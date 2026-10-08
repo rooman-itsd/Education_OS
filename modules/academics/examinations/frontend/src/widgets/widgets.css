@@ -1,0 +1,45 @@
+/* Examination Staff widgets. Colours and spacing come from the shell's tokens (--eos-*). */
+.eos-exam { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.eos-exam__muted { color: var(--eos-muted, #6b7280); font-size: 12px; margin: 0; }
+.eos-exam [data-warn] dd { color: var(--eos-error, #b42318); font-weight: 600; }
+
+/* examinations.schedule */
+.eos-exam__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.eos-exam__session {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--eos-border, #d9dde3);
+}
+.eos-exam__session:last-child { border-bottom: 0; }
+.eos-exam__when, .eos-exam__what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eos-exam__what strong { overflow-wrap: anywhere; }
+.eos-exam__facts { display: flex; gap: 12px; margin: 0; }
+.eos-exam__facts div, .eos-exam__counts div { display: flex; flex-direction: column; }
+.eos-exam dt { color: var(--eos-muted, #6b7280); font-size: 11px; }
+.eos-exam dd { margin: 0; font-weight: 600; }
+@media (max-width: 600px) {
+  .eos-exam__session { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* examinations.hall-tickets-issued and examinations.results-pending */
+.eos-exam__cycle { display: flex; flex-direction: column; gap: 8px; }
+.eos-exam__cycle-name { margin: 0; font-size: 13px; font-weight: 600; }
+.eos-exam__bar { height: 6px; border-radius: 999px; background: var(--eos-border, #d9dde3); overflow: hidden; }
+.eos-exam__bar span { display: block; height: 100%; background: #15803d; }
+.eos-exam__counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; margin: 0; }
+.eos-exam__reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.eos-exam__reasons li { display: flex; justify-content: space-between; gap: 8px; color: var(--eos-muted, #6b7280); }
+.eos-exam__stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.eos-exam__stages li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--eos-border, #d9dde3);
+  border-radius: 6px;
+}
+.eos-exam__stages li[data-pending] { border-color: #f59e0b; background: #fffbeb; }
+.eos-exam__stage-label { color: var(--eos-muted, #6b7280); font-size: 12px; }
