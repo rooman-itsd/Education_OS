@@ -13,6 +13,15 @@ export default defineConfig({
     // Local API during development; in production nginx proxies /api/ to the API container.
     proxy: { "/api": { target: process.env.EOS_API_TARGET ?? "http://127.0.0.1:8000", changeOrigin: true } },
   },
+  // Two pages: the role dashboard shell (index.html) and the admin console (admin.html).
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("index.html", import.meta.url)),
+        admin: fileURLToPath(new URL("admin.html", import.meta.url)),
+      },
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",
