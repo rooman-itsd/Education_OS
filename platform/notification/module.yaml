@@ -5,14 +5,15 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Email, SMS, WhatsApp, push and in-app notifications with templates."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
-  integrations: []
+  platform: [identity, audit, event-bus, documents, scheduler]
+  integrations: [messaging-providers]   # the physical transport; this module never talks to
+                                        # a provider directly.
 
 # Public surface. Other modules may ONLY use these.
 exposes:
@@ -21,7 +22,16 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - tenancy.organisation.registered
+  - tenancy.organisation.verified
+  - tenancy.organisation.approved
+  - tenancy.package.requested
+  - tenancy.package.changed
+  - identity.user.created
+  - billing.subscription.started
+  - billing.trial.expired
+  - billing.subscription.upgraded
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

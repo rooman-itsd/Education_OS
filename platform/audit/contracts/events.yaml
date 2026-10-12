@@ -1,9 +1,40 @@
 # Domain events published by audit.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it.
 module: audit
 version: 1
-events: []
-#  - name: audit.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+# Audit is a sink: every module writes to it, it reacts to nothing. The few events here are
+# about the audit trail itself, not about what was audited. Re-publishing audited actions as
+# events would duplicate the publishing module's own events and double every consumer's work.
+events:
+  - name: audit.export.ready
+    version: 1
+    description: >-
+      A compliance export finished and is available through platform/documents.
+    payload:
+      export_id: uuid
+      document_id: uuid
+      record_count: integer
+      occurred_from: datetime
+      occurred_to: datetime
+
+  - name: audit.record.redacted
+    version: 1
+    description: >-
+      A record's before/after payload was replaced by a tombstone under a legal erasure
+      request. The record itself remains; only the payload is gone.
+    payload:
+      record_id: uuid
+      reason: string
+      redacted_by: uuid
+
+  - name: audit.retention.pruned
+    version: 1
+    description: >-
+      Records older than the retention window were removed. Raised once per prune run so the
+      removal is itself accounted for.
+    payload:
+      removed_count: integer
+      older_than: datetime
+
+consumes: []

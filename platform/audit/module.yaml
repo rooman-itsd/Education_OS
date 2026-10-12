@@ -5,13 +5,15 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Immutable, append-only audit log for every state-changing action."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity]
+  platform: [identity]           # permission checks and resolving an actor's name.
+                                 # Deliberately NOT audit itself, and NOT event-bus: audit must
+                                 # stay writable when everything else is down.
   integrations: []
 
 # Public surface. Other modules may ONLY use these.

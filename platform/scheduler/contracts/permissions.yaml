@@ -1,11 +1,47 @@
 # Permission catalogue for scheduler. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Job definitions are declared in code and are not editable here, so these permissions cover
+# timing and visibility only. Per ADR-0005, platform:* keys belong to the super admin and are
+# never grantable inside an organisation.
 module: scheduler
-permissions: []
-#  - key: scheduler:record:read
-#    description: ...
-#  - key: scheduler:record:write
-#    description: ...
-roles: []
-#  - name: scheduler-admin
-#    grants: [scheduler:record:read, scheduler:record:write]
+permissions:
+  - key: scheduler:job:read
+    description: View the job definitions modules have declared
+  - key: scheduler:schedule:read
+    description: View this organisation's schedules and when they next run
+  - key: scheduler:schedule:write
+    description: >-
+      Create, retime, enable, disable or delete a schedule for this organisation. Cannot point
+      a schedule at a platform-scoped job.
+  - key: scheduler:run:read
+    description: View run history and outcomes
+  - key: scheduler:run:trigger
+    description: >-
+      Run a schedule immediately, outside its window. Separate from schedule:write because
+      retiming a job and firing it now are different risks.
+  - key: platform:scheduler:admin
+    description: >-
+      Super admin only. Schedule and run platform-scoped jobs such as billing.expire-trials,
+      which run once per deployment across every organisation, and see schedules of all
+      organisations.
+
+roles:
+  - name: scheduler-admin
+    description: >-
+      Manages an academy's scheduled work. Intended for an organisation admin.
+    grants:
+      - scheduler:job:read
+      - scheduler:schedule:read
+      - scheduler:schedule:write
+      - scheduler:run:read
+      - scheduler:run:trigger
+
+  - name: scheduler-viewer
+    description: >-
+      Read-only. For support staff answering "did the overnight job run?" without the ability
+      to retime or fire anything.
+    grants:
+      - scheduler:job:read
+      - scheduler:schedule:read
+      - scheduler:run:read
