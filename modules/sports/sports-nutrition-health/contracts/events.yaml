@@ -1,9 +1,30 @@
 # Domain events published by sports-nutrition-health.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Health data is confidential: events carry ids, status and dates only, never clinical detail.
 module: sports-nutrition-health
 version: 1
-events: []
-#  - name: sports-nutrition-health.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: sports-nutrition-health.plan.created
+    description: A nutrition plan was created for an athlete.
+    payload: { organisation_id: uuid, plan_id: uuid, athlete_id: uuid, goal: string, start_date: date, review_due_on: date }
+
+  - name: sports-nutrition-health.plan.reviewed
+    description: A nutritionist reviewed a plan and decided to continue, adjust or end it.
+    payload: { organisation_id: uuid, plan_id: uuid, athlete_id: uuid, outcome: string, next_review_on: date }
+
+  - name: sports-nutrition-health.injury.reported
+    description: An injury was reported. Coaches and athlete-performance use it for availability.
+    payload: { organisation_id: uuid, injury_id: uuid, athlete_id: uuid, severity: string, occurred_on: date, expected_return_on: date }
+
+  - name: sports-nutrition-health.injury.resolved
+    description: An injury was marked resolved; the athlete is back to normal training.
+    payload: { organisation_id: uuid, injury_id: uuid, athlete_id: uuid, resolved_on: date }
+
+  - name: sports-nutrition-health.appointment.scheduled
+    description: A physiotherapy, medical or nutrition appointment was scheduled.
+    payload: { organisation_id: uuid, appointment_id: uuid, athlete_id: uuid, practitioner_id: uuid, appointment_type: string, scheduled_at: datetime }
+
+  - name: sports-nutrition-health.appointment.completed
+    description: An appointment took place and was marked completed.
+    payload: { organisation_id: uuid, appointment_id: uuid, athlete_id: uuid, appointment_type: string, completed_at: datetime }

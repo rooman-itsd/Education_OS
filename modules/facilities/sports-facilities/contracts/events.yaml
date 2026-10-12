@@ -1,9 +1,21 @@
 # Domain events published by sports-facilities.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
 module: sports-facilities
 version: 1
-events: []
-#  - name: sports-facilities.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: sports-facilities.facility.registered
+    description: A sports facility was added to the registry. facility-booking can offer it for booking.
+    payload: { organisation_id: uuid, facility_id: uuid, name: string, facility_type: string, sports: [string], capacity: integer }
+
+  - name: sports-facilities.facility.updated
+    description: The details, spaces or operating hours of a facility changed.
+    payload: { organisation_id: uuid, facility_id: uuid, changed_fields: [string] }
+
+  - name: sports-facilities.availability.changed
+    description: A facility was opened, limited or closed (for example for maintenance or weather).
+    payload: { organisation_id: uuid, facility_id: uuid, status: string, reason: string, until: datetime }
+
+  - name: sports-facilities.usage.recorded
+    description: Use of a facility was recorded.
+    payload: { organisation_id: uuid, usage_id: uuid, facility_id: uuid, space_id: uuid, used_from: datetime, used_to: datetime, purpose: string, headcount: integer }

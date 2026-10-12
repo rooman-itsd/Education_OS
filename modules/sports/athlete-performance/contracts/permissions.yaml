@@ -1,11 +1,88 @@
 # Permission catalogue for athlete-performance. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Athletes see only their own profile, results and assessments: the module filters rows by the
+# caller's athlete record; the keys below say which kinds of data a role may use at all.
 module: athlete-performance
-permissions: []
-#  - key: athlete-performance:record:read
-#    description: ...
-#  - key: athlete-performance:record:write
-#    description: ...
-roles: []
-#  - name: athlete-performance-admin
-#    grants: [athlete-performance:record:read, athlete-performance:record:write]
+permissions:
+  - key: athlete-performance:catalogue:read
+    description: View disciplines, metric definitions and fitness tests
+  - key: athlete-performance:catalogue:write
+    description: Create and manage disciplines, metric definitions and fitness tests
+  - key: athlete-performance:athlete:read
+    description: View athlete profiles
+  - key: athlete-performance:athlete:write
+    description: Create and update athlete profiles
+  - key: athlete-performance:result:read
+    description: View performance results and history
+  - key: athlete-performance:result:record
+    description: Record and correct performance results
+  - key: athlete-performance:assessment:read
+    description: View fitness assessments
+  - key: athlete-performance:assessment:record
+    description: Record fitness assessments
+  - key: athlete-performance:benchmark:read
+    description: View benchmarks and compare athletes with them
+  - key: athlete-performance:benchmark:write
+    description: Create and change benchmarks
+  - key: athlete-performance:clearance:read
+    description: View athletes' fitness clearance status
+  - key: athlete-performance:clearance:write
+    description: Set athletes' fitness clearance (medical staff)
+  - key: athlete-performance:report:read
+    description: View squad and performance summary reports
+roles:
+  - name: athlete-performance-admin
+    description: Full administration of the catalogue, athletes, results, assessments, benchmarks and clearances
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:catalogue:write
+      - athlete-performance:athlete:read
+      - athlete-performance:athlete:write
+      - athlete-performance:result:read
+      - athlete-performance:result:record
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:benchmark:read
+      - athlete-performance:benchmark:write
+      - athlete-performance:clearance:read
+      - athlete-performance:clearance:write
+      - athlete-performance:report:read
+  - name: athlete-performance-coach
+    description: Coaches managing their athletes, recording results and assessments, and setting benchmarks
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:athlete:write
+      - athlete-performance:result:read
+      - athlete-performance:result:record
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:benchmark:read
+      - athlete-performance:benchmark:write
+      - athlete-performance:clearance:read
+      - athlete-performance:report:read
+  - name: athlete-performance-medical
+    description: Medical staff recording fitness assessments and setting fitness clearance
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:result:read
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:clearance:read
+      - athlete-performance:clearance:write
+  - name: athlete-performance-athlete
+    description: Athletes viewing their own profile, results, assessments, benchmarks and clearance
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:result:read
+      - athlete-performance:assessment:read
+      - athlete-performance:benchmark:read
+      - athlete-performance:clearance:read
+  - name: athlete-performance-viewer
+    description: Management and authorised staff reading performance summaries
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:report:read

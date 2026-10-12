@@ -1,10 +1,892 @@
+# HTTP contract for sports-facilities. The only way other modules call this one synchronously.
+# Every path is scoped to the caller's organisation (row-level security on organisation_id).
 openapi: 3.1.0
 info:
   title: sports-facilities API
   version: 0.1.0
-  description: "Registry of grounds, courts, pools, gyms and their usage."
+  description: Registry of grounds, courts, pools, gyms and their usage.
 servers:
-  - url: /api/v1/sports-facilities
-paths: {}
+- url: /api/v1/sports-facilities
+security:
+- bearerAuth: []
+paths:
+  /facilities:
+    get:
+      summary: List sports facilities
+      description: 'Permission: `sports-facilities:facility:read`.'
+      operationId: listFacilitys
+      parameters:
+      - name: facility_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - ground
+          - court
+          - pool
+          - gym
+          - track
+          - hall
+          - range
+          - other
+      - name: sport
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - operational
+          - limited
+          - closed
+          - under_maintenance
+      - name: indoor
+        in: query
+        schema:
+          type: boolean
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of sports facilities
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Facility'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create sports facility
+      description: 'Permission: `sports-facilities:facility:write`.'
+      operationId: createFacility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFacilityRequest'
+      responses:
+        '201':
+          description: Sports facility created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Facility'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /facilities/{facility_id}:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get sports facility
+      description: 'Permission: `sports-facilities:facility:read`.'
+      operationId: getFacility
+      responses:
+        '200':
+          description: Sports facility
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Facility'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update sports facility
+      description: 'Permission: `sports-facilities:facility:write`.'
+      operationId: updateFacility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFacilityRequest'
+      responses:
+        '200':
+          description: Sports facility updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Facility'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /facilities/{facility_id}/spaces:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: List spaces
+      description: 'Permission: `sports-facilities:facility:read`.'
+      operationId: listSpaces
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of spaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Space'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create space
+      description: 'Permission: `sports-facilities:facility:write`.'
+      operationId: createSpace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSpaceRequest'
+      responses:
+        '201':
+          description: Space created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Space'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /facilities/{facility_id}/spaces/{space_id}:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: space_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      summary: Update space
+      description: 'Permission: `sports-facilities:facility:write`.'
+      operationId: updateSpace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSpaceRequest'
+      responses:
+        '200':
+          description: Space updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Space'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /usage:
+    get:
+      summary: List usage records
+      description: 'Permission: `sports-facilities:usage:read`.'
+      operationId: listUsages
+      parameters:
+      - name: facility_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: purpose
+        in: query
+        schema:
+          type: string
+          enum:
+          - training
+          - competition
+          - physical_education
+          - recreation
+          - event
+          - maintenance
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of usage records
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UsageRecord'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Record facility usage
+      description: 'Permission: `sports-facilities:usage:record`.'
+      operationId: recordUsage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUsageRecordRequest'
+      responses:
+        '201':
+          description: Usage record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /usage/{usage_id}:
+    parameters:
+    - name: usage_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get usage record
+      description: 'Permission: `sports-facilities:usage:read`.'
+      operationId: getUsage
+      responses:
+        '200':
+          description: Usage record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageRecord'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /facilities/{facility_id}/hours:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get operating hours
+      description: 'Permission: `sports-facilities:facility:read`.'
+      operationId: getOperatingHours
+      responses:
+        '200':
+          description: Weekly hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatingHours'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Set operating hours
+      description: 'Permission: `sports-facilities:facility:write`.'
+      operationId: setOperatingHours
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatingHours'
+      responses:
+        '200':
+          description: Hours saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatingHours'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /facilities/{facility_id}/status:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    put:
+      summary: Change a facility's availability
+      description: 'Open, limit or close a facility, e.g. for maintenance or weather. Permission: `sports-facilities:facility:status`.'
+      operationId: setFacilityStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStatusRequest'
+      responses:
+        '200':
+          description: Status changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Facility'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /facilities/{facility_id}/utilisation:
+    parameters:
+    - name: facility_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Utilisation between two dates
+      description: 'Hours used against hours open, by purpose. Permission: `sports-facilities:usage:read`.'
+      operationId: getUtilisation
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Utilisation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Utilisation'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
-  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The caller lacks the permission this operation needs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found in the caller's organisation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+    Facility:
+      type: object
+      description: A sports ground, court, pool, gym or track. Bookings are made in facility-booking, which references facilities
+        by id.
+      required:
+      - id
+      - organisation_id
+      - name
+      - facility_type
+      - sports
+      - indoor
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - operational
+          - limited
+          - closed
+          - under_maintenance
+          readOnly: true
+        status_reason:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: Synthetic athletics track
+        facility_type:
+          type: string
+          enum:
+          - ground
+          - court
+          - pool
+          - gym
+          - track
+          - hall
+          - range
+          - other
+        sports:
+          type: array
+          items:
+            type: string
+            example: Athletics
+        surface:
+          type: string
+          example: Synthetic (polyurethane)
+        indoor:
+          type: boolean
+        capacity:
+          type: integer
+          description: Maximum people using it at once.
+        location:
+          type: string
+          example: North campus
+        description:
+          type: string
+    CreateFacilityRequest:
+      type: object
+      required:
+      - name
+      - facility_type
+      - sports
+      - indoor
+      properties:
+        name:
+          type: string
+          example: Synthetic athletics track
+        facility_type:
+          type: string
+          enum:
+          - ground
+          - court
+          - pool
+          - gym
+          - track
+          - hall
+          - range
+          - other
+        sports:
+          type: array
+          items:
+            type: string
+            example: Athletics
+        surface:
+          type: string
+          example: Synthetic (polyurethane)
+        indoor:
+          type: boolean
+        capacity:
+          type: integer
+          description: Maximum people using it at once.
+        location:
+          type: string
+          example: North campus
+        description:
+          type: string
+    Space:
+      type: object
+      description: A part of a facility used on its own, e.g. Court 2 or Lanes 1–4.
+      required:
+      - id
+      - organisation_id
+      - name
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: Court 2
+        capacity:
+          type: integer
+        sports:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+          default: true
+    CreateSpaceRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          example: Court 2
+        capacity:
+          type: integer
+        sports:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+          default: true
+    UpdateSpaceRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          example: Court 2
+        capacity:
+          type: integer
+        sports:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+          default: true
+    UsageRecord:
+      type: object
+      description: Who used a facility, when and for what.
+      required:
+      - id
+      - organisation_id
+      - facility_id
+      - used_from
+      - used_to
+      - purpose
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        recorded_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        facility_id:
+          type: string
+          format: uuid
+        space_id:
+          type: string
+          format: uuid
+        used_from:
+          type: string
+          format: date-time
+        used_to:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+          enum:
+          - training
+          - competition
+          - physical_education
+          - recreation
+          - event
+          - maintenance
+        group_name:
+          type: string
+          example: Senior sprint squad
+        headcount:
+          type: integer
+        booking_reference:
+          type: string
+          description: facility-booking reference, when the use was booked.
+    CreateUsageRecordRequest:
+      type: object
+      required:
+      - facility_id
+      - used_from
+      - used_to
+      - purpose
+      properties:
+        facility_id:
+          type: string
+          format: uuid
+        space_id:
+          type: string
+          format: uuid
+        used_from:
+          type: string
+          format: date-time
+        used_to:
+          type: string
+          format: date-time
+        purpose:
+          type: string
+          enum:
+          - training
+          - competition
+          - physical_education
+          - recreation
+          - event
+          - maintenance
+        group_name:
+          type: string
+          example: Senior sprint squad
+        headcount:
+          type: integer
+        booking_reference:
+          type: string
+          description: facility-booking reference, when the use was booked.
+    OperatingHours:
+      type: object
+      required:
+      - slots
+      properties:
+        slots:
+          type: array
+          items:
+            type: object
+            required:
+            - day_of_week
+            - opens_at
+            - closes_at
+            properties:
+              day_of_week:
+                type: integer
+                minimum: 0
+                maximum: 6
+                description: 0 = Monday
+              opens_at:
+                type: string
+                pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                example: 06:00
+              closes_at:
+                type: string
+                pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                example: 06:00
+    SetStatusRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - operational
+          - limited
+          - closed
+          - under_maintenance
+        reason:
+          type: string
+        until:
+          type: string
+          format: date-time
+    Utilisation:
+      type: object
+      required:
+      - facility_id
+      - hours_open
+      - hours_used
+      properties:
+        facility_id:
+          type: string
+          format: uuid
+        hours_open:
+          type: number
+        hours_used:
+          type: number
+        utilisation_pct:
+          type: number
+        by_purpose:
+          type: array
+          items:
+            type: object
+            properties:
+              purpose:
+                type: string
+                enum:
+                - training
+                - competition
+                - physical_education
+                - recreation
+                - event
+                - maintenance
+              hours:
+                type: number
+    UpdateFacilityRequest:
+      description: "Partial update of a facility: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        name:
+          type: string
+          example: Synthetic athletics track
+        facility_type:
+          type: string
+          enum:
+          - ground
+          - court
+          - pool
+          - gym
+          - track
+          - hall
+          - range
+          - other
+        sports:
+          type: array
+          items:
+            type: string
+            example: Athletics
+        surface:
+          type: string
+          example: Synthetic (polyurethane)
+        indoor:
+          type: boolean
+        capacity:
+          type: integer
+          description: Maximum people using it at once.
+        location:
+          type: string
+          example: North campus
+        description:
+          type: string

@@ -1,11 +1,73 @@
 # Permission catalogue for tournament-events. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Draft tournaments are visible only to holders of tournament:write.
 module: tournament-events
-permissions: []
-#  - key: tournament-events:record:read
-#    description: ...
-#  - key: tournament-events:record:write
-#    description: ...
-roles: []
-#  - name: tournament-events-admin
-#    grants: [tournament-events:record:read, tournament-events:record:write]
+permissions:
+  - key: tournament-events:tournament:read
+    description: View published tournaments and the calendar
+  - key: tournament-events:tournament:write
+    description: Create tournaments and edit drafts
+  - key: tournament-events:tournament:publish
+    description: Publish or cancel a tournament
+  - key: tournament-events:entry:read
+    description: View entries
+  - key: tournament-events:entry:write
+    description: Enter athletes or teams, confirm or withdraw entries
+  - key: tournament-events:fixture:read
+    description: View fixtures
+  - key: tournament-events:fixture:write
+    description: Schedule and update fixtures
+  - key: tournament-events:result:read
+    description: View results
+  - key: tournament-events:result:record
+    description: Record fixture results
+  - key: tournament-events:official:read
+    description: View assigned officials
+  - key: tournament-events:official:write
+    description: Assign and remove officials
+  - key: tournament-events:logistics:read
+    description: View travel and event logistics
+  - key: tournament-events:logistics:write
+    description: Set travel and event logistics
+roles:
+  - name: tournament-events-admin
+    description: Full administration of tournaments, entries, fixtures, results, officials and logistics
+    grants:
+      - tournament-events:tournament:read
+      - tournament-events:tournament:write
+      - tournament-events:tournament:publish
+      - tournament-events:entry:read
+      - tournament-events:entry:write
+      - tournament-events:fixture:read
+      - tournament-events:fixture:write
+      - tournament-events:result:read
+      - tournament-events:result:record
+      - tournament-events:official:read
+      - tournament-events:official:write
+      - tournament-events:logistics:read
+      - tournament-events:logistics:write
+  - name: tournament-events-coach
+    description: Coaches entering athletes, following fixtures and recording results
+    grants:
+      - tournament-events:tournament:read
+      - tournament-events:entry:read
+      - tournament-events:entry:write
+      - tournament-events:fixture:read
+      - tournament-events:result:read
+      - tournament-events:result:record
+      - tournament-events:official:read
+      - tournament-events:logistics:read
+  - name: tournament-events-athlete
+    description: Athletes viewing tournaments, their entries, fixtures, results and travel plans
+    grants:
+      - tournament-events:tournament:read
+      - tournament-events:entry:read
+      - tournament-events:fixture:read
+      - tournament-events:result:read
+      - tournament-events:logistics:read
+  - name: tournament-events-viewer
+    description: Management and staff following the tournament calendar and results
+    grants:
+      - tournament-events:tournament:read
+      - tournament-events:fixture:read
+      - tournament-events:result:read

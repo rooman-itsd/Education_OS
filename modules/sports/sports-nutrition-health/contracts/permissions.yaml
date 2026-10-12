@@ -1,11 +1,68 @@
 # Permission catalogue for sports-nutrition-health. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Health records are confidential: only medical roles hold health-record keys. Athletes see only
+# their own plans, injuries and appointments (rows filtered by the caller's athlete record).
 module: sports-nutrition-health
-permissions: []
-#  - key: sports-nutrition-health:record:read
-#    description: ...
-#  - key: sports-nutrition-health:record:write
-#    description: ...
-roles: []
-#  - name: sports-nutrition-health-admin
-#    grants: [sports-nutrition-health:record:read, sports-nutrition-health:record:write]
+permissions:
+  - key: sports-nutrition-health:plan:read
+    description: View nutrition plans and their reviews
+  - key: sports-nutrition-health:plan:write
+    description: Create and update nutrition plans
+  - key: sports-nutrition-health:plan:review
+    description: Record nutrition plan reviews
+  - key: sports-nutrition-health:health-record:read
+    description: View confidential health records (medical history, allergies, medication, screenings)
+  - key: sports-nutrition-health:health-record:write
+    description: Create and update confidential health records
+  - key: sports-nutrition-health:injury:read
+    description: View injuries, their status and expected return dates
+  - key: sports-nutrition-health:injury:write
+    description: Report injuries and update their recovery
+  - key: sports-nutrition-health:appointment:read
+    description: View physiotherapy, medical and nutrition appointments
+  - key: sports-nutrition-health:appointment:write
+    description: Schedule and update appointments
+roles:
+  - name: sports-nutrition-health-admin
+    description: Full administration of plans, health records, injuries and appointments
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:plan:write
+      - sports-nutrition-health:plan:review
+      - sports-nutrition-health:health-record:read
+      - sports-nutrition-health:health-record:write
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:injury:write
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write
+  - name: sports-nutrition-health-medical
+    description: Doctors and physiotherapists managing health records, injuries and appointments
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:health-record:read
+      - sports-nutrition-health:health-record:write
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:injury:write
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write
+  - name: sports-nutrition-health-nutritionist
+    description: Nutritionists building and reviewing diet plans
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:plan:write
+      - sports-nutrition-health:plan:review
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write
+  - name: sports-nutrition-health-coach
+    description: Coaches seeing who is injured and on which plan, without clinical records
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read
+  - name: sports-nutrition-health-athlete
+    description: Athletes viewing their own plans, injuries and appointments
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read

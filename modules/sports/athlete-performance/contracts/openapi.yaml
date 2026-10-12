@@ -1,10 +1,1835 @@
+# HTTP contract for athlete-performance. The only way other modules call this one synchronously.
+# Every path is scoped to the caller's organisation (row-level security on organisation_id).
 openapi: 3.1.0
 info:
   title: athlete-performance API
   version: 0.1.0
-  description: "Athlete profiles, performance metrics, fitness testing, benchmarks."
+  description: Athlete profiles, performance metrics, fitness testing, benchmarks.
 servers:
-  - url: /api/v1/athlete-performance
-paths: {}
+- url: /api/v1/athlete-performance
+security:
+- bearerAuth: []
+paths:
+  /disciplines:
+    get:
+      summary: List disciplines
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: listDisciplines
+      parameters:
+      - name: active
+        in: query
+        schema:
+          type: boolean
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of disciplines
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Discipline'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create discipline
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: createDiscipline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDisciplineRequest'
+      responses:
+        '201':
+          description: Discipline created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Discipline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /disciplines/{discipline_id}:
+    parameters:
+    - name: discipline_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get discipline
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: getDiscipline
+      responses:
+        '200':
+          description: Discipline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Discipline'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update discipline
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: updateDiscipline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDisciplineRequest'
+      responses:
+        '200':
+          description: Discipline updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Discipline'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /metrics:
+    get:
+      summary: List metric definitions
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: listMetrics
+      parameters:
+      - name: discipline_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of metric definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Metric'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create metric definition
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: createMetric
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMetricRequest'
+      responses:
+        '201':
+          description: Metric definition created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metric'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /metrics/{metric_id}:
+    parameters:
+    - name: metric_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get metric definition
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: getMetric
+      responses:
+        '200':
+          description: Metric definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metric'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update metric definition
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: updateMetric
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMetricRequest'
+      responses:
+        '200':
+          description: Metric definition updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Metric'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /athletes:
+    get:
+      summary: List athlete profiles
+      description: 'Athletes see only their own profile; coaches and staff see the athletes of their organisation. Permission:
+        `athlete-performance:athlete:read`.'
+      operationId: listAthletes
+      parameters:
+      - name: discipline_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: coach_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: squad
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - inactive
+          - alumni
+      - name: q
+        in: query
+        schema:
+          type: string
+          description: Search by name
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of athlete profiles
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Athlete'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create athlete profile
+      description: 'Permission: `athlete-performance:athlete:write`.'
+      operationId: createAthlete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAthleteRequest'
+      responses:
+        '201':
+          description: Athlete profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /athletes/{athlete_id}:
+    parameters:
+    - name: athlete_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get athlete profile
+      description: 'Permission: `athlete-performance:athlete:read`.'
+      operationId: getAthlete
+      responses:
+        '200':
+          description: Athlete profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update athlete profile
+      description: 'Permission: `athlete-performance:athlete:write`.'
+      operationId: updateAthlete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAthleteRequest'
+      responses:
+        '200':
+          description: Athlete profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Athlete'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /results:
+    get:
+      summary: List performance results
+      description: 'Permission: `athlete-performance:result:read`.'
+      operationId: listResults
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: metric_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: context
+        in: query
+        schema:
+          type: string
+          enum:
+          - training
+          - trial
+          - competition
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of performance results
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PerformanceResult'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Record a performance result
+      description: 'Permission: `athlete-performance:result:record`.'
+      operationId: recordResult
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePerformanceResultRequest'
+      responses:
+        '201':
+          description: Performance result created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /results/{result_id}:
+    parameters:
+    - name: result_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get performance result
+      description: 'Permission: `athlete-performance:result:read`.'
+      operationId: getResult
+      responses:
+        '200':
+          description: Performance result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Correct a performance result
+      description: 'Permission: `athlete-performance:result:record`.'
+      operationId: updateResult
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePerformanceResultRequest'
+      responses:
+        '200':
+          description: Performance result updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /fitness-tests:
+    get:
+      summary: List fitness tests
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: listFitnessTests
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of fitness tests
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FitnessTest'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create fitness test
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: createFitnessTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFitnessTestRequest'
+      responses:
+        '201':
+          description: Fitness test created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessTest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /fitness-tests/{fitness_test_id}:
+    parameters:
+    - name: fitness_test_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get fitness test
+      description: 'Permission: `athlete-performance:catalogue:read`.'
+      operationId: getFitnessTest
+      responses:
+        '200':
+          description: Fitness test
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessTest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update fitness test
+      description: 'Permission: `athlete-performance:catalogue:write`.'
+      operationId: updateFitnessTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFitnessTestRequest'
+      responses:
+        '200':
+          description: Fitness test updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessTest'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /assessments:
+    get:
+      summary: List fitness assessments
+      description: 'Permission: `athlete-performance:assessment:read`.'
+      operationId: listAssessments
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: fitness_test_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of fitness assessments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FitnessAssessment'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Record a fitness assessment
+      description: 'Permission: `athlete-performance:assessment:record`.'
+      operationId: recordAssessment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFitnessAssessmentRequest'
+      responses:
+        '201':
+          description: Fitness assessment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessAssessment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /assessments/{assessment_id}:
+    parameters:
+    - name: assessment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get fitness assessment
+      description: 'Permission: `athlete-performance:assessment:read`.'
+      operationId: getAssessment
+      responses:
+        '200':
+          description: Fitness assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessAssessment'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /benchmarks:
+    get:
+      summary: List benchmarks
+      description: 'Permission: `athlete-performance:benchmark:read`.'
+      operationId: listBenchmarks
+      parameters:
+      - name: metric_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: discipline_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of benchmarks
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Benchmark'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create benchmark
+      description: 'Permission: `athlete-performance:benchmark:write`.'
+      operationId: createBenchmark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBenchmarkRequest'
+      responses:
+        '201':
+          description: Benchmark created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Benchmark'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /benchmarks/{benchmark_id}:
+    parameters:
+    - name: benchmark_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get benchmark
+      description: 'Permission: `athlete-performance:benchmark:read`.'
+      operationId: getBenchmark
+      responses:
+        '200':
+          description: Benchmark
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Benchmark'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update benchmark
+      description: 'Permission: `athlete-performance:benchmark:write`.'
+      operationId: updateBenchmark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBenchmarkRequest'
+      responses:
+        '200':
+          description: Benchmark updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Benchmark'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /athletes/{athlete_id}/history:
+    parameters:
+    - name: athlete_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Performance history for one metric
+      description: 'Results and assessment measurements over time, with the matching benchmark if one exists. Permission:
+        `athlete-performance:result:read`.'
+      operationId: getPerformanceHistory
+      parameters:
+      - name: metric_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Time series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceHistory'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /athletes/{athlete_id}/benchmark-comparison:
+    parameters:
+    - name: athlete_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Compare an athlete's latest results with benchmarks
+      description: 'Permission: `athlete-performance:benchmark:read`.'
+      operationId: compareWithBenchmarks
+      parameters:
+      - name: level
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: One row per metric with a benchmark
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BenchmarkComparison'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /athletes/{athlete_id}/clearance:
+    parameters:
+    - name: athlete_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get an athlete's fitness clearance
+      description: 'Whether the athlete is cleared to train and compete. Permission: `athlete-performance:clearance:read`.'
+      operationId: getClearance
+      responses:
+        '200':
+          description: Current clearance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessClearance'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Set an athlete's fitness clearance
+      description: 'Set by medical staff after an assessment. Permission: `athlete-performance:clearance:write`.'
+      operationId: setClearance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetClearanceRequest'
+      responses:
+        '200':
+          description: Clearance updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FitnessClearance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /reports/squad-summary:
+    get:
+      summary: Squad performance summary
+      description: 'Latest result per key metric and trend for each athlete in a squad, discipline or coach group. Permission:
+        `athlete-performance:report:read`.'
+      operationId: getSquadSummary
+      parameters:
+      - name: discipline_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: coach_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: squad
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Summary rows
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SquadSummaryRow'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
-  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The caller lacks the permission this operation needs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found in the caller's organisation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+    Discipline:
+      type: object
+      description: A sport or event group an athlete competes in, e.g. Athletics (sprints), Wrestling.
+      required:
+      - id
+      - organisation_id
+      - name
+      - category
+      - active
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: Athletics (sprints)
+        category:
+          type: string
+          enum:
+          - individual
+          - team
+        description:
+          type: string
+        active:
+          type: boolean
+          default: true
+    CreateDisciplineRequest:
+      type: object
+      required:
+      - name
+      - category
+      - active
+      properties:
+        name:
+          type: string
+          example: Athletics (sprints)
+        category:
+          type: string
+          enum:
+          - individual
+          - team
+        description:
+          type: string
+        active:
+          type: boolean
+          default: true
+    Metric:
+      type: object
+      description: Something measurable about performance or fitness, e.g. 100 m time (s), vertical jump (cm), body fat (%).
+      required:
+      - id
+      - organisation_id
+      - name
+      - unit
+      - direction
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: 100 m sprint
+        unit:
+          type: string
+          example: s
+        direction:
+          type: string
+          enum:
+          - higher_is_better
+          - lower_is_better
+        discipline_id:
+          type: string
+          format: uuid
+          description: 'Optional: the discipline this metric belongs to.'
+        description:
+          type: string
+    CreateMetricRequest:
+      type: object
+      required:
+      - name
+      - unit
+      - direction
+      properties:
+        name:
+          type: string
+          example: 100 m sprint
+        unit:
+          type: string
+          example: s
+        direction:
+          type: string
+          enum:
+          - higher_is_better
+          - lower_is_better
+        discipline_id:
+          type: string
+          format: uuid
+          description: 'Optional: the discipline this metric belongs to.'
+        description:
+          type: string
+    Athlete:
+      type: object
+      description: An athlete's sports profile. Identity and student records stay in their own modules and are referenced
+        by id.
+      required:
+      - id
+      - organisation_id
+      - full_name
+      - primary_discipline_id
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        user_id:
+          type: string
+          format: uuid
+          description: platform/identity user, when the athlete can sign in.
+        student_id:
+          type: string
+          format: uuid
+          description: Student record id in student-information, if any (reference only).
+        full_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - other
+          - undisclosed
+        primary_discipline_id:
+          type: string
+          format: uuid
+        discipline_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        coach_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the assigned coach.
+        squad:
+          type: string
+          example: Senior sprint squad
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
+          - alumni
+    CreateAthleteRequest:
+      type: object
+      required:
+      - full_name
+      - primary_discipline_id
+      - status
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: platform/identity user, when the athlete can sign in.
+        student_id:
+          type: string
+          format: uuid
+          description: Student record id in student-information, if any (reference only).
+        full_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - other
+          - undisclosed
+        primary_discipline_id:
+          type: string
+          format: uuid
+        discipline_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        coach_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the assigned coach.
+        squad:
+          type: string
+          example: Senior sprint squad
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
+          - alumni
+    PerformanceResult:
+      type: object
+      description: One measured value for one athlete and metric. Results are kept as history; corrections are updates, not
+        deletes.
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - metric_id
+      - value
+      - recorded_at
+      - context
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        recorded_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        metric_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+        recorded_at:
+          type: string
+          format: date-time
+        context:
+          type: string
+          enum:
+          - training
+          - trial
+          - competition
+        notes:
+          type: string
+    CreatePerformanceResultRequest:
+      type: object
+      required:
+      - athlete_id
+      - metric_id
+      - value
+      - recorded_at
+      - context
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        metric_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+        recorded_at:
+          type: string
+          format: date-time
+        context:
+          type: string
+          enum:
+          - training
+          - trial
+          - competition
+        notes:
+          type: string
+    FitnessTest:
+      type: object
+      description: A battery of measurements taken together, e.g. a pre-season fitness test or a body composition check.
+      required:
+      - id
+      - organisation_id
+      - name
+      - metric_ids
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: Pre-season fitness test
+        description:
+          type: string
+        metric_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+    CreateFitnessTestRequest:
+      type: object
+      required:
+      - name
+      - metric_ids
+      properties:
+        name:
+          type: string
+          example: Pre-season fitness test
+        description:
+          type: string
+        metric_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+    FitnessAssessment:
+      type: object
+      description: The results of one fitness test for one athlete on one day.
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - fitness_test_id
+      - assessed_on
+      - measurements
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        assessor_id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        fitness_test_id:
+          type: string
+          format: uuid
+        assessed_on:
+          type: string
+          format: date
+        measurements:
+          type: array
+          items:
+            type: object
+            required:
+            - metric_id
+            - value
+            properties:
+              metric_id:
+                type: string
+                format: uuid
+              value:
+                type: number
+        notes:
+          type: string
+    CreateFitnessAssessmentRequest:
+      type: object
+      required:
+      - athlete_id
+      - fitness_test_id
+      - assessed_on
+      - measurements
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        fitness_test_id:
+          type: string
+          format: uuid
+        assessed_on:
+          type: string
+          format: date
+        measurements:
+          type: array
+          items:
+            type: object
+            required:
+            - metric_id
+            - value
+            properties:
+              metric_id:
+                type: string
+                format: uuid
+              value:
+                type: number
+        notes:
+          type: string
+    Benchmark:
+      type: object
+      description: A target value for a metric, for a level and group, used to compare athletes.
+      required:
+      - id
+      - organisation_id
+      - metric_id
+      - level
+      - target_value
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        metric_id:
+          type: string
+          format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+        level:
+          type: string
+          example: state
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - any
+        age_group:
+          type: string
+          example: U-19
+        target_value:
+          type: number
+        source:
+          type: string
+          example: State federation qualifying standard 2026
+    CreateBenchmarkRequest:
+      type: object
+      required:
+      - metric_id
+      - level
+      - target_value
+      properties:
+        metric_id:
+          type: string
+          format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+        level:
+          type: string
+          example: state
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - any
+        age_group:
+          type: string
+          example: U-19
+        target_value:
+          type: number
+        source:
+          type: string
+          example: State federation qualifying standard 2026
+    PerformanceHistory:
+      type: object
+      required:
+      - athlete_id
+      - metric_id
+      - points
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        metric_id:
+          type: string
+          format: uuid
+        points:
+          type: array
+          items:
+            type: object
+            required:
+            - at
+            - value
+            - source
+            properties:
+              at:
+                type: string
+                format: date-time
+              value:
+                type: number
+              source:
+                type: string
+                enum:
+                - result
+                - assessment
+        benchmark:
+          $ref: '#/components/schemas/Benchmark'
+    BenchmarkComparison:
+      type: object
+      required:
+      - metric_id
+      - target_value
+      - status
+      properties:
+        metric_id:
+          type: string
+          format: uuid
+        benchmark_id:
+          type: string
+          format: uuid
+        latest_value:
+          type: number
+        target_value:
+          type: number
+        gap:
+          type: number
+          description: Distance to the target, signed by the metric's direction.
+        status:
+          type: string
+          enum:
+          - meets
+          - below
+          - no_result
+    FitnessClearance:
+      type: object
+      required:
+      - athlete_id
+      - status
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - cleared
+          - restricted
+          - not_cleared
+        valid_until:
+          type: string
+          format: date
+        restrictions:
+          type: string
+        set_by:
+          type: string
+          format: uuid
+          readOnly: true
+        set_at:
+          type: string
+          format: date-time
+          readOnly: true
+    SetClearanceRequest:
+      type: object
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - cleared
+          - restricted
+          - not_cleared
+        valid_until:
+          type: string
+          format: date
+        restrictions:
+          type: string
+    SquadSummaryRow:
+      type: object
+      required:
+      - athlete_id
+      - full_name
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        clearance:
+          type: string
+          enum:
+          - cleared
+          - restricted
+          - not_cleared
+        metrics:
+          type: array
+          items:
+            type: object
+            properties:
+              metric_id:
+                type: string
+                format: uuid
+              latest_value:
+                type: number
+              trend:
+                type: string
+                enum:
+                - improving
+                - steady
+                - declining
+                - no_data
+    UpdateAthleteRequest:
+      description: "Partial update of a athlete: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          description: platform/identity user, when the athlete can sign in.
+        student_id:
+          type: string
+          format: uuid
+          description: Student record id in student-information, if any (reference only).
+        full_name:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - other
+          - undisclosed
+        primary_discipline_id:
+          type: string
+          format: uuid
+        discipline_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        coach_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the assigned coach.
+        squad:
+          type: string
+          example: Senior sprint squad
+        status:
+          type: string
+          enum:
+          - active
+          - inactive
+          - alumni
+    UpdateBenchmarkRequest:
+      description: "Partial update of a benchmark: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        metric_id:
+          type: string
+          format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+        level:
+          type: string
+          example: state
+        gender:
+          type: string
+          enum:
+          - female
+          - male
+          - any
+        age_group:
+          type: string
+          example: U-19
+        target_value:
+          type: number
+        source:
+          type: string
+          example: State federation qualifying standard 2026
+    UpdateDisciplineRequest:
+      description: "Partial update of a discipline: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        name:
+          type: string
+          example: Athletics (sprints)
+        category:
+          type: string
+          enum:
+          - individual
+          - team
+        description:
+          type: string
+        active:
+          type: boolean
+          default: true
+    UpdateFitnessTestRequest:
+      description: "Partial update of a fitness test: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        name:
+          type: string
+          example: Pre-season fitness test
+        description:
+          type: string
+        metric_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        discipline_id:
+          type: string
+          format: uuid
+    UpdateMetricRequest:
+      description: "Partial update of a metric: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        name:
+          type: string
+          example: 100 m sprint
+        unit:
+          type: string
+          example: s
+        direction:
+          type: string
+          enum:
+          - higher_is_better
+          - lower_is_better
+        discipline_id:
+          type: string
+          format: uuid
+          description: 'Optional: the discipline this metric belongs to.'
+        description:
+          type: string
+    UpdatePerformanceResultRequest:
+      description: "Partial update of a performance result: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        metric_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+        recorded_at:
+          type: string
+          format: date-time
+        context:
+          type: string
+          enum:
+          - training
+          - trial
+          - competition
+        notes:
+          type: string
