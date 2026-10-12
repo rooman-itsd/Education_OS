@@ -1,11 +1,88 @@
 # Permission catalogue for academic-management. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: academic-management
-permissions: []
-#  - key: academic-management:record:read
-#    description: ...
-#  - key: academic-management:record:write
-#    description: ...
-roles: []
-#  - name: academic-management-admin
-#    grants: [academic-management:record:read, academic-management:record:write]
+permissions:
+  - key: academic-management:term:read
+    description: View academic terms
+  - key: academic-management:term:write
+    description: Create and edit terms; activate a term
+  - key: academic-management:programme:read
+    description: View programmes
+  - key: academic-management:programme:write
+    description: Create, edit and archive programmes
+  - key: academic-management:curriculum:read
+    description: View curricula and their versions
+  - key: academic-management:curriculum:write
+    description: Create and edit draft curricula
+  - key: academic-management:curriculum:publish
+    description: Publish a curriculum version
+  - key: academic-management:course:read
+    description: View the course catalogue
+  - key: academic-management:course:write
+    description: Create, edit and archive courses
+  - key: academic-management:offering:read
+    description: View course offerings and sections
+  - key: academic-management:offering:write
+    description: Create and edit offerings and sections; change offering status
+  - key: academic-management:faculty-assignment:read
+    description: View faculty assignments
+  - key: academic-management:faculty-assignment:write
+    description: Assign faculty to offerings and sections; end assignments
+  - key: academic-management:roster:read
+    description: View rosters of offerings the user is assigned to
+  - key: academic-management:roster:read-all
+    description: View rosters of every offering in the organisation or the user's department
+  - key: academic-management:faculty-load:read
+    description: View faculty teaching load per term
+roles:
+  - name: academic-management-admin
+    description: Full administration of the academic catalogue. Default for org-admin.
+    grants:
+      - academic-management:term:read
+      - academic-management:term:write
+      - academic-management:programme:read
+      - academic-management:programme:write
+      - academic-management:curriculum:read
+      - academic-management:curriculum:write
+      - academic-management:curriculum:publish
+      - academic-management:course:read
+      - academic-management:course:write
+      - academic-management:offering:read
+      - academic-management:offering:write
+      - academic-management:faculty-assignment:read
+      - academic-management:faculty-assignment:write
+      - academic-management:roster:read-all
+      - academic-management:faculty-load:read
+  - name: academic-management-department-head
+    description: Plans offerings and faculty for a department. Default for department-admin.
+    grants:
+      - academic-management:term:read
+      - academic-management:programme:read
+      - academic-management:curriculum:read
+      - academic-management:curriculum:write
+      - academic-management:course:read
+      - academic-management:course:write
+      - academic-management:offering:read
+      - academic-management:offering:write
+      - academic-management:faculty-assignment:read
+      - academic-management:faculty-assignment:write
+      - academic-management:roster:read-all
+      - academic-management:faculty-load:read
+  - name: academic-management-faculty
+    description: Teaches offerings and reads their rosters. Default for faculty.
+    grants:
+      - academic-management:term:read
+      - academic-management:programme:read
+      - academic-management:curriculum:read
+      - academic-management:course:read
+      - academic-management:offering:read
+      - academic-management:faculty-assignment:read
+      - academic-management:roster:read
+  - name: academic-management-viewer
+    description: Read-only view of the catalogue. Default for student and examination-staff.
+    grants:
+      - academic-management:term:read
+      - academic-management:programme:read
+      - academic-management:curriculum:read
+      - academic-management:course:read
+      - academic-management:offering:read
