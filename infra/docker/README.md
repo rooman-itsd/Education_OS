@@ -105,14 +105,19 @@ published outside Docker's network; only the API's port 8000 is. Both services r
 Every deploy: `git pull && docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build`.
 
 Then wire the proxy. In the nginx container (CT 101), with the Docker host's LAN IP in place of
-`192.168.1.122`:
+`192.168.1.122`. The first line finds the vhost that still carries the placeholder:
 
 ```
-sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' /etc/nginx/sites-available/educationos.futureacad.ae
-grep -n proxy_pass /etc/nginx/sites-available/educationos.futureacad.ae
+V=$(grep -rl '<api-host>' /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ | head -1); echo "$V"
+sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' "$V"
+grep -n proxy_pass "$V"
 nginx -t && nginx -s reload
 curl -s https://educationos.futureacad.ae/api/v1/health
 ```
+
+If the first line prints nothing, the live vhost has no `/api/` location yet: copy the
+`location /api/` block from `nginx.public-vhost.conf` into the server block for
+`educationos.futureacad.ae` and run the rest.
 
 Health must return `{"status":"ok","database":"postgres",...}`. If it returns HTML, the vhost still
 has the placeholder or the `/api/` location is missing. The web shell detects the API on load and
