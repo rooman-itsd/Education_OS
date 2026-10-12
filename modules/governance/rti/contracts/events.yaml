@@ -1,9 +1,18 @@
 # Domain events published by rti.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Payloads carry identifiers and metadata only: never the applicant's name, address, email, phone or person id, the
+# subject, the information sought, fee details, referral questions or replies, the response summary or grounds, the
+# transfer authority, or appeal grounds or notes. Whether these events should be public is docs/prd.md open question 8.
+# No module consumes them yet. The event-bus envelope proposed in PR #189 differs: docs/prd.md open question 11.
 module: rti
 version: 1
-events: []
-#  - name: rti.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: rti.request.received
+    description: A request was recorded.
+    payload: { organisation_id: uuid, request_id: uuid, number: string, received_via: string, received_on: date }
+  - name: rti.request.closed
+    description: >-
+      A request reached a final state: closed after a response (closure responded) or an appeal decision (appeal_decided),
+      or transferred. response_type is null for transfers.
+    payload: { organisation_id: uuid, request_id: uuid, number: string, closure: string, response_type: string, appealed: boolean, closed_at: datetime }

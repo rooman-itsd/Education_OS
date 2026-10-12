@@ -2,9 +2,1674 @@ openapi: 3.1.0
 info:
   title: lms API
   version: 0.1.0
-  description: "Learning management: content, assignments, quizzes, discussions, grading."
+  description: |
+    Learning management: course spaces, content units, materials, assignments, submissions, quizzes,
+    quiz attempts, coursework grades and feedback, discussions, gradebook and reports.
+    Coursework grades are not examination results (docs/prd.md section 2).
+    Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
+    `x-permission` names the one key from contracts/permissions.yaml an operation requires; it gives
+    the narrowest scope. Where wider scopes exist, the operation's description names the further
+    keys that widen it (*-own or *-assigned < *-department < *-all; docs/prd.md section 13). The widest
+    key the caller holds applies. This follows the timetable-attendance and examinations contracts.
+    course_offering_id and section ids are academic-management IDs (vocabulary aligned by owner decision C5);
+    student_id is an external person ID (LQ6); document_id is a platform/documents ID;
+    scheduled_class_id is an optional timetable-attendance ID (owner decision C19).
 servers:
   - url: /api/v1/lms
-paths: {}
+tags:
+  - name: course-spaces
+  - name: content
+  - name: assignments
+  - name: quizzes
+  - name: grades
+  - name: discussions
+  - name: reports
+  - name: widgets
+paths:
+  # --------------------------------------------------------- course spaces
+  /course-spaces:
+    get:
+      tags: [course-spaces]
+      summary: List course spaces
+      description: "Course spaces the caller belongs to (FR-3). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listCourseSpaces
+      x-permission: lms:course-space:read-own
+      parameters:
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/CourseSpaceStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Course spaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CourseSpace" } }
+                  total: { type: integer }
+    post:
+      tags: [course-spaces]
+      summary: Create a course space for a course offering
+      description: Manual creation by an administrator, one per course offering (FR-1, owner decision C17). Publishes lms.course-space.created.
+      operationId: createCourseSpace
+      x-permission: lms:course-space:manage-all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCourseSpaceRequest" }
+      responses:
+        "201":
+          description: Course space created in draft
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseSpace" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /course-spaces/{course_space_id}:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [course-spaces]
+      summary: Get a course space
+      description: "Settings and the caller's role in it (FR-2, FR-3). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: getCourseSpace
+      x-permission: lms:course-space:read-own
+      responses:
+        "200":
+          description: Course space
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseSpace" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [course-spaces]
+      summary: Edit a course space's settings
+      description: "Title, description and visible sections (FR-2). Scope: lms:course-space:manage-assigned gives course spaces the caller teaches; lms:course-space:manage-all widens it to the organisation."
+      operationId: updateCourseSpace
+      x-permission: lms:course-space:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCourseSpaceRequest" }
+      responses:
+        "200":
+          description: Course space updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseSpace" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /course-spaces/{course_space_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    post:
+      tags: [course-spaces]
+      summary: Activate or archive a course space
+      description: "draft → active → archived (FR-2). Scope: lms:course-space:manage-assigned gives course spaces the caller teaches; lms:course-space:manage-all widens it to the organisation."
+      operationId: changeCourseSpaceStatus
+      x-permission: lms:course-space:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, archived] }
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseSpace" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------- content units
+  /course-spaces/{course_space_id}/units:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [content]
+      summary: List content units
+      description: "Students see published units only (FR-4). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listContentUnits
+      x-permission: lms:course-space:read-own
+      responses:
+        "200":
+          description: Units in display order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ContentUnit" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [content]
+      summary: Create a content unit
+      description: "FR-4. Scope: lms:material:manage-assigned gives course spaces the caller teaches; lms:material:manage-all widens it to the organisation."
+      operationId: createContentUnit
+      x-permission: lms:material:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ContentUnitInput" }
+      responses:
+        "201":
+          description: Unit created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContentUnit" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /units/{unit_id}:
+    parameters:
+      - $ref: "#/components/parameters/UnitId"
+    patch:
+      tags: [content]
+      summary: Rename, reorder, publish or unpublish a content unit
+      description: "FR-4. Scope: lms:material:manage-assigned gives course spaces the caller teaches; lms:material:manage-all widens it to the organisation."
+      operationId: updateContentUnit
+      x-permission: lms:material:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                position: { type: integer, minimum: 0 }
+                published: { type: boolean }
+      responses:
+        "200":
+          description: Unit updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContentUnit" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # -------------------------------------------------------------- materials
+  /course-spaces/{course_space_id}/materials:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [content]
+      summary: List course materials
+      description: "Students see published materials in published units visible to their section (FR-5). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listCourseMaterials
+      x-permission: lms:course-space:read-own
+      parameters:
+        - { name: unit_id, in: query, schema: { type: string, format: uuid } }
+        - { name: material_type, in: query, schema: { $ref: "#/components/schemas/MaterialType" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Materials
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CourseMaterial" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [content]
+      summary: Add a course material
+      description: "A document (uploaded to platform/documents first), link or page, created as draft (FR-5, FR-21). Scope: lms:material:manage-assigned gives course spaces the caller teaches; lms:material:manage-all widens it to the organisation."
+      operationId: createCourseMaterial
+      x-permission: lms:material:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseMaterialInput" }
+      responses:
+        "201":
+          description: Material created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseMaterial" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /materials/{material_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    get:
+      tags: [content]
+      summary: Get a course material
+      description: "Includes a page's body or a document's document_id (FR-5). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: getCourseMaterial
+      x-permission: lms:course-space:read-own
+      responses:
+        "200":
+          description: Material
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseMaterial" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [content]
+      summary: Edit a course material
+      description: "FR-5. Scope: lms:material:manage-assigned gives course spaces the caller teaches; lms:material:manage-all widens it to the organisation."
+      operationId: updateCourseMaterial
+      x-permission: lms:material:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCourseMaterialRequest" }
+      responses:
+        "200":
+          description: Material updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseMaterial" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /materials/{material_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    post:
+      tags: [content]
+      summary: Publish or unpublish a course material
+      description: "Publishing publishes lms.material.published (FR-5). Scope: lms:material:manage-assigned gives course spaces the caller teaches; lms:material:manage-all widens it to the organisation."
+      operationId: changeCourseMaterialStatus
+      x-permission: lms:material:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [published, unpublished] }
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseMaterial" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ------------------------------------------------------------ assignments
+  /course-spaces/{course_space_id}/assignments:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [assignments]
+      summary: List assignments
+      description: "Students see published and closed assignments for their sections (FR-6). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listAssignments
+      x-permission: lms:course-space:read-own
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/WorkStatus" } }
+        - { name: unit_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Assignments ordered by due date
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [assignments]
+      summary: Create an assignment
+      description: "Created as draft (FR-6). Scope: lms:assignment:manage-assigned gives course spaces the caller teaches; lms:assignment:manage-all widens it to the organisation."
+      operationId: createAssignment
+      x-permission: lms:assignment:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssignmentInput" }
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assignment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assignments/{assignment_id}:
+    parameters:
+      - $ref: "#/components/parameters/AssignmentId"
+    get:
+      tags: [assignments]
+      summary: Get an assignment
+      description: "FR-6. Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: getAssignment
+      x-permission: lms:course-space:read-own
+      responses:
+        "200":
+          description: Assignment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assignment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [assignments]
+      summary: Edit an assignment
+      description: "Any field while draft. Once published, changes to due_at, max_points, target_section_ids or late_policy publish lms.assignment.updated (FR-6). Scope: lms:assignment:manage-assigned gives course spaces the caller teaches; lms:assignment:manage-all widens it to the organisation."
+      operationId: updateAssignment
+      x-permission: lms:assignment:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAssignmentRequest" }
+      responses:
+        "200":
+          description: Assignment updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assignment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /assignments/{assignment_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/AssignmentId"
+    post:
+      tags: [assignments]
+      summary: Publish or close an assignment
+      description: "draft → published publishes lms.assignment.published; published → closed publishes lms.assignment.updated (FR-6). Scope: lms:assignment:manage-assigned gives course spaces the caller teaches; lms:assignment:manage-all widens it to the organisation."
+      operationId: changeAssignmentStatus
+      x-permission: lms:assignment:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [published, closed] }
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assignment" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ------------------------------------------------------------ submissions
+  /assignments/{assignment_id}/submissions:
+    parameters:
+      - $ref: "#/components/parameters/AssignmentId"
+    get:
+      tags: [assignments]
+      summary: List submissions for an assignment
+      description: "Current attempts by default (FR-7). Scope: lms:submission:read-assigned gives course spaces the caller teaches; lms:submission:read-all widens it to the organisation."
+      operationId: listSubmissions
+      x-permission: lms:submission:read-assigned
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SubmissionStatus" } }
+        - { name: include_superseded, in: query, schema: { type: boolean, default: false } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Submissions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Submission" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [assignments]
+      summary: Submit an assignment
+      description: Within the late policy and max_attempts; a new attempt supersedes the previous one. Publishes lms.submission.submitted (FR-7).
+      operationId: submitAssignment
+      x-permission: lms:submission:submit-own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSubmissionRequest" }
+      responses:
+        "201":
+          description: Submission recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Submission" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Assignment not published, past the late cut-off, or no attempts left
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  # ---------------------------------------------------------------- quizzes
+  /course-spaces/{course_space_id}/quizzes:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [quizzes]
+      summary: List quizzes
+      description: "Students see published and closed quizzes (FR-8). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listQuizzes
+      x-permission: lms:course-space:read-own
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/WorkStatus" } }
+        - { name: unit_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Quizzes ordered by opening time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Quiz" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [quizzes]
+      summary: Create a quiz with its questions
+      description: "Created as draft (FR-8). Scope: lms:quiz:manage-assigned gives course spaces the caller teaches; lms:quiz:manage-all widens it to the organisation."
+      operationId: createQuiz
+      x-permission: lms:quiz:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuizInput" }
+      responses:
+        "201":
+          description: Quiz created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quiz" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /quizzes/{quiz_id}:
+    parameters:
+      - $ref: "#/components/parameters/QuizId"
+    get:
+      tags: [quizzes]
+      summary: Get a quiz
+      description: "Questions and answer keys are returned only to holders of lms:quiz:manage-assigned for the space; students get the quiz settings and receive questions when they start an attempt (FR-8, FR-9). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: getQuiz
+      x-permission: lms:course-space:read-own
+      responses:
+        "200":
+          description: Quiz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quiz" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [quizzes]
+      summary: Edit a draft quiz and its questions
+      description: "Questions are frozen once published; the window and attempts can still change (FR-8). Scope: lms:quiz:manage-assigned gives course spaces the caller teaches; lms:quiz:manage-all widens it to the organisation."
+      operationId: updateQuiz
+      x-permission: lms:quiz:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateQuizRequest" }
+      responses:
+        "200":
+          description: Quiz updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quiz" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /quizzes/{quiz_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/QuizId"
+    post:
+      tags: [quizzes]
+      summary: Publish or close a quiz
+      description: "draft → published publishes lms.quiz.published (FR-8). Scope: lms:quiz:manage-assigned gives course spaces the caller teaches; lms:quiz:manage-all widens it to the organisation."
+      operationId: changeQuizStatus
+      x-permission: lms:quiz:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [published, closed] }
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quiz" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ----------------------------------------------------------- quiz attempts
+  /quizzes/{quiz_id}/attempts:
+    parameters:
+      - $ref: "#/components/parameters/QuizId"
+    get:
+      tags: [quizzes]
+      summary: List attempts at a quiz
+      description: "FR-9, FR-10. Scope: lms:quiz-attempt:read-assigned gives course spaces the caller teaches; lms:quiz-attempt:read-all widens it to the organisation."
+      operationId: listQuizAttempts
+      x-permission: lms:quiz-attempt:read-assigned
+      parameters:
+        - { name: manual_grading_state, in: query, schema: { $ref: "#/components/schemas/ManualGradingState" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Attempts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/QuizAttempt" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [quizzes]
+      summary: Start a quiz attempt
+      description: Inside the open window and within attempts_allowed. Returns the questions without answer keys (FR-9).
+      operationId: startQuizAttempt
+      x-permission: lms:quiz-attempt:attempt-own
+      responses:
+        "201":
+          description: Attempt started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StartedQuizAttempt" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Quiz not open, or no attempts left, or an attempt is already in progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /attempts/{attempt_id}/answers:
+    parameters:
+      - $ref: "#/components/parameters/AttemptId"
+    put:
+      tags: [quizzes]
+      summary: Save answers in an attempt
+      description: Only the caller's own attempt while in_progress and within its time limit (FR-9).
+      operationId: saveQuizAnswers
+      x-permission: lms:quiz-attempt:attempt-own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers]
+              properties:
+                answers: { type: array, items: { $ref: "#/components/schemas/Answer" } }
+      responses:
+        "200":
+          description: Answers saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizAttempt" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /attempts/{attempt_id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/AttemptId"
+    post:
+      tags: [quizzes]
+      summary: Submit an attempt
+      description: Scores automatic questions. Publishes lms.quiz-attempt.submitted (FR-9, FR-10). The system submits attempts at the time limit or closes_at.
+      operationId: submitQuizAttempt
+      x-permission: lms:quiz-attempt:attempt-own
+      responses:
+        "200":
+          description: Attempt submitted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizAttempt" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /attempts/{attempt_id}/scores:
+    parameters:
+      - $ref: "#/components/parameters/AttemptId"
+    patch:
+      tags: [quizzes, grades]
+      summary: Score essay questions of an attempt
+      description: "When every question is scored the attempt becomes graded and its draft grade is created or updated (FR-10, FR-11). Scope: lms:grade:manage-assigned gives course spaces the caller teaches; lms:grade:manage-all widens it to the organisation."
+      operationId: scoreQuizAttempt
+      x-permission: lms:grade:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scores]
+              properties:
+                scores:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [question_id, points]
+                    properties:
+                      question_id: { type: string, format: uuid }
+                      points: { type: number, minimum: 0 }
+                      comment: { type: string }
+      responses:
+        "200":
+          description: Attempt after scoring
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuizAttempt" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ----------------------------------------------------------------- grades
+  /grades:
+    put:
+      tags: [grades]
+      summary: Enter or change coursework grades and feedback
+      description: "For one assignment or quiz, for the listed students. New grades are drafts; changing a released grade needs a reason, creates a new version and releases it again (FR-11, FR-12). Coursework grades only, not examination results. Scope: lms:grade:manage-assigned gives course spaces the caller teaches; lms:grade:manage-all widens it to the organisation."
+      operationId: enterGrades
+      x-permission: lms:grade:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnterGradesRequest" }
+      responses:
+        "200":
+          description: Grades after the change
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Grade" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /grades/release:
+    post:
+      tags: [grades]
+      summary: Release coursework grades to students
+      description: "For one assignment or quiz, all or listed students. Publishes lms.grade.released per grade (FR-12). Scope: lms:grade:manage-assigned gives course spaces the caller teaches; lms:grade:manage-all widens it to the organisation."
+      operationId: releaseGrades
+      x-permission: lms:grade:manage-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReleaseGradesRequest" }
+      responses:
+        "200":
+          description: Release summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [released, skipped]
+                properties:
+                  released: { type: integer }
+                  skipped: { type: integer, description: Students without a draft grade }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /course-spaces/{course_space_id}/gradebook:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [grades, reports]
+      summary: Gradebook of a course space
+      description: "Every published assignment and quiz per student with status and points, unweighted totals (FR-13). Scope: lms:grade:read-assigned gives course spaces the caller teaches; lms:grade:read-department widens it to the caller's department; lms:grade:read-all widens it to the organisation."
+      operationId: getGradebook
+      x-permission: lms:grade:read-assigned
+      responses:
+        "200":
+          description: Gradebook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Gradebook" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ------------------------------------------------------------ discussions
+  /course-spaces/{course_space_id}/threads:
+    parameters:
+      - $ref: "#/components/parameters/CourseSpaceId"
+    get:
+      tags: [discussions]
+      summary: List discussion threads
+      description: "Hidden threads are shown only to moderators (FR-14). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: listThreads
+      x-permission: lms:course-space:read-own
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Threads, most recently active first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Thread" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [discussions]
+      summary: Start a discussion thread
+      description: Members of an active course space. Publishes lms.discussion-thread.created (FR-14).
+      operationId: createThread
+      x-permission: lms:discussion:post-own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body]
+              properties:
+                title: { type: string, minLength: 1 }
+                body: { type: string, minLength: 1 }
+      responses:
+        "201":
+          description: Thread created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Thread" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /threads/{thread_id}:
+    parameters:
+      - $ref: "#/components/parameters/ThreadId"
+    get:
+      tags: [discussions]
+      summary: Get a thread with its posts
+      description: "Hidden posts are shown only to moderators (FR-14). Scope: lms:course-space:read-own gives the caller's own course spaces; lms:course-space:read-department widens it to the caller's department; lms:course-space:read-all widens it to the organisation."
+      operationId: getThread
+      x-permission: lms:course-space:read-own
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Thread and posts, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thread, posts, total]
+                properties:
+                  thread: { $ref: "#/components/schemas/Thread" }
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /threads/{thread_id}/posts:
+    parameters:
+      - $ref: "#/components/parameters/ThreadId"
+    post:
+      tags: [discussions]
+      summary: Reply to a thread
+      description: While the course space is active and the thread open (FR-14).
+      operationId: createPost
+      x-permission: lms:discussion:post-own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1 }
+      responses:
+        "201":
+          description: Post created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Post" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /threads/{thread_id}/moderation:
+    parameters:
+      - $ref: "#/components/parameters/ThreadId"
+    post:
+      tags: [discussions]
+      summary: Lock, unlock, hide or unhide a thread
+      description: "Hidden content is kept for audit (FR-15). Scope: lms:discussion:moderate-assigned gives course spaces the caller teaches; lms:discussion:moderate-all widens it to the organisation."
+      operationId: moderateThread
+      x-permission: lms:discussion:moderate-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [lock, unlock, hide, unhide] }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Thread after moderation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Thread" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /posts/{post_id}/moderation:
+    parameters:
+      - $ref: "#/components/parameters/PostId"
+    post:
+      tags: [discussions]
+      summary: Hide or unhide a post
+      description: "Hidden content is kept for audit (FR-15). Scope: lms:discussion:moderate-assigned gives course spaces the caller teaches; lms:discussion:moderate-all widens it to the organisation."
+      operationId: moderatePost
+      x-permission: lms:discussion:moderate-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [hide, unhide] }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Post after moderation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Post" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------------- reports
+  /reports/coursework-activity:
+    get:
+      tags: [reports]
+      summary: Coursework activity per course space
+      description: "Department heads get their own department by default; report:read-all holders pass department_id or get the whole organisation (FR-18). Scope: lms:report:read-department gives the caller's department; lms:report:read-all widens it to the organisation."
+      operationId: getCourseworkActivityReport
+      x-permission: lms:report:read-department
+      parameters:
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+        - { name: academic_period_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CourseworkActivityReport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # --------------------------------------------------------------------- me
+  /me/grading-queue:
+    get:
+      tags: [widgets, grades]
+      summary: The caller's grading queue
+      description: Assignments and quizzes in course spaces the caller teaches with ungraded submissions or attempts needing manual scoring, oldest waiting first (FR-16). Used by widget lms.assignments-to-grade (Faculty dashboard and layouts extending it).
+      operationId: getMyGradingQueue
+      x-permission: lms:grade:manage-assigned
+      responses:
+        "200":
+          description: Grading queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/GradingQueueItem" } }
+                  total: { type: integer }
+
+  /me/course-materials:
+    get:
+      tags: [widgets, content]
+      summary: Recently published materials in the caller's course spaces
+      description: Newest first (FR-17). Used by widget lms.course-materials (Student dashboard and layouts extending it).
+      operationId: getMyCourseMaterials
+      x-permission: lms:course-space:read-own
+      parameters:
+        - { name: since, in: query, description: Defaults to 14 days ago, schema: { type: string, format: date-time } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1, maximum: 50 } }
+      responses:
+        "200":
+          description: Recent materials
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/RecentMaterialItem" } }
+
+  /me/submissions:
+    get:
+      tags: [assignments]
+      summary: The caller's own submissions
+      description: All attempts for an assignment or course space (FR-7).
+      operationId: listMySubmissions
+      x-permission: lms:submission:read-own
+      parameters:
+        - { name: assignment_id, in: query, schema: { type: string, format: uuid } }
+        - { name: course_space_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Submissions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Submission" } }
+
+  /me/quiz-attempts:
+    get:
+      tags: [quizzes]
+      summary: The caller's own quiz attempts
+      description: Scores are shown once the quiz grade is released (FR-9, FR-12).
+      operationId: listMyQuizAttempts
+      x-permission: lms:quiz-attempt:read-own
+      parameters:
+        - { name: quiz_id, in: query, schema: { type: string, format: uuid } }
+        - { name: course_space_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Attempts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/QuizAttempt" } }
+
+  /me/grades:
+    get:
+      tags: [grades]
+      summary: The caller's released coursework grades
+      description: Released grades and feedback only, with unweighted totals per course space (FR-13). Not examination results.
+      operationId: listMyGrades
+      x-permission: lms:grade:read-own
+      parameters:
+        - { name: course_space_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Grades grouped by course space
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/MyCourseGrades" } }
+
 components:
-  schemas: {}
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0, minimum: 0 }
+    CourseSpaceId:
+      name: course_space_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UnitId:
+      name: unit_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MaterialId:
+      name: material_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssignmentId:
+      name: assignment_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    QuizId:
+      name: quiz_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AttemptId:
+      name: attempt_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ThreadId:
+      name: thread_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PostId:
+      name: post_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Caller lacks the permission or scope for this resource
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Request conflicts with the resource's current state
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unprocessable:
+      description: Request is well formed but breaks a domain rule (for example an unknown course offering or document)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object }
+
+    # --- enums
+    CourseSpaceStatus:
+      type: string
+      enum: [draft, active, archived]
+    MaterialType:
+      type: string
+      enum: [document, link, page]
+    MaterialStatus:
+      type: string
+      enum: [draft, published, unpublished]
+    WorkStatus:
+      type: string
+      enum: [draft, published, closed]
+    SubmissionType:
+      type: string
+      enum: [file, text, file_and_text, none]
+    SubmissionStatus:
+      type: string
+      enum: [submitted, graded, superseded]
+    QuestionType:
+      type: string
+      enum: [single_choice, multiple_choice, true_false, short_answer, essay]
+    AttemptStatus:
+      type: string
+      enum: [in_progress, submitted, graded]
+    ManualGradingState:
+      type: string
+      enum: [none, pending, done]
+    ItemType:
+      type: string
+      enum: [assignment, quiz]
+    GradeStatus:
+      type: string
+      enum: [draft, released]
+    ThreadState:
+      type: string
+      enum: [open, locked, hidden]
+    PostState:
+      type: string
+      enum: [visible, hidden]
+
+    # --- course spaces
+    CourseSpace:
+      type: object
+      required: [id, organisation_id, course_offering_id, title, visible_section_ids, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        course_code: { type: string, readOnly: true }
+        course_title: { type: string, readOnly: true }
+        department_id: { type: [string, "null"], format: uuid, readOnly: true, description: Cached from the course offering }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        visible_section_ids:
+          type: array
+          description: Empty means every section of the course offering
+          items: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/CourseSpaceStatus" }
+        caller_is_instructor: { type: boolean, readOnly: true }
+    CreateCourseSpaceRequest:
+      type: object
+      required: [course_offering_id, title]
+      properties:
+        course_offering_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        visible_section_ids: { type: array, items: { type: string, format: uuid } }
+    UpdateCourseSpaceRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: [string, "null"] }
+        visible_section_ids: { type: array, items: { type: string, format: uuid } }
+
+    # --- content
+    ContentUnitInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        position: { type: integer, minimum: 0, description: Appended at the end when omitted }
+        published: { type: boolean, default: false }
+    ContentUnit:
+      allOf:
+        - $ref: "#/components/schemas/ContentUnitInput"
+        - type: object
+          required: [id, organisation_id, course_space_id, position, published]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            course_space_id: { type: string, format: uuid }
+    CourseMaterialInput:
+      type: object
+      required: [material_type, title]
+      description: document needs document_id; link needs url; page needs body
+      properties:
+        material_type: { $ref: "#/components/schemas/MaterialType" }
+        title: { type: string }
+        unit_id: { type: string, format: uuid }
+        document_id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        body: { type: string }
+        visible_section_ids: { type: array, items: { type: string, format: uuid } }
+        scheduled_class_id: { type: string, format: uuid, description: Optional timetable-attendance class link (owner decision C19); no scheduled-class events are consumed }
+    UpdateCourseMaterialRequest:
+      type: object
+      properties:
+        title: { type: string }
+        unit_id: { type: [string, "null"], format: uuid }
+        document_id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        body: { type: string }
+        visible_section_ids: { type: array, items: { type: string, format: uuid } }
+        scheduled_class_id: { type: [string, "null"], format: uuid }
+    CourseMaterial:
+      allOf:
+        - $ref: "#/components/schemas/CourseMaterialInput"
+        - type: object
+          required: [id, organisation_id, course_space_id, status]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            course_space_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/MaterialStatus" }
+            published_at: { type: [string, "null"], format: date-time }
+
+    # --- assignments and submissions
+    LatePolicy:
+      type: object
+      required: [accept_late]
+      properties:
+        accept_late: { type: boolean }
+        late_cutoff_at: { type: [string, "null"], format: date-time, description: No submissions after this time; null means no cut-off when accept_late is true }
+    AssignmentInput:
+      type: object
+      required: [title, due_at, max_points, submission_type]
+      properties:
+        title: { type: string }
+        instructions: { type: string }
+        unit_id: { type: string, format: uuid }
+        due_at: { type: string, format: date-time }
+        max_points: { type: number, exclusiveMinimum: 0 }
+        submission_type: { $ref: "#/components/schemas/SubmissionType" }
+        max_attempts: { type: integer, minimum: 1, default: 1 }
+        late_policy: { $ref: "#/components/schemas/LatePolicy" }
+        target_section_ids:
+          type: array
+          description: Empty means every visible section of the course space
+          items: { type: string, format: uuid }
+    UpdateAssignmentRequest:
+      type: object
+      properties:
+        title: { type: string }
+        instructions: { type: string }
+        unit_id: { type: [string, "null"], format: uuid }
+        due_at: { type: string, format: date-time }
+        max_points: { type: number, exclusiveMinimum: 0 }
+        submission_type: { $ref: "#/components/schemas/SubmissionType" }
+        max_attempts: { type: integer, minimum: 1 }
+        late_policy: { $ref: "#/components/schemas/LatePolicy" }
+        target_section_ids: { type: array, items: { type: string, format: uuid } }
+    Assignment:
+      allOf:
+        - $ref: "#/components/schemas/AssignmentInput"
+        - type: object
+          required: [id, organisation_id, course_space_id, status]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            course_space_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/WorkStatus" }
+            published_at: { type: [string, "null"], format: date-time }
+    CreateSubmissionRequest:
+      type: object
+      description: Content must match the assignment's submission_type
+      properties:
+        document_ids:
+          type: array
+          description: Files already uploaded to platform/documents
+          items: { type: string, format: uuid }
+        text: { type: string }
+    Submission:
+      type: object
+      required: [id, organisation_id, assignment_id, student_id, attempt, submitted_at, late, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        assignment_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        attempt: { type: integer, minimum: 1 }
+        document_ids: { type: array, items: { type: string, format: uuid } }
+        text: { type: [string, "null"] }
+        submitted_at: { type: string, format: date-time }
+        late: { type: boolean }
+        status: { $ref: "#/components/schemas/SubmissionStatus" }
+
+    # --- quizzes
+    QuizQuestionInput:
+      type: object
+      required: [question_type, prompt, points]
+      properties:
+        question_type: { $ref: "#/components/schemas/QuestionType" }
+        prompt: { type: string }
+        options:
+          type: array
+          description: For single_choice and multiple_choice
+          items: { type: string }
+        answer_key:
+          description: Never returned to students. Option indexes for choice types; boolean for true_false; accepted strings for short_answer; absent for essay
+          oneOf:
+            - { type: array, items: { type: integer, minimum: 0 } }
+            - { type: boolean }
+            - { type: array, items: { type: string } }
+        points: { type: number, exclusiveMinimum: 0 }
+    QuizQuestion:
+      allOf:
+        - $ref: "#/components/schemas/QuizQuestionInput"
+        - type: object
+          required: [id, position]
+          properties:
+            id: { type: string, format: uuid }
+            position: { type: integer, minimum: 0 }
+    StudentQuizQuestion:
+      type: object
+      description: A question as shown to a student; no answer key
+      required: [id, position, question_type, prompt, points]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        question_type: { $ref: "#/components/schemas/QuestionType" }
+        prompt: { type: string }
+        options: { type: array, items: { type: string } }
+        points: { type: number }
+    QuizSettings:
+      type: object
+      properties:
+        title: { type: string }
+        unit_id: { type: [string, "null"], format: uuid }
+        opens_at: { type: string, format: date-time }
+        closes_at: { type: string, format: date-time }
+        time_limit_minutes: { type: [integer, "null"], minimum: 1 }
+        attempts_allowed: { type: integer, minimum: 1 }
+        attempt_scoring: { type: string, enum: [highest, latest] }
+        auto_release: { type: boolean, description: Release the grade as soon as an attempt is fully scored }
+    QuizInput:
+      allOf:
+        - $ref: "#/components/schemas/QuizSettings"
+        - type: object
+          required: [title, opens_at, closes_at, attempts_allowed, questions]
+          properties:
+            attempts_allowed: { type: integer, minimum: 1, default: 1 }
+            attempt_scoring: { type: string, enum: [highest, latest], default: highest }
+            auto_release: { type: boolean, default: false }
+            questions: { type: array, minItems: 1, items: { $ref: "#/components/schemas/QuizQuestionInput" } }
+    UpdateQuizRequest:
+      allOf:
+        - $ref: "#/components/schemas/QuizSettings"
+        - type: object
+          properties:
+            questions:
+              type: array
+              description: Replaces all questions; refused once the quiz is published
+              items: { $ref: "#/components/schemas/QuizQuestionInput" }
+    Quiz:
+      allOf:
+        - $ref: "#/components/schemas/QuizSettings"
+        - type: object
+          required: [id, organisation_id, course_space_id, title, opens_at, closes_at, attempts_allowed, status, question_count, max_points]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            course_space_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/WorkStatus" }
+            question_count: { type: integer }
+            max_points: { type: number }
+            published_at: { type: [string, "null"], format: date-time }
+            questions:
+              type: array
+              description: Only for holders of lms:quiz:manage-assigned for the space
+              items: { $ref: "#/components/schemas/QuizQuestion" }
+
+    # --- quiz attempts
+    Answer:
+      type: object
+      required: [question_id]
+      properties:
+        question_id: { type: string, format: uuid }
+        selected_options: { type: array, items: { type: integer, minimum: 0 } }
+        boolean_answer: { type: boolean }
+        text_answer: { type: string }
+    QuizAttempt:
+      type: object
+      required: [id, organisation_id, quiz_id, student_id, attempt_number, started_at, status, manual_grading_state]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        quiz_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        attempt_number: { type: integer, minimum: 1 }
+        started_at: { type: string, format: date-time }
+        must_submit_by: { type: string, format: date-time, readOnly: true, description: Earlier of the time limit and closes_at }
+        submitted_at: { type: [string, "null"], format: date-time }
+        submitted_by_system: { type: boolean }
+        answers: { type: array, items: { $ref: "#/components/schemas/Answer" } }
+        auto_score: { type: [number, "null"], description: Hidden from the student until the quiz grade is released }
+        manual_score: { type: [number, "null"], description: Hidden from the student until the quiz grade is released }
+        manual_grading_state: { $ref: "#/components/schemas/ManualGradingState" }
+        status: { $ref: "#/components/schemas/AttemptStatus" }
+    StartedQuizAttempt:
+      allOf:
+        - $ref: "#/components/schemas/QuizAttempt"
+        - type: object
+          required: [questions]
+          properties:
+            questions: { type: array, items: { $ref: "#/components/schemas/StudentQuizQuestion" } }
+
+    # --- grades
+    Grade:
+      type: object
+      required: [id, organisation_id, course_space_id, item_type, item_id, student_id, points, max_points, status, version]
+      description: A coursework grade. Not an examination result.
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        course_space_id: { type: string, format: uuid }
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        item_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        points: { type: number, minimum: 0 }
+        max_points: { type: number }
+        feedback: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/GradeStatus" }
+        version: { type: integer, minimum: 1 }
+        released_at: { type: [string, "null"], format: date-time }
+        change_reason: { type: [string, "null"] }
+    EnterGradesRequest:
+      type: object
+      required: [item_type, item_id, entries]
+      properties:
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        item_id: { type: string, format: uuid }
+        entries:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [student_id, points]
+            properties:
+              student_id: { type: string, format: uuid }
+              points: { type: number, minimum: 0, description: At most the item's max_points }
+              feedback: { type: string }
+              reason: { type: string, description: Required when changing a released grade or overriding a quiz score }
+    ReleaseGradesRequest:
+      type: object
+      required: [item_type, item_id]
+      properties:
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        item_id: { type: string, format: uuid }
+        student_ids:
+          type: array
+          description: All students with a draft grade when omitted
+          items: { type: string, format: uuid }
+    GradebookCell:
+      type: object
+      required: [item_type, item_id, status]
+      properties:
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        item_id: { type: string, format: uuid }
+        status: { type: string, enum: [missing, submitted, graded, released] }
+        points: { type: [number, "null"] }
+        late: { type: boolean }
+    Gradebook:
+      type: object
+      required: [course_space_id, items, students]
+      properties:
+        course_space_id: { type: string, format: uuid }
+        items:
+          type: array
+          description: Published assignments and quizzes, columns of the gradebook
+          items:
+            type: object
+            required: [item_type, item_id, title, max_points]
+            properties:
+              item_type: { $ref: "#/components/schemas/ItemType" }
+              item_id: { type: string, format: uuid }
+              title: { type: string }
+              due_at: { type: [string, "null"], format: date-time }
+              max_points: { type: number }
+        students:
+          type: array
+          items:
+            type: object
+            required: [student_id, cells, released_points, released_max_points]
+            properties:
+              student_id: { type: string, format: uuid }
+              student_name: { type: string, description: Cached from the membership event when provided (LQ4) }
+              cells: { type: array, items: { $ref: "#/components/schemas/GradebookCell" } }
+              released_points: { type: number }
+              released_max_points: { type: number }
+              released_percent: { type: [number, "null"], description: Unweighted; not an examination result }
+    MyCourseGrades:
+      type: object
+      required: [course_space_id, grades, released_points, released_max_points]
+      properties:
+        course_space_id: { type: string, format: uuid }
+        course_title: { type: string }
+        grades: { type: array, items: { $ref: "#/components/schemas/Grade" } }
+        released_points: { type: number }
+        released_max_points: { type: number }
+
+    # --- discussions
+    Thread:
+      type: object
+      required: [id, organisation_id, course_space_id, title, body, created_by, created_at, state, post_count]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        course_space_id: { type: string, format: uuid }
+        title: { type: string }
+        body: { type: string }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        state: { $ref: "#/components/schemas/ThreadState" }
+        post_count: { type: integer }
+        last_activity_at: { type: [string, "null"], format: date-time }
+    Post:
+      type: object
+      required: [id, organisation_id, thread_id, body, created_by, created_at, state]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        thread_id: { type: string, format: uuid }
+        body: { type: string }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        state: { $ref: "#/components/schemas/PostState" }
+
+    # --- widgets and reports
+    GradingQueueItem:
+      type: object
+      required: [course_space_id, item_type, item_id, title, waiting_count, oldest_waiting_since]
+      properties:
+        course_space_id: { type: string, format: uuid }
+        course_title: { type: string }
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        item_id: { type: string, format: uuid }
+        title: { type: string }
+        due_at: { type: [string, "null"], format: date-time }
+        waiting_count: { type: integer, description: Ungraded submissions or attempts needing manual scoring }
+        oldest_waiting_since: { type: string, format: date-time }
+    RecentMaterialItem:
+      type: object
+      required: [material_id, course_space_id, title, material_type, published_at]
+      properties:
+        material_id: { type: string, format: uuid }
+        course_space_id: { type: string, format: uuid }
+        course_title: { type: string }
+        title: { type: string }
+        material_type: { $ref: "#/components/schemas/MaterialType" }
+        published_at: { type: string, format: date-time }
+    CourseworkActivityReport:
+      type: object
+      required: [items]
+      properties:
+        department_id: { type: [string, "null"], format: uuid }
+        items:
+          type: array
+          description: One row per course space
+          items:
+            type: object
+            required: [course_space_id, materials_published, assignments_published, quizzes_published, submissions_received, ungraded]
+            properties:
+              course_space_id: { type: string, format: uuid }
+              course_offering_id: { type: string, format: uuid }
+              course_title: { type: string }
+              materials_published: { type: integer }
+              assignments_published: { type: integer }
+              quizzes_published: { type: integer }
+              submissions_received: { type: integer }
+              ungraded: { type: integer }
+              oldest_ungraded_since: { type: [string, "null"], format: date-time }
+              last_activity_at: { type: [string, "null"], format: date-time }

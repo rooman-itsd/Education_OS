@@ -2,9 +2,352 @@ openapi: 3.1.0
 info:
   title: projects API
   version: 0.1.0
-  description: "Projects with milestones, teams and reviews: capstone, film, live business, research, artwork."
+  description: >-
+    Generic projects pattern: a project with a team and guides, milestones the team submits and guides review,
+    and a final submission and evaluation. Labels shown to users come from the academy profile vocabulary
+    (keys projects.project, projects.milestone, projects.guide). See docs/prd.md.
 servers:
   - url: /api/v1/projects
-paths: {}
+paths:
+  /projects:
+    get:
+      summary: >-
+        Projects. status=active backs the widget projects.active (guide and coordinator dashboards). A caller with
+        only projects:guidance:read sees the projects they guide. Permission projects:project:read or projects:guidance:read.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ProjectStatus" } }
+        - { name: kind, in: query, schema: { type: string } }
+        - { name: academic_year, in: query, schema: { type: string } }
+        - { name: guide_id, in: query, schema: { type: string, format: uuid } }
+        - { name: member_id, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, description: Title contains, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectPage" } } } } }
+    post:
+      summary: >-
+        Create a project. With projects:project:manage it starts active with the given team and guides; with
+        projects:self:propose it starts proposed with the caller as lead. Publishes projects.project.proposed or projects.project.approved.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectCreate" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }, "409": { description: "Same person as member and guide, or no lead" } }
+  /projects/{id}:
+    get:
+      summary: >-
+        One project with team, guides and milestones. Permission projects:project:read; projects:guidance:read if
+        the caller guides it; projects:self:read if the caller is a member.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectDetail" } } } }, "404": { description: Not found } }
+    patch:
+      summary: >-
+        Update title, summary, kind, period or external partner. Permission projects:project:manage, or
+        projects:self:propose for the lead while the project is proposed.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectUpdate" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }, "409": { description: "Completed, rejected or cancelled" } }
+  /projects/{id}/decision:
+    post:
+      summary: >-
+        Approve a proposal (proposed → active) with at least one guide, or reject it with a reason. Publishes
+        projects.project.approved or projects.project.rejected. Permission projects:project:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectDecision" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }, "409": { description: "Not proposed, or approval without a guide" } }
+  /projects/{id}/members:
+    post:
+      summary: >-
+        Add a team member, or make one the lead. Publishes projects.member.added. Permission projects:project:manage,
+        or projects:self:propose for the lead while the project is proposed.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MemberInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Member" } } } }, "409": { description: "Already a member, or a guide of this project" } }
+  /projects/{id}/members/{person_id}:
+    delete:
+      summary: >-
+        Remove a team member (the record is kept with left_at). The lead can be removed only after another member is made lead.
+        Publishes projects.member.removed. Permission projects:project:manage, or projects:self:propose for the lead while the project is proposed.
+      parameters: [{ $ref: "#/components/parameters/Id" }, { $ref: "#/components/parameters/PersonId" }]
+      responses: { "204": { description: Removed }, "409": { description: Member is the lead } }
+  /projects/{id}/guides:
+    put:
+      summary: Replace the project's guides (at least one while active). Publishes projects.guide.assigned. Permission projects:project:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [guide_ids], properties: { guide_ids: { type: array, minItems: 1, items: { type: string, format: uuid } } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectDetail" } } } }, "409": { description: A guide is a team member } }
+  /projects/{id}/cancel:
+    post:
+      summary: Cancel a proposed or active project with a reason. Publishes projects.project.cancelled. Permission projects:project:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }, "409": { description: "Already completed, rejected or cancelled" } }
+  /projects/{id}/milestones:
+    get:
+      summary: Milestones of a project in due order. Same visibility as GET /projects/{id}.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Milestone" } } } } } }
+    post:
+      summary: Add a milestone to an active project. Publishes projects.milestone.created. Permission projects:milestone:manage for a project the caller guides, or projects:project:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MilestoneInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Milestone" } } } }, "409": { description: Project not active } }
+  /milestones/{id}:
+    patch:
+      summary: >-
+        Change a milestone's title, description, due date or weight, or cancel it (status=cancelled). Not once accepted.
+        Permission projects:milestone:manage for a project the caller guides, or projects:project:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MilestoneUpdate" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Milestone" } } } }, "409": { description: Milestone accepted } }
+  /milestones/{id}/submissions:
+    get:
+      summary: Every submitted version of a milestone with its review. Same visibility as GET /projects/{id}.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Submission" } } } } } }
+    post:
+      summary: >-
+        A team member submits a pending or returned milestone (→ submitted). Publishes projects.milestone.submitted.
+        Permission projects:self:submit, as a member of the project.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SubmissionInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Submission" } } } }, "403": { description: Not a member }, "409": { description: "Already submitted, accepted or cancelled, or project not active" } }
+  /milestones/{id}/review:
+    post:
+      summary: >-
+        A guide accepts or returns the latest submission of a milestone. Publishes projects.milestone.accepted or
+        projects.milestone.returned. Permission projects:review:record, as a guide of the project.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Milestone" } } } }, "403": { description: Not a guide of this project }, "409": { description: Nothing submitted } }
+  /projects/{id}/submit:
+    post:
+      summary: >-
+        A team member makes the final submission (active → submitted). Milestones not accepted are listed in the
+        response as a warning, not refused. Publishes projects.project.submitted. Permission projects:self:submit, as a member.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SubmissionInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/FinalSubmissionResult" } } } }, "403": { description: Not a member }, "409": { description: Project not active } }
+  /projects/{id}/evaluation:
+    post:
+      summary: >-
+        A guide evaluates the final submission: decision completed records the outcome (submitted → completed,
+        projects.project.completed); decision returned sends it back (submitted → active, projects.project.returned).
+        Permission projects:review:record, as a guide of the project.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EvaluationInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Project" } } } }, "403": { description: Not a guide of this project }, "409": { description: Project not submitted } }
+  /me/projects:
+    get:
+      summary: >-
+        Projects the caller is a member of: active and submitted first, then proposed, with progress (milestones accepted
+        of total) and the next milestone; completed with include_past. Backs the widget projects.my-projects. Permission projects:self:read.
+      parameters: [{ name: include_past, in: query, schema: { type: boolean, default: false } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MyProject" } } } } } }
+  /me/milestones:
+    get:
+      summary: >-
+        Pending, returned and overdue milestones of the caller's active projects due within within_days, earliest first.
+        Backs the widget projects.milestones-due. Permission projects:self:read.
+      parameters: [{ name: within_days, in: query, schema: { type: integer, minimum: 1, maximum: 180, default: 14 } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MilestoneDue" } } } } } }
+  /me/reviews:
+    get:
+      summary: >-
+        Work awaiting the caller as guide: submitted milestones and submitted projects, oldest first. Backs the widget
+        projects.to-review. Permission projects:guidance:read.
+      parameters: [{ $ref: "#/components/parameters/Limit" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    PersonId: { name: person_id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Reason:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 3 } }
+    ProjectStatus: { type: string, enum: [proposed, active, submitted, completed, rejected, cancelled] }
+    ProjectFields:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        summary: { type: string, maxLength: 4000 }
+        kind: { type: string, description: "Organisation's label for the kind of project" }
+        academic_year: { type: string, examples: ["2026-27"] }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        external_partner: { type: [string, "null"], description: "Name of an outside client or partner, if any" }
+    ProjectCreate:
+      allOf:
+        - { $ref: "#/components/schemas/ProjectFields" }
+        - type: object
+          required: [title, starts_on, ends_on]
+          properties:
+            member_ids: { type: array, items: { type: string, format: uuid }, description: "Coordinator create only; ignored when proposing" }
+            lead_id: { type: string, format: uuid, description: "Coordinator create only; the proposer is the lead when proposing" }
+            guide_ids: { type: array, items: { type: string, format: uuid }, description: "Coordinator create only; at least one" }
+    ProjectUpdate: { $ref: "#/components/schemas/ProjectFields" }
+    ProjectDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, rejected] }
+        guide_ids: { type: array, items: { type: string, format: uuid }, description: "Required to approve" }
+        reason: { type: string, description: "Required to reject" }
+    Project:
+      allOf:
+        - { $ref: "#/components/schemas/ProjectFields" }
+        - type: object
+          required: [id, organisation_id, title, status]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/ProjectStatus" }
+            lead_id: { type: [string, "null"], format: uuid }
+            guide_ids: { type: array, items: { type: string, format: uuid } }
+            member_count: { type: integer }
+            milestones_total: { type: integer }
+            milestones_accepted: { type: integer }
+            outcome: { type: [string, "null"], description: "Evaluation outcome on the organisation's scale" }
+            score: { type: [number, "null"] }
+            reason: { type: [string, "null"], description: "Rejection or cancellation reason" }
+    ProjectDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Project" }
+        - type: object
+          properties:
+            members: { type: array, items: { $ref: "#/components/schemas/Member" } }
+            guides: { type: array, items: { $ref: "#/components/schemas/Guide" } }
+            milestones: { type: array, items: { $ref: "#/components/schemas/Milestone" } }
+    ProjectPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Project" } }
+        next_cursor: { type: [string, "null"] }
+    MemberInput:
+      type: object
+      required: [person_id]
+      properties:
+        person_id: { type: string, format: uuid }
+        role: { type: string, enum: [lead, member], default: member, description: "Making someone lead demotes the current lead to member" }
+    Member:
+      type: object
+      required: [person_id, role, joined_at]
+      properties:
+        person_id: { type: string, format: uuid }
+        person_name: { type: string, description: "Cached from student-information" }
+        role: { type: string, enum: [lead, member] }
+        joined_at: { type: string, format: date-time }
+        left_at: { type: [string, "null"], format: date-time }
+    Guide:
+      type: object
+      required: [person_id, assigned_at]
+      properties:
+        person_id: { type: string, format: uuid }
+        person_name: { type: string, description: "Cached from hr-payroll" }
+        assigned_at: { type: string, format: date-time }
+    MilestoneStatus: { type: string, enum: [pending, submitted, accepted, returned, cancelled] }
+    MilestoneInput:
+      type: object
+      required: [title, due_on]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 4000 }
+        due_on: { type: string, format: date }
+        weight: { type: [number, "null"], minimum: 0, maximum: 100, description: "Optional share of the final evaluation, in percent" }
+    MilestoneUpdate:
+      allOf:
+        - { $ref: "#/components/schemas/MilestoneInput" }
+        - type: object
+          properties:
+            status: { type: string, enum: [cancelled], description: "Set to cancel the milestone" }
+            reason: { type: string }
+    Milestone:
+      allOf:
+        - { $ref: "#/components/schemas/MilestoneInput" }
+        - type: object
+          required: [id, organisation_id, project_id, status]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            project_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/MilestoneStatus" }
+            overdue: { type: boolean }
+            latest_submission_at: { type: [string, "null"], format: date-time }
+    SubmissionInput:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string, maxLength: 4000 }
+        document_ids: { type: array, items: { type: string, format: uuid }, description: "Files uploaded through platform/documents" }
+    Submission:
+      allOf:
+        - { $ref: "#/components/schemas/SubmissionInput" }
+        - type: object
+          required: [id, organisation_id, project_id, version, submitted_by, submitted_at]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            project_id: { type: string, format: uuid }
+            milestone_id: { type: [string, "null"], format: uuid, description: "Null for the final submission" }
+            version: { type: integer, minimum: 1 }
+            submitted_by: { type: string, format: uuid }
+            submitted_at: { type: string, format: date-time }
+            review: { oneOf: [{ $ref: "#/components/schemas/Review" }, { type: "null" }] }
+    ReviewInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [accepted, returned] }
+        comments: { type: string, maxLength: 4000, description: "Required when returning" }
+        score: { type: [number, "null"], minimum: 0, maximum: 100 }
+    Review:
+      allOf:
+        - { $ref: "#/components/schemas/ReviewInput" }
+        - type: object
+          required: [reviewer_id, reviewed_at]
+          properties:
+            reviewer_id: { type: string, format: uuid }
+            reviewed_at: { type: string, format: date-time }
+    EvaluationInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [completed, returned] }
+        outcome: { type: string, description: "Required when completing; value on the organisation's outcome scale" }
+        score: { type: [number, "null"], minimum: 0, maximum: 100 }
+        comments: { type: string, maxLength: 4000 }
+    FinalSubmissionResult:
+      type: object
+      required: [submission, project]
+      properties:
+        submission: { $ref: "#/components/schemas/Submission" }
+        project: { $ref: "#/components/schemas/Project" }
+        milestones_not_accepted: { type: array, items: { type: string, format: uuid } }
+    MyProject:
+      allOf:
+        - { $ref: "#/components/schemas/Project" }
+        - type: object
+          properties:
+            my_role: { type: string, enum: [lead, member] }
+            next_milestone: { oneOf: [{ $ref: "#/components/schemas/Milestone" }, { type: "null" }] }
+    MilestoneDue:
+      allOf:
+        - { $ref: "#/components/schemas/Milestone" }
+        - type: object
+          required: [project_title]
+          properties:
+            project_title: { type: string }
+            days_left: { type: integer, description: "Negative when overdue" }
+    ReviewItem:
+      type: object
+      required: [kind, project_id, project_title, submission]
+      properties:
+        kind: { type: string, enum: [milestone, final] }
+        project_id: { type: string, format: uuid }
+        project_title: { type: string }
+        milestone_id: { type: [string, "null"], format: uuid }
+        milestone_title: { type: [string, "null"] }
+        submission: { $ref: "#/components/schemas/Submission" }
+        waiting_days: { type: integer, minimum: 0 }

@@ -1,11 +1,35 @@
 # Permission catalogue for regulatory-reports. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Role names and their mapping to profile roles are a proposal: docs/prd.md open question 10.
 module: regulatory-reports
-permissions: []
-#  - key: regulatory-reports:record:read
-#    description: ...
-#  - key: regulatory-reports:record:write
-#    description: ...
-roles: []
-#  - name: regulatory-reports-admin
-#    grants: [regulatory-reports:record:read, regulatory-reports:record:write]
+permissions:
+  - key: regulatory-reports:obligation:manage
+    description: Record, change and deactivate obligations.
+  - key: regulatory-reports:filing:manage
+    description: Create filings; change owner, due date and period; return, mark not applicable, submit and acknowledge any filing.
+  - key: regulatory-reports:filing:prepare
+    description: See one's own filings and their obligations; edit notes and links, start preparation and send for review.
+  - key: regulatory-reports:data:read
+    description: Read all obligations and filings; use scope=all on the due statistics; with stats:read, see the compliance calendar.
+  - key: regulatory-reports:stats:read
+    description: See the due statistics; with data:read, see the compliance calendar.
+roles:
+  - name: regulatory-reports-coordinator
+    description: Runs statutory reporting. Proposed default for the governance profile role.
+    grants:
+      - regulatory-reports:obligation:manage
+      - regulatory-reports:filing:manage
+      - regulatory-reports:data:read
+      - regulatory-reports:stats:read
+  - name: regulatory-reports-preparer
+    description: >-
+      Prepares the filings they own. Proposed default for the hospital-coordinator, research-office, department-admin,
+      finance-staff and hr-staff profile roles.
+    grants:
+      - regulatory-reports:filing:prepare
+      - regulatory-reports:stats:read
+  - name: regulatory-reports-viewer
+    description: Read-only oversight and the compliance calendar. Proposed default for the management profile role.
+    grants:
+      - regulatory-reports:data:read
+      - regulatory-reports:stats:read

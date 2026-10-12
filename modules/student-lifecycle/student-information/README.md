@@ -7,7 +7,16 @@
 Student master record (SIS): profiles, documents, ID cards, status history.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+The Person system of record (SIS): profile, contact and guardian details, status history
+(pending, active, suspended, graduated, withdrawn, alumnus), attached identity/supporting
+documents, and ID card issuance. A Person record is created only by an authorised staff role
+(registrar, or admissions staff with the permission) — never through public sign-up.
+
+Explicitly not this module's responsibility: login credentials (`platform/identity`), raw file
+storage (`platform/documents`), the admissions funnel (`admissions`), organisation onboarding and
+sign-up (`web-portal-cms` + `platform/tenancy`), programme enrolment (`enrolment-registration`),
+academic records (`academics/*`), or fee invoices (`finance-operations/fees-accounts`). See
+[docs/prd.md](docs/prd.md) for the full scope.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

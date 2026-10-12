@@ -2,9 +2,344 @@ openapi: 3.1.0
 info:
   title: selection-process API
   version: 0.1.0
-  description: "Auditions, casting, squad selection, jury rounds, moot court teams, supervisor allocation."
+  description: >-
+    Generic selection pattern (ADR-0004): a configurable set of candidates move through one or
+    more ordered stages, each judged by a panel, until a final outcome. Field words come from the
+    profile vocabulary (selection-process.selection — "Audition" for a music academy,
+    "Critique / jury" for an arts academy, "Moot court panel" for law, "Squad trial" for sports,
+    "Supervisor allocation" for a research university); this contract names no field, no fixed
+    stage list, and no fixed criteria. candidate person references and any upstream reference
+    (e.g. a portfolio item, an admissions application) are opaque ids — this module never calls
+    another module's API and never joins across schemas.
 servers:
   - url: /api/v1/selection-process
-paths: {}
+paths:
+  /process-types:
+    get:
+      summary: List process types of the caller's organisation. Permission selection-process:process-type:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ProcessType" } } } } } }
+    post:
+      summary: Create a process type. Permission selection-process:process-type:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessTypeInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessType" } } } }, "409": { description: Name already in use } }
+  /process-types/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      summary: Update a process type. Permission selection-process:process-type:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ProcessTypeInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessType" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    delete:
+      summary: Delete a process type that no process uses. Permission selection-process:process-type:manage.
+      responses: { "204": { description: Deleted }, "409": { description: Processes still use this type } }
+
+  /processes:
+    get:
+      summary: Find selection processes. Permission selection-process:process:read.
+      parameters:
+        - { name: type_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ProcessStatus" } } }
+        - { name: q, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessPage" } } } } }
+    post:
+      summary: Create a selection process as a draft, with its ordered stages. Permission selection-process:process:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } } }
+
+  /processes/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One process with its stages and panels. Permission selection-process:process:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      summary: Update a process's details. Does not change stages (use /processes/{id}/stages) or status (use /processes/{id}/open or /close). Permission selection-process:process:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ProcessUpdate" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    delete:
+      summary: Delete a draft process with no candidates. Permission selection-process:process:manage.
+      responses: { "204": { description: Deleted }, "409": { description: Process has candidates or is not a draft } }
+
+  /processes/{id}/stages:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    put:
+      summary: >
+        Replace the ordered list of stages. Organisation-named (e.g. "Screening", "Final round",
+        "Interview") — this contract fixes no stage names or count. Allowed only while the
+        process is draft. Permission selection-process:process:manage.
+      requestBody: { required: true, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/StageInput" } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Stage" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Process is not a draft }
+
+  /processes/{id}/open:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Open a draft process for candidate registration and decisions. Requires at least one stage. Permission selection-process:process:manage.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { description: "Process is not a draft, or has no stages" } }
+
+  /processes/{id}/close:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Close a process. No further candidates, decisions or stage changes are accepted. Permission selection-process:process:manage.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /processes/{id}/panels:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Panels on a process. Permission selection-process:process:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Panel" } } } } } }
+    post:
+      summary: Create a panel, optionally scoped to one stage (omit to apply to every stage). Permission selection-process:panel:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PanelInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Panel" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /panels/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      summary: Update a panel's members. Permission selection-process:panel:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/PanelInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Panel" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    delete:
+      summary: Remove a panel. Permission selection-process:panel:manage.
+      responses: { "204": { description: Deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /processes/{id}/candidates:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: >
+        Candidates on a process. scope=mine (default) returns the caller's own candidacy;
+        scope=managed returns candidates on a stage the caller panels, or every candidate with
+        selection-process:candidate:read-all. Permission selection-process:candidate:read.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, managed], default: mine } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/CandidateStatus" } } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CandidatePage" } } } } }
+    post:
+      summary: >
+        Register a candidate on an open process, at its first stage. Permission
+        selection-process:candidate:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CandidateInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Candidate" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "Process is not open, or this person is already a candidate on it", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /candidates/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One candidate with their decision history. The candidate themself, a panelist on their current stage, or selection-process:candidate:read-all. Permission selection-process:candidate:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Candidate" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /candidates/{id}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Withdraw a candidate before a final outcome. Permission selection-process:candidate:manage.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Candidate" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { description: Candidate already has a final outcome } }
+
+  /candidates/{id}/decisions:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Decision history for a candidate, one per stage reached. Permission selection-process:candidate:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Decision" } } } } } }
+    post:
+      summary: >
+        Record a decision for the candidate's current stage. advance moves them to the next
+        stage, or to a final selected outcome if it was the last stage; hold keeps them at the
+        current stage (e.g. an undecided or waitlisted-within-stage outcome); reject is a final
+        outcome. A panelist on the candidate's current stage, or selection-process:decision:manage.
+        Permission selection-process:decision:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Decision" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Candidate already has a final outcome }
+
+  /candidates/{id}/finalize:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: >
+        Set the candidate's final outcome directly (selected, waitlisted or rejected) — for
+        processes that decide at the process level rather than purely by per-stage advancement
+        (e.g. a single-stage allocation). Permission selection-process:decision:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FinalizeInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Candidate" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Candidate already has a final outcome }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    NotFound: { description: Not found in the caller's organisation }
+
+  schemas:
+    ProcessStatus:
+      type: string
+      enum: [draft, open, closed]
+    CandidateStatus:
+      type: string
+      enum: [registered, in_progress, selected, waitlisted, rejected, withdrawn]
+      description: "selected, waitlisted, rejected and withdrawn are final outcomes for that candidate on that process."
+
+    ProcessTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 120, description: "The organisation's own word for this kind of selection, e.g. Audition, Squad trial, Supervisor allocation — never hardcoded here" }
+        description: { type: string }
+    ProcessType:
+      allOf:
+        - $ref: "#/components/schemas/ProcessTypeInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            process_count: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    Source:
+      type: object
+      description: >-
+        An optional, opaque reference to where a candidate or process originated (e.g. an
+        admissions application, a portfolio item, an academic cohort). A cached reference by id,
+        never a database foreign key into another module's schema (module-standard rule 2); this
+        module does not require that module's contract to exist.
+      required: [module, entity, id]
+      properties:
+        module: { type: string }
+        entity: { type: string }
+        id: { type: string }
+
+    StageInput:
+      type: object
+      required: [name, sequence]
+      properties:
+        name: { type: string, maxLength: 120, description: "Organisation-named, e.g. Screening, Interview, Final round" }
+        sequence: { type: integer, minimum: 1 }
+        description: { type: string }
+    Stage:
+      allOf:
+        - $ref: "#/components/schemas/StageInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            process_id: { type: string, format: uuid }
+
+    ProcessInput:
+      type: object
+      required: [type_id, title]
+      properties:
+        type_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        academic_year: { type: string, nullable: true }
+        context: { $ref: "#/components/schemas/Source" }
+        stages: { type: array, items: { $ref: "#/components/schemas/StageInput" }, description: "Optional at creation; may also be set afterwards via PUT /processes/{id}/stages" }
+    ProcessUpdate:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        academic_year: { type: string, nullable: true }
+    Process:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        type_id: { type: string, format: uuid }
+        title: { type: string }
+        academic_year: { type: string, nullable: true }
+        context: { $ref: "#/components/schemas/Source" }
+        status: { $ref: "#/components/schemas/ProcessStatus" }
+        stages: { type: array, items: { $ref: "#/components/schemas/Stage" } }
+        panels: { type: array, items: { $ref: "#/components/schemas/Panel" } }
+        candidate_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProcessPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Process" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    PanelInput:
+      type: object
+      required: [name, member_person_ids]
+      properties:
+        name: { type: string, maxLength: 120 }
+        stage_id: { type: string, format: uuid, nullable: true, description: "Null applies the panel to every stage of the process" }
+        member_person_ids: { type: array, items: { type: string, format: uuid }, minItems: 1 }
+    Panel:
+      allOf:
+        - $ref: "#/components/schemas/PanelInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            process_id: { type: string, format: uuid }
+
+    CandidateInput:
+      type: object
+      required: [person_id]
+      properties:
+        person_id: { type: string, format: uuid, description: "Opaque reference, typically into student-information or admissions; not validated against another module's API" }
+        source: { $ref: "#/components/schemas/Source" }
+    Candidate:
+      allOf:
+        - $ref: "#/components/schemas/CandidateInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            process_id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/CandidateStatus" }
+            current_stage_id: { type: string, format: uuid, nullable: true }
+            decisions: { type: array, items: { $ref: "#/components/schemas/Decision" } }
+            registered_at: { type: string, format: date-time }
+            decided_at: { type: string, format: date-time, nullable: true }
+    CandidatePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Candidate" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    DecisionInput:
+      type: object
+      required: [outcome]
+      properties:
+        outcome: { type: string, enum: [advance, hold, reject] }
+        score: { type: number, nullable: true, description: "Optional; not every selection process scores numerically" }
+        comments: { type: string }
+    Decision:
+      allOf:
+        - $ref: "#/components/schemas/DecisionInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            candidate_id: { type: string, format: uuid }
+            stage_id: { type: string, format: uuid }
+            panel_id: { type: string, format: uuid, nullable: true }
+            decided_by: { type: string, format: uuid }
+            decided_at: { type: string, format: date-time }
+
+    FinalizeInput:
+      type: object
+      required: [outcome]
+      properties:
+        outcome: { type: string, enum: [selected, waitlisted, rejected] }
+        comments: { type: string }
+
+    ConflictError:
+      type: object
+      properties:
+        code: { type: string, enum: [process_not_draft, process_not_open, no_stages, duplicate_candidate, already_decided] }
+        message: { type: string }
