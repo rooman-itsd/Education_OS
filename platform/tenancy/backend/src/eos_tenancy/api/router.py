@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from eos_core.db import get_db
 from eos_core.settings import settings
-from eos_identity.api.deps import Principal, require, require_organisation
+from eos_identity.api.deps import Principal, require
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
@@ -99,7 +99,9 @@ def verify(body: Verify, db: Session = Depends(get_db)):
 
 
 @router.get("/organisation")
-def organisation(p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def organisation(
+    p: Principal = Depends(require("tenancy:organisation:read", organisation=True)), db: Session = Depends(get_db)
+):
     try:
         return service.get_organisation(db, p.organisation_id).to_dict()
     except TenancyError as e:
@@ -107,7 +109,9 @@ def organisation(p: Principal = Depends(require_organisation), db: Session = Dep
 
 
 @router.get("/organisation/entitlement")
-def entitlement(p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def entitlement(
+    p: Principal = Depends(require("tenancy:organisation:read", organisation=True)), db: Session = Depends(get_db)
+):
     return service.entitlement(db, p.organisation_id)
 
 
