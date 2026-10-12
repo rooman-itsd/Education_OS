@@ -2,9 +2,412 @@ openapi: 3.1.0
 info:
   title: grievance API
   version: 0.1.0
-  description: "SGRC, anti-ragging and POSH-ICC complaint intake and resolution."
+  description: >-
+    SGRC, anti-ragging and POSH-ICC complaint intake and resolution. See docs/prd.md. Case content is visible only to the
+    complainant (own cases, without proceedings) and to members of the committee handling the case; membership is checked
+    on the server for every case operation, in addition to the permission named.
 servers:
   - url: /api/v1/grievance
-paths: {}
+paths:
+  /committees:
+    get:
+      summary: >-
+        Committees. Members are listed only to callers with grievance:committee:manage and to members of that committee;
+        complainants see id, name and kind to choose where to file. Permission grievance:committee:manage,
+        grievance:case:read or grievance:case:file.
+      parameters:
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/CommitteeKind" } }
+        - { name: active, in: query, schema: { type: boolean } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Committee" } } } } } }
+    post:
+      summary: Create a committee. Permission grievance:committee:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CommitteeInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Committee" } } } }, "409": { description: "Name already used" } }
+  /committees/{id}:
+    patch:
+      summary: Rename, change members or deactivate. A committee with open cases cannot be deactivated. Permission grievance:committee:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CommitteeUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Committee" } } } }, "409": { description: "Committee has open cases" } }
+  /me/grievances:
+    post:
+      summary: >-
+        File a complaint (status submitted). The committee must be active and of the kind matching the track; it may be
+        omitted when the organisation has exactly one. Committee members are notified. Publishes grievance.case.filed.
+        Permission grievance:case:file.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GrievanceInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/MyGrievance" } } } }, "422": { description: "No active committee for the track, committee required, or committee of the wrong kind" } }
+    get:
+      summary: The caller's own cases, newest first. Permission grievance:case:read-own.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/CaseStatus" } } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyGrievancePage" } } } } }
+  /me/grievances/{id}:
+    get:
+      summary: One of the caller's own cases with updates, decision and appeal; never proceedings. Permission grievance:case:read-own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyGrievanceDetail" } } } }, "404": { description: "Not found or not the caller's case" } }
+  /me/grievances/{id}/updates:
+    post:
+      summary: Add information or answer the committee on the caller's own open case. Committee members are notified. Permission grievance:case:read-own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Update" } } } }, "409": { description: "Case is in a final state" } }
+  /me/grievances/{id}/withdraw:
+    post:
+      summary: Withdraw the caller's own case before a decision (submitted, acknowledged or under_inquiry → withdrawn). Publishes grievance.case.closed. Permission grievance:case:read-own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyGrievance" } } } }, "409": { description: "Already decided or final" } }
+  /me/grievances/{id}/appeal:
+    post:
+      summary: >-
+        Appeal a decided student_grievance case within GRIEVANCE_APPEAL_WINDOW_DAYS (decided → appealed). The appeal goes to
+        the organisation's active ombudsperson committee, whose members are notified. If GRIEVANCE_APPEAL_WINDOW_DAYS is not
+        configured, no appeal is accepted: the request is refused with 409 and the message "Appeal window is not configured".
+        Permission grievance:case:read-own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AppealInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyGrievance" } } } }, "409": { description: "Appeal window is not configured (GRIEVANCE_APPEAL_WINDOW_DAYS is empty); or not decided, not the student_grievance track, appeal window passed, or no active ombudsperson committee" } }
+  /grievances:
+    get:
+      summary: >-
+        Cases of the committees the caller is a member of (and, for ombudsperson members, cases appealed to them), newest
+        first. Permission grievance:case:read.
+      parameters:
+        - { name: committee_id, in: query, schema: { type: string, format: uuid } }
+        - { name: track, in: query, schema: { $ref: "#/components/schemas/Track" } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/CaseStatus" } } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GrievancePage" } } } } }
+  /grievances/{id}:
+    get:
+      summary: The full case including proceedings. The read is audited. Permission grievance:case:read, for members of the case's committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GrievanceDetail" } } } }, "404": { description: "Not found or not a case of the caller's committees" } }
+  /grievances/{id}/status:
+    post:
+      summary: >-
+        Move the case: submitted → acknowledged; acknowledged → under_inquiry; submitted → not_admitted (needs reason);
+        decided → closed (after GRIEVANCE_APPEAL_WINDOW_DAYS on the student_grievance track, at once on other tracks);
+        appeal_decided → closed. The complainant is notified. not_admitted and closed publish grievance.case.closed.
+        Permission grievance:case:manage, for members of the case's committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Grievance" } } } }, "409": { description: "Transition not allowed, or appeal window still open" }, "422": { description: "reason missing" } }
+  /grievances/{id}/updates:
+    post:
+      summary: Message the complainant on the case, for example to ask for information. The complainant is notified. Permission grievance:case:manage, for members of the case's committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Update" } } } }, "409": { description: "Case is in a final state" } }
+  /grievances/{id}/proceedings:
+    post:
+      summary: Record a hearing, statement or note. Visible only to the committee. Permission grievance:case:manage, for members of the case's committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProceedingInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Proceeding" } } } }, "409": { description: "Case is not acknowledged or under inquiry" } }
+  /grievances/{id}/decision:
+    post:
+      summary: Record the committee's decision (under_inquiry → decided). The complainant is notified. Permission grievance:case:manage, for members of the case's committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DecisionInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GrievanceDetail" } } } }, "409": { description: "Not under inquiry" } }
+  /grievances/{id}/transfer:
+    post:
+      summary: >-
+        Move a case filed with the wrong committee or track to another active committee (not ombudsperson), with a reason,
+        before a decision. The track follows the new committee's kind. Permission grievance:case:manage, for members of the
+        case's current committee.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransferInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Grievance" } } } }, "409": { description: "Already decided or final, or target committee inactive or ombudsperson" } }
+  /grievances/{id}/appeal-decision:
+    post:
+      summary: Decide an appeal (appealed → appeal_decided). The complainant is notified. Permission grievance:appeal:decide, for members of the ombudsperson committee the appeal went to.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AppealDecisionInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GrievanceDetail" } } } }, "409": { description: "Not appealed" } }
+  /stats/open-by-committee:
+    get:
+      summary: >-
+        Open cases (submitted, acknowledged, under_inquiry, decided, appealed, appeal_decided) per committee, by status, with
+        overdue counts. No case content. Backs the Governance widget grievance.open-by-committee. Permission
+        grievance:stats:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpenByCommittee" } } } } }
+  /stats/open:
+    get:
+      summary: Open cases per track, with overdue counts. No case content. Backs the Management widget grievance.open. Permission grievance:stats:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpenByTrack" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Track:
+      type: string
+      description: "student_grievance is heard by an sgrc committee, ragging by anti_ragging, sexual_harassment by icc."
+      enum: [student_grievance, ragging, sexual_harassment]
+    CommitteeKind:
+      type: string
+      enum: [sgrc, anti_ragging, icc, ombudsperson]
+    MemberRole:
+      type: string
+      enum: [chair, member, external_member]
+    CaseStatus:
+      type: string
+      enum: [submitted, acknowledged, under_inquiry, decided, appealed, appeal_decided, closed, not_admitted, withdrawn]
+    Closure:
+      type: string
+      description: How a case reached a final state.
+      enum: [decided, withdrawn, not_admitted]
+    DecisionOutcome:
+      type: string
+      enum: [upheld, partly_upheld, not_upheld]
+    AppealOutcome:
+      type: string
+      enum: [upheld, modified, dismissed]
+    Member:
+      type: object
+      required: [person_id, role]
+      properties:
+        person_id: { type: string, format: uuid }
+        role: { $ref: "#/components/schemas/MemberRole" }
+    CommitteeInput:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, maxLength: 120 }
+        kind: { $ref: "#/components/schemas/CommitteeKind" }
+        members: { type: array, items: { $ref: "#/components/schemas/Member" } }
+        active: { type: boolean, default: true }
+    CommitteeUpdateInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        members: { type: array, items: { $ref: "#/components/schemas/Member" }, description: Replaces the member list }
+        active: { type: boolean }
+    Committee:
+      type: object
+      required: [id, organisation_id, name, kind, active]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/CommitteeKind" }
+        members: { type: array, items: { $ref: "#/components/schemas/Member" }, description: "Only for grievance:committee:manage and members of this committee" }
+        active: { type: boolean }
+    Respondent:
+      type: object
+      description: The person complained about, as a person id or a description; optional.
+      properties:
+        person_id: { type: string, format: uuid }
+        description: { type: string, maxLength: 500 }
+    GrievanceInput:
+      type: object
+      required: [track, category, description]
+      properties:
+        track: { $ref: "#/components/schemas/Track" }
+        committee_id: { type: string, format: uuid, description: "Active committee of the track's kind; may be omitted when there is exactly one" }
+        category: { type: string, maxLength: 80, description: Label from the organisation }
+        description: { type: string, minLength: 10 }
+        incident_date: { type: string, format: date }
+        respondent: { $ref: "#/components/schemas/Respondent" }
+    Grievance:
+      type: object
+      description: A case as seen by committee members.
+      required: [id, organisation_id, number, track, committee_id, category, status, filed_at, overdue]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as GRV-000123" }
+        track: { $ref: "#/components/schemas/Track" }
+        committee_id: { type: string, format: uuid }
+        complainant_id: { type: [string, "null"], format: uuid, description: "Always set in v1; null is reserved for anonymous filing if open question 2 allows it" }
+        respondent: { oneOf: [{ $ref: "#/components/schemas/Respondent" }, { type: "null" }] }
+        category: { type: string }
+        description: { type: string }
+        incident_date: { type: [string, "null"], format: date }
+        status: { $ref: "#/components/schemas/CaseStatus" }
+        closure: { oneOf: [{ $ref: "#/components/schemas/Closure" }, { type: "null" }] }
+        filed_at: { type: string, format: date-time }
+        acknowledged_at: { type: [string, "null"], format: date-time }
+        decided_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        due_at: { type: [string, "null"], format: date-time, description: "From the per-track settings, worked out when read; null when no value is set" }
+        overdue: { type: boolean, description: "Open and past due_at; worked out when read" }
+    MyGrievance:
+      type: object
+      description: A case as seen by its complainant.
+      required: [id, number, track, committee_id, category, status, filed_at]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        track: { $ref: "#/components/schemas/Track" }
+        committee_id: { type: string, format: uuid }
+        category: { type: string }
+        description: { type: string }
+        incident_date: { type: [string, "null"], format: date }
+        status: { $ref: "#/components/schemas/CaseStatus" }
+        filed_at: { type: string, format: date-time }
+        acknowledged_at: { type: [string, "null"], format: date-time }
+        decided_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        can_appeal: { type: boolean, description: "Decided student_grievance case inside the appeal window; always false while GRIEVANCE_APPEAL_WINDOW_DAYS is not configured" }
+    UpdateInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+    Update:
+      type: object
+      required: [id, grievance_id, author_id, from_committee, body, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        grievance_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        from_committee: { type: boolean }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    ProceedingInput:
+      type: object
+      required: [kind, held_on, summary]
+      properties:
+        kind: { type: string, enum: [hearing, statement, note] }
+        held_on: { type: string, format: date }
+        summary: { type: string, minLength: 3 }
+    Proceeding:
+      allOf:
+        - { $ref: "#/components/schemas/ProceedingInput" }
+        - type: object
+          required: [id, grievance_id, recorded_by, created_at]
+          properties:
+            id: { type: string, format: uuid }
+            grievance_id: { type: string, format: uuid }
+            recorded_by: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+    DecisionInput:
+      type: object
+      required: [outcome, findings]
+      properties:
+        outcome: { $ref: "#/components/schemas/DecisionOutcome" }
+        findings: { type: string, minLength: 3 }
+        actions_recommended: { type: string }
+    Decision:
+      allOf:
+        - { $ref: "#/components/schemas/DecisionInput" }
+        - type: object
+          required: [decided_by, decided_at]
+          properties:
+            decided_by: { type: string, format: uuid }
+            decided_at: { type: string, format: date-time }
+    AppealInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10 }
+    AppealDecisionInput:
+      type: object
+      required: [outcome, outcome_note]
+      properties:
+        outcome: { $ref: "#/components/schemas/AppealOutcome" }
+        outcome_note: { type: string, minLength: 3 }
+    Appeal:
+      type: object
+      required: [committee_id, reason, filed_at]
+      properties:
+        committee_id: { type: string, format: uuid, description: The ombudsperson committee }
+        reason: { type: string }
+        filed_at: { type: string, format: date-time }
+        outcome: { oneOf: [{ $ref: "#/components/schemas/AppealOutcome" }, { type: "null" }] }
+        outcome_note: { type: [string, "null"] }
+        decided_by: { type: [string, "null"], format: uuid }
+        decided_at: { type: [string, "null"], format: date-time }
+    StatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [acknowledged, under_inquiry, not_admitted, closed] }
+        reason: { type: string, minLength: 3, description: "Required for not_admitted; shown to the complainant" }
+    TransferInput:
+      type: object
+      required: [committee_id, reason]
+      properties:
+        committee_id: { type: string, format: uuid, description: "Active committee, not ombudsperson" }
+        reason: { type: string, minLength: 3 }
+    GrievanceDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Grievance" }
+        - type: object
+          required: [updates, proceedings]
+          properties:
+            updates: { type: array, items: { $ref: "#/components/schemas/Update" } }
+            proceedings: { type: array, items: { $ref: "#/components/schemas/Proceeding" } }
+            decision: { oneOf: [{ $ref: "#/components/schemas/Decision" }, { type: "null" }] }
+            appeal: { oneOf: [{ $ref: "#/components/schemas/Appeal" }, { type: "null" }] }
+    MyGrievanceDetail:
+      allOf:
+        - { $ref: "#/components/schemas/MyGrievance" }
+        - type: object
+          required: [updates]
+          properties:
+            updates: { type: array, items: { $ref: "#/components/schemas/Update" } }
+            not_admitted_reason: { type: [string, "null"] }
+            decision: { oneOf: [{ $ref: "#/components/schemas/Decision" }, { type: "null" }] }
+            appeal: { oneOf: [{ $ref: "#/components/schemas/Appeal" }, { type: "null" }] }
+    GrievancePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Grievance" } }
+        next_cursor: { type: [string, "null"] }
+    MyGrievancePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MyGrievance" } }
+        next_cursor: { type: [string, "null"] }
+    OpenByCommittee:
+      type: object
+      required: [total_open, committees]
+      properties:
+        total_open: { type: integer }
+        committees:
+          type: array
+          items:
+            type: object
+            required: [committee_id, name, kind, open, overdue, by_status]
+            properties:
+              committee_id: { type: string, format: uuid }
+              name: { type: string }
+              kind: { $ref: "#/components/schemas/CommitteeKind" }
+              open: { type: integer }
+              overdue: { type: integer }
+              by_status:
+                type: array
+                items:
+                  type: object
+                  required: [status, count]
+                  properties:
+                    status: { $ref: "#/components/schemas/CaseStatus" }
+                    count: { type: integer }
+    OpenByTrack:
+      type: object
+      required: [total_open, overdue, tracks]
+      properties:
+        total_open: { type: integer }
+        overdue: { type: integer }
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [track, open, overdue]
+            properties:
+              track: { $ref: "#/components/schemas/Track" }
+              open: { type: integer }
+              overdue: { type: integer }
