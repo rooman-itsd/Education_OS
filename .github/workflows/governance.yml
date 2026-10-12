@@ -17,13 +17,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -q pyyaml ruff
+      - run: pip install -q pyyaml ruff pytest
       - name: Root layout (nothing outside the folders)
         run: python tools/scripts/check-root.py
       - name: Approved stack only
         run: python tools/scripts/check-stack.py
       - name: Module boundaries
         run: python tools/scripts/check-boundaries.py
+      - name: Module manifests
+        run: python tools/scripts/check-manifests.py
+      - name: Migrations carry organisation_id and RLS
+        run: python tools/scripts/check-migrations.py
+      - name: Governance script tests
+        run: python -m pytest -q -p no:cacheprovider tools/scripts/tests
       - name: Python lint and format
         run: ruff check --config tools/config/ruff.toml . && ruff format --config tools/config/ruff.toml --check .
       - name: Conventional commits scoped by module
