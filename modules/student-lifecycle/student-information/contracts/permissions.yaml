@@ -1,11 +1,20 @@
 # Permission catalogue for student-information. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: student-information
-permissions: []
-#  - key: student-information:record:read
-#    description: ...
-#  - key: student-information:record:write
-#    description: ...
+permissions:
+  - key: student-information:person:read
+    description: Read a person's profile, contact details, documents, ID cards and status.
+  - key: student-information:person:write
+    description: >-
+      Create a person record and update profile fields. Creation is staff-only; this module has
+      no public or anonymous path, and no permission here is ever granted to an unauthenticated
+      caller or an organisation sign-up flow.
+  - key: student-information:status:manage
+    description: Change a person's status (pending, active, suspended, graduated, withdrawn, alumnus) and view status history.
+  - key: student-information:document:manage
+    description: Attach or remove documents on a person's record.
+  - key: student-information:id-card:manage
+    description: Issue or revoke a person's ID card.
+# Role-to-permission composition is profile data owned by the Architecture lead
+# (platform/identity/config/profiles/*.yaml), not this file. See ADR-0004.
 roles: []
-#  - name: student-information-admin
-#    grants: [student-information:record:read, student-information:record:write]

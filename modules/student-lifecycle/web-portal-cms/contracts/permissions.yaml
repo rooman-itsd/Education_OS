@@ -1,11 +1,19 @@
 # Permission catalogue for web-portal-cms. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Public read (pages, announcements, the sign-up page's own content) needs no permission key.
+# Organisation sign-up itself needs no web-portal-cms permission because it is not a
+# web-portal-cms endpoint — platform/tenancy's POST /register is already public by its own
+# contract, unmodified here.
 module: web-portal-cms
-permissions: []
-#  - key: web-portal-cms:record:read
-#    description: ...
-#  - key: web-portal-cms:record:write
-#    description: ...
-roles: []
-#  - name: web-portal-cms-admin
-#    grants: [web-portal-cms:record:read, web-portal-cms:record:write]
+permissions:
+  - key: web-portal-cms:page:manage
+    description: Create, edit, publish/unpublish and delete pages.
+  - key: web-portal-cms:announcement:manage
+    description: Create, edit, publish/unpublish and delete announcements.
+roles:
+  - name: web-portal-cms-editor
+    description: Organisation staff who maintain the public site.
+    grants: [web-portal-cms:page:manage, web-portal-cms:announcement:manage]
+  - name: org-admin
+    description: Full control over their own organisation's public site.
+    grants: [web-portal-cms:page:manage, web-portal-cms:announcement:manage]

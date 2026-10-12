@@ -1,9 +1,64 @@
 # Domain events published by notification.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it.
 module: notification
 version: 1
-events: []
-#  - name: notification.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+events:
+  - name: notification.message.sent
+    version: 1
+    description: >-
+      A message was accepted by the provider. Accepted is not the same as read; for email it
+      means the provider took it, nothing more.
+    payload:
+      message_id: uuid
+      template: string
+      channel: string
+      recipient_id: uuid
+      provider_message_id: string
+
+  - name: notification.message.failed
+    version: 1
+    description: >-
+      Delivery failed after the final retry. Raised once, not per attempt.
+    payload:
+      message_id: uuid
+      template: string
+      channel: string
+      recipient_id: uuid
+      attempts: integer
+      last_error: string
+
+  - name: notification.message.bounced
+    version: 1
+    description: >-
+      The provider reported the address as undeliverable. A hard bounce suppresses the address
+      until someone corrects it, so later sends do not damage sending reputation.
+    payload:
+      message_id: uuid
+      channel: string
+      recipient_id: uuid
+      bounce_type: string      # hard | soft
+      suppressed: boolean
+
+  - name: notification.preferences.changed
+    version: 1
+    description: >-
+      A recipient changed the channels or categories they accept. Published so modules can
+      stop producing work nobody will receive.
+    payload:
+      user_id: uuid
+      categories_disabled: array
+      channels_disabled: array
+
+# Events this module reacts to. Every name below is already published by code in this repo;
+# the notification each produces is listed in docs/prd.md.
+consumes:
+  - tenancy.organisation.registered     # verification mail; replaces the live eos_core.notify stub
+  - tenancy.organisation.verified       # awaiting operator approval
+  - tenancy.organisation.approved       # academy is live, how to sign in
+  - tenancy.package.requested           # package change requested
+  - tenancy.package.changed             # package change applied
+  - identity.user.created               # welcome, set your password
+  - billing.subscription.started        # trial started, what it includes
+  - billing.trial.expired               # trial ended, how to upgrade
+  - billing.subscription.upgraded       # plan changed, what is now available

@@ -1,11 +1,39 @@
 # Permission catalogue for audit. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Reading an audit record means reading what changed, so these are not casual permissions.
+# Per ADR-0005, platform:* keys belong to the super admin and are never grantable inside an
+# organisation.
 module: audit
-permissions: []
-#  - key: audit:record:read
-#    description: ...
-#  - key: audit:record:write
-#    description: ...
-roles: []
-#  - name: audit-admin
-#    grants: [audit:record:read, audit:record:write]
+permissions:
+  - key: audit:record:write
+    description: >-
+      Append a record. Held by modules through packages/sdk, not by people. Writing is not a
+      privilege a user can be granted; it is how every module reports what it did.
+  - key: audit:record:read
+    description: Search and read audit records of this organisation
+  - key: audit:record:export
+    description: Export this organisation's records for compliance or accreditation
+  - key: platform:audit:read
+    description: >-
+      Super admin only. Read records across every organisation, including platform-level
+      actions. Using it is itself recorded.
+  - key: platform:audit:redact
+    description: >-
+      Super admin only. Replace a record's before/after payload with a tombstone under a legal
+      erasure request. Never removes the record or the fact of the action.
+
+roles:
+  - name: audit-reader
+    description: >-
+      Reads the organisation's audit trail. Intended for an organisation admin or a governance
+      officer, not a general user.
+    grants:
+      - audit:record:read
+
+  - name: audit-officer
+    description: >-
+      Governance, IQAC or RTI role that must produce evidence: reads and exports.
+    grants:
+      - audit:record:read
+      - audit:record:export

@@ -1,11 +1,35 @@
 # Permission catalogue for incident-management. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: incident-management
-permissions: []
-#  - key: incident-management:record:read
-#    description: ...
-#  - key: incident-management:record:write
-#    description: ...
-roles: []
-#  - name: incident-management-admin
-#    grants: [incident-management:record:read, incident-management:record:write]
+permissions:
+  - key: incident-management:incident:read
+    description: View incidents with their timeline and references, and the open-incident counts.
+  - key: incident-management:incident:report
+    description: Report an incident.
+  - key: incident-management:incident:manage
+    description: Change an incident's status, severity, details, lead and responders; add timeline updates and references; link it to a problem.
+  - key: incident-management:problem:read
+    description: View problems, RCAs and corrective actions; mark one's own corrective action done.
+  - key: incident-management:problem:manage
+    description: Open and move problems, draft and publish RCAs, create and change corrective actions.
+roles:
+  - name: incident-management-responder
+    description: Support staff who report and work incidents. Default for the support-staff profile role.
+    grants:
+      - incident-management:incident:read
+      - incident-management:incident:report
+      - incident-management:incident:manage
+      - incident-management:problem:read
+  - name: incident-management-problem-manager
+    description: Support lead who also runs problems and root-cause analysis.
+    grants:
+      - incident-management:incident:read
+      - incident-management:incident:report
+      - incident-management:incident:manage
+      - incident-management:problem:read
+      - incident-management:problem:manage
+  - name: incident-management-viewer
+    description: Read-only oversight. Default for the management and org-admin profile roles.
+    grants:
+      - incident-management:incident:read
+      - incident-management:problem:read
