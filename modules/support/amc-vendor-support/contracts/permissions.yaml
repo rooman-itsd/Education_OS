@@ -1,11 +1,27 @@
 # Permission catalogue for amc-vendor-support. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Role names and their mapping to profile roles are a proposal: docs/prd.md open question 6.
 module: amc-vendor-support
-permissions: []
-#  - key: amc-vendor-support:record:read
-#    description: ...
-#  - key: amc-vendor-support:record:write
-#    description: ...
-roles: []
-#  - name: amc-vendor-support-admin
-#    grants: [amc-vendor-support:record:read, amc-vendor-support:record:write]
+permissions:
+  - key: amc-vendor-support:contract:read
+    description: View contracts, covered items, coverage, engagements and the expiring-contracts statistics.
+  - key: amc-vendor-support:contract:manage
+    description: Record, edit, activate, renew and terminate contracts; add and remove covered items.
+  - key: amc-vendor-support:engagement:manage
+    description: Raise engagements with a vendor, update them and move them through their statuses.
+roles:
+  - name: amc-vendor-support-coordinator
+    description: Raises and tracks vendor calls and visits. Proposed default for the support-staff and facility-staff profile roles.
+    grants:
+      - amc-vendor-support:contract:read
+      - amc-vendor-support:engagement:manage
+  - name: amc-vendor-support-contract-manager
+    description: Records and manages AMC contracts and their renewals. Proposed default for the org-admin profile role.
+    grants:
+      - amc-vendor-support:contract:read
+      - amc-vendor-support:contract:manage
+      - amc-vendor-support:engagement:manage
+  - name: amc-vendor-support-viewer
+    description: Read-only oversight. Proposed default for the management and finance-staff profile roles.
+    grants:
+      - amc-vendor-support:contract:read
