@@ -2,9 +2,1816 @@ openapi: 3.1.0
 info:
   title: examinations API
   version: 0.1.0
-  description: "Exam scheduling, hall tickets, evaluation, results, transcripts."
+  description: |
+    Exam cycles, assessment and grading schemes, papers, sessions, candidates and eligibility,
+    hall tickets, exam duties, mark entry, results and examination reports.
+    Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
+    `x-permission` names the one key from contracts/permissions.yaml an operation requires; it gives
+    the narrowest scope. Where wider scopes exist, the operation's description names the further
+    keys that widen it (*-assigned < *-department < *-all; docs/prd.md section 13). The widest key
+    the caller holds applies. This follows the timetable-attendance contract.
+    academic_period_id, course_offering_id and instructor_assignment_id are academic-management IDs
+    (vocabulary aligned by owner decision C5, docs/prd.md Q8); student_id and staff_id are external person IDs;
+    document_id is a platform/documents ID.
 servers:
   - url: /api/v1/examinations
-paths: {}
+tags:
+  - name: exam-cycles
+  - name: schemes
+  - name: papers
+  - name: sessions
+  - name: candidates
+  - name: hall-tickets
+  - name: duties
+  - name: marks
+  - name: results
+  - name: reports
+  - name: widgets
+paths:
+  # ----------------------------------------------------------- exam cycles
+  /exam-cycles:
+    get:
+      tags: [exam-cycles]
+      summary: List exam cycles
+      operationId: listExamCycles
+      x-permission: examinations:exam-cycle:read
+      parameters:
+        - { name: academic_period_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ExamCycleStatus" } }
+        - { name: cycle_type, in: query, schema: { $ref: "#/components/schemas/CycleType" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Exam cycles, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamCycle" } }
+                  total: { type: integer }
+    post:
+      tags: [exam-cycles]
+      summary: Create an exam cycle
+      operationId: createExamCycle
+      x-permission: examinations:exam-cycle:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExamCycleRequest" }
+      responses:
+        "201":
+          description: Exam cycle created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamCycle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /exam-cycles/{exam_cycle_id}:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    get:
+      tags: [exam-cycles]
+      summary: Get an exam cycle
+      operationId: getExamCycle
+      x-permission: examinations:exam-cycle:read
+      responses:
+        "200":
+          description: Exam cycle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamCycle" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [exam-cycles]
+      summary: Configure an exam cycle
+      description: Allowed while the cycle is draft or scheduled (FR-1).
+      operationId: updateExamCycle
+      x-permission: examinations:exam-cycle:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExamCycleRequest" }
+      responses:
+        "200":
+          description: Exam cycle updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamCycle" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /exam-cycles/{exam_cycle_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [exam-cycles]
+      summary: Change an exam cycle's status
+      description: |
+        Transitions follow docs/prd.md section 6. results_published is set by publication, not here.
+        Closing publishes examinations.exam-cycle.closed.
+      operationId: changeExamCycleStatus
+      x-permission: examinations:exam-cycle:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/ExamCycleStatus" }
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamCycle" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------- assessment schemes
+  /assessment-schemes:
+    get:
+      tags: [schemes]
+      summary: List assessment schemes
+      operationId: listAssessmentSchemes
+      x-permission: examinations:assessment-scheme:read
+      parameters:
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SchemeStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Assessment schemes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/AssessmentScheme" } }
+                  total: { type: integer }
+    post:
+      tags: [schemes]
+      summary: Create a draft assessment scheme for a course offering
+      description: "Scope: examinations:assessment-scheme:write-department gives the caller's department; examinations:assessment-scheme:write-all widens it to the organisation."
+      operationId: createAssessmentScheme
+      x-permission: examinations:assessment-scheme:write-department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssessmentSchemeInput" }
+      responses:
+        "201":
+          description: Draft scheme created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentScheme" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assessment-schemes/{assessment_scheme_id}:
+    parameters:
+      - $ref: "#/components/parameters/AssessmentSchemeId"
+    get:
+      tags: [schemes]
+      summary: Get an assessment scheme
+      operationId: getAssessmentScheme
+      x-permission: examinations:assessment-scheme:read
+      responses:
+        "200":
+          description: Assessment scheme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentScheme" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [schemes]
+      summary: Replace a draft assessment scheme
+      description: "Scope: examinations:assessment-scheme:write-department gives the caller's department; examinations:assessment-scheme:write-all widens it to the organisation."
+      operationId: replaceAssessmentScheme
+      x-permission: examinations:assessment-scheme:write-department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssessmentSchemeInput" }
+      responses:
+        "200":
+          description: Scheme replaced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentScheme" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Scheme is not a draft
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /assessment-schemes/{assessment_scheme_id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/AssessmentSchemeId"
+    post:
+      tags: [schemes]
+      summary: Activate an assessment scheme
+      description: "Supersedes the course offering's previous active scheme (FR-2). Weightages must add up to 100. Scope: examinations:assessment-scheme:write-department gives the caller's department; examinations:assessment-scheme:write-all widens it to the organisation."
+      operationId: activateAssessmentScheme
+      x-permission: examinations:assessment-scheme:write-department
+      responses:
+        "200":
+          description: Scheme activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssessmentScheme" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ------------------------------------------------------- grading schemes
+  /grading-schemes:
+    get:
+      tags: [schemes]
+      summary: List grading schemes
+      operationId: listGradingSchemes
+      x-permission: examinations:grading-scheme:read
+      responses:
+        "200":
+          description: Grading schemes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/GradingScheme" } }
+                  total: { type: integer }
+    post:
+      tags: [schemes]
+      summary: Create a grading scheme
+      operationId: createGradingScheme
+      x-permission: examinations:grading-scheme:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GradingSchemeInput" }
+      responses:
+        "201":
+          description: Grading scheme created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradingScheme" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /grading-schemes/{grading_scheme_id}:
+    parameters:
+      - $ref: "#/components/parameters/GradingSchemeId"
+    get:
+      tags: [schemes]
+      summary: Get a grading scheme
+      operationId: getGradingScheme
+      x-permission: examinations:grading-scheme:read
+      responses:
+        "200":
+          description: Grading scheme
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradingScheme" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [schemes]
+      summary: Replace a grading scheme's bands
+      description: Refused once a cycle using it has published results (FR-3).
+      operationId: replaceGradingScheme
+      x-permission: examinations:grading-scheme:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GradingSchemeInput" }
+      responses:
+        "200":
+          description: Grading scheme replaced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradingScheme" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /grading-schemes/{grading_scheme_id}/set-default:
+    parameters:
+      - $ref: "#/components/parameters/GradingSchemeId"
+    post:
+      tags: [schemes]
+      summary: Make a grading scheme the organisation default
+      operationId: setDefaultGradingScheme
+      x-permission: examinations:grading-scheme:manage
+      responses:
+        "200":
+          description: Default set
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GradingScheme" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ---------------------------------------------------------------- papers
+  /papers:
+    get:
+      tags: [papers]
+      summary: List exam papers
+      operationId: listExamPapers
+      x-permission: examinations:paper:read
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/PaperStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Exam papers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamPaper" } }
+                  total: { type: integer }
+    post:
+      tags: [papers]
+      summary: Create exam papers for a course offering in a cycle
+      description: One paper per listed component of the offering's active assessment scheme (FR-4).
+      operationId: createExamPapers
+      x-permission: examinations:paper:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExamPapersRequest" }
+      responses:
+        "201":
+          description: Papers created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamPaper" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /papers/{exam_paper_id}:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    get:
+      tags: [papers]
+      summary: Get an exam paper
+      operationId: getExamPaper
+      x-permission: examinations:paper:read
+      responses:
+        "200":
+          description: Exam paper
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPaper" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [papers]
+      summary: Edit a draft exam paper
+      operationId: updateExamPaper
+      x-permission: examinations:paper:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                duration_minutes: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Paper updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPaper" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # -------------------------------------------------------------- sessions
+  /sessions:
+    get:
+      tags: [sessions, widgets]
+      summary: List exam sessions
+      description: Used by widget examinations.schedule (Examination Staff dashboard) with date_from=today.
+      operationId: listExamSessions
+      x-permission: examinations:session:read
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SessionStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Sessions ordered by start time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamSession" } }
+                  total: { type: integer }
+    post:
+      tags: [sessions]
+      summary: Schedule an exam session
+      description: Rejects papers already in a session and candidate clashes (FR-5). Publishes examinations.exam-session.scheduled.
+      operationId: scheduleExamSession
+      x-permission: examinations:session:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExamSessionRequest" }
+      responses:
+        "201":
+          description: Session scheduled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSession" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /sessions/{exam_session_id}:
+    parameters:
+      - $ref: "#/components/parameters/ExamSessionId"
+    get:
+      tags: [sessions]
+      summary: Get an exam session
+      operationId: getExamSession
+      x-permission: examinations:session:read
+      responses:
+        "200":
+          description: Exam session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSession" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [sessions]
+      summary: Reschedule an exam session or change its venue
+      description: Only while scheduled. Publishes examinations.exam-session.rescheduled (FR-6).
+      operationId: rescheduleExamSession
+      x-permission: examinations:session:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateExamSessionRequest" }
+      responses:
+        "200":
+          description: Session rescheduled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSession" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /sessions/{exam_session_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ExamSessionId"
+    post:
+      tags: [sessions]
+      summary: Cancel an exam session
+      description: Its papers return to draft. Publishes examinations.exam-session.cancelled (FR-6).
+      operationId: cancelExamSession
+      x-permission: examinations:session:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: Session cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamSession" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ------------------------------------------------------------ candidates
+  /candidates:
+    get:
+      tags: [candidates]
+      summary: List candidates and their eligibility
+      description: "Scope: examinations:candidate:read-department gives the caller's department; examinations:candidate:read-all widens it to the organisation."
+      operationId: listCandidates
+      x-permission: examinations:candidate:read-department
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: exam_paper_id, in: query, schema: { type: string, format: uuid } }
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: student_id, in: query, schema: { type: string, format: uuid } }
+        - { name: eligibility_status, in: query, schema: { $ref: "#/components/schemas/EligibilityStatus" } }
+        - { name: reason_code, in: query, schema: { $ref: "#/components/schemas/EligibilityReasonCode" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Candidate" } }
+                  total: { type: integer }
+
+  /exam-cycles/{exam_cycle_id}/eligibility-runs:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [candidates]
+      summary: Determine eligibility for a cycle
+      description: |
+        Creates or refreshes candidates from registration and applies the eligibility inputs (FR-7).
+        Inputs whose source is not yet available leave candidates pending. Manual overrides are kept.
+        Publishes examinations.candidate.eligibility-determined per student.
+      operationId: determineEligibility
+      x-permission: examinations:candidate:determine
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                exam_paper_ids:
+                  type: array
+                  description: Limit the run to these papers; all papers of the cycle when omitted
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Run summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EligibilityRunResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /candidates/{candidate_id}:
+    parameters:
+      - $ref: "#/components/parameters/CandidateId"
+    patch:
+      tags: [candidates]
+      summary: Override a candidate's eligibility
+      description: Reason is mandatory; recorded as a manual_override reason (FR-7).
+      operationId: overrideCandidateEligibility
+      x-permission: examinations:candidate:override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eligibility_status, reason]
+              properties:
+                eligibility_status: { $ref: "#/components/schemas/EligibilityStatus" }
+                reason: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Candidate updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Candidate" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------- hall tickets
+  /hall-tickets:
+    get:
+      tags: [hall-tickets]
+      summary: List hall tickets
+      operationId: listHallTickets
+      x-permission: examinations:hall-ticket:read-all
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: student_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/HallTicketStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Hall tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/HallTicket" } }
+                  total: { type: integer }
+
+  /exam-cycles/{exam_cycle_id}/hall-tickets:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [hall-tickets]
+      summary: Issue hall tickets
+      description: |
+        Issues tickets to students with at least one eligible paper, for the whole cycle or the listed
+        students. Re-issues withheld tickets; revoked tickets get a new ticket. Stores the file through
+        platform/documents. Publishes examinations.hall-ticket.issued per ticket (FR-8).
+      operationId: issueHallTickets
+      x-permission: examinations:hall-ticket:issue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                student_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Issue summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssueHallTicketsResult" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /hall-tickets/{hall_ticket_id}/withhold:
+    parameters:
+      - $ref: "#/components/parameters/HallTicketId"
+    post:
+      tags: [hall-tickets]
+      summary: Withhold a hall ticket
+      operationId: withholdHallTicket
+      x-permission: examinations:hall-ticket:withhold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: Ticket withheld
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HallTicket" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /hall-tickets/{hall_ticket_id}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/HallTicketId"
+    post:
+      tags: [hall-tickets]
+      summary: Revoke a hall ticket
+      description: Final; issuing again creates a new ticket.
+      operationId: revokeHallTicket
+      x-permission: examinations:hall-ticket:revoke
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: Ticket revoked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HallTicket" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ---------------------------------------------------------------- duties
+  /duties:
+    get:
+      tags: [duties]
+      summary: List exam duties
+      description: "Scope: examinations:duty:read-department gives the caller's department; examinations:duty:read-all widens it to the organisation."
+      operationId: listExamDuties
+      x-permission: examinations:duty:read-department
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: staff_id, in: query, schema: { type: string, format: uuid } }
+        - { name: duty_type, in: query, schema: { $ref: "#/components/schemas/DutyType" } }
+        - { name: exam_session_id, in: query, schema: { type: string, format: uuid } }
+        - { name: exam_paper_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/DutyStatus" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Duties
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamDuty" } }
+                  total: { type: integer }
+    post:
+      tags: [duties]
+      summary: Assign an exam duty
+      description: Invigilation needs exam_session_id; evaluation and moderation need exam_paper_id (FR-9). Publishes examinations.duty.assigned.
+      operationId: assignExamDuty
+      x-permission: examinations:duty:assign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateExamDutyRequest" }
+      responses:
+        "201":
+          description: Duty assigned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDuty" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /duties/{exam_duty_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ExamDutyId"
+    post:
+      tags: [duties]
+      summary: Cancel an exam duty
+      operationId: cancelExamDuty
+      x-permission: examinations:duty:assign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReasonRequest" }
+      responses:
+        "200":
+          description: Duty cancelled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamDuty" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ----------------------------------------------------------------- marks
+  /papers/{exam_paper_id}/marks:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    get:
+      tags: [marks]
+      summary: Marks of a paper
+      description: "One row per eligible candidate; unmarked candidates have no marks yet. Scope: examinations:marks:read-assigned gives assigned papers; examinations:marks:read-department widens it to the caller's department; examinations:marks:read-all widens it to the organisation."
+      operationId: listMarks
+      x-permission: examinations:marks:read-assigned
+      responses:
+        "200":
+          description: Marks
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exam_paper_id, max_marks, paper_status, items, total]
+                properties:
+                  exam_paper_id: { type: string, format: uuid }
+                  max_marks: { type: number }
+                  paper_status: { $ref: "#/components/schemas/PaperStatus" }
+                  items: { type: array, items: { $ref: "#/components/schemas/MarkEntry" } }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [marks]
+      summary: Enter marks
+      description: "Creates or overwrites marks for the listed candidates while the paper is in marks_entry (FR-10). Scope: examinations:marks:enter-assigned gives assigned papers; examinations:marks:enter-all widens it to the organisation."
+      operationId: enterMarks
+      x-permission: examinations:marks:enter-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnterMarksRequest" }
+      responses:
+        "200":
+          description: Marks after entry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exam_paper_id, items]
+                properties:
+                  exam_paper_id: { type: string, format: uuid }
+                  items: { type: array, items: { $ref: "#/components/schemas/MarkEntry" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Paper is not in marks_entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: Marks out of range, or candidate not eligible
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /papers/{exam_paper_id}/marks/submit:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    post:
+      tags: [marks]
+      summary: Submit a paper's marks for moderation
+      description: "Every eligible candidate must have marks or be absent. Moves the paper to moderation (FR-11). Scope: examinations:marks:enter-assigned gives assigned papers; examinations:marks:enter-all widens it to the organisation."
+      operationId: submitMarks
+      x-permission: examinations:marks:enter-assigned
+      responses:
+        "200":
+          description: Paper moved to moderation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPaper" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /papers/{exam_paper_id}/moderation:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    post:
+      tags: [marks]
+      summary: Moderate a paper's marks
+      description: "Uniform or per-candidate adjustment with a reason; original marks are kept (FR-11). Scope: examinations:marks:moderate-assigned gives assigned papers; examinations:marks:moderate-department widens it to the caller's department."
+      operationId: moderateMarks
+      x-permission: examinations:marks:moderate-assigned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ModerationRequest" }
+      responses:
+        "200":
+          description: Marks after moderation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exam_paper_id, items]
+                properties:
+                  exam_paper_id: { type: string, format: uuid }
+                  items: { type: array, items: { $ref: "#/components/schemas/MarkEntry" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /papers/{exam_paper_id}/lock:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    post:
+      tags: [marks]
+      summary: Lock a paper's marks
+      description: Only after moderation; locked marks change only through result revision (FR-12).
+      operationId: lockMarks
+      x-permission: examinations:marks:lock
+      responses:
+        "200":
+          description: Paper locked
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPaper" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # --------------------------------------------------------------- results
+  /exam-cycles/{exam_cycle_id}/results/compute:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [results]
+      summary: Compute results
+      description: For course offerings whose papers are all locked; replaces only computed results (FR-13).
+      operationId: computeResults
+      x-permission: examinations:result:compute
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseOfferingSelection" }
+      responses:
+        "200":
+          description: Computation summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /exam-cycles/{exam_cycle_id}/results/approve:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [results]
+      summary: Approve computed results
+      description: "Department heads approve their department's course offerings; the controller any (FR-14). Scope: examinations:result:approve-department gives the caller's department; examinations:result:approve-all widens it to the organisation."
+      operationId: approveResults
+      x-permission: examinations:result:approve-department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseOfferingSelection" }
+      responses:
+        "200":
+          description: Approval summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /exam-cycles/{exam_cycle_id}/results/publish:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [results]
+      summary: Publish approved results
+      description: Publishes examinations.result.published per student (FR-15).
+      operationId: publishResults
+      x-permission: examinations:result:publish
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseOfferingSelection" }
+      responses:
+        "200":
+          description: Publication summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /results:
+    get:
+      tags: [results]
+      summary: List results
+      description: "Scope: examinations:result:read-department gives the caller's department; examinations:result:read-all widens it to the organisation."
+      operationId: listResults
+      x-permission: examinations:result:read-department
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: student_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ResultStatus" } }
+        - { name: include_superseded, in: query, description: Include earlier versions of revised results, schema: { type: boolean, default: false } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Result" } }
+                  total: { type: integer }
+
+  /results/{result_id}/revise:
+    parameters:
+      - $ref: "#/components/parameters/ResultId"
+    post:
+      tags: [results]
+      summary: Revise a published result
+      description: Creates a new version, keeps the previous one, publishes examinations.result.revised (FR-17).
+      operationId: reviseResult
+      x-permission: examinations:result:revise
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviseResultRequest" }
+      responses:
+        "200":
+          description: The new result version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Result" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # --------------------------------------------------------------- reports
+  /reports/hall-tickets:
+    get:
+      tags: [reports, widgets]
+      summary: Hall-ticket counts per exam cycle
+      description: Used by widget examinations.hall-tickets-issued (Examination Staff dashboard).
+      operationId: getHallTicketReport
+      x-permission: examinations:hall-ticket:read-all
+      parameters:
+        - { name: exam_cycle_id, in: query, description: Defaults to cycles that are scheduled or in progress, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HallTicketReport" }
+
+  /reports/results-pending:
+    get:
+      tags: [reports, widgets]
+      summary: Results pipeline status
+      description: Used by widget examinations.results-pending (Examination Staff dashboard).
+      operationId: getResultsPendingReport
+      x-permission: examinations:report:read-all
+      parameters:
+        - { name: exam_cycle_id, in: query, description: Defaults to cycles in evaluation, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultsPendingReport" }
+
+  /reports/results-summary:
+    get:
+      tags: [reports, widgets]
+      summary: Published results summary per course offering
+      description: |
+        Department heads get their own department by default; report:read-all holders pass department_id
+        or get the whole organisation. Used by widget examinations.results-summary (Department Admin dashboard).
+        Scope: examinations:report:read-department gives the caller's department; examinations:report:read-all widens it to the organisation.
+      operationId: getResultsSummaryReport
+      x-permission: examinations:report:read-department
+      parameters:
+        - { name: exam_cycle_id, in: query, description: Defaults to the latest cycle with published results, schema: { type: string, format: uuid } }
+        - { name: department_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultsSummaryReport" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ------------------------------------------------------------------- me
+  /me/duties:
+    get:
+      tags: [widgets, duties]
+      summary: The caller's exam duties
+      description: Upcoming by default. Used by widget examinations.exam-duties (Faculty dashboard).
+      operationId: listMyDuties
+      x-permission: examinations:duty:read-own
+      parameters:
+        - { name: include_past, in: query, schema: { type: boolean, default: false } }
+      responses:
+        "200":
+          description: Duties ordered by time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ExamDuty" } }
+
+  /me/exam-schedule:
+    get:
+      tags: [widgets, sessions]
+      summary: The caller's upcoming exam sessions (student)
+      description: Exams only (PRD Q6). Used by widget examinations.upcoming-assessments (Student dashboard).
+      operationId: getMyExamSchedule
+      x-permission: examinations:session:read-own
+      parameters:
+        - { name: date_from, in: query, description: Defaults to today, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Sessions ordered by start time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/MyExamSessionItem" } }
+
+  /me/hall-tickets:
+    get:
+      tags: [hall-tickets]
+      summary: The caller's hall tickets
+      operationId: listMyHallTickets
+      x-permission: examinations:hall-ticket:read-own
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+      responses:
+        "200":
+          description: Hall tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/HallTicket" } }
+
+  /me/results:
+    get:
+      tags: [results]
+      summary: The caller's published results
+      description: Only published, current versions.
+      operationId: listMyResults
+      x-permission: examinations:result:read-own
+      parameters:
+        - $ref: "#/components/parameters/ExamCycleQuery"
+      responses:
+        "200":
+          description: Results grouped by exam cycle
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/StudentCycleResult" } }
+
 components:
-  schemas: {}
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0, minimum: 0 }
+    ExamCycleQuery:
+      name: exam_cycle_id
+      in: query
+      schema: { type: string, format: uuid }
+    ExamCycleId:
+      name: exam_cycle_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssessmentSchemeId:
+      name: assessment_scheme_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    GradingSchemeId:
+      name: grading_scheme_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExamPaperId:
+      name: exam_paper_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExamSessionId:
+      name: exam_session_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CandidateId:
+      name: candidate_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    HallTicketId:
+      name: hall_ticket_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ExamDutyId:
+      name: exam_duty_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ResultId:
+      name: result_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Caller lacks the permission or scope for this resource
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Request conflicts with the resource's current state (status, clash, duplicate)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unprocessable:
+      description: Request is well formed but breaks a domain rule (for example an unknown course offering, or weightages not adding up to 100)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object }
+
+    # --- enums
+    CycleType:
+      type: string
+      enum: [internal, mid_term, end_term, supplementary]
+    ExamCycleStatus:
+      type: string
+      enum: [draft, scheduled, in_progress, evaluation, results_published, closed]
+    SchemeStatus:
+      type: string
+      enum: [draft, active, superseded]
+    ComponentKind:
+      type: string
+      enum: [written, practical, oral, project, continuous]
+    PaperStatus:
+      type: string
+      enum: [draft, scheduled, marks_entry, moderation, locked]
+    SessionStatus:
+      type: string
+      enum: [scheduled, cancelled, completed]
+    EligibilityStatus:
+      type: string
+      enum: [pending, eligible, ineligible]
+    EligibilityReasonCode:
+      type: string
+      enum: [not_registered, student_status, attendance_shortage, dues_outstanding, exam_rule, manual_override]
+    HallTicketStatus:
+      type: string
+      enum: [issued, withheld, revoked]
+    DutyType:
+      type: string
+      enum: [invigilation, evaluation, moderation]
+    DutyStatus:
+      type: string
+      enum: [assigned, cancelled, completed]
+    MarkStatus:
+      type: string
+      enum: [entered, moderated, locked]
+    ResultStatus:
+      type: string
+      enum: [computed, approved, published, superseded]
+
+    # --- exam cycles
+    ExamCycle:
+      type: object
+      required: [id, organisation_id, academic_period_id, code, name, cycle_type, starts_on, ends_on, grading_scheme_id, check_dues, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        academic_period_id: { type: string, format: uuid }
+        code: { type: string, examples: ["2026-ODD-END"] }
+        name: { type: string }
+        cycle_type: { $ref: "#/components/schemas/CycleType" }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        grading_scheme_id: { type: string, format: uuid }
+        eligibility_cutoff_date: { type: [string, "null"], format: date }
+        min_attendance_percent:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+          description: Null means no attendance rule. Attendance comes from timetable-attendance's bulk read (owner decision C7); where the minimum lives is still Q5
+        check_dues:
+          type: boolean
+          description: Whether dues are an eligibility input; the dues source is pending Q4
+        status: { $ref: "#/components/schemas/ExamCycleStatus" }
+    CreateExamCycleRequest:
+      type: object
+      required: [academic_period_id, code, name, cycle_type, starts_on, ends_on]
+      properties:
+        academic_period_id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        cycle_type: { $ref: "#/components/schemas/CycleType" }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        grading_scheme_id: { type: string, format: uuid, description: Defaults to the organisation default }
+        eligibility_cutoff_date: { type: string, format: date }
+        min_attendance_percent: { type: number, minimum: 0, maximum: 100 }
+        check_dues: { type: boolean, default: false }
+    UpdateExamCycleRequest:
+      type: object
+      properties:
+        name: { type: string }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        grading_scheme_id: { type: string, format: uuid }
+        eligibility_cutoff_date: { type: [string, "null"], format: date }
+        min_attendance_percent: { type: [number, "null"], minimum: 0, maximum: 100 }
+        check_dues: { type: boolean }
+
+    # --- assessment schemes
+    AssessmentComponent:
+      type: object
+      required: [code, name, kind, weightage_percent, max_marks]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        code: { type: string, examples: ["END"] }
+        name: { type: string }
+        kind: { $ref: "#/components/schemas/ComponentKind" }
+        weightage_percent: { type: number, exclusiveMinimum: 0, maximum: 100 }
+        max_marks: { type: number, exclusiveMinimum: 0 }
+        pass_marks: { type: [number, "null"], minimum: 0, description: Minimum marks in this component to pass; null means no component minimum }
+    AssessmentSchemeInput:
+      type: object
+      required: [course_offering_id, pass_percent, components]
+      properties:
+        course_offering_id: { type: string, format: uuid }
+        pass_percent: { type: number, minimum: 0, maximum: 100, description: Minimum weighted percentage to pass }
+        components:
+          type: array
+          minItems: 1
+          description: Weightages must add up to 100
+          items: { $ref: "#/components/schemas/AssessmentComponent" }
+    AssessmentScheme:
+      allOf:
+        - $ref: "#/components/schemas/AssessmentSchemeInput"
+        - type: object
+          required: [id, organisation_id, version, status]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            version: { type: integer, minimum: 1 }
+            status: { $ref: "#/components/schemas/SchemeStatus" }
+            department_id: { type: string, format: uuid, readOnly: true, description: Cached from the course offering }
+
+    # --- grading schemes
+    GradingBand:
+      type: object
+      required: [min_percent, max_percent, grade, grade_point, is_pass]
+      properties:
+        min_percent: { type: number, minimum: 0, maximum: 100 }
+        max_percent: { type: number, minimum: 0, maximum: 100 }
+        grade: { type: string, examples: ["A"] }
+        grade_point: { type: number, minimum: 0 }
+        is_pass: { type: boolean }
+    GradingSchemeInput:
+      type: object
+      required: [name, bands]
+      properties:
+        name: { type: string }
+        bands:
+          type: array
+          minItems: 1
+          description: Must cover 0 to 100 without gaps or overlaps
+          items: { $ref: "#/components/schemas/GradingBand" }
+    GradingScheme:
+      allOf:
+        - $ref: "#/components/schemas/GradingSchemeInput"
+        - type: object
+          required: [id, organisation_id, is_default, in_use]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            is_default: { type: boolean }
+            in_use: { type: boolean, readOnly: true, description: True once a cycle using it has published results }
+
+    # --- papers
+    ExamPaper:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, course_offering_id, assessment_component_id, component_code, max_marks, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        assessment_component_id: { type: string, format: uuid }
+        component_code: { type: string }
+        title: { type: string }
+        course_code: { type: string, readOnly: true }
+        course_title: { type: string, readOnly: true }
+        department_id: { type: string, format: uuid, readOnly: true }
+        max_marks: { type: number }
+        duration_minutes: { type: [integer, "null"], minimum: 1 }
+        exam_session_id: { type: [string, "null"], format: uuid, readOnly: true }
+        candidate_count: { type: integer, readOnly: true }
+        status: { $ref: "#/components/schemas/PaperStatus" }
+    CreateExamPapersRequest:
+      type: object
+      required: [exam_cycle_id, course_offering_id, component_codes]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        component_codes:
+          type: array
+          minItems: 1
+          description: Components of the offering's active assessment scheme examined in this cycle
+          items: { type: string }
+        duration_minutes: { type: integer, minimum: 1 }
+
+    # --- sessions
+    ExamSession:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, starts_at, ends_at, status, papers, candidate_count, invigilators_required, invigilators_assigned]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        venue_label: { type: [string, "null"], description: Free text until venue ownership is settled (PRD Q3) }
+        status: { $ref: "#/components/schemas/SessionStatus" }
+        cancel_reason: { type: [string, "null"] }
+        papers:
+          type: array
+          items:
+            type: object
+            required: [exam_paper_id, course_offering_id]
+            properties:
+              exam_paper_id: { type: string, format: uuid }
+              course_offering_id: { type: string, format: uuid }
+              course_code: { type: string }
+              course_title: { type: string }
+              component_code: { type: string }
+        candidate_count: { type: integer }
+        invigilators_required: { type: integer, minimum: 0 }
+        invigilators_assigned: { type: integer }
+    CreateExamSessionRequest:
+      type: object
+      required: [exam_cycle_id, starts_at, ends_at, exam_paper_ids]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        venue_label: { type: string }
+        invigilators_required: { type: integer, minimum: 0, default: 1 }
+        exam_paper_ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+    UpdateExamSessionRequest:
+      type: object
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        venue_label: { type: [string, "null"] }
+        invigilators_required: { type: integer, minimum: 0 }
+        reason: { type: string }
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
+    # --- candidates
+    EligibilityReason:
+      type: object
+      required: [code]
+      properties:
+        code: { $ref: "#/components/schemas/EligibilityReasonCode" }
+        detail: { type: string }
+    Candidate:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, exam_paper_id, course_offering_id, student_id, eligibility_status, eligibility_reasons]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        exam_paper_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        eligibility_status: { $ref: "#/components/schemas/EligibilityStatus" }
+        eligibility_reasons: { type: array, items: { $ref: "#/components/schemas/EligibilityReason" } }
+        pending_inputs:
+          type: array
+          description: Eligibility inputs not yet available for this candidate (FR-7)
+          items: { type: string, enum: [registration, student_status, attendance, dues] }
+        overridden_by: { type: [string, "null"], format: uuid }
+        determined_at: { type: [string, "null"], format: date-time }
+    EligibilityRunResult:
+      type: object
+      required: [exam_cycle_id, candidates, eligible, ineligible, pending]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        candidates: { type: integer }
+        eligible: { type: integer }
+        ineligible: { type: integer }
+        pending: { type: integer }
+
+    # --- hall tickets
+    HallTicket:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, student_id, status, exam_paper_ids]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/HallTicketStatus" }
+        exam_paper_ids: { type: array, items: { type: string, format: uuid } }
+        document_id: { type: [string, "null"], format: uuid, description: platform/documents file of the issued ticket }
+        reason: { type: [string, "null"], description: Reason for withholding or revoking }
+        issued_at: { type: [string, "null"], format: date-time }
+    IssueHallTicketsResult:
+      type: object
+      required: [exam_cycle_id, issued, skipped_no_eligible_paper]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        issued: { type: integer }
+        skipped_no_eligible_paper: { type: integer }
+        skipped_pending: { type: integer, description: Students with only pending candidacies }
+
+    # --- duties
+    ExamDuty:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, staff_id, duty_type, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        staff_id: { type: string, format: uuid, description: Identity user id }
+        duty_type: { $ref: "#/components/schemas/DutyType" }
+        exam_session_id: { type: [string, "null"], format: uuid }
+        exam_paper_id: { type: [string, "null"], format: uuid }
+        starts_at: { type: [string, "null"], format: date-time, readOnly: true, description: "Session start, for invigilation" }
+        ends_at: { type: [string, "null"], format: date-time, readOnly: true }
+        venue_label: { type: [string, "null"], readOnly: true }
+        course_code: { type: [string, "null"], readOnly: true, description: For evaluation and moderation }
+        status: { $ref: "#/components/schemas/DutyStatus" }
+        cancel_reason: { type: [string, "null"] }
+    CreateExamDutyRequest:
+      type: object
+      required: [staff_id, duty_type]
+      properties:
+        staff_id: { type: string, format: uuid }
+        duty_type: { $ref: "#/components/schemas/DutyType" }
+        exam_session_id: { type: string, format: uuid }
+        exam_paper_id: { type: string, format: uuid }
+
+    # --- marks
+    MarkEntry:
+      type: object
+      required: [candidate_id, student_id, status]
+      properties:
+        id: { type: [string, "null"], format: uuid, description: Null for a candidate not yet marked }
+        candidate_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        marks_obtained: { type: [number, "null"], minimum: 0 }
+        absent: { type: boolean, default: false }
+        moderation_delta: { type: [number, "null"] }
+        moderation_reason: { type: [string, "null"] }
+        final_marks: { type: [number, "null"], readOnly: true, description: "marks_obtained plus moderation_delta, within 0 and max_marks" }
+        entered_by: { type: [string, "null"], format: uuid }
+        entered_at: { type: [string, "null"], format: date-time }
+        moderated_by: { type: [string, "null"], format: uuid }
+        status: { oneOf: [{ $ref: "#/components/schemas/MarkStatus" }, { type: "null" }] }
+    EnterMarksRequest:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [candidate_id]
+            properties:
+              candidate_id: { type: string, format: uuid }
+              marks_obtained: { type: number, minimum: 0, description: Omit when absent is true }
+              absent: { type: boolean, default: false }
+    ModerationRequest:
+      type: object
+      required: [reason]
+      description: Either a uniform adjustment for the paper or per-candidate adjustments
+      properties:
+        reason: { type: string, minLength: 1 }
+        uniform_delta: { type: number }
+        adjustments:
+          type: array
+          items:
+            type: object
+            required: [candidate_id, delta]
+            properties:
+              candidate_id: { type: string, format: uuid }
+              delta: { type: number }
+
+    # --- results
+    ComponentScore:
+      type: object
+      required: [component_code, max_marks]
+      properties:
+        component_code: { type: string }
+        final_marks: { type: [number, "null"] }
+        max_marks: { type: number }
+        absent: { type: boolean }
+        passed: { type: [boolean, "null"], description: Null when the component has no minimum }
+    Result:
+      type: object
+      required: [id, organisation_id, exam_cycle_id, student_id, course_offering_id, version, components, weighted_percent, grade, grade_point, passed, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        course_code: { type: string, readOnly: true }
+        course_title: { type: string, readOnly: true }
+        credits: { type: [number, "null"], readOnly: true, description: Cached from the course offering (consumed events pending) }
+        version: { type: integer, minimum: 1 }
+        components: { type: array, items: { $ref: "#/components/schemas/ComponentScore" } }
+        weighted_percent: { type: number, minimum: 0, maximum: 100 }
+        grade: { type: string }
+        grade_point: { type: number }
+        passed: { type: boolean }
+        status: { $ref: "#/components/schemas/ResultStatus" }
+        approved_by: { type: [string, "null"], format: uuid }
+        published_at: { type: [string, "null"], format: date-time }
+        revision_reason: { type: [string, "null"] }
+    StudentCycleResult:
+      type: object
+      required: [exam_cycle_id, results]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        exam_cycle_name: { type: string }
+        grade_point_average: { type: [number, "null"], description: Credit-weighted; null when credits are unavailable }
+        results: { type: array, items: { $ref: "#/components/schemas/Result" } }
+    CourseOfferingSelection:
+      type: object
+      properties:
+        course_offering_ids:
+          type: array
+          description: All eligible course offerings of the cycle when omitted (not allowed for approval by department scope beyond the caller's department)
+          items: { type: string, format: uuid }
+    ResultActionSummary:
+      type: object
+      required: [exam_cycle_id, course_offerings, results]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        course_offerings: { type: integer }
+        results: { type: integer }
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [course_offering_id, reason]
+            properties:
+              course_offering_id: { type: string, format: uuid }
+              reason: { type: string }
+    ReviseResultRequest:
+      type: object
+      required: [reason, components]
+      properties:
+        reason: { type: string, minLength: 1 }
+        components:
+          type: array
+          minItems: 1
+          description: Corrected final marks per component; grade and pass are recomputed
+          items:
+            type: object
+            required: [component_code, final_marks]
+            properties:
+              component_code: { type: string }
+              final_marks: { type: number, minimum: 0 }
+
+    # --- widgets and reports
+    MyExamSessionItem:
+      type: object
+      required: [exam_session_id, exam_cycle_id, starts_at, ends_at, exam_paper_id, course_offering_id, eligibility_status]
+      properties:
+        exam_session_id: { type: string, format: uuid }
+        exam_cycle_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        venue_label: { type: [string, "null"] }
+        exam_paper_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        course_code: { type: string }
+        course_title: { type: string }
+        component_code: { type: string }
+        eligibility_status: { $ref: "#/components/schemas/EligibilityStatus" }
+        hall_ticket_status: { oneOf: [{ $ref: "#/components/schemas/HallTicketStatus" }, { type: "null" }] }
+    HallTicketReport:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [exam_cycle_id, eligible_students, issued, withheld, revoked, not_issued]
+            properties:
+              exam_cycle_id: { type: string, format: uuid }
+              exam_cycle_name: { type: string }
+              eligible_students: { type: integer }
+              issued: { type: integer }
+              withheld: { type: integer }
+              revoked: { type: integer }
+              not_issued: { type: integer }
+              withheld_reasons:
+                type: array
+                items:
+                  type: object
+                  required: [reason, count]
+                  properties:
+                    reason: { type: string }
+                    count: { type: integer }
+    ResultsPendingReport:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [exam_cycle_id, stages]
+            properties:
+              exam_cycle_id: { type: string, format: uuid }
+              exam_cycle_name: { type: string }
+              stages:
+                type: array
+                description: One row per pipeline stage still holding papers or results
+                items:
+                  type: object
+                  required: [stage, count]
+                  properties:
+                    stage: { type: string, enum: [marks_entry, moderation, awaiting_lock, awaiting_computation, awaiting_approval, awaiting_publication] }
+                    count: { type: integer, description: Papers for paper stages; course offerings for result stages }
+                    oldest_since: { type: [string, "null"], format: date-time }
+    ResultsSummaryReport:
+      type: object
+      required: [exam_cycle_id, items]
+      properties:
+        exam_cycle_id: { type: string, format: uuid }
+        department_id: { type: [string, "null"], format: uuid }
+        items:
+          type: array
+          description: One row per course offering with published results
+          items:
+            type: object
+            required: [course_offering_id, candidates, passed, pass_rate, grade_distribution]
+            properties:
+              course_offering_id: { type: string, format: uuid }
+              course_code: { type: string }
+              course_title: { type: string }
+              candidates: { type: integer }
+              passed: { type: integer }
+              pass_rate: { type: number, minimum: 0, maximum: 100 }
+              average_percent: { type: number }
+              grade_distribution:
+                type: array
+                items:
+                  type: object
+                  required: [grade, count]
+                  properties:
+                    grade: { type: string }
+                    count: { type: integer }

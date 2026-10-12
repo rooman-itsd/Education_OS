@@ -2,9 +2,289 @@ openapi: 3.1.0
 info:
   title: student-information API
   version: 0.1.0
-  description: "Student master record (SIS): profiles, documents, ID cards, status history."
+  description: >-
+    Student master record (SIS): the Person system of record for Education OS. Profiles,
+    documents, ID cards, status history. Person records are created only by an authorised staff
+    role (admissions staff, registrar) — never through public sign-up. See docs/prd.md.
 servers:
   - url: /api/v1/student-information
-paths: {}
+paths:
+  /people:
+    get:
+      summary: >
+        Find people in the caller's organisation. identity_number matches exactly (used to check
+        for a duplicate before creating a record); q searches name and email. Permission
+        student-information:person:read.
+      parameters:
+        - { name: q, in: query, description: "Search in first name, last name and email", schema: { type: string } }
+        - { name: identity_number, in: query, description: "Exact match on identity document number, to check for a duplicate", schema: { type: string } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/PersonStatus" } } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PersonPage" } } } }
+    post:
+      summary: >
+        Create a Person record. Staff-only: there is no public or anonymous path to this
+        endpoint, and it is never called as a side effect of organisation sign-up.
+        Permission student-information:person:write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PersonInput" }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
+        "409": { description: An identity document number already in use in this organisation, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /people/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One person. Permission student-information:person:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update profile fields. Does not change status (use /people/{id}/status). Permission student-information:person:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PersonUpdate" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: An identity document number already in use in this organisation, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /people/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Full status history for one person, most recent first. Permission student-information:person:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/StatusHistoryEntry" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: >
+        Change status with a reason. Appends to status history; history is never edited or
+        deleted. Permission student-information:status:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StatusChangeInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { description: "Status unchanged (new status equals current status)", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
+
+  /people/{id}/documents:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Documents attached to a person. Permission student-information:person:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PersonDocument" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: >
+        Attach a document already stored by platform/documents (this module never handles raw
+        file bytes). Permission student-information:document:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PersonDocumentInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/PersonDocument" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /people/{id}/documents/{document_id}:
+    parameters:
+      - { $ref: "#/components/parameters/Id" }
+      - { name: document_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      summary: Remove a document reference from a person's record. Permission student-information:document:manage.
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /people/{id}/id-cards:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: ID cards issued to a person, most recent first. Permission student-information:person:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/IdentityCard" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: >
+        Issue a new ID card for a person. Only one card may be active at a time; issuing a new
+        one does not automatically revoke an existing active card — revoke it first.
+        Permission student-information:id-card:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/IdentityCardInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/IdentityCard" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Person already has an active card, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /id-cards/{id}/revoke:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Revoke an issued card with a reason. Permission student-information:id-card:manage.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 1 } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/IdentityCard" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Card is not active, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    NotFound: { description: Not found in the caller's organisation }
+
+  schemas:
+    PersonStatus:
+      type: string
+      enum: [pending, active, suspended, graduated, withdrawn, alumnus]
+      description: >-
+        pending: record created, not yet confirmed (e.g. awaiting document verification).
+        There is no "applicant" status: a person not yet confirmed as a student belongs to
+        admissions' own Application entity, not to this module.
+
+    ContactDetails:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        phone: { type: string }
+        address: { type: string }
+
+    Guardian:
+      type: object
+      required: [name, relation]
+      properties:
+        name: { type: string }
+        relation: { type: string, description: "e.g. parent, guardian, sponsor" }
+        phone: { type: string }
+        email: { type: string, format: email }
+
+    Source:
+      type: object
+      description: >-
+        Where this person originated, for traceability only. A cached reference by id, never a
+        database foreign key into another module's schema (module-standard rule 2). Optional:
+        this module does not require any other module's contract to exist.
+      required: [module, entity, id]
+      properties:
+        module: { type: string, description: "e.g. admissions" }
+        entity: { type: string, description: "e.g. application" }
+        id: { type: string }
+
+    PersonInput:
+      type: object
+      required: [first_name, last_name]
+      properties:
+        first_name: { type: string, maxLength: 120 }
+        last_name: { type: string, maxLength: 120 }
+        preferred_name: { type: string, maxLength: 120 }
+        date_of_birth: { type: string, format: date }
+        gender: { type: string }
+        identity_number: { type: string, description: "National ID / passport number. Unique within the organisation if provided." }
+        contact: { $ref: "#/components/schemas/ContactDetails" }
+        guardians: { type: array, items: { $ref: "#/components/schemas/Guardian" } }
+        identity_user_id: { type: string, format: uuid, nullable: true, description: "Linked platform/identity user account, if sign-in access has been granted" }
+        source: { $ref: "#/components/schemas/Source" }
+    PersonUpdate:
+      type: object
+      properties:
+        first_name: { type: string, maxLength: 120 }
+        last_name: { type: string, maxLength: 120 }
+        preferred_name: { type: string, maxLength: 120 }
+        date_of_birth: { type: string, format: date }
+        gender: { type: string }
+        identity_number: { type: string }
+        contact: { $ref: "#/components/schemas/ContactDetails" }
+        guardians: { type: array, items: { $ref: "#/components/schemas/Guardian" } }
+        identity_user_id: { type: string, format: uuid, nullable: true }
+    Person:
+      allOf:
+        - $ref: "#/components/schemas/PersonInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/PersonStatus" }
+            status_effective_date: { type: string, format: date }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    PersonPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Person" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    StatusChangeInput:
+      type: object
+      required: [status, reason]
+      properties:
+        status: { $ref: "#/components/schemas/PersonStatus" }
+        reason: { type: string, minLength: 1 }
+        effective_date: { type: string, format: date, description: "Defaults to today" }
+    StatusHistoryEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        person_id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/PersonStatus" }
+        reason: { type: string }
+        effective_date: { type: string, format: date }
+        changed_by: { type: string, format: uuid }
+        changed_at: { type: string, format: date-time }
+
+    PersonDocumentType:
+      type: string
+      enum: [identity_proof, address_proof, photograph, prior_transcript, other]
+    PersonDocumentInput:
+      type: object
+      required: [type, document_id]
+      properties:
+        type: { $ref: "#/components/schemas/PersonDocumentType" }
+        document_id: { type: string, description: "Document id from platform/documents" }
+        label: { type: string }
+    PersonDocument:
+      allOf:
+        - $ref: "#/components/schemas/PersonDocumentInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            person_id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            uploaded_by: { type: string, format: uuid }
+            uploaded_at: { type: string, format: date-time }
+
+    IdentityCardStatus:
+      type: string
+      enum: [issued, revoked, expired]
+    IdentityCardInput:
+      type: object
+      properties:
+        expires_at: { type: string, format: date, nullable: true }
+    IdentityCard:
+      allOf:
+        - $ref: "#/components/schemas/IdentityCardInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            person_id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            card_number: { type: string }
+            status: { $ref: "#/components/schemas/IdentityCardStatus" }
+            document_id: { type: string, description: "The generated card artifact, from platform/documents" }
+            issued_by: { type: string, format: uuid }
+            issued_at: { type: string, format: date-time }
+            revoked_by: { type: string, format: uuid, nullable: true }
+            revoked_at: { type: string, format: date-time, nullable: true }
+            revoked_reason: { type: string, nullable: true }
+
+    ConflictError:
+      type: object
+      properties:
+        code: { type: string, enum: [duplicate_identity_number, active_card_exists, card_not_active] }
+        message: { type: string }
+    RuleError:
+      type: object
+      properties:
+        code: { type: string, enum: [status_unchanged] }
+        message: { type: string }

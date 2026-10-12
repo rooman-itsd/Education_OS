@@ -2,9 +2,405 @@ openapi: 3.1.0
 info:
   title: scheduler API
   version: 0.1.0
-  description: "Jobs, cron, reminders and alert dispatch."
+  description: >-
+    Jobs, cron, reminders and alert dispatch. Scheduler owns the clock; modules own the work.
+    A job definition is declared in code by the module that handles it and is not editable
+    through this API - only its timing is. When a schedule fires, scheduler publishes
+    scheduler.job.due and the owning module consumes it, because module-to-module imports are
+    forbidden. Bus delivery is at-least-once, so every handler must be idempotent.
 servers:
   - url: /api/v1/scheduler
-paths: {}
+
+paths:
+  /jobs:
+    get:
+      summary: List job definitions
+      description: >-
+        Every job a module has declared. Read-only: a job that nothing handles cannot be
+        invented here, because firing it would publish an event with no consumer.
+      operationId: listJobs
+      parameters:
+        - name: module
+          in: query
+          schema: { type: string }
+        - name: scope
+          in: query
+          schema: { $ref: "#/components/schemas/Scope" }
+      responses:
+        "200":
+          description: Declared jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Job" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /schedules:
+    get:
+      summary: List schedules
+      description: >-
+        Organisation-scoped. A super admin with platform:scheduler:admin also sees platform
+        schedules, which belong to no organisation.
+      operationId: listSchedules
+      parameters:
+        - name: job
+          in: query
+          schema: { type: string }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: A page of schedules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Schedule" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      summary: Create a schedule
+      description: >-
+        Either recurring (cron + timezone) or one-off (run_at), never both. A platform-scoped
+        job may only be scheduled by a super admin.
+      operationId: createSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewSchedule" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Schedule" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: Unknown job, invalid cron, missing timezone, or both cron and run_at given
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /schedules/{schedule_id}:
+    get:
+      summary: Get one schedule
+      operationId: getSchedule
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Schedule" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    patch:
+      summary: Change a schedule's timing or enable state
+      description: >-
+        The job a schedule points at cannot be changed; create a different schedule instead.
+        Audited.
+      operationId: updateSchedule
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cron: { type: [string, "null"] }
+                timezone: { type: [string, "null"] }
+                run_at: { type: [string, "null"], format: date-time }
+                enabled: { type: boolean }
+                allow_overlap: { type: boolean }
+                catch_up: { $ref: "#/components/schemas/CatchUp" }
+                arguments:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Schedule" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    delete:
+      summary: Delete a schedule
+      description: >-
+        Removes the schedule. Past runs are kept, because a run is a record of something that
+        happened. Audited.
+      operationId: deleteSchedule
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /schedules/{schedule_id}/run:
+    post:
+      summary: Run now
+      description: >-
+        Fires the job immediately, outside its schedule, without changing the schedule. For an
+        operator who cannot wait for the next window. Refused while a previous run is still
+        going unless the schedule allows overlap. Audited.
+      operationId: runScheduleNow
+      parameters:
+        - name: schedule_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Run started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: A run is already in progress and this schedule does not allow overlap
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /runs:
+    get:
+      summary: Run history
+      description: >-
+        Answers "did the nightly job run, and what happened" without reading logs.
+      operationId: listRuns
+      parameters:
+        - name: schedule_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: job
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/RunStatus" }
+        - name: started_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: started_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: A page of runs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Run" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /runs/{run_id}:
+    get:
+      summary: Get one run
+      operationId: getRun
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Run" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
-  schemas: {}
+  schemas:
+    Scope:
+      type: string
+      enum: [platform, organisation]
+      description: >-
+        platform runs once per deployment across all tenants, with organisation_id null, e.g.
+        billing.expire-trials. organisation runs per academy with app.organisation_id set, so
+        row-level security applies to the handler exactly as it does to a request.
+
+    CatchUp:
+      type: string
+      enum: [once, never]
+      default: once
+      description: >-
+        What happens to windows missed during an outage or deployment. once runs a single
+        catch-up and records how many windows were missed; never skips them silently.
+
+    RunStatus:
+      type: string
+      enum: [running, succeeded, failed, skipped]
+      description: >-
+        skipped means the window passed without running - overlap was not allowed and the
+        previous run was still going, or the schedule was disabled.
+
+    Job:
+      type: object
+      description: >-
+        A job declared in code by the module that handles it. Not created through this API.
+      required: [key, module, scope]
+      properties:
+        key:
+          type: string
+          description: "<module>.<job-name>"
+          examples: ["billing.expire-trials"]
+        module: { type: string }
+        scope: { $ref: "#/components/schemas/Scope" }
+        description: { type: string }
+        arguments_schema:
+          type: object
+          additionalProperties: true
+          description: Arguments this job accepts, used to validate a schedule
+        default_cron:
+          type: [string, "null"]
+          description: Suggested timing the module ships with
+        idempotent:
+          type: boolean
+          description: >-
+            The handler asserts it is safe to run twice. Delivery is at-least-once, so a job
+            that declares false cannot be scheduled.
+
+    NewSchedule:
+      type: object
+      required: [job]
+      properties:
+        job:
+          type: string
+          examples: ["billing.expire-trials"]
+        cron:
+          type: [string, "null"]
+          description: Five-field cron. Mutually exclusive with run_at.
+          examples: ["0 2 * * *"]
+        timezone:
+          type: [string, "null"]
+          description: >-
+            Required with cron. There is no default: academies are not all in one timezone and
+            an implicit one is a bug, not a convenience.
+          examples: ["Asia/Kolkata"]
+        run_at:
+          type: [string, "null"]
+          format: date-time
+          description: One-off. Mutually exclusive with cron.
+        arguments:
+          type: object
+          additionalProperties: true
+        enabled: { type: boolean, default: true }
+        allow_overlap:
+          type: boolean
+          default: false
+          description: >-
+            Whether a run may start while the previous one is still going. False by default:
+            overlapping nightly jobs is a common way to corrupt data.
+        catch_up: { $ref: "#/components/schemas/CatchUp" }
+
+    Schedule:
+      allOf:
+        - $ref: "#/components/schemas/NewSchedule"
+        - type: object
+          required: [id, scope, created_at]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id:
+              type: [string, "null"]
+              format: uuid
+              description: Null for platform-scoped schedules
+            scope: { $ref: "#/components/schemas/Scope" }
+            created_at: { type: string, format: date-time }
+            last_run_at: { type: [string, "null"], format: date-time }
+            last_status: { $ref: "#/components/schemas/RunStatus" }
+            next_run_at:
+              type: [string, "null"]
+              format: date-time
+              description: Computed in the schedule's own timezone
+
+    Run:
+      type: object
+      required: [id, schedule_id, job, status, started_at]
+      properties:
+        id: { type: string, format: uuid }
+        schedule_id: { type: string, format: uuid }
+        job: { type: string }
+        organisation_id: { type: [string, "null"], format: uuid }
+        status: { $ref: "#/components/schemas/RunStatus" }
+        trigger:
+          type: string
+          enum: [schedule, manual, catch_up]
+          description: manual means an operator used "run now"
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        duration_ms: { type: [integer, "null"] }
+        missed_windows:
+          type: integer
+          default: 0
+          description: Windows skipped before this catch-up run
+        detail:
+          type: [string, "null"]
+          description: >-
+            What the handler reported back, or why the run failed. Scheduler does not know what
+            a job means, so this is the handler's own summary.
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+  responses:
+    Forbidden:
+      description: Missing permission, or the schedule belongs to another organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such schedule or run in this organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

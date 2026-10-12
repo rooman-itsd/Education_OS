@@ -1,11 +1,35 @@
 # Permission catalogue for selection-process. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Each academy profile maps its panelist, coordinator and staff roles to the module roles below.
 module: selection-process
-permissions: []
-#  - key: selection-process:record:read
-#    description: ...
-#  - key: selection-process:record:write
-#    description: ...
-roles: []
-#  - name: selection-process-admin
-#    grants: [selection-process:record:read, selection-process:record:write]
+permissions:
+  - key: selection-process:process-type:read
+    description: See the process types configured for the organisation.
+  - key: selection-process:process-type:manage
+    description: Create and edit process types.
+  - key: selection-process:process:read
+    description: See processes, their stages and panels.
+  - key: selection-process:process:manage
+    description: Create, edit, open and close processes and their stages.
+  - key: selection-process:panel:manage
+    description: Create and edit panels and their membership.
+  - key: selection-process:candidate:read
+    description: See one's own candidacy, or a candidate on a stage one panels.
+  - key: selection-process:candidate:read-all
+    description: See every candidate on every process in the organisation.
+  - key: selection-process:candidate:manage
+    description: Register or withdraw a candidate on a process.
+  - key: selection-process:decision:write
+    description: Record a decision for a candidate on a stage one panels.
+  - key: selection-process:decision:manage
+    description: Record or override a decision on any candidate, and finalize an outcome directly.
+roles:
+  - name: selection-process-panelist
+    description: Judges or reviewers on one or more panels.
+    grants: [selection-process:process-type:read, selection-process:process:read, selection-process:candidate:read, selection-process:decision:write]
+  - name: selection-process-coordinator
+    description: Runs a selection process end to end — configures types, processes, stages and panels, and may decide or override any outcome.
+    grants: [selection-process:process-type:read, selection-process:process-type:manage, selection-process:process:read, selection-process:process:manage, selection-process:panel:manage, selection-process:candidate:read, selection-process:candidate:read-all, selection-process:candidate:manage, selection-process:decision:write, selection-process:decision:manage]
+  - name: org-admin
+    description: Read-only visibility into the organisation's selection activity.
+    grants: [selection-process:process:read]

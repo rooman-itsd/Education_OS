@@ -1,11 +1,119 @@
 # Permission catalogue for timetable-attendance. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Scope rules (docs/prd.md section 12). Modules check keys, never roles, so scope is widened only
+# by holding a further key:
+# - attendance-session:open|close and attendance-record:mark|correct apply to classes the caller
+#   teaches. attendance-record:correct-department widens correct to the caller's department;
+#   attendance-session:override widens all four to the organisation.
+# - attendance-session:read and attendance-record:read return classes the caller teaches,
+#   widened to the department by report:read-department and to the organisation by report:read-all.
+# - *:read-own returns only the caller's own data.
+# - How the caller's department is known, and whether timetable and scheduled-class writes are
+#   limited to it, is pending confirmation from platform/identity (docs/prd.md Q9).
 module: timetable-attendance
-permissions: []
-#  - key: timetable-attendance:record:read
-#    description: ...
-#  - key: timetable-attendance:record:write
-#    description: ...
-roles: []
-#  - name: timetable-attendance-admin
-#    grants: [timetable-attendance:record:read, timetable-attendance:record:write]
+permissions:
+  - key: timetable-attendance:timetable:read
+    description: View timetables and their slots
+  - key: timetable-attendance:timetable:write
+    description: Create timetables and edit draft or unpublished timetables
+  - key: timetable-attendance:timetable:publish
+    description: Publish or unpublish a timetable
+  - key: timetable-attendance:scheduled-class:read
+    description: View scheduled classes
+  - key: timetable-attendance:scheduled-class:read-own
+    description: View the scheduled classes of the caller's own sections
+  - key: timetable-attendance:scheduled-class:write
+    description: Generate scheduled classes, create ad-hoc classes, reschedule classes
+  - key: timetable-attendance:scheduled-class:cancel
+    description: Cancel a scheduled class
+  - key: timetable-attendance:attendance-session:read
+    description: View attendance sessions
+  - key: timetable-attendance:attendance-session:open
+    description: Open the attendance session for a class the caller teaches
+  - key: timetable-attendance:attendance-session:close
+    description: Close the attendance session for a class the caller teaches
+  - key: timetable-attendance:attendance-session:override
+    description: Open, close, mark and correct attendance for any class, outside own-class and time-window limits
+  - key: timetable-attendance:attendance-record:read
+    description: View attendance records
+  - key: timetable-attendance:attendance-record:read-own
+    description: View the caller's own attendance records
+  - key: timetable-attendance:attendance-record:mark
+    description: Mark attendance in an open session for a class the caller teaches
+  - key: timetable-attendance:attendance-record:correct
+    description: Correct a record in a closed session, with a reason, within the correction window
+  - key: timetable-attendance:attendance-record:correct-department
+    description: Widens correct to every class in the caller's department, after the correction window too
+  - key: timetable-attendance:report:read-own
+    description: View the caller's own attendance summary and history
+  - key: timetable-attendance:report:read-department
+    description: View attendance reports for the caller's department
+  - key: timetable-attendance:report:read-all
+    description: View attendance reports for any student or department in the organisation
+  - key: timetable-attendance:report:read-eligibility
+    description: Read attendance counts in bulk for exam eligibility, for any course offering in the organisation (FR-18)
+roles:
+  - name: timetable-attendance-admin
+    description: Academic or timetable administrator. Default for org-admin.
+    grants:
+      - timetable-attendance:timetable:read
+      - timetable-attendance:timetable:write
+      - timetable-attendance:timetable:publish
+      - timetable-attendance:scheduled-class:read
+      - timetable-attendance:scheduled-class:write
+      - timetable-attendance:scheduled-class:cancel
+      - timetable-attendance:attendance-session:read
+      - timetable-attendance:attendance-session:open
+      - timetable-attendance:attendance-session:close
+      - timetable-attendance:attendance-session:override
+      - timetable-attendance:attendance-record:read
+      - timetable-attendance:attendance-record:mark
+      - timetable-attendance:attendance-record:correct
+      - timetable-attendance:report:read-department
+      - timetable-attendance:report:read-all
+      - timetable-attendance:report:read-eligibility
+  - name: timetable-attendance-department-head
+    description: Plans the department timetable and oversees its attendance. Default for department-admin.
+    grants:
+      - timetable-attendance:timetable:read
+      - timetable-attendance:timetable:write
+      - timetable-attendance:timetable:publish
+      - timetable-attendance:scheduled-class:read
+      - timetable-attendance:scheduled-class:write
+      - timetable-attendance:scheduled-class:cancel
+      - timetable-attendance:attendance-session:read
+      - timetable-attendance:attendance-record:read
+      - timetable-attendance:attendance-record:correct
+      - timetable-attendance:attendance-record:correct-department
+      - timetable-attendance:report:read-department
+  - name: timetable-attendance-faculty
+    description: Teaches classes and takes attendance for them. Default for faculty.
+    grants:
+      - timetable-attendance:timetable:read
+      - timetable-attendance:scheduled-class:read
+      - timetable-attendance:attendance-session:read
+      - timetable-attendance:attendance-session:open
+      - timetable-attendance:attendance-session:close
+      - timetable-attendance:attendance-record:read
+      - timetable-attendance:attendance-record:mark
+      - timetable-attendance:attendance-record:correct
+  - name: timetable-attendance-student
+    description: Sees their own schedule and attendance. Default for student.
+    grants:
+      - timetable-attendance:scheduled-class:read-own
+      - timetable-attendance:attendance-record:read-own
+      - timetable-attendance:report:read-own
+  - name: timetable-attendance-viewer
+    description: Read-only access to timetables, classes, attendance and organisation-wide reports.
+    grants:
+      - timetable-attendance:timetable:read
+      - timetable-attendance:scheduled-class:read
+      - timetable-attendance:attendance-session:read
+      - timetable-attendance:attendance-record:read
+      - timetable-attendance:report:read-department
+      - timetable-attendance:report:read-all
+  - name: timetable-attendance-exam-eligibility
+    description: Reads attendance counts for exam eligibility. Default for examination-staff (owner decision C7).
+    grants:
+      - timetable-attendance:report:read-eligibility

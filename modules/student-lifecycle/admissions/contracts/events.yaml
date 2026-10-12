@@ -1,9 +1,36 @@
 # Domain events published by admissions.
 # Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+#
+# admissions.application.accepted is named to match the existing example in
+# docs/architecture/ARCHITECTURE.md ("fees-accounts... subscribes to admissions.application.accepted
+# and creates a fee invoice"). No event here assumes an applicant has an identity account; actor
+# for applicant-initiated events (submitted, accepted, declined) is the application itself, not a
+# user id, since submission and offer decisions are anonymous by design (see docs/prd.md).
 module: admissions
 version: 1
-events: []
-#  - name: admissions.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: admissions.application.submitted
+    description: A new application was submitted (anonymous, public).
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, programme_id: uuid, academic_year: string, applicant_email: string }
+  - name: admissions.application.status-changed
+    description: >-
+      Staff moved an application between under_review, eligible, ineligible, rejected or
+      staff-initiated withdrawn. Does not cover offer or offer-decision transitions.
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, status: string, previous_status: string, reason: string }
+  - name: admissions.merit-list.published
+    description: A merit list became visible to applicants.
+    payload: { organisation_id: uuid, merit_list_id: uuid, programme_id: uuid, academic_year: string }
+  - name: admissions.offer.made
+    description: Staff extended an offer on an application.
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, offer_id: uuid }
+  - name: admissions.application.accepted
+    description: >-
+      The applicant accepted their offer. fees-accounts subscribes to this to raise the
+      confirmation fee invoice (docs/architecture/ARCHITECTURE.md). A staff member later creates
+      the Person record in student-information as a separate, manual action referencing this
+      application; there is no automatic subscription from student-information to this event.
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, programme_id: uuid, academic_year: string, applicant_first_name: string, applicant_last_name: string, applicant_email: string }
+  - name: admissions.application.declined
+    description: The applicant declined their offer.
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, reason: string }

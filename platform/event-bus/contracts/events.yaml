@@ -1,9 +1,113 @@
-# Domain events published by event-bus.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Domain events published by event-bus, AND the envelope every event in Education OS carries.
+#
+# THE ENVELOPE IS DEFINED HERE AND NOWHERE ELSE.
+# Every module's contracts/events.yaml describes only the `payload` of its events.
+# The six envelope fields below are added by the publisher and must not be repeated in a payload.
+#
+# Naming: <module>.<entity>.<past-tense-verb>   e.g. admissions.application.submitted
 module: event-bus
 version: 1
-events: []
-#  - name: event-bus.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+# ---------------------------------------------------------------------------
+# Envelope — the shape of every event on the bus
+# ---------------------------------------------------------------------------
+envelope:
+  id:
+    type: uuid
+    required: true
+    description: >-
+      Unique id of this event. Consumers deduplicate on it. Delivery is at-least-once,
+      so the same id may arrive more than once and must be treated as one occurrence.
+  name:
+    type: string
+    required: true
+    description: "<module>.<entity>.<past-tense-verb>. Lower case, dot separated."
+  version:
+    type: integer
+    required: true
+    default: 1
+    description: >-
+      Schema version of this event's payload, starting at 1. Bump when the payload changes
+      in a way a consumer could not ignore (a field removed, renamed, or its meaning changed).
+      Adding an optional field does not bump it. Publishers may emit two versions of a name
+      during a migration; consumers must ignore versions they do not understand.
+  organisation_id:
+    type: uuid
+    required: false
+    description: >-
+      The tenant this event belongs to (ADR-0005). Required for every event raised inside an
+      organisation. Null ONLY for platform-level events that exist outside any organisation,
+      such as super-admin actions on the platform itself. Consumers must never act on an event
+      from an organisation other than the one in their current context.
+  actor:
+    type: uuid
+    required: false
+    description: >-
+      The user who caused the change. Null when the cause was the system (a scheduled job,
+      a relay retry, an inbound webhook).
+  occurred_at:
+    type: datetime
+    required: true
+    description: >-
+      When the state change happened, in UTC, ISO 8601. Set in the same transaction as the
+      change, NOT when the relay delivered it. Not a reliable ordering key across modules.
+  payload:
+    type: object
+    required: true
+    description: >-
+      Event-specific data. Must NOT repeat organisation_id, actor or occurred_at - they are
+      already on the envelope. Keep it to the ids and fields a consumer needs so it does not
+      have to call back; see "payload rules" below.
+
+# ---------------------------------------------------------------------------
+# Rules every publishing module follows
+# ---------------------------------------------------------------------------
+payload_rules:
+  - Name events in the past tense. An event is a fact that already happened, never a command.
+  - Publish inside the same database transaction as the state change, via eos_core.publish().
+    Never publish from a background thread or after a commit; the outbox exists for this.
+  - Put the ids a consumer needs, plus the few fields it would otherwise call back for.
+    Do not put the whole entity in, and never put secrets, passwords, tokens or full documents.
+  - Do not repeat envelope fields inside the payload.
+  - Never remove or rename a payload field without bumping `version`.
+  - A consumer must tolerate unknown payload fields.
+
+delivery:
+  guarantee: at-least-once
+  ordering: >-
+    None across events. Events may arrive out of order and more than once. A consumer that
+    needs order must use the entity's own state or occurred_at, not arrival order.
+  idempotency: >-
+    Required of every consumer, keyed on envelope.id. Handling the same id twice must have
+    the same effect as handling it once.
+  isolation: >-
+    The relay sets app.organisation_id from the envelope before invoking a consumer, so
+    row-level security applies to consumer writes exactly as it does to API requests.
+
+# ---------------------------------------------------------------------------
+# Events this module itself publishes (operational, not business)
+# ---------------------------------------------------------------------------
+events:
+  - name: event-bus.event.dead-lettered
+    version: 1
+    description: >-
+      An event exhausted its retries and was moved to the dead-letter state. It will not be
+      delivered again until an operator replays it.
+    payload:
+      event_id: uuid
+      event_name: string
+      attempts: integer
+      last_error: string
+
+  - name: event-bus.relay.stalled
+    version: 1
+    description: >-
+      The relay has not drained the outbox within its threshold. Raised once per stall, for
+      monitoring and the Super Admin dashboard.
+    payload:
+      backlog: integer
+      oldest_unpublished_at: datetime
+      transport: string
+
+# Events consumed: none. The bus carries events, it does not react to them.
+consumes: []
