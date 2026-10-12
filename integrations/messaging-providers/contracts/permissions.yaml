@@ -1,0 +1,23 @@
+# Permission catalogue for messaging-providers. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Provider credentials are platform-level, so configuring them is a super-admin act. An
+# organisation admin never touches providers; they manage templates in platform/notification.
+module: messaging-providers
+permissions:
+  - key: messaging-providers:provider:read
+    description: >-
+      View which providers are configured and whether they are reachable. Never returns
+      credentials, masked or otherwise.
+  - key: platform:messaging-providers:admin
+    description: >-
+      Super admin only. Enable or disable a provider and send a test message. Credentials
+      themselves arrive as environment variables and are not editable through the API.
+
+roles:
+  - name: messaging-providers-operator
+    description: >-
+      Reads provider health when diagnosing a delivery problem. Intended for platform support,
+      not for an organisation admin.
+    grants:
+      - messaging-providers:provider:read

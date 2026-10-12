@@ -2,9 +2,276 @@ openapi: 3.1.0
 info:
   title: audit API
   version: 0.1.0
-  description: "Immutable, append-only audit log for every state-changing action."
+  description: >-
+    Immutable, append-only record of every state-changing action. Records are written once
+    and never altered: this API has no PUT, PATCH or DELETE on a record, by design.
+    Modules write through packages/sdk rather than calling this directly.
 servers:
   - url: /api/v1/audit
-paths: {}
+
+paths:
+  /records:
+    post:
+      summary: Record an action
+      description: >-
+        Append one audit record. Called by packages/sdk on behalf of a module, in the same
+        request that made the change. Idempotent on client_token: replaying the same token
+        returns the original record rather than creating a second one, so a retried request
+        cannot double-record.
+      operationId: recordAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewRecord" }
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Record" }
+        "200":
+          description: Already recorded with this client_token; the original is returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Record" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    get:
+      summary: Search records
+      description: >-
+        Most recent first. Scoped to the caller's organisation. A super admin with
+        platform:audit:read may pass organisation_id; doing so is itself audited.
+      operationId: searchRecords
+      parameters:
+        - name: module
+          in: query
+          description: Module that raised the record, e.g. admissions
+          schema: { type: string }
+        - name: action
+          in: query
+          description: Exact action, or a prefix ending in '*'
+          schema: { type: string }
+        - name: actor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: entity_type
+          in: query
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          description: Use with entity_type to get the full history of one object
+          schema: { type: string }
+        - name: organisation_id
+          in: query
+          description: Super admin only. Ignored for other callers.
+          schema: { type: string, format: uuid }
+        - name: occurred_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: occurred_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: A page of records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Record" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /records/{record_id}:
+    get:
+      summary: Get one record
+      operationId: getRecord
+      parameters:
+        - name: record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Record" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /records/export:
+    post:
+      summary: Export records for compliance
+      description: >-
+        Produces a CSV or JSON export of the matching records for one organisation. ADR-0005
+        requires exports to work per organisation. The export is produced asynchronously and
+        delivered through platform/documents; this returns a job reference. Exporting is
+        itself audited.
+      operationId: exportRecords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [occurred_from, occurred_to, format]
+              properties:
+                occurred_from: { type: string, format: date-time }
+                occurred_to: { type: string, format: date-time }
+                format:
+                  type: string
+                  enum: [csv, json]
+                module: { type: string }
+                entity_type: { type: string }
+      responses:
+        "202":
+          description: Export accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [export_id, status]
+                properties:
+                  export_id: { type: string, format: uuid }
+                  status:
+                    type: string
+                    enum: [pending, running, ready, failed]
+                  document_id:
+                    type: [string, "null"]
+                    format: uuid
+                    description: Set when ready; fetch through platform/documents
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /entities/{entity_type}/{entity_id}/history:
+    get:
+      summary: Full history of one object
+      description: >-
+        Every recorded change to one entity, oldest first. The common case behind a
+        "who changed this" view in any module.
+      operationId: getEntityHistory
+      parameters:
+        - name: entity_type
+          in: path
+          required: true
+          schema: { type: string }
+        - name: entity_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100, maximum: 500 }
+      responses:
+        "200":
+          description: The object's history, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Record" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  schemas:
+    NewRecord:
+      type: object
+      required: [module, action, entity_type, entity_id]
+      properties:
+        client_token:
+          type: string
+          description: >-
+            Caller-supplied idempotency key, unique per logical action. A retry with the same
+            token returns the original record instead of appending a duplicate.
+        module:
+          type: string
+          description: Module raising the record
+          examples: ["admissions"]
+        action:
+          type: string
+          description: "<entity>.<past-tense-verb>, matching the module's vocabulary"
+          examples: ["application.accepted"]
+        entity_type:
+          type: string
+          examples: ["application"]
+        entity_id:
+          type: string
+        summary:
+          type: string
+          description: One human-readable line, shown in history views
+        before:
+          type: [object, "null"]
+          additionalProperties: true
+          description: >-
+            Changed fields only, as they were. Never the whole entity, never secrets,
+            passwords, tokens or full documents.
+        after:
+          type: [object, "null"]
+          additionalProperties: true
+          description: Changed fields only, as they became
+        context:
+          type: object
+          additionalProperties: true
+          description: >-
+            Request context the gateway supplies: ip, user_agent, request_id, and
+            impersonated_by when a super admin is acting as a user.
+
+    Record:
+      allOf:
+        - $ref: "#/components/schemas/NewRecord"
+        - type: object
+          required: [id, organisation_id, actor, occurred_at]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id:
+              type: [string, "null"]
+              format: uuid
+              description: Null for platform-level actions outside any organisation
+            actor:
+              type: [string, "null"]
+              format: uuid
+              description: Null when the system acted
+            actor_name:
+              type: string
+              description: Resolved from identity at read time, for display
+            occurred_at: { type: string, format: date-time }
+            redacted:
+              type: boolean
+              default: false
+              description: >-
+                True when before/after were replaced by a tombstone under a legal erasure
+                request. The fact of the action is never removed.
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+  responses:
+    Forbidden:
+      description: Missing permission, or the record belongs to another organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such record in this organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

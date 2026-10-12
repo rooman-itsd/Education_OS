@@ -5,7 +5,7 @@ kind: integration              # feature | platform | integration
 domain: integrations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress         # planned | in-progress | stable | deprecated
 description: "SBIePay payment gateway adapter (initiate, callback, reconcile)."
 owners: [gokulalakshmirooman-source]                # GitHub handles. Keep in sync with CODEOWNERS.
 

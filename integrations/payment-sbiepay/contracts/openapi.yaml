@@ -196,6 +196,7 @@ components:
     Payment:
       type: object
       properties:
+        id: { type: string, format: uuid, description: "Internal id; reference is the public identifier" }
         reference: { type: string }
         organisation_id: { type: string, format: uuid }
         purpose: { $ref: "#/components/schemas/Purpose" }
@@ -244,6 +245,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
         settlement_date: { type: string, format: date }
         status: { type: string, enum: [queued, running, completed, failed] }
         matched: { type: integer }

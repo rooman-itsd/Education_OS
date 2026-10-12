@@ -1,11 +1,38 @@
 # Permission catalogue for iqac-accreditation. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Role names and their mapping to profile roles are a proposal: docs/prd.md open question 9.
 module: iqac-accreditation
-permissions: []
-#  - key: iqac-accreditation:record:read
-#    description: ...
-#  - key: iqac-accreditation:record:write
-#    description: ...
-roles: []
-#  - name: iqac-accreditation-admin
-#    grants: [iqac-accreditation:record:read, iqac-accreditation:record:write]
+permissions:
+  - key: iqac-accreditation:framework:manage
+    description: Record and change frameworks and their metrics.
+  - key: iqac-accreditation:cycle:manage
+    description: Open and move cycles, assign metrics to owners, and accept or return responses.
+  - key: iqac-accreditation:response:submit
+    description: See, fill in and submit one's own responses, and add or remove their evidence; read frameworks and metrics.
+  - key: iqac-accreditation:action-item:manage
+    description: Record, change, reassign and cancel any action item.
+  - key: iqac-accreditation:action-item:update-own
+    description: See one's own action items and move them open → in_progress → done.
+  - key: iqac-accreditation:data:read
+    description: Read frameworks, metrics, cycles, all responses with evidence, and all action items.
+  - key: iqac-accreditation:stats:read
+    description: See the action-item counts behind the Governance widget.
+roles:
+  - name: iqac-accreditation-coordinator
+    description: Runs IQAC work. Proposed default for the governance profile role.
+    grants:
+      - iqac-accreditation:framework:manage
+      - iqac-accreditation:cycle:manage
+      - iqac-accreditation:action-item:manage
+      - iqac-accreditation:data:read
+      - iqac-accreditation:stats:read
+  - name: iqac-accreditation-contributor
+    description: Owns metric responses and action items. Proposed default for the department-admin and faculty profile roles.
+    grants:
+      - iqac-accreditation:response:submit
+      - iqac-accreditation:action-item:update-own
+  - name: iqac-accreditation-viewer
+    description: Read-only oversight. Proposed default for the management and org-admin profile roles.
+    grants:
+      - iqac-accreditation:data:read
+      - iqac-accreditation:stats:read

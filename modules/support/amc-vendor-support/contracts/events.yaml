@@ -1,9 +1,22 @@
 # Domain events published by amc-vendor-support.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Scope text, vendor contacts and engagement notes are never published. No module consumes these events yet
+# (docs/prd.md open question 5). Engagements publish no event in v1. Expiry is worked out when read and has no event.
+# The event-bus envelope proposed in PR #189 differs from this convention: docs/prd.md open question 8.
 module: amc-vendor-support
 version: 1
-events: []
-#  - name: amc-vendor-support.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: amc-vendor-support.contract.activated
+    description: >-
+      A contract came into force. Modules that hold an AMC reference (asset-management, maintenance) may use it;
+      covered_references lists what it covers by reference.
+    payload: { organisation_id: uuid, contract_id: uuid, number: string, vendor_id: uuid, coverage_type: string, start_date: date, end_date: date, renewed_from_id: uuid, covered_references: "reference[]" }
+  - name: amc-vendor-support.contract.renewed
+    description: >-
+      A contract was succeeded by its activated renewal, so holders of the old contract reference can move to the new one.
+      Published together with contract.activated for the successor.
+    payload: { organisation_id: uuid, contract_id: uuid, number: string, successor_id: uuid, successor_number: string, vendor_id: uuid, renewed_at: datetime }
+  - name: amc-vendor-support.contract.terminated
+    description: A contract was ended early. Coverage stops on effective_date.
+    payload: { organisation_id: uuid, contract_id: uuid, number: string, vendor_id: uuid, effective_date: date, terminated_at: datetime }

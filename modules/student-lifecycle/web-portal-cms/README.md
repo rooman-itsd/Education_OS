@@ -7,7 +7,16 @@
 Public website, CMS pages, announcements, news and notices.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+The organisation's public website: CMS pages, announcements/notices, and the organisation
+sign-up page. The sign-up page composes `platform/billing`'s existing `GET /plans` and
+`platform/tenancy`'s existing `GET /academy-types` / `POST /register` / `POST /register/verify`
+directly — this module does not duplicate registration or plan logic, and never creates an
+organisation, a plan, a Person/Student record, or an admissions application.
+
+Explicitly not this module's responsibility: organisation registration and entitlement
+(`platform/tenancy`), plans/subscriptions (`platform/billing`), creating a Person/Student record
+(`student-information`, a manual staff action), or the admissions funnel (`admissions`, its own
+anonymous flow). See [docs/prd.md](docs/prd.md) for the full scope.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
