@@ -2,12 +2,22 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 Ticketing for all user roles with categories and routing.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** tickets raised by any signed-in person or by an agent on their behalf; categories and
+support queues; assignment and pick-up; public replies and internal notes; on hold, resolve, confirm,
+reopen, auto-close and cancel; links to records in other modules; the open-by-priority counts behind the
+Support Staff widget `helpdesk.open-by-priority`. Publishes ticket events that sla-management uses for
+response and resolution clocks.
+
+**Not in scope:** SLA targets, clocks and breaches (sla-management), repairs (maintenance), major
+outages (incident-management), help articles (knowledge-base), vendor and AMC calls (amc-vendor-support),
+grievances and RTI requests (grievance, rti).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
