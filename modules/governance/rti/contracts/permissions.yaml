@@ -1,11 +1,37 @@
 # Permission catalogue for rti. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Applicant personal data is visible only through rti:request:read. Role names and their mapping to profile roles are
+# a proposal: docs/prd.md open question 10.
 module: rti
-permissions: []
-#  - key: rti:record:read
-#    description: ...
-#  - key: rti:record:write
-#    description: ...
-roles: []
-#  - name: rti-admin
-#    grants: [rti:record:read, rti:record:write]
+permissions:
+  - key: rti:request:read
+    description: View requests, including applicant personal data, referrals, response, transfer and appeal.
+  - key: rti:request:manage
+    description: Record, correct, assign, refer, respond to, transfer and close requests.
+  - key: rti:referral:respond
+    description: See and answer one's own referrals only (question and request number; no applicant data).
+  - key: rti:appeal:decide
+    description: Record and decide first appeals.
+  - key: rti:stats:read
+    description: See counts and request numbers with due dates for open requests; no applicant data.
+roles:
+  - name: rti-officer
+    description: Records and handles RTI requests. Proposed default for the governance profile role.
+    grants:
+      - rti:request:read
+      - rti:request:manage
+      - rti:stats:read
+  - name: rti-custodian
+    description: Answers referrals for information. Proposed default for the department-admin and faculty profile roles.
+    grants:
+      - rti:referral:respond
+  - name: rti-appellate-authority
+    description: Records and decides first appeals. Proposed default for the management profile role.
+    grants:
+      - rti:request:read
+      - rti:appeal:decide
+      - rti:stats:read
+  - name: rti-viewer
+    description: Counts and deadlines only. Proposed default for the org-admin profile role.
+    grants:
+      - rti:stats:read

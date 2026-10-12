@@ -1,11 +1,55 @@
 # Permission catalogue for helpdesk. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: helpdesk
-permissions: []
-#  - key: helpdesk:record:read
-#    description: ...
-#  - key: helpdesk:record:write
-#    description: ...
-roles: []
-#  - name: helpdesk-admin
-#    grants: [helpdesk:record:read, helpdesk:record:write]
+permissions:
+  - key: helpdesk:ticket:read
+    description: View tickets in the queues the caller belongs to, with internal notes, and the open-by-priority counts.
+  - key: helpdesk:ticket:read-all
+    description: View tickets in every queue.
+  - key: helpdesk:ticket:work
+    description: Raise tickets on behalf of others, pick up tickets in own queues, reply, add internal notes, hold, resolve and link.
+  - key: helpdesk:ticket:manage
+    description: Assign and move tickets between queues, change category and priority of any ticket, cancel tickets and duplicates.
+  - key: helpdesk:settings:manage
+    description: Create and update support queues, their members, and ticket categories.
+  - key: helpdesk:self:read
+    description: View own tickets and the public replies on them.
+  - key: helpdesk:self:raise
+    description: Raise tickets for oneself, reply, confirm, reopen and withdraw own tickets.
+roles:
+  - name: helpdesk-requester
+    description: Every signed-in person (student, faculty, staff, applicant). Default for all profile roles.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+  - name: helpdesk-agent
+    description: Support staff working tickets in their queues. Default for the support-staff profile role.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:work
+  - name: helpdesk-lead
+    description: Support supervisor. Works and manages tickets across every queue.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:read-all
+      - helpdesk:ticket:work
+      - helpdesk:ticket:manage
+  - name: helpdesk-admin
+    description: Sets up queues and categories. Default for org-admin.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:read-all
+      - helpdesk:settings:manage
+  - name: helpdesk-viewer
+    description: Management oversight, read only, across every queue. Default for management.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:read-all

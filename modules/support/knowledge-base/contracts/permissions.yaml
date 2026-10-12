@@ -1,11 +1,47 @@
 # Permission catalogue for knowledge-base. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: knowledge-base
-permissions: []
-#  - key: knowledge-base:record:read
-#    description: ...
-#  - key: knowledge-base:record:write
-#    description: ...
-roles: []
-#  - name: knowledge-base-admin
-#    grants: [knowledge-base:record:read, knowledge-base:record:write]
+permissions:
+  - key: knowledge-base:article:read
+    description: Browse, search and read published articles for everyone, see categories, and give feedback.
+  - key: knowledge-base:article:read-internal
+    description: Also read published staff-only articles.
+  - key: knowledge-base:article:write
+    description: >-
+      Create articles; edit, submit and discard own drafts; change own articles' settings (owner_id, review_by); see
+      drafts, review states and revision history.
+  - key: knowledge-base:article:publish
+    description: Return, publish, archive and restore articles; edit or discard any draft; change article settings.
+  - key: knowledge-base:category:manage
+    description: Create, rename, move, reorder and deactivate categories.
+  - key: knowledge-base:stats:read
+    description: See feedback comments and article usage, including the top-articles statistics.
+roles:
+  - name: knowledge-base-reader
+    description: Every signed-in person. Default for all profile roles.
+    grants:
+      - knowledge-base:article:read
+  - name: knowledge-base-author
+    description: Support staff who write and maintain articles. Default for the support-staff profile role.
+    grants:
+      - knowledge-base:article:read
+      - knowledge-base:article:read-internal
+      - knowledge-base:article:write
+      - knowledge-base:stats:read
+  - name: knowledge-base-editor
+    description: >-
+      Reviews and publishes articles and manages categories. Default for the org-admin profile role; an organisation
+      can also give it to a support lead.
+    grants:
+      - knowledge-base:article:read
+      - knowledge-base:article:read-internal
+      - knowledge-base:article:write
+      - knowledge-base:article:publish
+      - knowledge-base:category:manage
+      - knowledge-base:stats:read
+  - name: knowledge-base-viewer
+    description: Read-only oversight of all published content and usage. Default for the management profile role.
+    grants:
+      - knowledge-base:article:read
+      - knowledge-base:article:read-internal
+      - knowledge-base:stats:read

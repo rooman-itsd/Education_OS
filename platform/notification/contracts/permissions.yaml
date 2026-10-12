@@ -1,11 +1,42 @@
 # Permission catalogue for notification. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: notification
-permissions: []
-#  - key: notification:record:read
-#    description: ...
-#  - key: notification:record:write
-#    description: ...
-roles: []
-#  - name: notification-admin
-#    grants: [notification:record:read, notification:record:write]
+permissions:
+  - key: notification:message:send
+    description: >-
+      Send a notification. Held by modules through packages/sdk, not by people.
+  - key: notification:message:read
+    description: >-
+      Read this organisation's delivery history. Recipient addresses are masked and bodies are
+      never returned, because a message may contain personal data or a token.
+  - key: notification:message:resend
+    description: Resend a failed or bounced message
+  - key: notification:template:read
+    description: View notification templates
+  - key: notification:template:write
+    description: Create and override this organisation's templates
+  - key: notification:preference:manage
+    description: >-
+      Change another user's notification preferences. A person may always change their own
+      without this permission.
+  - key: platform:notification:read
+    description: >-
+      Super admin only. Delivery health and failures across every organisation.
+
+roles:
+  - name: notification-admin
+    description: >-
+      Manages an academy's templates and investigates delivery problems. Intended for an
+      organisation admin.
+    grants:
+      - notification:message:read
+      - notification:message:resend
+      - notification:template:read
+      - notification:template:write
+      - notification:preference:manage
+
+  - name: notification-viewer
+    description: Read-only delivery history, for support staff diagnosing "I never got the email"
+    grants:
+      - notification:message:read
+      - notification:template:read

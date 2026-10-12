@@ -2,9 +2,378 @@ openapi: 3.1.0
 info:
   title: knowledge-base API
   version: 0.1.0
-  description: "Articles, FAQs and how-to guides for self-service."
+  description: "Articles, FAQs and how-to guides for self-service. See docs/prd.md."
 servers:
   - url: /api/v1/knowledge-base
-paths: {}
+paths:
+  /categories:
+    get:
+      summary: The category tree, in display order. Inactive categories only with knowledge-base:category:manage. Permission knowledge-base:article:read.
+      parameters: [{ name: active, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Category" } } } } } }
+    post:
+      summary: Create a category or sub-category. Permission knowledge-base:category:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CategoryInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Category" } } } }, "409": { description: "Name already used under this parent, or parent is itself a sub-category" } }
+  /categories/{id}:
+    patch:
+      summary: Rename, move, reorder or deactivate a category. A category holding published articles cannot be deactivated. Permission knowledge-base:category:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CategoryInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Category" } } } }, "409": { description: "Category holds published articles, or the move would create a third level" } }
+  /articles:
+    get:
+      summary: >-
+        Browse and search articles. Readers receive only published articles whose audience they may read
+        (staff articles need knowledge-base:article:read-internal). The status, owner, stale and in_review filters, and any
+        non-published article, need knowledge-base:article:write. q searches title, summary, body and tags; results then
+        carry a snippet. Permission knowledge-base:article:read.
+      parameters:
+        - { name: q, in: query, description: Full-text search, schema: { type: string, minLength: 2 } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/ArticleType" } }
+        - { name: category_id, in: query, description: Includes the category's sub-categories, schema: { type: string, format: uuid } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: audience, in: query, schema: { $ref: "#/components/schemas/Audience" } }
+        - { name: slug, in: query, schema: { type: string } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ArticleStatus" } } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: stale, in: query, description: "Published articles whose review_by date has passed", schema: { type: boolean } }
+        - { name: in_review, in: query, description: "Articles with a revision in review", schema: { type: boolean } }
+        - { name: sort, in: query, description: "relevance needs q; default newest, or relevance when q is given", schema: { type: string, enum: [relevance, newest, popular, helpful, title] } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ArticlePage" } } } }, "403": { description: "A filter or status the caller may not use" } }
+    post:
+      summary: Create an article with revision 1 as a draft. Permission knowledge-base:article:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ArticleCreateInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ArticleDetail" } } } }, "409": { description: "Slug already used in the organisation" }, "422": { description: "Inactive category or unknown related article" } }
+  /articles/{id}:
+    get:
+      summary: >-
+        One article. view=published (default) returns the published revision and counts a view (at most once per reader per
+        day); an archived article is still returned, with status archived. view=open returns the open revision and needs
+        knowledge-base:article:write. Permission knowledge-base:article:read, plus knowledge-base:article:read-internal for a
+        staff article.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: view, in: query, schema: { type: string, enum: [published, open], default: published } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ArticleDetail" } } } }, "404": { description: "Not found, not visible to the caller, or no such revision" } }
+    patch:
+      summary: Change article settings that are not content (owner, review_by). Permission knowledge-base:article:publish, or knowledge-base:article:write for the article's owner.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ArticleSettingsInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Article" } } } } }
+  /articles/{id}/draft:
+    put:
+      summary: >-
+        Save the open draft, or start one. With an open draft, the body replaces its content and must hold every content
+        field (type, title, body, category_id, audience). With no open revision, a new draft is started from a source
+        revision: from_revision (rollback), otherwise the published revision, otherwise the latest revision; fields left
+        out are copied from the source, so a rollback can send an empty body. Permission knowledge-base:article:write for
+        the caller's own draft or a new one; knowledge-base:article:publish to edit another author's draft.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: from_revision, in: query, description: "Revision number to start a new draft from; only when there is no open revision", schema: { type: integer, minimum: 1 } }
+      requestBody: { required: false, content: { application/json: { schema: { $ref: "#/components/schemas/DraftInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Revision" } } } }, "404": { description: "from_revision not found" }, "409": { description: "The open revision is in review, or from_revision was given while a draft is open" }, "422": { description: "Saving an open draft without every content field" } }
+  /articles/{id}/draft/submit:
+    post:
+      summary: Submit the open draft for review (draft → in_review). Editors are notified through notification; no public event. Permission knowledge-base:article:write for the caller's own draft.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Revision" } } } }, "409": { description: "No open draft" } }
+  /articles/{id}/draft/return:
+    post:
+      summary: Return the revision in review with a comment (in_review → draft). The author is notified through notification; no public event. Permission knowledge-base:article:publish.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReturnInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Revision" } } } }, "409": { description: "No revision in review" } }
+  /articles/{id}/draft/discard:
+    post:
+      summary: Discard the open revision (draft or in_review → discarded). The published revision is unaffected. Permission knowledge-base:article:write for the caller's own draft; knowledge-base:article:publish otherwise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Revision" } } } }, "409": { description: "No open revision" } }
+  /articles/{id}/publish:
+    post:
+      summary: >-
+        Publish the open revision, from draft or in_review. The previous published revision becomes superseded and the article
+        becomes published. Publishes knowledge-base.article.published. Permission knowledge-base:article:publish.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/PublishInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ArticleDetail" } } } }, "409": { description: "No open revision, or the article is archived" } }
+  /articles/{id}/archive:
+    post:
+      summary: >-
+        Archive a draft or published article. It leaves browse and search but stays readable by id; an open draft is kept.
+        Publishes knowledge-base.article.archived. Permission knowledge-base:article:publish.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Article" } } } }, "409": { description: "Already archived" } }
+  /articles/{id}/restore:
+    post:
+      summary: >-
+        Restore an archived article: to published if it was ever published (publishes knowledge-base.article.published),
+        otherwise to draft. Permission knowledge-base:article:publish.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Article" } } } }, "409": { description: "Not archived" } }
+  /articles/{id}/revisions:
+    get:
+      summary: Revision history, newest first, without bodies. Permission knowledge-base:article:write.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/RevisionSummary" } } } } } }
+  /articles/{id}/revisions/{revision_no}:
+    get:
+      summary: One revision with its full content. Permission knowledge-base:article:write.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: revision_no, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Revision" } } } }, "404": { description: "Not found" } }
+  /articles/{id}/feedback:
+    post:
+      summary: Say whether a published article helped, with an optional comment. One vote per person per article; a new vote replaces the earlier one. Permission knowledge-base:article:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackInput" } } } }
+      responses: { "200": { description: Recorded, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackCounts" } } } }, "409": { description: "Article is not published" } }
+    get:
+      summary: Feedback on an article with comments, newest first. Permission knowledge-base:stats:read.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: helpful, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeedbackPage" } } } } }
+  /stats/top-articles:
+    get:
+      summary: >-
+        Published articles ranked by views in the period (default) or by helpful share; the helpful ranking includes only
+        articles with at least KNOWLEDGE_BASE_HELPFUL_MIN_VOTES votes. Backs the Support Staff widget
+        knowledge-base.top-articles. Permission knowledge-base:stats:read.
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [7d, 30d, 90d], default: 30d } }
+        - { name: metric, in: query, schema: { type: string, enum: [views, helpful], default: views } }
+        - { name: limit, in: query, description: "Defaults to KNOWLEDGE_BASE_TOP_ARTICLES_LIMIT", schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TopArticles" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    ArticleType:
+      type: string
+      enum: [article, faq, how_to]
+    Audience:
+      type: string
+      description: "everyone: every signed-in reader. staff: needs knowledge-base:article:read-internal."
+      enum: [everyone, staff]
+    ArticleStatus:
+      type: string
+      enum: [draft, published, archived]
+    RevisionState:
+      type: string
+      enum: [draft, in_review, published, superseded, discarded]
+    Reason:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 3 } }
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        parent_id: { type: [string, "null"], format: uuid, description: "Null for a top-level category. Only two levels." }
+        name: { type: string, maxLength: 80, description: Label from the organisation }
+        description: { type: string }
+        position: { type: integer, minimum: 0, description: Display order among siblings }
+        active: { type: boolean, default: true }
+    Category:
+      allOf:
+        - { $ref: "#/components/schemas/CategoryInput" }
+        - type: object
+          required: [id, organisation_id, published_article_count]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            published_article_count: { type: integer, description: Published articles the caller may read }
+    ReferenceInput:
+      type: object
+      required: [module, entity, id]
+      properties:
+        module: { type: string, description: "Module name, such as incident-management" }
+        entity: { type: string, description: "Entity in that module, such as problem" }
+        id: { type: string, description: Id of the record in that module }
+        note: { type: string }
+    RevisionFields:
+      type: object
+      description: Content of a revision. Which fields are required depends on where it is used.
+      properties:
+        type: { $ref: "#/components/schemas/ArticleType" }
+        title: { type: string, minLength: 3, maxLength: 200, description: "For an faq, the question" }
+        summary: { type: string, maxLength: 500 }
+        body: { type: string, minLength: 1, description: "Markdown. Embedded HTML and scripts are not rendered." }
+        category_id: { type: string, format: uuid }
+        tags: { type: array, items: { type: string, maxLength: 40 } }
+        audience: { $ref: "#/components/schemas/Audience" }
+        related_article_ids: { type: array, items: { type: string, format: uuid } }
+        references: { type: array, items: { $ref: "#/components/schemas/ReferenceInput" } }
+    RevisionContent:
+      description: Complete revision content, with every required field.
+      allOf:
+        - { $ref: "#/components/schemas/RevisionFields" }
+        - { type: object, required: [type, title, body, category_id, audience] }
+    DraftInput:
+      description: >-
+        Body of PUT /articles/{id}/draft. Saving an open draft needs every content field (type, title, body, category_id,
+        audience); starting a new draft copies any field left out from the source revision.
+      allOf:
+        - { $ref: "#/components/schemas/RevisionFields" }
+        - type: object
+          properties:
+            change_note: { type: string, maxLength: 500, description: What changed in this revision }
+    ArticleCreateInput:
+      allOf:
+        - { $ref: "#/components/schemas/RevisionContent" }
+        - type: object
+          properties:
+            change_note: { type: string, maxLength: 500 }
+            slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 120, description: "Unique in the organisation; derived from the title when omitted" }
+            owner_id: { type: string, format: uuid, description: "Defaults to the caller" }
+            review_by: { type: string, format: date, description: "Optional. When omitted, set on first publication to KNOWLEDGE_BASE_DEFAULT_REVIEW_MONTHS after that date" }
+    ArticleSettingsInput:
+      type: object
+      properties:
+        owner_id: { type: string, format: uuid }
+        review_by: { type: [string, "null"], format: date }
+    ReturnInput:
+      type: object
+      required: [comment]
+      properties: { comment: { type: string, minLength: 3, description: Changes requested; shown to the author } }
+    PublishInput:
+      type: object
+      properties:
+        review_by: { type: string, format: date, description: "Optional new review date. When omitted, an existing review_by is kept; an article with none gets KNOWLEDGE_BASE_DEFAULT_REVIEW_MONTHS from now" }
+    Article:
+      type: object
+      required: [id, organisation_id, slug, status, owner_id, helpful_count, not_helpful_count, view_count, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        slug: { type: string }
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+        owner_id: { type: string, format: uuid }
+        review_by: { type: [string, "null"], format: date }
+        stale: { type: boolean, description: "Published and review_by has passed; worked out when read" }
+        published_revision_no: { type: [integer, "null"] }
+        open_revision_no: { type: [integer, "null"] }
+        open_revision_state: { oneOf: [{ type: string, enum: [draft, in_review] }, { type: "null" }] }
+        view_count: { type: integer }
+        helpful_count: { type: integer }
+        not_helpful_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        first_published_at: { type: [string, "null"], format: date-time }
+        published_at: { type: [string, "null"], format: date-time }
+        archived_at: { type: [string, "null"], format: date-time }
+    ArticleDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Article" }
+        - type: object
+          required: [revision]
+          properties:
+            revision: { $ref: "#/components/schemas/Revision" }
+            related: { type: array, items: { $ref: "#/components/schemas/ArticleListItem" }, description: Related articles the caller may read }
+    ArticleListItem:
+      type: object
+      required: [id, slug, status, type, title, category_id, audience]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        status: { $ref: "#/components/schemas/ArticleStatus" }
+        type: { $ref: "#/components/schemas/ArticleType" }
+        title: { type: string }
+        summary: { type: string }
+        category_id: { type: string, format: uuid }
+        tags: { type: array, items: { type: string } }
+        audience: { $ref: "#/components/schemas/Audience" }
+        snippet: { type: [string, "null"], description: "Highlighted match when q is given" }
+        helpful_share: { type: [number, "null"], description: "helpful / (helpful + not helpful), null with no votes" }
+        view_count: { type: integer }
+        published_at: { type: [string, "null"], format: date-time }
+        open_revision_state: { oneOf: [{ type: string, enum: [draft, in_review] }, { type: "null" }], description: "Returned to callers with knowledge-base:article:write" }
+        stale: { type: boolean }
+    ArticlePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ArticleListItem" } }
+        next_cursor: { type: [string, "null"] }
+    RevisionSummary:
+      type: object
+      required: [revision_no, state, author_id, created_at]
+      properties:
+        revision_no: { type: integer }
+        state: { $ref: "#/components/schemas/RevisionState" }
+        title: { type: string }
+        author_id: { type: string, format: uuid }
+        change_note: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        submitted_at: { type: [string, "null"], format: date-time }
+        reviewed_by: { type: [string, "null"], format: uuid }
+        review_comment: { type: [string, "null"] }
+        published_at: { type: [string, "null"], format: date-time }
+    Revision:
+      allOf:
+        - { $ref: "#/components/schemas/RevisionContent" }
+        - { $ref: "#/components/schemas/RevisionSummary" }
+        - type: object
+          required: [article_id]
+          properties:
+            article_id: { type: string, format: uuid }
+    FeedbackInput:
+      type: object
+      required: [helpful]
+      properties:
+        helpful: { type: boolean }
+        comment: { type: string, maxLength: 1000, description: Visible only with knowledge-base:stats:read }
+    FeedbackCounts:
+      type: object
+      required: [helpful_count, not_helpful_count]
+      properties:
+        helpful_count: { type: integer }
+        not_helpful_count: { type: integer }
+        my_vote: { type: [boolean, "null"] }
+    Feedback:
+      type: object
+      required: [helpful, revision_no, created_at]
+      properties:
+        person_id: { type: string, format: uuid }
+        helpful: { type: boolean }
+        comment: { type: [string, "null"] }
+        revision_no: { type: integer, description: The published revision the vote was given on }
+        created_at: { type: string, format: date-time }
+    FeedbackPage:
+      type: object
+      required: [counts, items]
+      properties:
+        counts: { $ref: "#/components/schemas/FeedbackCounts" }
+        items: { type: array, items: { $ref: "#/components/schemas/Feedback" } }
+        next_cursor: { type: [string, "null"] }
+    TopArticles:
+      type: object
+      required: [period, metric, items]
+      properties:
+        period: { type: string, enum: [7d, 30d, 90d] }
+        metric: { type: string, enum: [views, helpful] }
+        items:
+          type: array
+          items:
+            type: object
+            required: [article_id, slug, title, type, category_id, views, helpful_count, not_helpful_count]
+            properties:
+              article_id: { type: string, format: uuid }
+              slug: { type: string }
+              title: { type: string }
+              type: { $ref: "#/components/schemas/ArticleType" }
+              category_id: { type: string, format: uuid }
+              audience: { $ref: "#/components/schemas/Audience" }
+              views: { type: integer, description: Views in the period }
+              helpful_count: { type: integer }
+              not_helpful_count: { type: integer }
+              helpful_share: { type: [number, "null"] }

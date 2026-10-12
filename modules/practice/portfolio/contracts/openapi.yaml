@@ -2,9 +2,243 @@ openapi: 3.1.0
 info:
   title: portfolio API
   version: 0.1.0
-  description: "Learner portfolios: artworks, repertoire, showreels, designs, teaching and research portfolios."
+  description: >-
+    Generic portfolio pattern (ADR-0004): a learner builds a body of work (items) that staff
+    review and give feedback on. Field words come from the profile vocabulary
+    (portfolio.item — "Artwork" for an arts academy, "Showreel" for film/media, "Publication" for
+    a research university, and so on); this contract stays neutral and never names a field.
+    Item *types* are organisation-defined data (like facility-booking's resource types), not a
+    fixed enum, so each academy can have as many or as few kinds of item as it needs.
 servers:
   - url: /api/v1/portfolio
-paths: {}
+paths:
+  /item-types:
+    get:
+      summary: List item types of the caller's organisation. Permission portfolio:item-type:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ItemType" } } } } } }
+    post:
+      summary: Create an item type. Permission portfolio:item-type:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ItemTypeInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ItemType" } } } }, "409": { description: Name already in use } }
+  /item-types/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      summary: Update an item type. Permission portfolio:item-type:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ItemTypeInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemType" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    delete:
+      summary: Delete an item type that no item uses. Permission portfolio:item-type:manage.
+      responses: { "204": { description: Deleted }, "409": { description: Items still use this type } }
+
+  /items:
+    get:
+      summary: >
+        Find items. scope=mine (default) returns the caller's own items; scope=managed returns
+        items the caller may review, or every item in the organisation with
+        portfolio:item:read-all. Permission portfolio:item:read.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, managed], default: mine } }
+        - { name: owner_person_id, in: query, description: "Filter by owner; requires portfolio:item:read-all unless it equals the caller's own person", schema: { type: string, format: uuid } }
+        - { name: type_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ItemStatus" } } }
+        - { name: q, in: query, description: "Search in title, description and tags", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } } } }
+    post:
+      summary: >
+        Create an item as a draft, owned by the caller unless owner_person_id is set (which
+        needs portfolio:item:manage). Permission portfolio:item:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ItemInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }, "422": { $ref: "#/components/responses/RuleViolation" } }
+
+  /items/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One item with its media and reviews. Owner, a reviewer, or portfolio:item:read-all. Permission portfolio:item:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      summary: >
+        Edit an item's details. Only while it is draft or changes_requested — a submitted or
+        under_review item must be withdrawn first. Owner, or portfolio:item:manage. Permission
+        portfolio:item:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ItemInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "Item is not editable in its current status", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+    delete:
+      summary: Delete a draft item. Owner, or portfolio:item:manage. Permission portfolio:item:write.
+      responses: { "204": { description: Deleted }, "404": { $ref: "#/components/responses/NotFound" }, "409": { description: Only a draft item may be deleted } }
+
+  /items/{id}/submit:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Submit a draft (or resubmit a changes_requested) item for review. Owner, or portfolio:item:manage. Permission portfolio:item:write.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Item is not in a submittable status }
+
+  /items/{id}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Withdraw a submitted or under_review item back to draft. Owner, or portfolio:item:manage. Permission portfolio:item:write.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Item has already been decided }
+
+  /items/{id}/media:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Media attached to an item. Permission portfolio:item:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ItemMedia" } } } } } }
+    post:
+      summary: >
+        Attach a file already stored by platform/documents. Owner, or portfolio:item:manage.
+        Permission portfolio:item:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ItemMediaInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ItemMedia" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /items/{id}/media/{media_id}:
+    parameters:
+      - { $ref: "#/components/parameters/Id" }
+      - { name: media_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      summary: Remove a media reference from an item. Owner, or portfolio:item:manage. Permission portfolio:item:write.
+      responses: { "204": { description: Deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /items/{id}/reviews:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Reviews on an item, most recent first. Permission portfolio:item:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Review" } } } } } }
+    post:
+      summary: >
+        Add a review decision. Moves the item to approved or changes_requested. A reviewer named
+        on the item type's reviewer list, or portfolio:review:manage. Permission
+        portfolio:review:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Review" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Item is not under review }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    NotFound: { description: Not found in the caller's organisation }
+    RuleViolation:
+      description: A rule configured on the item type forbids this (e.g. a required field for that type is missing).
+      content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } }
+
+  schemas:
+    ItemStatus:
+      type: string
+      enum: [draft, submitted, under_review, approved, changes_requested, withdrawn]
+      description: >-
+        under_review and changes_requested may cycle while feedback is addressed. approved and
+        withdrawn are terminal for that submission cycle; a withdrawn item returns to draft and
+        may be resubmitted.
+
+    ItemTypeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 120, description: "The organisation's own word for this kind of item, e.g. Artwork, Showreel, Publication — never hardcoded here" }
+        description: { type: string }
+        requires_review: { type: boolean, default: true, description: "If false, items of this type skip review and move straight from submitted to approved" }
+        reviewer_person_ids: { type: array, items: { type: string, format: uuid }, description: "People who may review items of this type, in addition to portfolio:review:manage holders" }
+    ItemType:
+      allOf:
+        - $ref: "#/components/schemas/ItemTypeInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            item_count: { type: integer }
+            created_at: { type: string, format: date-time }
+
+    ItemInput:
+      type: object
+      required: [type_id, title]
+      properties:
+        type_id: { type: string, format: uuid }
+        owner_person_id: { type: string, format: uuid, description: "Defaults to the caller's own person reference; setting it to someone else needs portfolio:item:manage" }
+        title: { type: string, maxLength: 200 }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        attributes: { type: object, additionalProperties: { type: string }, description: "Organisation-defined extra fields, kept generic on purpose (e.g. medium, duration, format)" }
+    Item:
+      allOf:
+        - $ref: "#/components/schemas/ItemInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/ItemStatus" }
+            media: { type: array, items: { $ref: "#/components/schemas/ItemMedia" } }
+            reviews: { type: array, items: { $ref: "#/components/schemas/Review" } }
+            submitted_at: { type: string, format: date-time, nullable: true }
+            decided_at: { type: string, format: date-time, nullable: true }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+            can: { type: array, items: { type: string, enum: [edit, delete, submit, withdraw, review] }, description: "Actions the caller may take now" }
+    ItemPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Item" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    ItemMediaInput:
+      type: object
+      required: [document_id]
+      properties:
+        document_id: { type: string, description: "Document id from platform/documents" }
+        caption: { type: string }
+        sort_order: { type: integer, default: 0 }
+    ItemMedia:
+      allOf:
+        - $ref: "#/components/schemas/ItemMediaInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            item_id: { type: string, format: uuid }
+            uploaded_by: { type: string, format: uuid }
+            uploaded_at: { type: string, format: date-time }
+
+    ReviewInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approved, changes_requested] }
+        score: { type: number, nullable: true, description: "Optional; not every academy scores items numerically" }
+        comments: { type: string }
+    Review:
+      allOf:
+        - $ref: "#/components/schemas/ReviewInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            item_id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            reviewer_person_id: { type: string, format: uuid }
+            reviewed_at: { type: string, format: date-time }
+
+    ConflictError:
+      type: object
+      properties:
+        code: { type: string, enum: [not_editable, not_submittable, already_decided, type_in_use, not_under_review] }
+        message: { type: string }
+    RuleError:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }

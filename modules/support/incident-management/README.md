@@ -2,12 +2,21 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 Incident and problem records, root cause analysis.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** incidents (service disruptions) with severity, lead, responders, a timeline and references to
+related records in other modules; problems behind one or more incidents, with known errors and workarounds;
+root-cause analysis (draft and publish); corrective actions with owners and due dates; the open-incident counts
+behind the Support Staff widget `incident-management.open`.
+
+**Not in scope:** individual requests (helpdesk), SLA clocks (sla-management), repairs (maintenance), asset
+records (asset-management), vendor and AMC calls (amc-vendor-support), knowledge articles (knowledge-base), a
+status board or broadcast to affected users, reminders and timers.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

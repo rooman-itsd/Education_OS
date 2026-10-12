@@ -1,11 +1,18 @@
 # Permission catalogue for sla-management. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: sla-management
-permissions: []
-#  - key: sla-management:record:read
-#    description: ...
-#  - key: sla-management:record:write
-#    description: ...
-roles: []
-#  - name: sla-management-admin
-#    grants: [sla-management:record:read, sla-management:record:write]
+permissions:
+  - key: sla-management:clock:read
+    description: View SLA clocks, breaches, the breaches widget counts, and the calendars and policies behind them.
+  - key: sla-management:policy:manage
+    description: Create and update business-hours calendars and SLA policies with escalation levels.
+roles:
+  - name: sla-management-viewer
+    description: Sees SLA status of helpdesk tickets. Default for the support-staff and management profile roles.
+    grants:
+      - sla-management:clock:read
+  - name: sla-management-admin
+    description: Sets up calendars and policies. Default for org-admin.
+    grants:
+      - sla-management:clock:read
+      - sla-management:policy:manage

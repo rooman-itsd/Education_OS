@@ -2,12 +2,21 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 SGRC, anti-ragging and POSH-ICC complaint intake and resolution.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** committees (SGRC, anti-ragging, ICC, ombudsperson) and their members; complaints on the student
+grievance, ragging and sexual harassment tracks; acknowledgement, inquiry with committee-only proceedings, updates
+between committee and complainant, decision, transfer, withdrawal; SGRC appeals to the ombudsperson; configurable due
+dates worked out when read; open-case counts behind the Governance widget `grievance.open-by-committee` and the
+Management widget `grievance.open`. Case content is visible only to the complainant and the committee handling it.
+
+**Not in scope:** evidence attachments, respondent access, anonymous complaints, appeals on the ragging and sexual
+harassment tracks, reminders, helpdesk tickets (helpdesk) and hostel discipline records (hostel).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

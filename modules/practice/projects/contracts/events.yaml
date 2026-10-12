@@ -1,9 +1,53 @@
 # Domain events published by projects.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Payloads use only generic terms; consumers take labels from the academy profile vocabulary.
+# Submission notes, files and review comments are never published; read them through the API.
 module: projects
 version: 1
-events: []
-#  - name: projects.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: projects.project.proposed
+    description: A learner proposed a project. Notification tells the coordinators.
+    payload: { organisation_id: uuid, project_id: uuid, title: string, kind: string, lead_id: uuid }
+  - name: projects.project.approved
+    description: A project became active, by approving a proposal or by a coordinator creating it.
+    payload: { organisation_id: uuid, project_id: uuid, title: string, kind: string, member_ids: [uuid], guide_ids: [uuid], starts_on: date, ends_on: date }
+  - name: projects.project.rejected
+    description: A proposal was rejected. Notification tells the team.
+    payload: { organisation_id: uuid, project_id: uuid, reason: string }
+  - name: projects.project.submitted
+    description: The team made the final submission. Notification tells the guides.
+    payload: { organisation_id: uuid, project_id: uuid, submission_id: uuid, submitted_by: uuid }
+  - name: projects.project.returned
+    description: A guide returned the final submission for more work; the project is active again.
+    payload: { organisation_id: uuid, project_id: uuid, reviewer_id: uuid }
+  - name: projects.project.completed
+    description: A guide evaluated the project. portfolio and skill-progress may record it for each member.
+    payload: { organisation_id: uuid, project_id: uuid, title: string, kind: string, member_ids: [uuid], guide_ids: [uuid], outcome: string, score: number }
+  - name: projects.project.cancelled
+    description: A coordinator cancelled a proposed or active project.
+    payload: { organisation_id: uuid, project_id: uuid, reason: string }
+  - name: projects.member.added
+    description: A person joined a project team, or became its lead.
+    payload: { organisation_id: uuid, project_id: uuid, person_id: uuid, role: string }
+  - name: projects.member.removed
+    description: A person left a project team.
+    payload: { organisation_id: uuid, project_id: uuid, person_id: uuid }
+  - name: projects.guide.assigned
+    description: A project's guides were set or changed.
+    payload: { organisation_id: uuid, project_id: uuid, guide_ids: [uuid] }
+  - name: projects.milestone.created
+    description: A milestone was added to an active project. Notification tells the team.
+    payload: { organisation_id: uuid, milestone_id: uuid, project_id: uuid, due_on: date }
+  - name: projects.milestone.submitted
+    description: A team member submitted a milestone. The guides' to-review list updates.
+    payload: { organisation_id: uuid, milestone_id: uuid, project_id: uuid, submission_id: uuid, version: integer, submitted_by: uuid }
+  - name: projects.milestone.accepted
+    description: A guide accepted a milestone.
+    payload: { organisation_id: uuid, milestone_id: uuid, project_id: uuid, reviewer_id: uuid, score: number }
+  - name: projects.milestone.returned
+    description: A guide returned a milestone for rework. Notification tells the team.
+    payload: { organisation_id: uuid, milestone_id: uuid, project_id: uuid, reviewer_id: uuid }
+  - name: projects.milestone.overdue
+    description: Published once per milestone by the daily job the day after its due date when it is still pending or returned.
+    payload: { organisation_id: uuid, milestone_id: uuid, project_id: uuid, due_on: date }
