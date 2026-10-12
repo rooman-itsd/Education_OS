@@ -1,9 +1,66 @@
 # Domain events published by lms.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries organisation_id, in the envelope and in the payload.
+#
+# STATUS: PROPOSED (week 1, issue #63). `consumers` lists the modules expected to subscribe; each
+# owner confirms before this file is locked (see docs/prd.md section 11).
+# course_offering_id and section ids are academic-management IDs (vocabulary aligned by owner decision C5);
+# student_id is an external person ID (docs/prd.md LQ6); document_id is a platform/documents ID.
+# Grades here are coursework grades, not examination results.
 module: lms
 version: 1
-events: []
-#  - name: lms.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+# Envelope fields as stored by the outbox in packages/core (eos_core.events.OutboxEvent).
+# actor is the acting user's id, null when the system acts. The outbox stores no per-event
+# version; the contract version is `version` above.
+envelope:
+  id: uuid
+  name: string
+  organisation_id: uuid
+  actor: "uuid?"
+  occurred_at: datetime
+  payload: object
+events:
+  - name: lms.course-space.created
+    description: A course space was created for a course offering, manually by an administrator (owner decision C17).
+    consumers: []
+    payload: { organisation_id: uuid, course_space_id: uuid, course_offering_id: uuid, title: string, visible_section_ids: "uuid[]" }
+
+  - name: lms.material.published
+    description: A course material was published to students of the course space.
+    consumers: [notification]
+    payload: { organisation_id: uuid, material_id: uuid, course_space_id: uuid, course_offering_id: uuid, unit_id: "uuid?", material_type: string, title: string, visible_section_ids: "uuid[]", published_at: datetime }
+
+  - name: lms.assignment.published
+    description: An assignment was published to its target sections.
+    consumers: [notification]
+    payload: { organisation_id: uuid, assignment_id: uuid, course_space_id: uuid, course_offering_id: uuid, title: string, due_at: datetime, max_points: number, target_section_ids: "uuid[]", published_at: datetime }
+
+  - name: lms.assignment.updated
+    description: A published assignment's due date, maximum points, target sections or late policy changed, or it was closed.
+    consumers: [notification]
+    payload: { organisation_id: uuid, assignment_id: uuid, course_space_id: uuid, course_offering_id: uuid, changed_fields: "string[]", due_at: datetime, max_points: number, target_section_ids: "uuid[]", status: string }
+
+  - name: lms.submission.submitted
+    description: A student submitted an assignment attempt.
+    consumers: [notification]
+    payload: { organisation_id: uuid, submission_id: uuid, assignment_id: uuid, course_space_id: uuid, student_id: uuid, attempt: integer, submitted_at: datetime, late: boolean }
+
+  - name: lms.grade.released
+    description: A coursework grade was released to a student (again, with a higher version, after a change). Not an examination result.
+    consumers: [notification]
+    payload: { organisation_id: uuid, grade_id: uuid, course_space_id: uuid, course_offering_id: uuid, item_type: string, item_id: uuid, student_id: uuid, points: number, max_points: number, version: integer, released_at: datetime }
+
+  - name: lms.quiz.published
+    description: A quiz was published with its open and close window.
+    consumers: [notification]
+    payload: { organisation_id: uuid, quiz_id: uuid, course_space_id: uuid, course_offering_id: uuid, title: string, opens_at: datetime, closes_at: datetime, time_limit_minutes: "integer?", attempts_allowed: integer, published_at: datetime }
+
+  - name: lms.quiz-attempt.submitted
+    description: A quiz attempt was submitted by the student or by the system at its time limit.
+    consumers: []
+    payload: { organisation_id: uuid, attempt_id: uuid, quiz_id: uuid, course_space_id: uuid, student_id: uuid, attempt_number: integer, submitted_at: datetime, submitted_by_system: boolean, auto_score: number, needs_manual_grading: boolean }
+
+  - name: lms.discussion-thread.created
+    description: A discussion thread was started in a course space.
+    consumers: [notification]
+    payload: { organisation_id: uuid, thread_id: uuid, course_space_id: uuid, title: string, created_by: uuid, created_at: datetime }
