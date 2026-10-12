@@ -2,9 +2,1719 @@ openapi: 3.1.0
 info:
   title: timetable-attendance API
   version: 0.1.0
-  description: "Timetable generation, class scheduling, attendance capture and reports."
+  description: |
+    Timetable generation, class scheduling, attendance capture and reports.
+    Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
+    `x-permission` on each operation names the key from contracts/permissions.yaml it requires;
+    scope rules (own class, own department, self) are in docs/prd.md section 12.
+    academic_period_id, course_offering_id, section_id and instructor_assignment_id are
+    academic-management IDs; student_id and instructor_id are external person IDs.
 servers:
   - url: /api/v1/timetable-attendance
-paths: {}
+tags:
+  - name: timetables
+  - name: scheduled-classes
+  - name: attendance-sessions
+  - name: attendance-records
+  - name: reports
+  - name: widgets
+paths:
+  # ------------------------------------------------------------ timetables
+  /timetables:
+    get:
+      tags: [timetables]
+      summary: List timetables
+      operationId: listTimetables
+      x-permission: timetable-attendance:timetable:read
+      parameters:
+        - name: academic_period_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TimetableStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Timetables, without slots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TimetableSummary"
+                  total:
+                    type: integer
+    post:
+      tags: [timetables]
+      summary: Create a draft timetable
+      operationId: createTimetable
+      x-permission: timetable-attendance:timetable:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTimetableRequest"
+      responses:
+        "201":
+          description: Timetable created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /timetables/{timetable_id}:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    get:
+      tags: [timetables]
+      summary: Get a timetable with its slots
+      operationId: getTimetable
+      x-permission: timetable-attendance:timetable:read
+      responses:
+        "200":
+          description: Timetable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [timetables]
+      summary: Update a draft or unpublished timetable's details
+      operationId: updateTimetable
+      x-permission: timetable-attendance:timetable:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTimetableRequest"
+      responses:
+        "200":
+          description: Timetable updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /timetables/{timetable_id}/slots:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    put:
+      tags: [timetables]
+      summary: Replace the slots of a draft or unpublished timetable
+      description: Referenced academic-management IDs must exist in the local read models; unknown IDs return 422.
+      operationId: replaceTimetableSlots
+      x-permission: timetable-attendance:timetable:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slots]
+              properties:
+                slots:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/TimetableSlotInput"
+      responses:
+        "200":
+          description: Slots replaced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /timetables/{timetable_id}/conflicts:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    get:
+      tags: [timetables]
+      summary: Check a timetable for conflicts
+      description: Section and instructor overlaps block publishing; location overlaps are warnings (FR-4).
+      operationId: listTimetableConflicts
+      x-permission: timetable-attendance:timetable:read
+      responses:
+        "200":
+          description: Conflicts, empty when none
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blocking, items]
+                properties:
+                  blocking:
+                    type: boolean
+                    description: True when at least one conflict prevents publishing
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TimetableConflict"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /timetables/{timetable_id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    post:
+      tags: [timetables]
+      summary: Publish a timetable
+      description: |
+        Fails with 409 and the conflict list when there are blocking conflicts. On success increments
+        version and generates scheduled classes (FR-3, FR-5). Publishes timetable-attendance.timetable.published.
+      operationId: publishTimetable
+      x-permission: timetable-attendance:timetable:publish
+      responses:
+        "200":
+          description: Timetable published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Blocking conflicts, or the timetable is already published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /timetables/{timetable_id}/unpublish:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    post:
+      tags: [timetables]
+      summary: Unpublish a timetable
+      description: Cancels future scheduled classes that have no attendance session. Past classes and attendance are kept.
+      operationId: unpublishTimetable
+      x-permission: timetable-attendance:timetable:publish
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Timetable unpublished
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timetable"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /timetables/{timetable_id}/generate-classes:
+    parameters:
+      - $ref: "#/components/parameters/TimetableId"
+    post:
+      tags: [timetables, scheduled-classes]
+      summary: Generate scheduled classes for a published timetable
+      description: Idempotent; creates only missing (slot, date) occurrences in the range (FR-5).
+      operationId: generateScheduledClasses
+      x-permission: timetable-attendance:scheduled-class:write
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from:
+                  type: string
+                  format: date
+                  description: Defaults to today or the period start, whichever is later
+                to:
+                  type: string
+                  format: date
+                  description: Defaults to the academic period end
+      responses:
+        "200":
+          description: Generation result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [created, skipped_existing]
+                properties:
+                  created:
+                    type: integer
+                  skipped_existing:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ----------------------------------------------------- scheduled classes
+  /scheduled-classes:
+    get:
+      tags: [scheduled-classes]
+      summary: List scheduled classes
+      operationId: listScheduledClasses
+      x-permission: timetable-attendance:scheduled-class:read
+      parameters:
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: academic_period_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: course_offering_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: section_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: instructor_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: timetable_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ScheduledClassStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Scheduled classes ordered by start time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScheduledClass"
+                  total:
+                    type: integer
+    post:
+      tags: [scheduled-classes]
+      summary: Create an ad-hoc class
+      description: A class with no timetable slot, for example an extra or make-up class.
+      operationId: createScheduledClass
+      x-permission: timetable-attendance:scheduled-class:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduledClassRequest"
+      responses:
+        "201":
+          description: Class created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledClass"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /scheduled-classes/{scheduled_class_id}:
+    parameters:
+      - $ref: "#/components/parameters/ScheduledClassId"
+    get:
+      tags: [scheduled-classes]
+      summary: Get a scheduled class
+      operationId: getScheduledClass
+      x-permission: timetable-attendance:scheduled-class:read
+      responses:
+        "200":
+          description: Scheduled class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledClass"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [scheduled-classes]
+      summary: Reschedule a class or change its location or instructor assignment
+      description: Not allowed once the class has a closed attendance session.
+      operationId: updateScheduledClass
+      x-permission: timetable-attendance:scheduled-class:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduledClassRequest"
+      responses:
+        "200":
+          description: Class updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledClass"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /scheduled-classes/{scheduled_class_id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ScheduledClassId"
+    post:
+      tags: [scheduled-classes]
+      summary: Cancel a class
+      description: Not allowed once the class has a closed attendance session.
+      operationId: cancelScheduledClass
+      x-permission: timetable-attendance:scheduled-class:cancel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Class cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledClass"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # --------------------------------------------------- attendance sessions
+  /scheduled-classes/{scheduled_class_id}/attendance-session:
+    parameters:
+      - $ref: "#/components/parameters/ScheduledClassId"
+    get:
+      tags: [attendance-sessions]
+      summary: Get the attendance session of a class
+      operationId: getAttendanceSessionForClass
+      x-permission: timetable-attendance:attendance-session:read
+      responses:
+        "200":
+          description: Attendance session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "404":
+          description: Class not found, or no session opened yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [attendance-sessions]
+      summary: Open the attendance session for a class
+      description: |
+        Checks eligibility (FR-7): class is scheduled, caller is its instructor (or holds override),
+        and now is within the marking window. Snapshots eligible students as unmarked.
+        Returns the existing open session if one exists.
+      operationId: openAttendanceSession
+      x-permission: timetable-attendance:attendance-session:open
+      responses:
+        "200":
+          description: Session already open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "201":
+          description: Session opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Class cancelled, session already closed, or outside the marking window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance-sessions/{attendance_session_id}:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceSessionId"
+    get:
+      tags: [attendance-sessions]
+      summary: Get an attendance session
+      operationId: getAttendanceSession
+      x-permission: timetable-attendance:attendance-session:read
+      responses:
+        "200":
+          description: Attendance session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /attendance-sessions/{attendance_session_id}/close:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceSessionId"
+    post:
+      tags: [attendance-sessions]
+      summary: Close an attendance session
+      description: Unmarked eligible students become absent; the class becomes completed (FR-11).
+      operationId: closeAttendanceSession
+      x-permission: timetable-attendance:attendance-session:close
+      responses:
+        "200":
+          description: Session closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceSession"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ---------------------------------------------------- attendance records
+  /attendance-sessions/{attendance_session_id}/records:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceSessionId"
+    get:
+      tags: [attendance-records]
+      summary: List the records of a session
+      description: Includes every eligible student; unmarked students have status null while the session is open.
+      operationId: listAttendanceRecords
+      x-permission: timetable-attendance:attendance-record:read
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/AttendanceStatus"
+      responses:
+        "200":
+          description: Records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attendance_session_id, items, total]
+                properties:
+                  attendance_session_id:
+                    type: string
+                    format: uuid
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AttendanceRecord"
+                  total:
+                    type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [attendance-records]
+      summary: Mark attendance in an open session
+      description: |
+        Creates or overwrites records for the listed students; others are left as they are.
+        Only eligible students may be listed. Publishes one timetable-attendance.attendance-record.marked per call.
+      operationId: markAttendance
+      x-permission: timetable-attendance:attendance-record:mark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkAttendanceRequest"
+      responses:
+        "200":
+          description: Records after marking
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attendance_session_id, items, total]
+                properties:
+                  attendance_session_id:
+                    type: string
+                    format: uuid
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AttendanceRecord"
+                  total:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session is closed; use the correction endpoint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: One or more students are not eligible for this class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance-records/{attendance_record_id}:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceRecordId"
+    patch:
+      tags: [attendance-records]
+      summary: Correct a record in a closed session
+      description: |
+        Reason is mandatory. Instructors may correct within the correction window; attendance-record:correct-department
+        widens this to the caller's department at any time, attendance-session:override to any class (FR-10).
+        Publishes timetable-attendance.attendance-record.updated.
+      operationId: correctAttendanceRecord
+      x-permission: timetable-attendance:attendance-record:correct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrectAttendanceRecordRequest"
+      responses:
+        "200":
+          description: Record corrected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session still open (use marking), or correction window has passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /attendance-records/{attendance_record_id}/history:
+    parameters:
+      - $ref: "#/components/parameters/AttendanceRecordId"
+    get:
+      tags: [attendance-records]
+      summary: Correction history of a record
+      operationId: getAttendanceRecordHistory
+      x-permission: timetable-attendance:attendance-record:read
+      responses:
+        "200":
+          description: Changes, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attendance_record_id, items]
+                properties:
+                  attendance_record_id:
+                    type: string
+                    format: uuid
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AttendanceRecordChange"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # --------------------------------------------------------------- reports
+  /reports/students/{student_id}/attendance-summary:
+    parameters:
+      - $ref: "#/components/parameters/StudentId"
+    get:
+      tags: [reports]
+      summary: A student's attendance summary per course offering
+      description: Department heads see students in their department; report:read-all sees any student.
+      operationId: getStudentAttendanceSummary
+      x-permission: timetable-attendance:report:read-department
+      parameters:
+        - $ref: "#/components/parameters/AcademicPeriodQuery"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAttendanceSummary"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /reports/students/{student_id}/attendance-history:
+    parameters:
+      - $ref: "#/components/parameters/StudentId"
+    get:
+      tags: [reports]
+      summary: A student's dated attendance history
+      operationId: getStudentAttendanceHistory
+      x-permission: timetable-attendance:report:read-department
+      parameters:
+        - $ref: "#/components/parameters/AcademicPeriodQuery"
+        - name: course_offering_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: History, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAttendanceHistory"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /reports/department-attendance:
+    get:
+      tags: [reports, widgets]
+      summary: Department attendance per course offering and section
+      description: |
+        Department heads get their own department by default; report:read-all holders must pass department_id.
+        Used by widget timetable-attendance.department-attendance (Department Admin dashboard).
+      operationId: getDepartmentAttendance
+      x-permission: timetable-attendance:report:read-department
+      parameters:
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/AcademicPeriodQuery"
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: include_students_below_threshold
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Department report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentAttendanceReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /reports/attendance-eligibility:
+    post:
+      tags: [reports]
+      summary: Bulk attendance counts for exam eligibility
+      description: |
+        Read-only; POST only carries the student list. Returns, per student, the classes counted and the
+        classes attended in one course offering up to an inclusive cut-off date, for examinations to decide
+        exam eligibility (FR-18, owner decision C7). Excused classes are excluded from both counts. No
+        percentage or threshold is applied here; where the minimum lives is open (PRD Q5).
+        student_id follows this contract's provisional identifier (PRD Q3).
+      operationId: getAttendanceForEligibility
+      x-permission: timetable-attendance:report:read-eligibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceEligibilityRequest"
+      responses:
+        "200":
+          description: Counts per student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceEligibilityReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The course offering is not known to timetable-attendance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  # --------------------------------------------------------------- widgets
+  /me/teaching-schedule:
+    get:
+      tags: [widgets, scheduled-classes]
+      summary: Classes the caller teaches on a date
+      description: Used by widget timetable-attendance.today-classes (Faculty dashboard).
+      operationId: getMyTeachingSchedule
+      x-permission: timetable-attendance:scheduled-class:read
+      parameters:
+        - $ref: "#/components/parameters/DateQuery"
+      responses:
+        "200":
+          description: Classes ordered by start time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [date, items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScheduledClass"
+
+  /me/attendance-to-mark:
+    get:
+      tags: [widgets, attendance-sessions]
+      summary: The caller's classes still awaiting attendance
+      description: |
+        Classes the caller teaches that have started, are not cancelled, have no closed session and
+        are within the marking window, oldest first (FR-12).
+        Used by widget timetable-attendance.attendance-to-mark (Faculty dashboard).
+      operationId: getMyAttendanceToMark
+      x-permission: timetable-attendance:attendance-record:mark
+      responses:
+        "200":
+          description: Classes to mark
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AttendanceToMarkItem"
+                  total:
+                    type: integer
+
+  /me/schedule:
+    get:
+      tags: [widgets, scheduled-classes]
+      summary: The caller's own classes on a date (student)
+      description: Classes of the sections the caller is allocated to. Used by widget timetable-attendance.today (Student dashboard).
+      operationId: getMySchedule
+      x-permission: timetable-attendance:scheduled-class:read-own
+      parameters:
+        - $ref: "#/components/parameters/DateQuery"
+      responses:
+        "200":
+          description: Classes ordered by start time
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [date, items]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ScheduledClass"
+
+  /me/attendance-summary:
+    get:
+      tags: [widgets, reports]
+      summary: The caller's own attendance summary
+      description: Used by widget timetable-attendance.attendance-summary (Student dashboard).
+      operationId: getMyAttendanceSummary
+      x-permission: timetable-attendance:report:read-own
+      parameters:
+        - $ref: "#/components/parameters/AcademicPeriodQuery"
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAttendanceSummary"
+
+  /me/attendance-history:
+    get:
+      tags: [reports]
+      summary: The caller's own dated attendance history
+      operationId: getMyAttendanceHistory
+      x-permission: timetable-attendance:attendance-record:read-own
+      parameters:
+        - $ref: "#/components/parameters/AcademicPeriodQuery"
+        - name: course_offering_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: History, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentAttendanceHistory"
+
 components:
-  schemas: {}
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    DateQuery:
+      name: date
+      in: query
+      description: Defaults to today in the organisation's time zone
+      schema:
+        type: string
+        format: date
+    AcademicPeriodQuery:
+      name: academic_period_id
+      in: query
+      description: Defaults to the active academic period
+      schema:
+        type: string
+        format: uuid
+    TimetableId:
+      name: timetable_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ScheduledClassId:
+      name: scheduled_class_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AttendanceSessionId:
+      name: attendance_session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AttendanceRecordId:
+      name: attendance_record_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StudentId:
+      name: student_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Caller lacks the permission or scope for this resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with the resource's current state
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unprocessable:
+      description: Request is well formed but breaks a domain rule (for example an unknown academic-management ID)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    # --- enums
+    TimetableStatus:
+      type: string
+      enum: [draft, published, unpublished]
+    DayOfWeek:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
+    ScheduledClassStatus:
+      type: string
+      enum: [scheduled, cancelled, completed]
+    AttendanceSessionStatus:
+      type: string
+      enum: [open, closed]
+    AttendanceStatus:
+      type: string
+      enum: [present, absent, late, excused]
+    ConflictKind:
+      type: string
+      enum: [section, instructor, location]
+
+    # --- timetables
+    TimetableSummary:
+      type: object
+      required: [id, organisation_id, academic_period_id, name, version, status, slot_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        academic_period_id:
+          type: string
+          format: uuid
+        department_id:
+          type: [string, "null"]
+          format: uuid
+        name:
+          type: string
+        version:
+          type: integer
+          minimum: 0
+          description: 0 until first published; incremented on every publish
+        status:
+          $ref: "#/components/schemas/TimetableStatus"
+        published_at:
+          type: [string, "null"]
+          format: date-time
+        slot_count:
+          type: integer
+    Timetable:
+      allOf:
+        - $ref: "#/components/schemas/TimetableSummary"
+        - type: object
+          required: [slots]
+          properties:
+            slots:
+              type: array
+              items:
+                $ref: "#/components/schemas/TimetableSlot"
+    TimetableSlotInput:
+      type: object
+      required: [day_of_week, start_time, end_time, course_offering_id, section_id, instructor_assignment_id]
+      properties:
+        day_of_week:
+          $ref: "#/components/schemas/DayOfWeek"
+        start_time:
+          type: string
+          format: time
+          examples: ["09:00:00"]
+          description: Local time in the organisation's time zone
+        end_time:
+          type: string
+          format: time
+        course_offering_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        instructor_assignment_id:
+          type: string
+          format: uuid
+        location_label:
+          type: string
+          description: Free text until room ownership is settled (PRD Q4)
+        effective_from:
+          type: string
+          format: date
+          description: Defaults to the academic period start
+        effective_to:
+          type: string
+          format: date
+          description: Defaults to the academic period end
+    TimetableSlot:
+      allOf:
+        - $ref: "#/components/schemas/TimetableSlotInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              format: uuid
+            instructor_id:
+              type: string
+              format: uuid
+              readOnly: true
+              description: Cached from the instructor assignment
+            course_code:
+              type: string
+              readOnly: true
+            course_title:
+              type: string
+              readOnly: true
+    CreateTimetableRequest:
+      type: object
+      required: [academic_period_id, name]
+      properties:
+        academic_period_id:
+          type: string
+          format: uuid
+        department_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimetableSlotInput"
+    UpdateTimetableRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        department_id:
+          type: [string, "null"]
+          format: uuid
+    TimetableConflict:
+      type: object
+      required: [kind, blocking, slot_id, other_slot_id, day_of_week, overlap_start, overlap_end]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ConflictKind"
+        blocking:
+          type: boolean
+        slot_id:
+          type: string
+          format: uuid
+        other_slot_id:
+          type: string
+          format: uuid
+        other_timetable_id:
+          type: string
+          format: uuid
+          description: Set when the clash is with another published timetable
+        day_of_week:
+          $ref: "#/components/schemas/DayOfWeek"
+        overlap_start:
+          type: string
+          format: time
+        overlap_end:
+          type: string
+          format: time
+        shared_id:
+          type: string
+          description: The section_id, instructor_id or location_label both slots share
+
+    # --- scheduled classes
+    ScheduledClass:
+      type: object
+      required: [id, organisation_id, academic_period_id, course_offering_id, section_id, instructor_assignment_id, instructor_id, class_date, starts_at, ends_at, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        timetable_id:
+          type: [string, "null"]
+          format: uuid
+        slot_id:
+          type: [string, "null"]
+          format: uuid
+          description: Null for an ad-hoc class
+        academic_period_id:
+          type: string
+          format: uuid
+        course_offering_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        instructor_assignment_id:
+          type: string
+          format: uuid
+        instructor_id:
+          type: string
+          format: uuid
+        course_code:
+          type: string
+          readOnly: true
+        course_title:
+          type: string
+          readOnly: true
+        section_code:
+          type: string
+          readOnly: true
+        class_date:
+          type: string
+          format: date
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location_label:
+          type: [string, "null"]
+        status:
+          $ref: "#/components/schemas/ScheduledClassStatus"
+        cancel_reason:
+          type: [string, "null"]
+        attendance_session:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceSessionRef"
+            - type: "null"
+    CreateScheduledClassRequest:
+      type: object
+      required: [course_offering_id, section_id, instructor_assignment_id, starts_at, ends_at]
+      properties:
+        course_offering_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        instructor_assignment_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location_label:
+          type: string
+    UpdateScheduledClassRequest:
+      type: object
+      properties:
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        location_label:
+          type: [string, "null"]
+        instructor_assignment_id:
+          type: string
+          format: uuid
+          description: For a substitute; must belong to the same course offering
+        reason:
+          type: string
+
+    # --- attendance sessions
+    AttendanceSessionRef:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/AttendanceSessionStatus"
+    AttendanceCounts:
+      type: object
+      required: [eligible, unmarked, present, absent, late, excused]
+      properties:
+        eligible:
+          type: integer
+        unmarked:
+          type: integer
+        present:
+          type: integer
+        absent:
+          type: integer
+        late:
+          type: integer
+        excused:
+          type: integer
+    AttendanceSession:
+      type: object
+      required: [id, organisation_id, scheduled_class_id, status, opened_at, opened_by, marking_deadline, counts]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        scheduled_class_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/AttendanceSessionStatus"
+        opened_at:
+          type: string
+          format: date-time
+        opened_by:
+          type: string
+          format: uuid
+        marking_deadline:
+          type: string
+          format: date-time
+        closed_at:
+          type: [string, "null"]
+          format: date-time
+        closed_by:
+          type: [string, "null"]
+          format: uuid
+          description: Null when closed automatically at the deadline
+        counts:
+          $ref: "#/components/schemas/AttendanceCounts"
+
+    # --- attendance records
+    AttendanceRecord:
+      type: object
+      required: [organisation_id, attendance_session_id, student_id, status]
+      properties:
+        id:
+          type: [string, "null"]
+          format: uuid
+          description: Null for an eligible student not yet marked
+        organisation_id:
+          type: string
+          format: uuid
+        attendance_session_id:
+          type: string
+          format: uuid
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+          readOnly: true
+          description: Cached from the section allocation event, when provided (PRD Q3)
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/AttendanceStatus"
+            - type: "null"
+        remark:
+          type: [string, "null"]
+        marked_by:
+          type: [string, "null"]
+          format: uuid
+        marked_at:
+          type: [string, "null"]
+          format: date-time
+        corrected:
+          type: boolean
+          readOnly: true
+    MarkAttendanceRequest:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [student_id, status]
+            properties:
+              student_id:
+                type: string
+                format: uuid
+              status:
+                $ref: "#/components/schemas/AttendanceStatus"
+              remark:
+                type: string
+    CorrectAttendanceRecordRequest:
+      type: object
+      required: [status, reason]
+      properties:
+        status:
+          $ref: "#/components/schemas/AttendanceStatus"
+        remark:
+          type: string
+        reason:
+          type: string
+          minLength: 1
+    AttendanceRecordChange:
+      type: object
+      required: [id, from_status, to_status, reason, changed_by, changed_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        from_status:
+          $ref: "#/components/schemas/AttendanceStatus"
+        to_status:
+          $ref: "#/components/schemas/AttendanceStatus"
+        reason:
+          type: string
+        changed_by:
+          type: string
+          format: uuid
+        changed_at:
+          type: string
+          format: date-time
+
+    # --- widgets and reports
+    AttendanceToMarkItem:
+      type: object
+      required: [scheduled_class, marking_deadline]
+      properties:
+        scheduled_class:
+          $ref: "#/components/schemas/ScheduledClass"
+        marking_deadline:
+          type: string
+          format: date-time
+        counts:
+          $ref: "#/components/schemas/AttendanceCounts"
+    AttendanceEligibilityRequest:
+      type: object
+      required: [course_offering_id, cutoff_date]
+      properties:
+        course_offering_id:
+          type: string
+          format: uuid
+        cutoff_date:
+          type: string
+          format: date
+          description: Inclusive, in the organisation's time zone. Classes dated after it are not counted
+        from_date:
+          type: string
+          format: date
+          description: Inclusive. When omitted, every class of the course offering up to cutoff_date is counted
+        student_ids:
+          type: array
+          maxItems: 2000
+          description: When omitted, every student allocated to a section of the course offering between from_date and cutoff_date
+          items:
+            type: string
+            format: uuid
+    StudentEligibilityAttendance:
+      type: object
+      required: [student_id, classes_counted, attended, absent, excused, no_eligible_classes]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        classes_counted:
+          type: integer
+          description: |
+            Denominator. Closed attendance sessions of non-cancelled classes of the course offering, dated
+            within the range, for which the student was eligible (allocated to the class's section on the
+            class date), excluding sessions where the student was excused
+        attended:
+          type: integer
+          description: Sessions counted where the student was present or late
+        absent:
+          type: integer
+          description: Sessions counted where the student was absent, including students left unmarked at close (FR-11)
+        excused:
+          type: integer
+          description: Sessions where the student was excused; excluded from classes_counted and attended
+        no_eligible_classes:
+          type: boolean
+          description: True when classes_counted is 0, so no attendance ratio can be formed
+    AttendanceEligibilityReport:
+      type: object
+      required: [course_offering_id, cutoff_date, generated_at, items, unknown_student_ids, open_sessions_excluded]
+      properties:
+        course_offering_id:
+          type: string
+          format: uuid
+        from_date:
+          type: [string, "null"]
+          format: date
+        cutoff_date:
+          type: string
+          format: date
+        generated_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentEligibilityAttendance"
+        unknown_student_ids:
+          type: array
+          description: Requested students never allocated to a section of this course offering in the range; not an error
+          items:
+            type: string
+            format: uuid
+        open_sessions_excluded:
+          type: integer
+          description: Sessions in the range still open; they are not counted until closed
+    OfferingAttendance:
+      type: object
+      required: [course_offering_id, classes_held, attended, excused, percentage, below_threshold]
+      properties:
+        course_offering_id:
+          type: string
+          format: uuid
+        course_code:
+          type: string
+        course_title:
+          type: string
+        section_id:
+          type: string
+          format: uuid
+        classes_held:
+          type: integer
+          description: Closed sessions; excused classes excluded (PRD Q6, decided by C7)
+        attended:
+          type: integer
+          description: present + late
+        excused:
+          type: integer
+        percentage:
+          type: number
+          minimum: 0
+          maximum: 100
+        below_threshold:
+          type: boolean
+    StudentAttendanceSummary:
+      type: object
+      required: [student_id, academic_period_id, threshold_percent, items]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        academic_period_id:
+          type: string
+          format: uuid
+        threshold_percent:
+          type: number
+        overall_percentage:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfferingAttendance"
+    StudentAttendanceHistory:
+      type: object
+      required: [student_id, items, total]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            type: object
+            required: [scheduled_class_id, course_offering_id, class_date, status]
+            properties:
+              scheduled_class_id:
+                type: string
+                format: uuid
+              course_offering_id:
+                type: string
+                format: uuid
+              course_code:
+                type: string
+              class_date:
+                type: string
+                format: date
+              starts_at:
+                type: string
+                format: date-time
+              status:
+                $ref: "#/components/schemas/AttendanceStatus"
+              corrected:
+                type: boolean
+        total:
+          type: integer
+    DepartmentAttendanceReport:
+      type: object
+      required: [department_id, academic_period_id, threshold_percent, items]
+      properties:
+        department_id:
+          type: string
+          format: uuid
+        academic_period_id:
+          type: string
+          format: uuid
+        date_from:
+          type: [string, "null"]
+          format: date
+        date_to:
+          type: [string, "null"]
+          format: date
+        threshold_percent:
+          type: number
+        overall_percentage:
+          type: number
+        items:
+          type: array
+          description: One row per course offering and section
+          items:
+            type: object
+            required: [course_offering_id, section_id, classes_held, average_percentage, students_below_threshold]
+            properties:
+              course_offering_id:
+                type: string
+                format: uuid
+              course_code:
+                type: string
+              course_title:
+                type: string
+              section_id:
+                type: string
+                format: uuid
+              section_code:
+                type: string
+              instructor_id:
+                type: string
+                format: uuid
+              classes_held:
+                type: integer
+              average_percentage:
+                type: number
+              students_below_threshold:
+                type: integer
+              students:
+                type: array
+                description: Present only when include_students_below_threshold=true
+                items:
+                  type: object
+                  required: [student_id, percentage]
+                  properties:
+                    student_id:
+                      type: string
+                      format: uuid
+                    student_name:
+                      type: string
+                    percentage:
+                      type: number
