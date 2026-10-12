@@ -1,11 +1,186 @@
 # Permission catalogue for examinations. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Scope rules (docs/prd.md section 13). Modules check keys, never roles. Each scope is its own key,
+# and a key always means the same scope whoever holds it:
+# - *-assigned: papers or sessions the caller holds an exam duty for.
+# - *-department: the caller's department, as recorded on the course offering. How the caller's
+#   department is obtained from platform/identity is pending confirmation (docs/prd.md Q13).
+# - *-all: the whole organisation.
+# - *-own: the caller's own data (student: own candidacy, hall ticket, published results;
+#   staff: own duties).
+# An operation's x-permission is its narrowest key; holding a wider key of the same action widens the
+# scope, and the widest key held applies. Roles therefore hold the narrowest key plus any wider ones.
 module: examinations
-permissions: []
-#  - key: examinations:record:read
-#    description: ...
-#  - key: examinations:record:write
-#    description: ...
-roles: []
-#  - name: examinations-admin
-#    grants: [examinations:record:read, examinations:record:write]
+permissions:
+  - key: examinations:exam-cycle:read
+    description: View exam cycles
+  - key: examinations:exam-cycle:manage
+    description: Create, configure and change the status of exam cycles
+  - key: examinations:assessment-scheme:read
+    description: View assessment schemes
+  - key: examinations:assessment-scheme:write-department
+    description: Define and activate assessment schemes for course offerings of the caller's department
+  - key: examinations:assessment-scheme:write-all
+    description: Define and activate assessment schemes for any course offering
+  - key: examinations:grading-scheme:read
+    description: View grading schemes
+  - key: examinations:grading-scheme:manage
+    description: Define grading schemes and set the organisation default
+  - key: examinations:paper:read
+    description: View exam papers
+  - key: examinations:paper:manage
+    description: Create and edit exam papers
+  - key: examinations:session:read
+    description: View exam sessions
+  - key: examinations:session:read-own
+    description: View the exam sessions the caller is a candidate in
+  - key: examinations:session:manage
+    description: Schedule, reschedule and cancel exam sessions
+  - key: examinations:candidate:read-department
+    description: View candidates and eligibility for papers of the caller's department
+  - key: examinations:candidate:read-all
+    description: View candidates and eligibility for any paper
+  - key: examinations:candidate:determine
+    description: Run eligibility determination for an exam cycle
+  - key: examinations:candidate:override
+    description: Override a candidate's eligibility, with a reason
+  - key: examinations:hall-ticket:read-own
+    description: View the caller's own hall ticket
+  - key: examinations:hall-ticket:read-all
+    description: View any hall ticket and hall-ticket reports
+  - key: examinations:hall-ticket:issue
+    description: Issue hall tickets
+  - key: examinations:hall-ticket:withhold
+    description: Withhold a hall ticket, with a reason
+  - key: examinations:hall-ticket:revoke
+    description: Revoke a hall ticket, with a reason
+  - key: examinations:duty:read-own
+    description: View the caller's own exam duties
+  - key: examinations:duty:read-department
+    description: View exam duties for papers and sessions of the caller's department
+  - key: examinations:duty:read-all
+    description: View any exam duty
+  - key: examinations:duty:assign
+    description: Assign and cancel exam duties
+  - key: examinations:marks:read-assigned
+    description: View marks of papers the caller evaluates or moderates
+  - key: examinations:marks:read-department
+    description: View marks of papers of the caller's department
+  - key: examinations:marks:read-all
+    description: View marks of any paper
+  - key: examinations:marks:enter-assigned
+    description: Enter marks for papers the caller holds an evaluation duty for
+  - key: examinations:marks:enter-all
+    description: Enter or correct marks for any paper before it is locked
+  - key: examinations:marks:moderate-assigned
+    description: Moderate papers the caller holds a moderation duty for, with a reason
+  - key: examinations:marks:moderate-department
+    description: Moderate papers of the caller's department, with a reason
+  - key: examinations:marks:lock
+    description: Lock a paper's marks after moderation
+  - key: examinations:result:read-own
+    description: View the caller's own published results
+  - key: examinations:result:read-department
+    description: View results for course offerings of the caller's department
+  - key: examinations:result:read-all
+    description: View any result
+  - key: examinations:result:compute
+    description: Compute results from locked marks
+  - key: examinations:result:approve-department
+    description: Approve computed results for course offerings of the caller's department
+  - key: examinations:result:approve-all
+    description: Approve computed results for any course offering
+  - key: examinations:result:publish
+    description: Publish approved results
+  - key: examinations:result:revise
+    description: Revise a published result, with a reason
+  - key: examinations:report:read-department
+    description: View examination reports for the caller's department
+  - key: examinations:report:read-all
+    description: View examination reports for the organisation
+roles:
+  - name: examinations-controller
+    description: Runs examinations for the organisation. Default for examination-staff and org-admin.
+    grants:
+      - examinations:exam-cycle:read
+      - examinations:exam-cycle:manage
+      - examinations:assessment-scheme:read
+      - examinations:assessment-scheme:write-department
+      - examinations:assessment-scheme:write-all
+      - examinations:grading-scheme:read
+      - examinations:grading-scheme:manage
+      - examinations:paper:read
+      - examinations:paper:manage
+      - examinations:session:read
+      - examinations:session:manage
+      - examinations:candidate:read-all
+      - examinations:candidate:read-department
+      - examinations:candidate:determine
+      - examinations:candidate:override
+      - examinations:hall-ticket:read-all
+      - examinations:hall-ticket:issue
+      - examinations:hall-ticket:withhold
+      - examinations:hall-ticket:revoke
+      - examinations:duty:read-all
+      - examinations:duty:read-department
+      - examinations:duty:assign
+      - examinations:marks:read-all
+      - examinations:marks:read-assigned
+      - examinations:marks:enter-assigned
+      - examinations:marks:enter-all
+      - examinations:marks:lock
+      - examinations:result:read-all
+      - examinations:result:read-department
+      - examinations:result:compute
+      - examinations:result:approve-all
+      - examinations:result:approve-department
+      - examinations:result:publish
+      - examinations:result:revise
+      - examinations:report:read-all
+      - examinations:report:read-department
+  - name: examinations-department-head
+    description: Sets assessment schemes, moderates and approves results for a department. Default for department-admin.
+    grants:
+      - examinations:exam-cycle:read
+      - examinations:assessment-scheme:read
+      - examinations:assessment-scheme:write-department
+      - examinations:grading-scheme:read
+      - examinations:paper:read
+      - examinations:session:read
+      - examinations:candidate:read-department
+      - examinations:duty:read-department
+      - examinations:marks:read-department
+      - examinations:marks:read-assigned
+      - examinations:marks:moderate-department
+      - examinations:marks:moderate-assigned
+      - examinations:result:read-department
+      - examinations:result:approve-department
+      - examinations:report:read-department
+  - name: examinations-faculty
+    description: Invigilates, evaluates and moderates as assigned. Default for faculty.
+    grants:
+      - examinations:exam-cycle:read
+      - examinations:assessment-scheme:read
+      - examinations:paper:read
+      - examinations:session:read
+      - examinations:duty:read-own
+      - examinations:marks:read-assigned
+      - examinations:marks:enter-assigned
+      - examinations:marks:moderate-assigned
+  - name: examinations-student
+    description: Sits exams and sees their own hall ticket and published results. Default for student.
+    grants:
+      - examinations:session:read-own
+      - examinations:hall-ticket:read-own
+      - examinations:result:read-own
+  - name: examinations-viewer
+    description: Read-only access to exam setup and organisation-wide reports.
+    grants:
+      - examinations:exam-cycle:read
+      - examinations:assessment-scheme:read
+      - examinations:grading-scheme:read
+      - examinations:paper:read
+      - examinations:session:read
+      - examinations:report:read-department
+      - examinations:report:read-all
