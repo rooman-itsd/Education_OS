@@ -5,18 +5,21 @@ kind: integration              # feature | platform | integration
 domain: integrations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Email, SMS and WhatsApp provider adapters."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, integration-hub]   # integration-hub owns the port this
+                                                 # adapter implements and the registry it
+                                                 # registers with.
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
 exposes:
   api: contracts/openapi.yaml
+  port: contracts/port.yaml       # OutboundMessaging; what platform/notification depends on
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
 

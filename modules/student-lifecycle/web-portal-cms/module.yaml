@@ -7,7 +7,7 @@ tier: common        # core (platform) | common (every institution) | specialized
 version: 0.1.0
 status: planned           # planned | in-progress | stable | deprecated
 description: "Public website, CMS pages, announcements, news and notices."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [praveen-rooman]  # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:

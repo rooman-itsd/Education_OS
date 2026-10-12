@@ -5,13 +5,14 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Domain event contracts and broker abstraction. The only async channel between modules."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit]   # identity: permission checks on the ops API.
+                                # audit: a replay is an operator action and is recorded.
   integrations: []
 
 # Public surface. Other modules may ONLY use these.

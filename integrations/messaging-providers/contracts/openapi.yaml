@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: messaging-providers API
+  version: 0.1.0
+  description: >-
+    Email, SMS and WhatsApp provider adapters. Sending is not done through this API: callers
+    use the OutboundMessaging port in contracts/port.yaml, and only platform/notification
+    calls it. What is exposed over HTTP is the inbound direction (provider webhooks reporting
+    delivery) plus operator views of which providers are configured and reachable.
+servers:
+  - url: /api/v1/messaging-providers
+
+paths:
+  /webhooks/{provider}:
+    post:
+      summary: Receive a delivery receipt from a provider
+      description: >-
+        Public by necessity: the provider calls it. Every request must carry a valid vendor
+        signature; one that cannot be verified is rejected and never processed. The vendor
+        payload is normalised to the receipt shape in contracts/port.yaml and published as
+        messaging-providers.receipt.received, which platform/notification consumes.
+      operationId: receiveWebhook
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          description: Configured provider id, e.g. smtp, ses, sendgrid, twilio
+          schema: { type: string }
+      requestBody:
+        required: true
+        description: The vendor's own payload, shape varies by provider
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "204":
+          description: Accepted. Returned even for an unrecognised message id, so a provider is never made to retry forever.
+        "401":
+          description: Signature missing or invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: No such provider configured
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /providers:
+    get:
+      summary: List configured providers
+      description: >-
+        Operator view. Credentials are never returned, in any form, masked or otherwise.
+      operationId: listProviders
+      responses:
+        "200":
+          description: Configured providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Provider" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /providers/{provider}/health:
+    get:
+      summary: Check a provider is reachable
+      description: >-
+        Runs the port's healthcheck. Does not send a message. Backs the adapter registry and
+        the Super Admin dashboard.
+      operationId: checkProviderHealth
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Health result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reachable]
+                properties:
+                  reachable: { type: boolean }
+                  detail: { type: string }
+                  checked_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /providers/{provider}/test:
+    post:
+      summary: Send a test message
+      description: >-
+        Sends one real message to an address the operator supplies, to prove credentials and
+        sending identity work. Audited, and rate limited so it cannot be used to send mail.
+      operationId: sendTestMessage
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to:
+                  type: string
+                  description: Address or E.164 number to send the test to
+      responses:
+        "202":
+          description: Test accepted by the provider
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted]
+                properties:
+                  accepted: { type: boolean }
+                  provider_message_id: { type: [string, "null"] }
+                  reason: { type: [string, "null"] }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429":
+          description: Test send rate limit reached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    Provider:
+      type: object
+      required: [id, channel, enabled]
+      properties:
+        id:
+          type: string
+          examples: ["smtp"]
+        channel:
+          type: string
+          enum: [email, sms, whatsapp]
+        enabled: { type: boolean }
+        capabilities:
+          type: object
+          description: From the port's capabilities() operation
+          properties:
+            max_body_bytes: { type: integer }
+            supports_attachments: { type: boolean }
+            supports_html: { type: boolean }
+            rate_limit_per_minute: { type: integer }
+        last_health:
+          type: [object, "null"]
+          properties:
+            reachable: { type: boolean }
+            checked_at: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+  responses:
+    Forbidden:
+      description: Missing permission
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such provider
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
