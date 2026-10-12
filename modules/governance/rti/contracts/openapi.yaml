@@ -2,9 +2,319 @@ openapi: 3.1.0
 info:
   title: rti API
   version: 0.1.0
-  description: "RTI request intake, assignment, tracking and responses."
+  description: >-
+    RTI request intake, assignment, tracking and responses. See docs/prd.md. Applicant personal data is returned only to
+    holders of rti:request:read; custodians see only their own referrals.
 servers:
   - url: /api/v1/rti
-paths: {}
+paths:
+  /requests:
+    get:
+      summary: Requests, newest first. Permission rti:request:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/RequestStatus" } } }
+        - { name: officer, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { name: received_via, in: query, schema: { $ref: "#/components/schemas/Channel" } }
+        - { name: q, in: query, description: Matches request number or subject, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestPage" } } } } }
+    post:
+      summary: Record a received request (status received). Publishes rti.request.received. Permission rti:request:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RequestInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Request" } } } } }
+  /requests/{id}:
+    get:
+      summary: One request with applicant, referrals, response, transfer and appeal. The read is audited. Permission rti:request:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Correct applicant details, subject, information sought or fee metadata, while received or assigned. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RequestUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Request" } } } }, "409": { description: "Already responded, transferred or closed" } }
+  /requests/{id}/assign:
+    post:
+      summary: Assign or re-assign the officer (received or assigned → assigned). The officer is notified. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [officer_id], properties: { officer_id: { type: string, format: uuid } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Request" } } } }, "409": { description: "Not received or assigned" } }
+  /requests/{id}/referrals:
+    post:
+      summary: Ask an internal custodian for information while the request is assigned. The custodian is notified. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReferralInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Referral" } } } }, "409": { description: "Request is not assigned" } }
+  /referrals:
+    get:
+      summary: >-
+        Referrals. With rti:referral:respond, the caller's own referrals only, without applicant data. With rti:request:read,
+        referrals of a request (request_id). Permission rti:referral:respond or rti:request:read.
+      parameters:
+        - { name: request_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [open, replied] } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ReferralPage" } } } } }
+  /referrals/{id}/reply:
+    post:
+      summary: Answer one of the caller's own open referrals (open → replied). The officer is notified. Permission rti:referral:respond.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reply], properties: { reply: { type: string, minLength: 1 } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CustodianReferral" } } } }, "404": { description: "Not found or not the caller's referral" }, "409": { description: "Already replied" } }
+  /requests/{id}/respond:
+    post:
+      summary: Record the response and how it was dispatched (assigned → responded). Grounds are required for partly_provided and refused. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ResponseInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestDetail" } } } }, "409": { description: "Not assigned" }, "422": { description: "grounds missing" } }
+  /requests/{id}/transfer:
+    post:
+      summary: Transfer the request to another public authority (received or assigned → transferred, final). Publishes rti.request.closed. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransferInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestDetail" } } } }, "409": { description: "Not received or assigned" } }
+  /requests/{id}/appeal:
+    post:
+      summary: >-
+        Record a first appeal received against the response, within RTI_APPEAL_WINDOW_DAYS (responded → appealed). If
+        RTI_APPEAL_WINDOW_DAYS is not configured, no appeal is accepted: the request is refused with 409 and the message
+        "Appeal window is not configured". Permission rti:appeal:decide.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AppealInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestDetail" } } } }, "409": { description: "Appeal window is not configured (RTI_APPEAL_WINDOW_DAYS is empty); or not responded, or appeal window passed" } }
+  /requests/{id}/appeal-decision:
+    post:
+      summary: Decide the first appeal (appealed → appeal_decided). Permission rti:appeal:decide.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AppealDecisionInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RequestDetail" } } } }, "409": { description: "Not appealed" } }
+  /requests/{id}/close:
+    post:
+      summary: >-
+        Close the request (→ closed, final): a responded request once RTI_APPEAL_WINDOW_DAYS is configured and has passed, or
+        an appeal-decided request. While RTI_APPEAL_WINDOW_DAYS is not configured, a responded request cannot be closed.
+        Publishes rti.request.closed. Permission rti:request:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Request" } } } }, "409": { description: "Not responded or appeal_decided; appeal window not configured; or appeal window still open" } }
+  /stats/nearing-deadline:
+    get:
+      summary: >-
+        Open requests due within RTI_NEARING_DEADLINE_DAYS and overdue ones: counts and a list of request numbers, statuses
+        and due dates, with no applicant data. Backs the Governance widget rti.nearing-deadline. Permission rti:stats:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/NearingDeadline" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    RequestStatus:
+      type: string
+      enum: [received, assigned, responded, appealed, appeal_decided, transferred, closed]
+    Closure:
+      type: string
+      description: How a request reached a final state.
+      enum: [responded, appeal_decided, transferred]
+    Channel:
+      type: string
+      enum: [post, in_person, email, online_portal]
+    ResponseType:
+      type: string
+      enum: [information_provided, partly_provided, refused]
+    AppealOutcome:
+      type: string
+      enum: [upheld, partly_upheld, dismissed]
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: string, pattern: "^[0-9]+(\\.[0-9]{1,2})?$", description: "Decimal as a string, never a float" }
+        currency: { type: string, pattern: "^[A-Z]{3}$", description: "ISO 4217, defaults to RTI_DEFAULT_CURRENCY" }
+    Applicant:
+      type: object
+      description: Personal data. Returned only to holders of rti:request:read.
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        address: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        person_id: { type: [string, "null"], format: uuid, description: "When the applicant is a user" }
+    Fee:
+      type: object
+      description: Fee metadata only; no payment is taken here.
+      required: [status]
+      properties:
+        status: { type: string, enum: [paid, exempt, pending] }
+        amount: { $ref: "#/components/schemas/Money" }
+        mode: { type: string, description: "How it was paid, as recorded by the officer" }
+        receipt_reference: { type: string }
+    RequestInput:
+      type: object
+      required: [received_via, received_on, applicant, subject, information_sought, fee]
+      properties:
+        received_via: { $ref: "#/components/schemas/Channel" }
+        received_on: { type: string, format: date }
+        applicant: { $ref: "#/components/schemas/Applicant" }
+        subject: { type: string, minLength: 3, maxLength: 200 }
+        information_sought: { type: string, minLength: 3 }
+        fee: { $ref: "#/components/schemas/Fee" }
+    RequestUpdateInput:
+      type: object
+      properties:
+        applicant: { $ref: "#/components/schemas/Applicant" }
+        subject: { type: string, minLength: 3, maxLength: 200 }
+        information_sought: { type: string, minLength: 3 }
+        fee: { $ref: "#/components/schemas/Fee" }
+    Request:
+      type: object
+      required: [id, organisation_id, number, received_via, received_on, applicant, subject, information_sought, fee, status, overdue, created_by]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as RTI-000045" }
+        received_via: { $ref: "#/components/schemas/Channel" }
+        received_on: { type: string, format: date }
+        applicant: { $ref: "#/components/schemas/Applicant" }
+        subject: { type: string }
+        information_sought: { type: string }
+        fee: { $ref: "#/components/schemas/Fee" }
+        officer_id: { type: [string, "null"], format: uuid }
+        status: { $ref: "#/components/schemas/RequestStatus" }
+        closure: { oneOf: [{ $ref: "#/components/schemas/Closure" }, { type: "null" }] }
+        due_at: { type: [string, "null"], format: date-time, description: "From received_on and RTI_RESPONSE_DAYS, worked out when read; null when not configured" }
+        overdue: { type: boolean, description: "Open and past due_at; worked out when read" }
+        created_by: { type: string, format: uuid }
+        assigned_at: { type: [string, "null"], format: date-time }
+        responded_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+    ReferralInput:
+      type: object
+      required: [custodian_id, question]
+      properties:
+        custodian_id: { type: string, format: uuid }
+        question: { type: string, minLength: 3, description: "What the custodian is asked to supply; must not repeat applicant details" }
+        due_on: { type: string, format: date }
+    Referral:
+      type: object
+      description: A referral as seen by officers and the appellate authority.
+      required: [id, request_id, custodian_id, question, status]
+      properties:
+        id: { type: string, format: uuid }
+        request_id: { type: string, format: uuid }
+        custodian_id: { type: string, format: uuid }
+        question: { type: string }
+        due_on: { type: [string, "null"], format: date }
+        status: { type: string, enum: [open, replied] }
+        reply: { type: [string, "null"] }
+        replied_at: { type: [string, "null"], format: date-time }
+    CustodianReferral:
+      type: object
+      description: A referral as seen by its custodian. No applicant data, subject or response.
+      required: [id, request_number, question, status]
+      properties:
+        id: { type: string, format: uuid }
+        request_number: { type: string }
+        question: { type: string }
+        due_on: { type: [string, "null"], format: date }
+        status: { type: string, enum: [open, replied] }
+        reply: { type: [string, "null"] }
+        replied_at: { type: [string, "null"], format: date-time }
+    ReferralPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { oneOf: [{ $ref: "#/components/schemas/Referral" }, { $ref: "#/components/schemas/CustodianReferral" }] } }
+        next_cursor: { type: [string, "null"] }
+    ResponseInput:
+      type: object
+      required: [type, summary, dispatched_on, dispatch_mode]
+      properties:
+        type: { $ref: "#/components/schemas/ResponseType" }
+        summary: { type: string, minLength: 3 }
+        grounds: { type: string, minLength: 3, description: "Required for partly_provided and refused; free text, no built-in list" }
+        dispatched_on: { type: string, format: date }
+        dispatch_mode: { $ref: "#/components/schemas/Channel" }
+    Response:
+      allOf:
+        - { $ref: "#/components/schemas/ResponseInput" }
+        - type: object
+          required: [responded_by]
+          properties:
+            responded_by: { type: string, format: uuid }
+    TransferInput:
+      type: object
+      required: [authority_name, transferred_on, reason]
+      properties:
+        authority_name: { type: string, maxLength: 200 }
+        authority_address: { type: string }
+        transferred_on: { type: string, format: date }
+        reason: { type: string, minLength: 3 }
+    Transfer:
+      allOf:
+        - { $ref: "#/components/schemas/TransferInput" }
+        - type: object
+          required: [transferred_by]
+          properties:
+            transferred_by: { type: string, format: uuid }
+    AppealInput:
+      type: object
+      required: [filed_on, grounds]
+      properties:
+        filed_on: { type: string, format: date }
+        grounds: { type: string, minLength: 3 }
+    AppealDecisionInput:
+      type: object
+      required: [outcome, decision_note, decided_on]
+      properties:
+        outcome: { $ref: "#/components/schemas/AppealOutcome" }
+        decision_note: { type: string, minLength: 3 }
+        decided_on: { type: string, format: date }
+    Appeal:
+      type: object
+      required: [filed_on, grounds]
+      properties:
+        filed_on: { type: string, format: date }
+        grounds: { type: string }
+        outcome: { oneOf: [{ $ref: "#/components/schemas/AppealOutcome" }, { type: "null" }] }
+        decision_note: { type: [string, "null"] }
+        decided_by: { type: [string, "null"], format: uuid }
+        decided_on: { type: [string, "null"], format: date }
+        due_at: { type: [string, "null"], format: date-time, description: "From filed_on and RTI_APPEAL_DECIDE_DAYS, worked out when read; null when not configured" }
+    RequestDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Request" }
+        - type: object
+          required: [referrals]
+          properties:
+            referrals: { type: array, items: { $ref: "#/components/schemas/Referral" } }
+            response: { oneOf: [{ $ref: "#/components/schemas/Response" }, { type: "null" }] }
+            transfer: { oneOf: [{ $ref: "#/components/schemas/Transfer" }, { type: "null" }] }
+            appeal: { oneOf: [{ $ref: "#/components/schemas/Appeal" }, { type: "null" }] }
+    RequestPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Request" } }
+        next_cursor: { type: [string, "null"] }
+    NearingDeadline:
+      type: object
+      required: [within_days, due_soon, overdue, items]
+      properties:
+        within_days: { type: integer }
+        due_soon: { type: integer, description: "Open requests and appeals due within within_days" }
+        overdue: { type: integer }
+        items:
+          type: array
+          description: No applicant data or request content
+          items:
+            type: object
+            required: [request_id, number, status, due_at, overdue]
+            properties:
+              request_id: { type: string, format: uuid }
+              number: { type: string }
+              status: { $ref: "#/components/schemas/RequestStatus" }
+              due_at: { type: string, format: date-time }
+              overdue: { type: boolean }

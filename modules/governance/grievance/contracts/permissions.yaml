@@ -1,11 +1,41 @@
 # Permission catalogue for grievance. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Case permissions are also limited on the server by committee membership (docs/prd.md "Confidentiality and access").
+# Role names and their mapping to profile roles are a proposal: docs/prd.md open question 10.
 module: grievance
-permissions: []
-#  - key: grievance:record:read
-#    description: ...
-#  - key: grievance:record:write
-#    description: ...
-roles: []
-#  - name: grievance-admin
-#    grants: [grievance:record:read, grievance:record:write]
+permissions:
+  - key: grievance:case:file
+    description: File a complaint.
+  - key: grievance:case:read-own
+    description: See one's own cases (status, updates, decision, appeal; never proceedings); reply, withdraw and appeal.
+  - key: grievance:case:read
+    description: See case content, including proceedings, for cases of committees the caller is a member of.
+  - key: grievance:case:manage
+    description: Change status, message the complainant, record proceedings, decide and transfer cases of the caller's committees.
+  - key: grievance:appeal:decide
+    description: Decide appeals sent to an ombudsperson committee the caller is a member of.
+  - key: grievance:committee:manage
+    description: Create committees, change their members, and deactivate them. Gives no access to case content.
+  - key: grievance:stats:read
+    description: See counts of open and overdue cases per committee and per track. Gives no access to case content.
+roles:
+  - name: grievance-complainant
+    description: Every signed-in person. Proposed default for all profile roles.
+    grants:
+      - grievance:case:file
+      - grievance:case:read-own
+  - name: grievance-committee-member
+    description: People who sit on a committee. Each grant is still limited to that person's committees and committee kind.
+    grants:
+      - grievance:case:read
+      - grievance:case:manage
+      - grievance:appeal:decide
+  - name: grievance-coordinator
+    description: Sets up committees and sees counts, without case content. Proposed default for the governance profile role.
+    grants:
+      - grievance:committee:manage
+      - grievance:stats:read
+  - name: grievance-viewer
+    description: Counts only. Proposed default for the management profile role.
+    grants:
+      - grievance:stats:read

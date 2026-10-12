@@ -2,12 +2,20 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 UGC, AISHE, NIRF and other statutory reporting.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** the organisation's own list of statutory reporting obligations; filings per period with preparation,
+review, submission and acknowledgement; due and overdue filings worked out when read; the statistics behind the widget
+`regulatory-reports.due` and the calendar behind `regulatory-reports.compliance-calendar`. No regulator, return, form or
+deadline is built in, and the module is field-neutral.
+
+**Not in scope:** compiling return data from other modules, analytics and warehousing (platform/reporting), automatic
+recurrence and reminders, evidence files, regulators' portals, computing payroll and tax returns (hr-payroll).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
