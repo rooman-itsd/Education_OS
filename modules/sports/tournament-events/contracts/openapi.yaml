@@ -1,10 +1,1266 @@
+# HTTP contract for tournament-events. The only way other modules call this one synchronously.
+# Every path is scoped to the caller's organisation (row-level security on organisation_id).
 openapi: 3.1.0
 info:
   title: tournament-events API
   version: 0.1.0
-  description: "Tournaments, fixtures, results, officials and event logistics."
+  description: Tournaments, fixtures, results, officials and event logistics.
 servers:
-  - url: /api/v1/tournament-events
-paths: {}
+- url: /api/v1/tournament-events
+security:
+- bearerAuth: []
+paths:
+  /tournaments:
+    get:
+      summary: List tournaments
+      description: 'Permission: `tournament-events:tournament:read`.'
+      operationId: listTournaments
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - draft
+          - published
+          - ongoing
+          - completed
+          - cancelled
+      - name: level
+        in: query
+        schema:
+          type: string
+          enum:
+          - intra_institution
+          - inter_university
+          - state
+          - national
+          - international
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of tournaments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tournament'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create tournament
+      description: 'Permission: `tournament-events:tournament:write`.'
+      operationId: createTournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTournamentRequest'
+      responses:
+        '201':
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tournament'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /tournaments/{tournament_id}:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get tournament
+      description: 'Permission: `tournament-events:tournament:read`.'
+      operationId: getTournament
+      responses:
+        '200':
+          description: Tournament
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tournament'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update tournament
+      description: 'Permission: `tournament-events:tournament:write`.'
+      operationId: updateTournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTournamentRequest'
+      responses:
+        '200':
+          description: Tournament updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tournament'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/entries:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: List entries
+      description: 'Permission: `tournament-events:entry:read`.'
+      operationId: listEntrys
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - withdrawn
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entry'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create entry
+      description: 'Permission: `tournament-events:entry:write`.'
+      operationId: createEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEntryRequest'
+      responses:
+        '201':
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /tournaments/{tournament_id}/entries/{entry_id}:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: entry_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    patch:
+      summary: Confirm or withdraw an entry
+      description: 'Permission: `tournament-events:entry:write`.'
+      operationId: updateEntry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEntryRequest'
+      responses:
+        '200':
+          description: Entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entry'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/fixtures:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: List fixtures
+      description: 'Permission: `tournament-events:fixture:read`.'
+      operationId: listFixtures
+      parameters:
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - scheduled
+          - in_progress
+          - completed
+          - postponed
+          - cancelled
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of fixtures
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Fixture'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Schedule a fixture
+      description: 'Permission: `tournament-events:fixture:write`.'
+      operationId: scheduleFixture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFixtureRequest'
+      responses:
+        '201':
+          description: Fixture created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fixture'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /tournaments/{tournament_id}/fixtures/{fixture_id}:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: fixture_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get fixture
+      description: 'Permission: `tournament-events:fixture:read`.'
+      operationId: getFixture
+      responses:
+        '200':
+          description: Fixture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fixture'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update fixture
+      description: 'Permission: `tournament-events:fixture:write`.'
+      operationId: updateFixture
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFixtureRequest'
+      responses:
+        '200':
+          description: Fixture updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fixture'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/officials:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: List officials
+      description: 'Permission: `tournament-events:official:read`.'
+      operationId: listOfficials
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of officials
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Official'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Assign an official
+      description: 'Permission: `tournament-events:official:write`.'
+      operationId: assignOfficial
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfficialRequest'
+      responses:
+        '201':
+          description: Official created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Official'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /tournaments/{tournament_id}/officials/{official_id}:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: official_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    delete:
+      summary: Remove official
+      description: 'Permission: `tournament-events:official:write`.'
+      operationId: deleteOfficial
+      responses:
+        '204':
+          description: Official removed
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/publish:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: Publish a tournament
+      description: 'Makes a draft visible to athletes and opens entries. Permission: `tournament-events:tournament:publish`.'
+      operationId: publishTournament
+      responses:
+        '200':
+          description: Published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tournament'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/cancel:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    post:
+      summary: Cancel a tournament
+      description: 'Permission: `tournament-events:tournament:publish`.'
+      operationId: cancelTournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - reason
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tournament'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/fixtures/{fixture_id}/result:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    - name: fixture_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get a fixture's result
+      description: 'Permission: `tournament-events:result:read`.'
+      operationId: getResult
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Result'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Record a fixture's result
+      description: 'Recording a result completes the fixture. Permission: `tournament-events:result:record`.'
+      operationId: recordResult
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordResultRequest'
+      responses:
+        '200':
+          description: Result recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Result'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /tournaments/{tournament_id}/logistics:
+    parameters:
+    - name: tournament_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get travel and event logistics
+      description: 'Permission: `tournament-events:logistics:read`.'
+      operationId: getLogistics
+      responses:
+        '200':
+          description: Logistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Logistics'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: Set travel and event logistics
+      description: 'Permission: `tournament-events:logistics:write`.'
+      operationId: setLogistics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Logistics'
+      responses:
+        '200':
+          description: Logistics saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Logistics'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /calendar:
+    get:
+      summary: Tournament and fixture calendar
+      description: 'Published tournaments and their fixtures between two dates. Permission: `tournament-events:tournament:read`.'
+      operationId: getCalendar
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: Calendar entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CalendarEntry'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
-  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The caller lacks the permission this operation needs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found in the caller's organisation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+    Tournament:
+      type: object
+      description: A competition the institution hosts or takes part in. Drafts are visible only to organisers until published.
+      required:
+      - id
+      - organisation_id
+      - name
+      - discipline
+      - level
+      - format
+      - start_date
+      - end_date
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - draft
+          - published
+          - ongoing
+          - completed
+          - cancelled
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+          example: Inter-University Athletics Meet 2026
+        discipline:
+          type: string
+          example: Athletics
+        discipline_id:
+          type: string
+          format: uuid
+          description: athlete-performance discipline, when known (reference only).
+        level:
+          type: string
+          enum:
+          - intra_institution
+          - inter_university
+          - state
+          - national
+          - international
+        format:
+          type: string
+          enum:
+          - knockout
+          - league
+          - round_robin
+          - heats_and_finals
+          - other
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        venue:
+          type: string
+        hosting:
+          type: string
+          enum:
+          - home
+          - away
+          - neutral
+        registration_closes_on:
+          type: string
+          format: date
+        description:
+          type: string
+    CreateTournamentRequest:
+      type: object
+      required:
+      - name
+      - discipline
+      - level
+      - format
+      - start_date
+      - end_date
+      properties:
+        name:
+          type: string
+          example: Inter-University Athletics Meet 2026
+        discipline:
+          type: string
+          example: Athletics
+        discipline_id:
+          type: string
+          format: uuid
+          description: athlete-performance discipline, when known (reference only).
+        level:
+          type: string
+          enum:
+          - intra_institution
+          - inter_university
+          - state
+          - national
+          - international
+        format:
+          type: string
+          enum:
+          - knockout
+          - league
+          - round_robin
+          - heats_and_finals
+          - other
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        venue:
+          type: string
+        hosting:
+          type: string
+          enum:
+          - home
+          - away
+          - neutral
+        registration_closes_on:
+          type: string
+          format: date
+        description:
+          type: string
+    Entry:
+      type: object
+      description: An athlete or team entered in a tournament event or category.
+      required:
+      - id
+      - organisation_id
+      - category
+      - athlete_ids
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        category:
+          type: string
+          example: Men's 100 m
+        team_name:
+          type: string
+        athlete_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - withdrawn
+    CreateEntryRequest:
+      type: object
+      required:
+      - category
+      - athlete_ids
+      - status
+      properties:
+        category:
+          type: string
+          example: Men's 100 m
+        team_name:
+          type: string
+        athlete_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - withdrawn
+    UpdateEntryRequest:
+      type: object
+      minProperties: 1
+      properties:
+        team_name:
+          type: string
+        athlete_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum:
+          - pending
+          - confirmed
+          - withdrawn
+    Fixture:
+      type: object
+      description: A match, heat or round with its participants, time and place.
+      required:
+      - id
+      - organisation_id
+      - round
+      - entry_ids
+      - scheduled_at
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        round:
+          type: string
+          example: Semi-final 1
+        category:
+          type: string
+        entry_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        venue:
+          type: string
+        status:
+          type: string
+          enum:
+          - scheduled
+          - in_progress
+          - completed
+          - postponed
+          - cancelled
+    CreateFixtureRequest:
+      type: object
+      required:
+      - round
+      - entry_ids
+      - scheduled_at
+      - status
+      properties:
+        round:
+          type: string
+          example: Semi-final 1
+        category:
+          type: string
+        entry_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        venue:
+          type: string
+        status:
+          type: string
+          enum:
+          - scheduled
+          - in_progress
+          - completed
+          - postponed
+          - cancelled
+    UpdateFixtureRequest:
+      type: object
+      minProperties: 1
+      properties:
+        round:
+          type: string
+          example: Semi-final 1
+        category:
+          type: string
+        entry_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        venue:
+          type: string
+        status:
+          type: string
+          enum:
+          - scheduled
+          - in_progress
+          - completed
+          - postponed
+          - cancelled
+    Official:
+      type: object
+      description: A referee, judge or other official assigned to a tournament or fixture.
+      required:
+      - id
+      - organisation_id
+      - name
+      - official_role
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        name:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+          description: platform/identity user, when the official is staff.
+        official_role:
+          type: string
+          enum:
+          - referee
+          - umpire
+          - judge
+          - timekeeper
+          - technical_official
+          - team_manager
+        fixture_id:
+          type: string
+          format: uuid
+        confirmed:
+          type: boolean
+          default: false
+    CreateOfficialRequest:
+      type: object
+      required:
+      - name
+      - official_role
+      properties:
+        name:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+          description: platform/identity user, when the official is staff.
+        official_role:
+          type: string
+          enum:
+          - referee
+          - umpire
+          - judge
+          - timekeeper
+          - technical_official
+          - team_manager
+        fixture_id:
+          type: string
+          format: uuid
+        confirmed:
+          type: boolean
+          default: false
+    Placing:
+      type: object
+      required:
+      - entry_id
+      properties:
+        entry_id:
+          type: string
+          format: uuid
+        position:
+          type: integer
+        score:
+          type: string
+          example: 2-1
+        mark:
+          type: number
+          description: Time, distance or points, in the unit of the event.
+        unit:
+          type: string
+          example: s
+    Result:
+      type: object
+      required:
+      - fixture_id
+      - placings
+      - recorded_at
+      properties:
+        fixture_id:
+          type: string
+          format: uuid
+        placings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Placing'
+        notes:
+          type: string
+        recorded_by:
+          type: string
+          format: uuid
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+    RecordResultRequest:
+      type: object
+      required:
+      - placings
+      properties:
+        placings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Placing'
+        notes:
+          type: string
+    Logistics:
+      type: object
+      properties:
+        travel_mode:
+          type: string
+          enum:
+          - bus
+          - train
+          - flight
+          - own
+          - none
+        departure_at:
+          type: string
+          format: date-time
+        return_at:
+          type: string
+          format: date-time
+        accommodation:
+          type: string
+        travelling_count:
+          type: integer
+        contact_person_id:
+          type: string
+          format: uuid
+        notes:
+          type: string
+    CalendarEntry:
+      type: object
+      required:
+      - kind
+      - id
+      - title
+      - starts_at
+      properties:
+        kind:
+          type: string
+          enum:
+          - tournament
+          - fixture
+        id:
+          type: string
+          format: uuid
+        tournament_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        venue:
+          type: string
+    UpdateTournamentRequest:
+      description: "Partial update of a tournament: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        name:
+          type: string
+          example: Inter-University Athletics Meet 2026
+        discipline:
+          type: string
+          example: Athletics
+        discipline_id:
+          type: string
+          format: uuid
+          description: athlete-performance discipline, when known (reference only).
+        level:
+          type: string
+          enum:
+          - intra_institution
+          - inter_university
+          - state
+          - national
+          - international
+        format:
+          type: string
+          enum:
+          - knockout
+          - league
+          - round_robin
+          - heats_and_finals
+          - other
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        venue:
+          type: string
+        hosting:
+          type: string
+          enum:
+          - home
+          - away
+          - neutral
+        registration_closes_on:
+          type: string
+          format: date
+        description:
+          type: string

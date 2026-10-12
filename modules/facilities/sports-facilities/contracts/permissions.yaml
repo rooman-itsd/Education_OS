@@ -1,11 +1,40 @@
 # Permission catalogue for sports-facilities. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: sports-facilities
-permissions: []
-#  - key: sports-facilities:record:read
-#    description: ...
-#  - key: sports-facilities:record:write
-#    description: ...
-roles: []
-#  - name: sports-facilities-admin
-#    grants: [sports-facilities:record:read, sports-facilities:record:write]
+permissions:
+  - key: sports-facilities:facility:read
+    description: View sports facilities, their spaces, operating hours and status
+  - key: sports-facilities:facility:write
+    description: Register facilities and edit their details, spaces and operating hours
+  - key: sports-facilities:facility:status
+    description: Open, limit or close a facility
+  - key: sports-facilities:usage:read
+    description: View usage records and utilisation
+  - key: sports-facilities:usage:record
+    description: Record facility usage
+roles:
+  - name: sports-facilities-admin
+    description: Full administration of the sports facility registry and its usage
+    grants:
+      - sports-facilities:facility:read
+      - sports-facilities:facility:write
+      - sports-facilities:facility:status
+      - sports-facilities:usage:read
+      - sports-facilities:usage:record
+  - name: sports-facilities-staff
+    description: Facility staff keeping facilities, availability and usage up to date
+    grants:
+      - sports-facilities:facility:read
+      - sports-facilities:facility:status
+      - sports-facilities:usage:read
+      - sports-facilities:usage:record
+  - name: sports-facilities-coach
+    description: Coaches checking facilities and logging the use of their squads
+    grants:
+      - sports-facilities:facility:read
+      - sports-facilities:usage:read
+      - sports-facilities:usage:record
+  - name: sports-facilities-viewer
+    description: Athletes and staff checking which facilities exist and are open
+    grants:
+      - sports-facilities:facility:read

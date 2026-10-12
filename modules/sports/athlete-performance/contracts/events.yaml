@@ -1,9 +1,29 @@
 # Domain events published by athlete-performance.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
 module: athlete-performance
 version: 1
-events: []
-#  - name: athlete-performance.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: athlete-performance.athlete.registered
+    description: An athlete profile was created. Other sports modules can start referencing the athlete id.
+    payload: { organisation_id: uuid, athlete_id: uuid, user_id: uuid, primary_discipline_id: uuid, coach_id: uuid }
+
+  - name: athlete-performance.athlete.updated
+    description: An athlete's discipline, coach, squad or status changed.
+    payload: { organisation_id: uuid, athlete_id: uuid, changed_fields: [string], status: string }
+
+  - name: athlete-performance.result.recorded
+    description: A performance result was recorded for an athlete and metric.
+    payload: { organisation_id: uuid, result_id: uuid, athlete_id: uuid, metric_id: uuid, value: number, context: string, recorded_at: datetime }
+
+  - name: athlete-performance.assessment.recorded
+    description: A fitness assessment (one fitness test for one athlete) was recorded.
+    payload: { organisation_id: uuid, assessment_id: uuid, athlete_id: uuid, fitness_test_id: uuid, assessed_on: date }
+
+  - name: athlete-performance.benchmark.set
+    description: A benchmark was created or its target changed.
+    payload: { organisation_id: uuid, benchmark_id: uuid, metric_id: uuid, level: string, target_value: number }
+
+  - name: athlete-performance.clearance.changed
+    description: An athlete's fitness clearance changed. Carries the status only, never clinical detail.
+    payload: { organisation_id: uuid, athlete_id: uuid, status: string, valid_until: date }

@@ -1,9 +1,33 @@
 # Domain events published by tournament-events.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
 module: tournament-events
 version: 1
-events: []
-#  - name: tournament-events.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: tournament-events.tournament.created
+    description: A tournament was created as a draft.
+    payload: { organisation_id: uuid, tournament_id: uuid, name: string, level: string, start_date: date, end_date: date }
+
+  - name: tournament-events.tournament.published
+    description: A tournament was published; athletes can see it and entries open.
+    payload: { organisation_id: uuid, tournament_id: uuid, registration_closes_on: date }
+
+  - name: tournament-events.tournament.cancelled
+    description: A tournament was cancelled.
+    payload: { organisation_id: uuid, tournament_id: uuid, reason: string }
+
+  - name: tournament-events.entry.confirmed
+    description: An athlete or team entry was confirmed.
+    payload: { organisation_id: uuid, tournament_id: uuid, entry_id: uuid, category: string, athlete_ids: [uuid] }
+
+  - name: tournament-events.fixture.scheduled
+    description: A fixture was scheduled or rescheduled.
+    payload: { organisation_id: uuid, tournament_id: uuid, fixture_id: uuid, scheduled_at: datetime, venue: string }
+
+  - name: tournament-events.result.recorded
+    description: The result of a fixture was recorded. athlete-performance can record competition results from it.
+    payload: { organisation_id: uuid, tournament_id: uuid, fixture_id: uuid, placings: [{ entry_id: uuid, athlete_ids: [uuid], position: integer, mark: number, unit: string }] }
+
+  - name: tournament-events.official.assigned
+    description: An official was assigned to a tournament or fixture.
+    payload: { organisation_id: uuid, tournament_id: uuid, official_id: uuid, fixture_id: uuid, official_role: string }

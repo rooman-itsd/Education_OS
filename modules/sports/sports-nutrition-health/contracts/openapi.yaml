@@ -1,10 +1,1252 @@
+# HTTP contract for sports-nutrition-health. The only way other modules call this one synchronously.
+# Every path is scoped to the caller's organisation (row-level security on organisation_id).
 openapi: 3.1.0
 info:
   title: sports-nutrition-health API
   version: 0.1.0
-  description: "Diet plans, medical records, injury tracking, physio sessions."
+  description: Diet plans, medical records, injury tracking, physio sessions.
 servers:
-  - url: /api/v1/sports-nutrition-health
-paths: {}
+- url: /api/v1/sports-nutrition-health
+security:
+- bearerAuth: []
+paths:
+  /nutrition-plans:
+    get:
+      summary: List nutrition plans
+      description: 'Athletes see only their own plans. Permission: `sports-nutrition-health:plan:read`.'
+      operationId: listNutritionPlans
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - draft
+          - active
+          - completed
+          - archived
+      - name: review_due_before
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of nutrition plans
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NutritionPlan'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create nutrition plan
+      description: 'Permission: `sports-nutrition-health:plan:write`.'
+      operationId: createNutritionPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNutritionPlanRequest'
+      responses:
+        '201':
+          description: Nutrition plan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionPlan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /nutrition-plans/{plan_id}:
+    parameters:
+    - name: plan_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get nutrition plan
+      description: 'Permission: `sports-nutrition-health:plan:read`.'
+      operationId: getNutritionPlan
+      responses:
+        '200':
+          description: Nutrition plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionPlan'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update nutrition plan
+      description: 'Permission: `sports-nutrition-health:plan:write`.'
+      operationId: updateNutritionPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNutritionPlanRequest'
+      responses:
+        '200':
+          description: Nutrition plan updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionPlan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /nutrition-plans/{plan_id}/reviews:
+    parameters:
+    - name: plan_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: List plan reviews
+      description: 'Permission: `sports-nutrition-health:plan:read`.'
+      operationId: listPlanReviews
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of plan reviews
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlanReview'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Record a plan review
+      description: 'Permission: `sports-nutrition-health:plan:review`.'
+      operationId: recordPlanReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanReviewRequest'
+      responses:
+        '201':
+          description: Plan review created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanReview'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /health-records:
+    get:
+      summary: List health records
+      description: 'Permission: `sports-nutrition-health:health-record:read`.'
+      operationId: listHealthRecords
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: record_type
+        in: query
+        schema:
+          type: string
+          enum:
+          - medical_history
+          - allergy
+          - medication
+          - screening
+          - vaccination
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of health records
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HealthRecord'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Create health record
+      description: 'Permission: `sports-nutrition-health:health-record:write`.'
+      operationId: createHealthRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHealthRecordRequest'
+      responses:
+        '201':
+          description: Health record created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /health-records/{record_id}:
+    parameters:
+    - name: record_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get health record
+      description: 'Permission: `sports-nutrition-health:health-record:read`.'
+      operationId: getHealthRecord
+      responses:
+        '200':
+          description: Health record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRecord'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update health record
+      description: 'Permission: `sports-nutrition-health:health-record:write`.'
+      operationId: updateHealthRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHealthRecordRequest'
+      responses:
+        '200':
+          description: Health record updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /injuries:
+    get:
+      summary: List injuries
+      description: 'Permission: `sports-nutrition-health:injury:read`.'
+      operationId: listInjurys
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - recovering
+          - resolved
+      - name: severity
+        in: query
+        schema:
+          type: string
+          enum:
+          - minor
+          - moderate
+          - severe
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of injuries
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Injury'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Report an injury
+      description: 'Permission: `sports-nutrition-health:injury:write`.'
+      operationId: reportInjury
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInjuryRequest'
+      responses:
+        '201':
+          description: Injury created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Injury'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /injuries/{injury_id}:
+    parameters:
+    - name: injury_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get injury
+      description: 'Permission: `sports-nutrition-health:injury:read`.'
+      operationId: getInjury
+      responses:
+        '200':
+          description: Injury
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Injury'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update injury
+      description: 'Permission: `sports-nutrition-health:injury:write`.'
+      operationId: updateInjury
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInjuryRequest'
+      responses:
+        '200':
+          description: Injury updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Injury'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /appointments:
+    get:
+      summary: List appointments
+      description: 'Permission: `sports-nutrition-health:appointment:read`.'
+      operationId: listAppointments
+      parameters:
+      - name: athlete_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: practitioner_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: 'on'
+        in: query
+        schema:
+          type: string
+          format: date
+          description: Appointments on this day
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - scheduled
+          - completed
+          - cancelled
+          - no_show
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Page of appointments
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Appointment'
+                  total:
+                    type: integer
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      summary: Schedule an appointment
+      description: 'Permission: `sports-nutrition-health:appointment:write`.'
+      operationId: scheduleAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+      responses:
+        '201':
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /appointments/{appointment_id}:
+    parameters:
+    - name: appointment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    get:
+      summary: Get appointment
+      description: 'Permission: `sports-nutrition-health:appointment:read`.'
+      operationId: getAppointment
+      responses:
+        '200':
+          description: Appointment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Update appointment
+      description: 'Permission: `sports-nutrition-health:appointment:write`.'
+      operationId: updateAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppointmentRequest'
+      responses:
+        '200':
+          description: Appointment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
-  schemas: {}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request parameters or payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: The caller lacks the permission this operation needs
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found in the caller's organisation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+    NutritionPlan:
+      type: object
+      description: A diet plan for one athlete over a period, reviewed on a set date.
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - title
+      - goal
+      - start_date
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        nutritionist_id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: 'Competition phase: sprint squad'
+        goal:
+          type: string
+          enum:
+          - performance
+          - weight_gain
+          - weight_loss
+          - recovery
+          - maintenance
+        daily_calories:
+          type: integer
+        protein_g:
+          type: number
+        carbohydrate_g:
+          type: number
+        fat_g:
+          type: number
+        meals:
+          type: array
+          items:
+            type: object
+            required:
+            - meal
+            - items
+            properties:
+              meal:
+                type: string
+                example: Breakfast
+              items:
+                type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        review_due_on:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+          - completed
+          - archived
+    CreateNutritionPlanRequest:
+      type: object
+      required:
+      - athlete_id
+      - title
+      - goal
+      - start_date
+      - status
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: 'Competition phase: sprint squad'
+        goal:
+          type: string
+          enum:
+          - performance
+          - weight_gain
+          - weight_loss
+          - recovery
+          - maintenance
+        daily_calories:
+          type: integer
+        protein_g:
+          type: number
+        carbohydrate_g:
+          type: number
+        fat_g:
+          type: number
+        meals:
+          type: array
+          items:
+            type: object
+            required:
+            - meal
+            - items
+            properties:
+              meal:
+                type: string
+                example: Breakfast
+              items:
+                type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        review_due_on:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+          - completed
+          - archived
+    PlanReview:
+      type: object
+      description: 'A nutritionist''s review of a plan: progress, body weight and the decision.'
+      required:
+      - id
+      - organisation_id
+      - reviewed_on
+      - outcome
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        reviewed_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        reviewed_on:
+          type: string
+          format: date
+        outcome:
+          type: string
+          enum:
+          - continue
+          - adjust
+          - end
+        body_weight_kg:
+          type: number
+        next_review_on:
+          type: string
+          format: date
+        notes:
+          type: string
+    CreatePlanReviewRequest:
+      type: object
+      required:
+      - reviewed_on
+      - outcome
+      properties:
+        reviewed_on:
+          type: string
+          format: date
+        outcome:
+          type: string
+          enum:
+          - continue
+          - adjust
+          - end
+        body_weight_kg:
+          type: number
+        next_review_on:
+          type: string
+          format: date
+        notes:
+          type: string
+    HealthRecord:
+      type: object
+      description: 'Confidential medical information: history, allergies, medication, screenings. Never exposed in events.'
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - record_type
+      - title
+      - recorded_on
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        recorded_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        record_type:
+          type: string
+          enum:
+          - medical_history
+          - allergy
+          - medication
+          - screening
+          - vaccination
+        title:
+          type: string
+        details:
+          type: string
+        recorded_on:
+          type: string
+          format: date
+    CreateHealthRecordRequest:
+      type: object
+      required:
+      - athlete_id
+      - record_type
+      - title
+      - recorded_on
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        record_type:
+          type: string
+          enum:
+          - medical_history
+          - allergy
+          - medication
+          - screening
+          - vaccination
+        title:
+          type: string
+        details:
+          type: string
+        recorded_on:
+          type: string
+          format: date
+    Injury:
+      type: object
+      description: An injury from report to recovery. Coaches see status and expected return; clinical notes need health-record:read.
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - body_part
+      - severity
+      - occurred_on
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        reported_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        body_part:
+          type: string
+          example: Left hamstring
+        injury_type:
+          type: string
+          example: Strain
+        severity:
+          type: string
+          enum:
+          - minor
+          - moderate
+          - severe
+        occurred_on:
+          type: string
+          format: date
+        context:
+          type: string
+          enum:
+          - training
+          - competition
+          - other
+        status:
+          type: string
+          enum:
+          - active
+          - recovering
+          - resolved
+        expected_return_on:
+          type: string
+          format: date
+        clinical_notes:
+          type: string
+    CreateInjuryRequest:
+      type: object
+      required:
+      - athlete_id
+      - body_part
+      - severity
+      - occurred_on
+      - status
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        body_part:
+          type: string
+          example: Left hamstring
+        injury_type:
+          type: string
+          example: Strain
+        severity:
+          type: string
+          enum:
+          - minor
+          - moderate
+          - severe
+        occurred_on:
+          type: string
+          format: date
+        context:
+          type: string
+          enum:
+          - training
+          - competition
+          - other
+        status:
+          type: string
+          enum:
+          - active
+          - recovering
+          - resolved
+        expected_return_on:
+          type: string
+          format: date
+        clinical_notes:
+          type: string
+    Appointment:
+      type: object
+      description: A physiotherapy, medical or nutrition session with a practitioner.
+      required:
+      - id
+      - organisation_id
+      - athlete_id
+      - practitioner_id
+      - appointment_type
+      - scheduled_at
+      - status
+      - created_at
+      - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        athlete_id:
+          type: string
+          format: uuid
+        practitioner_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the doctor, physio or nutritionist.
+        appointment_type:
+          type: string
+          enum:
+          - physiotherapy
+          - medical
+          - nutrition
+        injury_id:
+          type: string
+          format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          default: 30
+        status:
+          type: string
+          enum:
+          - scheduled
+          - completed
+          - cancelled
+          - no_show
+        notes:
+          type: string
+    CreateAppointmentRequest:
+      type: object
+      required:
+      - athlete_id
+      - practitioner_id
+      - appointment_type
+      - scheduled_at
+      - status
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        practitioner_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the doctor, physio or nutritionist.
+        appointment_type:
+          type: string
+          enum:
+          - physiotherapy
+          - medical
+          - nutrition
+        injury_id:
+          type: string
+          format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          default: 30
+        status:
+          type: string
+          enum:
+          - scheduled
+          - completed
+          - cancelled
+          - no_show
+        notes:
+          type: string
+    UpdateAppointmentRequest:
+      description: "Partial update of a appointment: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        practitioner_id:
+          type: string
+          format: uuid
+          description: platform/identity user of the doctor, physio or nutritionist.
+        appointment_type:
+          type: string
+          enum:
+          - physiotherapy
+          - medical
+          - nutrition
+        injury_id:
+          type: string
+          format: uuid
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          default: 30
+        status:
+          type: string
+          enum:
+          - scheduled
+          - completed
+          - cancelled
+          - no_show
+        notes:
+          type: string
+    UpdateHealthRecordRequest:
+      description: "Partial update of a health record: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        record_type:
+          type: string
+          enum:
+          - medical_history
+          - allergy
+          - medication
+          - screening
+          - vaccination
+        title:
+          type: string
+        details:
+          type: string
+        recorded_on:
+          type: string
+          format: date
+    UpdateInjuryRequest:
+      description: "Partial update of a injury: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        body_part:
+          type: string
+          example: Left hamstring
+        injury_type:
+          type: string
+          example: Strain
+        severity:
+          type: string
+          enum:
+          - minor
+          - moderate
+          - severe
+        occurred_on:
+          type: string
+          format: date
+        context:
+          type: string
+          enum:
+          - training
+          - competition
+          - other
+        status:
+          type: string
+          enum:
+          - active
+          - recovering
+          - resolved
+        expected_return_on:
+          type: string
+          format: date
+        clinical_notes:
+          type: string
+    UpdateNutritionPlanRequest:
+      description: "Partial update of a nutrition plan: every field is optional and only the fields sent change."
+      type: object
+      properties:
+        athlete_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: 'Competition phase: sprint squad'
+        goal:
+          type: string
+          enum:
+          - performance
+          - weight_gain
+          - weight_loss
+          - recovery
+          - maintenance
+        daily_calories:
+          type: integer
+        protein_g:
+          type: number
+        carbohydrate_g:
+          type: number
+        fat_g:
+          type: number
+        meals:
+          type: array
+          items:
+            type: object
+            required:
+            - meal
+            - items
+            properties:
+              meal:
+                type: string
+                example: Breakfast
+              items:
+                type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        review_due_on:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - draft
+          - active
+          - completed
+          - archived
