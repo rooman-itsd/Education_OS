@@ -4,7 +4,7 @@ name: hostel
 kind: feature              # feature | platform | integration
 domain: campus-life
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
+version: 0.2.0
 status: in-progress         # planned | in-progress | stable | deprecated
 description: "Room allocation, mess, visitors, discipline and fee linkage."
 owners: [tejaswini-rooman]              # GitHub handles. Keep in sync with CODEOWNERS.
