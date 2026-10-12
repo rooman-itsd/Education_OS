@@ -1,9 +1,21 @@
 # Domain events published by portfolio.
 # Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+#
+# Generic pattern (ADR-0004): no event name or payload field names a field/domain. type_id is an
+# opaque reference to an organisation-defined ItemType; its label (e.g. "Artwork") is profile
+# vocabulary, never part of this contract.
 module: portfolio
 version: 1
-events: []
-#  - name: portfolio.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: portfolio.item.submitted
+    description: An item was submitted for review.
+    payload: { organisation_id: uuid, item_id: uuid, type_id: uuid, owner_person_id: uuid }
+  - name: portfolio.item.reviewed
+    description: >-
+      A review decision was recorded. Consumers that gate an outcome on a reviewed portfolio item
+      (e.g. a selection-process round that reviews a portfolio item) react to this.
+    payload: { organisation_id: uuid, item_id: uuid, review_id: uuid, decision: string, reviewer_person_id: uuid }
+  - name: portfolio.item.withdrawn
+    description: An item was withdrawn back to draft before or during review.
+    payload: { organisation_id: uuid, item_id: uuid }

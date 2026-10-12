@@ -1,11 +1,29 @@
 # Permission catalogue for admissions. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Public endpoints (submit, track, document upload, offer accept/decline) need no permission key;
+# they are unauthenticated by design (docs/prd.md §6) and are not listed below.
 module: admissions
-permissions: []
-#  - key: admissions:record:read
-#    description: ...
-#  - key: admissions:record:write
-#    description: ...
-roles: []
-#  - name: admissions-admin
-#    grants: [admissions:record:read, admissions:record:write]
+permissions:
+  - key: admissions:application:read
+    description: List and view applications in the organisation.
+  - key: admissions:application:manage
+    description: Move an application through staff-driven status transitions (under_review, eligible, ineligible, rejected, staff-initiated withdrawn).
+  - key: admissions:document:verify
+    description: Verify or reject a document attached to an application.
+  - key: admissions:merit-list:manage
+    description: Generate and publish merit lists.
+  - key: admissions:offer:manage
+    description: Extend an offer on an eligible application.
+roles:
+  - name: admissions-reviewer
+    description: Reviews documents and eligibility but does not decide offers or merit lists.
+    grants: [admissions:application:read, admissions:document:verify]
+  - name: admissions-staff
+    description: Runs the full admissions funnel for the organisation.
+    grants: [admissions:application:read, admissions:application:manage, admissions:document:verify, admissions:merit-list:manage, admissions:offer:manage]
+  - name: department-admin
+    description: Reviews applications and merit lists for their department's programmes.
+    grants: [admissions:application:read, admissions:merit-list:manage]
+  - name: org-admin
+    description: Read-only visibility into the organisation's admissions activity.
+    grants: [admissions:application:read]
