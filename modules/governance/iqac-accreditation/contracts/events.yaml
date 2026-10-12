@@ -1,9 +1,17 @@
 # Domain events published by iqac-accreditation.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Payloads carry identifiers and metadata only: never metric values, narratives, evidence or review comments.
+# No module consumes these events yet; whether to keep them public is docs/prd.md open question 8.
+# The event-bus envelope proposed in PR #189 differs from this convention: docs/prd.md open question 11.
 module: iqac-accreditation
 version: 1
-events: []
-#  - name: iqac-accreditation.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: iqac-accreditation.cycle.status-changed
+    description: A cycle moved status (planning, collecting, under_review, submitted, closed).
+    payload: { organisation_id: uuid, cycle_id: uuid, framework_id: uuid, from_status: string, to_status: string, changed_at: datetime }
+  - name: iqac-accreditation.response.accepted
+    description: >-
+      A metric response was accepted by the coordinator. Identifiers and the metric code only; a consumer that needs the
+      value reads it through GET /responses/{id} with permission (docs/prd.md open question 4).
+    payload: { organisation_id: uuid, response_id: uuid, cycle_id: uuid, metric_id: uuid, metric_code: string, accepted_at: datetime }
