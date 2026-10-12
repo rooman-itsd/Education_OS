@@ -1,9 +1,13 @@
 // What each API endpoint requires, read at build time from the platform routers
 // (platform/<service>/backend/src/*/api/router.py), so the Role & Access page follows the backend:
-//   require("<key>")       -> the caller must hold that permission key
-//   require_organisation   -> the caller must belong to an organisation (not a super admin)
-//   current_principal      -> any signed-in user
-//   none of these          -> public (sign-in, registration, plans)
+//   require("<key>")                       -> the caller must hold that permission key
+//   require("<key>", organisation=True)    -> ...and belong to an organisation (not a super admin)
+//   require_organisation                   -> the caller must belong to an organisation
+//   current_principal                      -> any signed-in user
+//   none of these                          -> public (sign-in, registration, plans)
+// Every organisation user also holds the implicit `member` role (platform/tenancy/contracts/permissions.yaml).
+
+import { ROLE_GRANTS } from './repo';
 
 const routers = import.meta.glob<string>('../../../../../platform/*/backend/src/*/api/router.py', {
   query: '?raw',
@@ -12,7 +16,7 @@ const routers = import.meta.glob<string>('../../../../../platform/*/backend/src/
 });
 
 export type Requirement =
-  | { kind: 'permission'; key: string }
+  | { kind: 'permission'; key: string; organisation?: boolean }
   | { kind: 'organisation' }
   | { kind: 'signed-in' }
   | { kind: 'public' };
@@ -36,9 +40,12 @@ function parse(service: string, source: string): Endpoint[] {
     if (!head) return [];
     const fn = block.match(/def\s+(\w+)\s*\(/)?.[1] ?? '';
     const doc = block.match(/"""\s*([^\n"]+)/)?.[1]?.trim();
-    const key = block.match(/require\("([^"]+)"\)/)?.[1];
+    const guard = block.match(/require\("([^"]+)"(,\s*organisation=True)?\s*\)/);
+    const key = guard?.[1];
     const requires: Requirement = key
-      ? { kind: 'permission', key }
+      ? guard?.[2]
+        ? { kind: 'permission', key, organisation: true }
+        : { kind: 'permission', key }
       : /require_organisation/.test(block)
         ? { kind: 'organisation' }
         : /current_principal/.test(block)
@@ -61,8 +68,11 @@ export interface Caller {
 /** Whether the backend lets this caller call the endpoint (identity deps: require / require_organisation). */
 export function allows(e: Endpoint, c: Caller): boolean {
   switch (e.requires.kind) {
-    case 'permission':
-      return c.permissions.includes(e.requires.key);
+    case 'permission': {
+      if (e.requires.organisation && !c.organisationId) return false;
+      const implicit = c.organisationId ? ROLE_GRANTS['member'] ?? new Set<string>() : new Set<string>();
+      return c.permissions.includes(e.requires.key) || implicit.has(e.requires.key);
+    }
     case 'organisation':
       return Boolean(c.organisationId);
     default:
@@ -71,4 +81,12 @@ export function allows(e: Endpoint, c: Caller): boolean {
 }
 
 export const requirementLabel = (r: Requirement) =>
-  r.kind === 'permission' ? r.key : r.kind === 'organisation' ? 'organisation user' : r.kind === 'signed-in' ? 'any signed-in user' : 'public';
+  r.kind === 'permission'
+    ? r.organisation
+      ? `${r.key} (organisation user)`
+      : r.key
+    : r.kind === 'organisation'
+      ? 'organisation user'
+      : r.kind === 'signed-in'
+        ? 'any signed-in user'
+        : 'public';
