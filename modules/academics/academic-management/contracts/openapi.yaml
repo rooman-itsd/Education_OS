@@ -2,9 +2,1595 @@ openapi: 3.1.0
 info:
   title: academic-management API
   version: 0.1.0
-  description: "Programmes, curriculum, courses, credits, faculty-course assignment."
+  description: |
+    Programmes, curriculum, courses, credits, faculty-course assignment.
+    Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
+    `x-permission` on each operation names the key from contracts/permissions.yaml it requires.
 servers:
   - url: /api/v1/academic-management
-paths: {}
+tags:
+  - name: terms
+  - name: programmes
+  - name: curricula
+  - name: courses
+  - name: offerings
+  - name: faculty
+  - name: widgets
+paths:
+  # ---------------------------------------------------------------- terms
+  /terms:
+    get:
+      tags: [terms]
+      summary: List terms
+      operationId: listTerms
+      x-permission: academic-management:term:read
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/TermStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Terms, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Term"
+                  total:
+                    type: integer
+    post:
+      tags: [terms]
+      summary: Create a term
+      operationId: createTerm
+      x-permission: academic-management:term:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTermRequest"
+      responses:
+        "201":
+          description: Term created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Term"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /terms/{academic_period_id}:
+    parameters:
+      - $ref: "#/components/parameters/AcademicPeriodId"
+    get:
+      tags: [terms]
+      summary: Get a term
+      operationId: getTerm
+      x-permission: academic-management:term:read
+      responses:
+        "200":
+          description: Term
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Term"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [terms]
+      summary: Update a term
+      operationId: updateTerm
+      x-permission: academic-management:term:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTermRequest"
+      responses:
+        "200":
+          description: Term updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Term"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /terms/{academic_period_id}/activate:
+    parameters:
+      - $ref: "#/components/parameters/AcademicPeriodId"
+    post:
+      tags: [terms]
+      summary: Make this the active term
+      description: Closes the currently active term. Publishes academic-management.term.activated.
+      operationId: activateTerm
+      x-permission: academic-management:term:write
+      responses:
+        "200":
+          description: Term activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Term"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ----------------------------------------------------------- programmes
+  /programmes:
+    get:
+      tags: [programmes]
+      summary: List programmes
+      operationId: listProgrammes
+      x-permission: academic-management:programme:read
+      parameters:
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: level
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProgrammeLevel"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProgrammeStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Programmes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Programme"
+                  total:
+                    type: integer
+    post:
+      tags: [programmes]
+      summary: Create a programme
+      operationId: createProgramme
+      x-permission: academic-management:programme:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProgrammeRequest"
+      responses:
+        "201":
+          description: Programme created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /programmes/{programme_id}:
+    parameters:
+      - $ref: "#/components/parameters/ProgrammeId"
+    get:
+      tags: [programmes]
+      summary: Get a programme
+      operationId: getProgramme
+      x-permission: academic-management:programme:read
+      responses:
+        "200":
+          description: Programme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [programmes]
+      summary: Update a programme
+      operationId: updateProgramme
+      x-permission: academic-management:programme:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProgrammeRequest"
+      responses:
+        "200":
+          description: Programme updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /programmes/{programme_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ProgrammeId"
+    post:
+      tags: [programmes]
+      summary: Archive a programme
+      operationId: archiveProgramme
+      x-permission: academic-management:programme:write
+      responses:
+        "200":
+          description: Programme archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Programme"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------------ curricula
+  /programmes/{programme_id}/curricula:
+    parameters:
+      - $ref: "#/components/parameters/ProgrammeId"
+    get:
+      tags: [curricula]
+      summary: List curriculum versions of a programme
+      operationId: listCurricula
+      x-permission: academic-management:curriculum:read
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/CurriculumStatus"
+      responses:
+        "200":
+          description: Curriculum versions, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Curriculum"
+                  total:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [curricula]
+      summary: Create a draft curriculum version
+      description: Optionally copies the items of an existing version.
+      operationId: createCurriculum
+      x-permission: academic-management:curriculum:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCurriculumRequest"
+      responses:
+        "201":
+          description: Draft curriculum created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Curriculum"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /curricula/{curriculum_id}:
+    parameters:
+      - $ref: "#/components/parameters/CurriculumId"
+    get:
+      tags: [curricula]
+      summary: Get a curriculum version with its items
+      operationId: getCurriculum
+      x-permission: academic-management:curriculum:read
+      responses:
+        "200":
+          description: Curriculum
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Curriculum"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [curricula]
+      summary: Replace the items of a draft curriculum
+      operationId: replaceCurriculumItems
+      x-permission: academic-management:curriculum:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceCurriculumItemsRequest"
+      responses:
+        "200":
+          description: Curriculum updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Curriculum"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Curriculum is published and cannot change
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /curricula/{curriculum_id}/publish:
+    parameters:
+      - $ref: "#/components/parameters/CurriculumId"
+    post:
+      tags: [curricula]
+      summary: Publish a draft curriculum
+      description: Fails if item credits do not add up to the programme's credits_required. Publishes academic-management.curriculum.published.
+      operationId: publishCurriculum
+      x-permission: academic-management:curriculum:publish
+      responses:
+        "200":
+          description: Curriculum published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Curriculum"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  # -------------------------------------------------------------- courses
+  /courses:
+    get:
+      tags: [courses]
+      summary: List courses
+      operationId: listCourses
+      x-permission: academic-management:course:read
+      parameters:
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: course_type
+          in: query
+          schema:
+            $ref: "#/components/schemas/CourseType"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/CourseStatus"
+        - name: q
+          in: query
+          description: Matches code or title
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Courses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Course"
+                  total:
+                    type: integer
+    post:
+      tags: [courses]
+      summary: Create a course
+      operationId: createCourse
+      x-permission: academic-management:course:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCourseRequest"
+      responses:
+        "201":
+          description: Course created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /courses/{course_id}:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    get:
+      tags: [courses]
+      summary: Get a course
+      operationId: getCourse
+      x-permission: academic-management:course:read
+      responses:
+        "200":
+          description: Course
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [courses]
+      summary: Update a course
+      operationId: updateCourse
+      x-permission: academic-management:course:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCourseRequest"
+      responses:
+        "200":
+          description: Course updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /courses/{course_id}/archive:
+    parameters:
+      - $ref: "#/components/parameters/CourseId"
+    post:
+      tags: [courses]
+      summary: Archive a course
+      operationId: archiveCourse
+      x-permission: academic-management:course:write
+      responses:
+        "200":
+          description: Course archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Course"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ------------------------------------------------------------ offerings
+  /offerings:
+    get:
+      tags: [offerings]
+      summary: List offerings
+      operationId: listOfferings
+      x-permission: academic-management:offering:read
+      parameters:
+        - name: academic_period_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: course_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: programme_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: department_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: faculty_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/OfferingStatus"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Offerings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Offering"
+                  total:
+                    type: integer
+    post:
+      tags: [offerings]
+      summary: Offer a course in a term
+      description: Creates the offering with at least one section.
+      operationId: createOffering
+      x-permission: academic-management:offering:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOfferingRequest"
+      responses:
+        "201":
+          description: Offering created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offering"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /offerings/{course_offering_id}:
+    parameters:
+      - $ref: "#/components/parameters/CourseOfferingId"
+    get:
+      tags: [offerings]
+      summary: Get an offering with its sections and faculty
+      operationId: getOffering
+      x-permission: academic-management:offering:read
+      responses:
+        "200":
+          description: Offering
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offering"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [offerings]
+      summary: Update an offering
+      operationId: updateOffering
+      x-permission: academic-management:offering:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateOfferingRequest"
+      responses:
+        "200":
+          description: Offering updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offering"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /offerings/{course_offering_id}/status:
+    parameters:
+      - $ref: "#/components/parameters/CourseOfferingId"
+    post:
+      tags: [offerings]
+      summary: Change an offering's status
+      description: |
+        Allowed: planned→open, open→in_progress, in_progress→completed, and planned|open→cancelled.
+        Moving to open requires exactly one primary faculty assignment.
+        Publishes academic-management.offering.status-changed.
+      operationId: changeOfferingStatus
+      x-permission: academic-management:offering:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: "#/components/schemas/OfferingStatus"
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Status changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offering"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /offerings/{course_offering_id}/sections:
+    parameters:
+      - $ref: "#/components/parameters/CourseOfferingId"
+    get:
+      tags: [offerings]
+      summary: List sections of an offering
+      operationId: listSections
+      x-permission: academic-management:offering:read
+      responses:
+        "200":
+          description: Sections
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Section"
+                  total:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [offerings]
+      summary: Add a section
+      operationId: createSection
+      x-permission: academic-management:offering:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSectionRequest"
+      responses:
+        "201":
+          description: Section created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Section"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /sections/{section_id}:
+    parameters:
+      - $ref: "#/components/parameters/SectionId"
+    patch:
+      tags: [offerings]
+      summary: Update a section's capacity or close it
+      operationId: updateSection
+      x-permission: academic-management:offering:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSectionRequest"
+      responses:
+        "200":
+          description: Section updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Section"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # ------------------------------------------------------ faculty assignment
+  /offerings/{course_offering_id}/faculty-assignments:
+    parameters:
+      - $ref: "#/components/parameters/CourseOfferingId"
+    get:
+      tags: [faculty]
+      summary: List faculty assigned to an offering
+      operationId: listFacultyAssignments
+      x-permission: academic-management:faculty-assignment:read
+      parameters:
+        - name: include_ended
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Faculty assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FacultyAssignment"
+                  total:
+                    type: integer
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [faculty]
+      summary: Assign a faculty member
+      description: Response includes `over_load` when the faculty member's term load now exceeds the configured maximum.
+      operationId: createFacultyAssignment
+      x-permission: academic-management:faculty-assignment:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFacultyAssignmentRequest"
+      responses:
+        "201":
+          description: Faculty assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAssignment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /faculty-assignments/{instructor_assignment_id}/end:
+    parameters:
+      - $ref: "#/components/parameters/InstructorAssignmentId"
+    post:
+      tags: [faculty]
+      summary: End a faculty assignment
+      operationId: endFacultyAssignment
+      x-permission: academic-management:faculty-assignment:write
+      responses:
+        "200":
+          description: Assignment ended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAssignment"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  # --------------------------------------------------------------- roster
+  /offerings/{course_offering_id}/roster:
+    parameters:
+      - $ref: "#/components/parameters/CourseOfferingId"
+    get:
+      tags: [offerings, widgets]
+      summary: Students enrolled in an offering
+      description: |
+        Read model built from enrolment-registration events. Callers with only
+        academic-management:roster:read get 403 for offerings they are not assigned to.
+        Used by widget academic-management.course-roster.
+      operationId: getRoster
+      x-permission: academic-management:roster:read
+      parameters:
+        - name: section_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Roster
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [course_offering_id, items, total]
+                properties:
+                  course_offering_id:
+                    type: string
+                    format: uuid
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RosterEntry"
+                  total:
+                    type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # -------------------------------------------------------------- widgets
+  /me/offerings:
+    get:
+      tags: [faculty, widgets]
+      summary: Offerings the caller teaches
+      description: |
+        The caller's active faculty assignments, one row per offering, with enrolment counts.
+        Defaults to the active term. Used by widget academic-management.course-roster (Faculty dashboard).
+      operationId: listMyOfferings
+      x-permission: academic-management:roster:read
+      parameters:
+        - name: academic_period_id
+          in: query
+          description: Defaults to the active term
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The caller's offerings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [academic_period_id, items]
+                properties:
+                  academic_period_id:
+                    type: string
+                    format: uuid
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MyOffering"
+
+  /faculty-load:
+    get:
+      tags: [faculty, widgets]
+      summary: Teaching load per faculty member
+      description: |
+        Sum of active assignment contact hours per faculty member in a term, against the configured maximum.
+        Used by widget academic-management.faculty-load (Department Admin dashboard).
+      operationId: getFacultyLoad
+      x-permission: academic-management:faculty-load:read
+      parameters:
+        - name: academic_period_id
+          in: query
+          description: Defaults to the active term
+          schema:
+            type: string
+            format: uuid
+        - name: department_id
+          in: query
+          description: Defaults to the caller's department when the caller is a department admin
+          schema:
+            type: string
+            format: uuid
+        - name: over_load_only
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Faculty load
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyLoadReport"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
 components:
-  schemas: {}
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+    AcademicPeriodId:
+      name: academic_period_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProgrammeId:
+      name: programme_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CurriculumId:
+      name: curriculum_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CourseId:
+      name: course_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CourseOfferingId:
+      name: course_offering_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SectionId:
+      name: section_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InstructorAssignmentId:
+      name: instructor_assignment_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Caller lacks the permission or scope for this resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Request conflicts with current state (duplicate code, overlapping dates, invalid transition)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unprocessable:
+      description: Request is well formed but breaks a domain rule
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+
+    # --- enums
+    TermStatus:
+      type: string
+      enum: [upcoming, active, closed]
+    ProgrammeLevel:
+      type: string
+      enum: [certificate, diploma, undergraduate, postgraduate, doctoral, other]
+    ProgrammeStatus:
+      type: string
+      enum: [active, archived]
+    CurriculumStatus:
+      type: string
+      enum: [draft, published]
+    CurriculumCategory:
+      type: string
+      enum: [core, elective]
+    CourseType:
+      type: string
+      enum: [theory, practical, practicum, project, studio]
+    CourseStatus:
+      type: string
+      enum: [active, archived]
+    OfferingStatus:
+      type: string
+      enum: [planned, open, in_progress, completed, cancelled]
+    SectionStatus:
+      type: string
+      enum: [open, closed]
+    FacultyRole:
+      type: string
+      enum: [primary, co_instructor, teaching_assistant]
+    AssignmentStatus:
+      type: string
+      enum: [active, ended]
+
+    # --- terms
+    Term:
+      type: object
+      required: [id, organisation_id, code, name, starts_on, ends_on, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          examples: ["2026-ODD"]
+        name:
+          type: string
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+        status:
+          $ref: "#/components/schemas/TermStatus"
+    CreateTermRequest:
+      type: object
+      required: [code, name, starts_on, ends_on]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+    UpdateTermRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        starts_on:
+          type: string
+          format: date
+        ends_on:
+          type: string
+          format: date
+
+    # --- programmes
+    Programme:
+      type: object
+      required: [id, organisation_id, code, name, level, department_id, duration_terms, credits_required, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        level:
+          $ref: "#/components/schemas/ProgrammeLevel"
+        department_id:
+          type: string
+          format: uuid
+          description: Org unit id from platform/identity
+        duration_terms:
+          type: integer
+          minimum: 1
+        credits_required:
+          type: number
+          minimum: 0
+        published_curriculum_id:
+          type: [string, "null"]
+          format: uuid
+        status:
+          $ref: "#/components/schemas/ProgrammeStatus"
+    CreateProgrammeRequest:
+      type: object
+      required: [code, name, level, department_id, duration_terms, credits_required]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        level:
+          $ref: "#/components/schemas/ProgrammeLevel"
+        department_id:
+          type: string
+          format: uuid
+        duration_terms:
+          type: integer
+          minimum: 1
+        credits_required:
+          type: number
+          minimum: 0
+    UpdateProgrammeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        department_id:
+          type: string
+          format: uuid
+        duration_terms:
+          type: integer
+          minimum: 1
+        credits_required:
+          type: number
+          minimum: 0
+
+    # --- curricula
+    Curriculum:
+      type: object
+      required: [id, organisation_id, programme_id, version, status, total_credits, items]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        programme_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        status:
+          $ref: "#/components/schemas/CurriculumStatus"
+        total_credits:
+          type: number
+        published_at:
+          type: [string, "null"]
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumItem"
+    CurriculumItem:
+      type: object
+      required: [course_id, programme_term, category, credits]
+      properties:
+        id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+          format: uuid
+        course_code:
+          type: string
+          readOnly: true
+        course_title:
+          type: string
+          readOnly: true
+        programme_term:
+          type: integer
+          minimum: 1
+          description: Term number within the programme (1..duration_terms)
+        category:
+          $ref: "#/components/schemas/CurriculumCategory"
+        credits:
+          type: number
+          minimum: 0
+    CreateCurriculumRequest:
+      type: object
+      properties:
+        copy_from_curriculum_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumItem"
+    ReplaceCurriculumItemsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurriculumItem"
+
+    # --- courses
+    Course:
+      type: object
+      required: [id, organisation_id, code, title, credits, course_type, department_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        credits:
+          type: number
+          minimum: 0
+        lecture_hours:
+          type: number
+          minimum: 0
+          description: Lecture contact hours per week
+        practical_hours:
+          type: number
+          minimum: 0
+          description: Practical contact hours per week
+        course_type:
+          $ref: "#/components/schemas/CourseType"
+        department_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CourseStatus"
+    CreateCourseRequest:
+      type: object
+      required: [code, title, credits, course_type, department_id]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        credits:
+          type: number
+          minimum: 0
+        lecture_hours:
+          type: number
+          minimum: 0
+        practical_hours:
+          type: number
+          minimum: 0
+        course_type:
+          $ref: "#/components/schemas/CourseType"
+        department_id:
+          type: string
+          format: uuid
+    UpdateCourseRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        credits:
+          type: number
+          minimum: 0
+        lecture_hours:
+          type: number
+          minimum: 0
+        practical_hours:
+          type: number
+          minimum: 0
+        course_type:
+          $ref: "#/components/schemas/CourseType"
+        department_id:
+          type: string
+          format: uuid
+
+    # --- offerings and sections
+    Offering:
+      type: object
+      required: [id, organisation_id, course_id, academic_period_id, status, programme_ids, course, sections]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        course_id:
+          type: string
+          format: uuid
+        academic_period_id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/OfferingStatus"
+        programme_ids:
+          type: array
+          description: Programmes this offering is open to; empty means any
+          items:
+            type: string
+            format: uuid
+        course:
+          $ref: "#/components/schemas/CourseSummary"
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/Section"
+        faculty:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacultyAssignment"
+        enrolled_count:
+          type: integer
+    CourseSummary:
+      type: object
+      required: [code, title, credits, course_type]
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        credits:
+          type: number
+        course_type:
+          $ref: "#/components/schemas/CourseType"
+        department_id:
+          type: string
+          format: uuid
+    CreateOfferingRequest:
+      type: object
+      required: [course_id, academic_period_id, sections]
+      properties:
+        course_id:
+          type: string
+          format: uuid
+        academic_period_id:
+          type: string
+          format: uuid
+        programme_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        sections:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/CreateSectionRequest"
+    UpdateOfferingRequest:
+      type: object
+      properties:
+        programme_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+    Section:
+      type: object
+      required: [id, organisation_id, course_offering_id, code, capacity, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        course_offering_id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          examples: ["A"]
+        capacity:
+          type: integer
+          minimum: 1
+        enrolled_count:
+          type: integer
+        status:
+          $ref: "#/components/schemas/SectionStatus"
+    CreateSectionRequest:
+      type: object
+      required: [code, capacity]
+      properties:
+        code:
+          type: string
+        capacity:
+          type: integer
+          minimum: 1
+    UpdateSectionRequest:
+      type: object
+      properties:
+        capacity:
+          type: integer
+          minimum: 1
+        status:
+          $ref: "#/components/schemas/SectionStatus"
+
+    # --- faculty assignment
+    FacultyAssignment:
+      type: object
+      required: [id, organisation_id, course_offering_id, faculty_id, role, contact_hours, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organisation_id:
+          type: string
+          format: uuid
+        course_offering_id:
+          type: string
+          format: uuid
+        section_id:
+          type: [string, "null"]
+          format: uuid
+          description: Null means the whole offering
+        faculty_id:
+          type: string
+          format: uuid
+          description: User id from platform/identity
+        faculty_name:
+          type: string
+          readOnly: true
+        role:
+          $ref: "#/components/schemas/FacultyRole"
+        contact_hours:
+          type: number
+          minimum: 0
+          description: Contact hours per week
+        status:
+          $ref: "#/components/schemas/AssignmentStatus"
+        over_load:
+          type: boolean
+          readOnly: true
+          description: True when this faculty member's term load exceeds the configured maximum
+    CreateFacultyAssignmentRequest:
+      type: object
+      required: [faculty_id, role, contact_hours]
+      properties:
+        faculty_id:
+          type: string
+          format: uuid
+        section_id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/FacultyRole"
+        contact_hours:
+          type: number
+          minimum: 0
+
+    # --- roster and widgets
+    RosterEntry:
+      type: object
+      required: [student_id, section_id, enrolled_at]
+      properties:
+        student_id:
+          type: string
+          format: uuid
+        student_name:
+          type: string
+          description: Cached from the enrolment event
+        roll_number:
+          type: string
+        section_id:
+          type: string
+          format: uuid
+        section_code:
+          type: string
+        enrolled_at:
+          type: string
+          format: date-time
+    MyOffering:
+      type: object
+      required: [course_offering_id, course, role, sections, enrolled_count]
+      properties:
+        course_offering_id:
+          type: string
+          format: uuid
+        course:
+          $ref: "#/components/schemas/CourseSummary"
+        role:
+          $ref: "#/components/schemas/FacultyRole"
+        status:
+          $ref: "#/components/schemas/OfferingStatus"
+        sections:
+          type: array
+          description: Sections the caller teaches (all sections when assigned to the whole offering)
+          items:
+            type: object
+            required: [section_id, code, enrolled_count]
+            properties:
+              section_id:
+                type: string
+                format: uuid
+              code:
+                type: string
+              enrolled_count:
+                type: integer
+        enrolled_count:
+          type: integer
+    FacultyLoadReport:
+      type: object
+      required: [academic_period_id, max_weekly_contact_hours, items]
+      properties:
+        academic_period_id:
+          type: string
+          format: uuid
+        department_id:
+          type: [string, "null"]
+          format: uuid
+        max_weekly_contact_hours:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FacultyLoad"
+    FacultyLoad:
+      type: object
+      required: [faculty_id, offerings_count, contact_hours, over_load]
+      properties:
+        faculty_id:
+          type: string
+          format: uuid
+        faculty_name:
+          type: string
+        offerings_count:
+          type: integer
+        contact_hours:
+          type: number
+        over_load:
+          type: boolean

@@ -2,9 +2,244 @@ openapi: 3.1.0
 info:
   title: sla-management API
   version: 0.1.0
-  description: "SLA definitions, timers, escalation and breach tracking."
+  description: "SLA definitions, timers, escalation and breach tracking. See docs/prd.md."
 servers:
   - url: /api/v1/sla-management
-paths: {}
+paths:
+  /calendars:
+    get:
+      summary: Business-hours calendars of the organisation. Permission sla-management:clock:read or sla-management:policy:manage.
+      parameters: [{ name: active, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Calendar" } } } } } }
+    post:
+      summary: Create a calendar. Permission sla-management:policy:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalendarInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Calendar" } } } }, "422": { description: "Overlapping working intervals, end before start, or unknown time zone" } }
+  /calendars/{id}:
+    get:
+      summary: One calendar. Permission sla-management:clock:read or sla-management:policy:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Calendar" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: >-
+        Update hours, holidays or time zone, or deactivate. Changes apply to due times computed afterwards;
+        a calendar used by an active policy cannot be deactivated. Permission sla-management:policy:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CalendarInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Calendar" } } } }, "409": { description: "Calendar is used by an active policy" }, "422": { description: "Invalid hours or time zone" } }
+  /policies:
+    get:
+      summary: SLA policies. Permission sla-management:clock:read or sla-management:policy:manage.
+      parameters:
+        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
+        - { name: category_id, in: query, description: A helpdesk category id, schema: { type: string, format: uuid } }
+        - { name: active, in: query, schema: { type: boolean } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Policy" } } } } } }
+    post:
+      summary: Create a policy for one priority and one helpdesk category, or every category (category_id null). Applies to tickets created afterwards. Permission sla-management:policy:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PolicyInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Policy" } } } }, "409": { description: "An active policy already exists for this priority and category" }, "422": { description: "Resolution target shorter than response target, inactive calendar, or too many escalation levels" } }
+  /policies/{id}:
+    get:
+      summary: One policy. Permission sla-management:clock:read or sla-management:policy:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Policy" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Update targets, calendar, warning, hold reasons or escalation levels, or deactivate. Running clocks keep the targets they started with. Permission sla-management:policy:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PolicyInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Policy" } } } }, "409": { description: "Reactivating would duplicate an active policy" }, "422": { description: "Invalid targets or escalation levels" } }
+  /clocks:
+    get:
+      summary: SLA clocks, soonest due first. Permission sla-management:clock:read.
+      parameters:
+        - { name: state, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ClockState" } } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/ClockKind" } }
+        - { name: breached, in: query, schema: { type: boolean } }
+        - { name: at_risk, in: query, description: "Running, not breached, warning time passed", schema: { type: boolean } }
+        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
+        - { name: category_id, in: query, schema: { type: string, format: uuid } }
+        - { name: assignee, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: ticket_number, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ClockPage" } } } } }
+  /clocks/{id}:
+    get:
+      summary: One clock with its escalation history. Permission sla-management:clock:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ClockDetail" } } } }, "404": { description: "Not found" } }
+  /tickets/{ticket_id}:
+    get:
+      summary: The SLA clocks of one helpdesk ticket, for showing due times on helpdesk screens. Permission sla-management:clock:read.
+      parameters: [{ name: ticket_id, in: path, required: true, description: A helpdesk ticket id, schema: { type: string, format: uuid } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TicketSla" } } } }, "404": { description: "Ticket unknown or not tracked (no policy matched)" } }
+  /stats/breaches:
+    get:
+      summary: >-
+        Breached and at-risk clocks that are still running, breaches recorded in the last 24 hours, and the most overdue
+        clocks. scope=mine counts clocks of tickets assigned to the caller; all (default) every clock.
+        Backs the Support Staff widget sla-management.breaches. Permission sla-management:clock:read.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all], default: all } }
+        - { name: limit, in: query, description: "Most overdue clocks to return; defaults to SLA_MANAGEMENT_BREACH_LIST_LIMIT", schema: { type: integer, minimum: 1, maximum: 50 } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BreachSummary" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Priority:
+      type: string
+      description: Helpdesk ticket priority
+      enum: [low, medium, high, urgent]
+    HoldReason:
+      type: string
+      description: Helpdesk hold reason
+      enum: [waiting_requester, waiting_third_party, waiting_internal]
+    ClockKind:
+      type: string
+      enum: [response, resolution]
+    ClockState:
+      type: string
+      enum: [running, paused, stopped, cancelled]
+    WorkingInterval:
+      type: object
+      required: [weekday, start, end]
+      properties:
+        weekday: { type: integer, minimum: 1, maximum: 7, description: "ISO weekday, 1 = Monday" }
+        start: { type: string, pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$", description: "Local time HH:MM" }
+        end: { type: string, pattern: "^([01][0-9]|2[0-4]):[0-5][0-9]$", description: "Local time HH:MM, after start; 24:00 for end of day" }
+    Holiday:
+      type: object
+      required: [date, name]
+      properties:
+        date: { type: string, format: date }
+        name: { type: string }
+    CalendarInput:
+      type: object
+      required: [name, time_zone]
+      properties:
+        name: { type: string, maxLength: 80 }
+        time_zone: { type: string, description: "IANA time zone, such as Asia/Kolkata" }
+        always_open: { type: boolean, default: false, description: "Count every minute; working_hours and holidays are ignored" }
+        working_hours: { type: array, items: { $ref: "#/components/schemas/WorkingInterval" }, description: "Required unless always_open" }
+        holidays: { type: array, items: { $ref: "#/components/schemas/Holiday" } }
+        active: { type: boolean, default: true }
+    Calendar:
+      allOf:
+        - { $ref: "#/components/schemas/CalendarInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+    EscalationLevel:
+      type: object
+      required: [level, after_breach_minutes]
+      properties:
+        level: { type: integer, minimum: 1, description: "Levels are numbered 1, 2, 3 in order" }
+        after_breach_minutes: { type: integer, minimum: 0, description: "Business minutes after the due time; level 1 is usually 0" }
+        notify_assignee: { type: boolean, default: true }
+        notify_person_ids: { type: array, items: { type: string, format: uuid }, description: "People notified at this level, such as the support lead" }
+    PolicyInput:
+      type: object
+      required: [name, priority, calendar_id, response_target_minutes, resolution_target_minutes]
+      properties:
+        name: { type: string, maxLength: 80 }
+        priority: { $ref: "#/components/schemas/Priority" }
+        category_id: { type: [string, "null"], format: uuid, description: "A helpdesk category id, or null for every category" }
+        calendar_id: { type: string, format: uuid }
+        response_target_minutes: { type: integer, minimum: 1, description: Business minutes to the first public response }
+        resolution_target_minutes: { type: integer, minimum: 1, description: Business minutes to resolution }
+        warning_percent: { type: integer, minimum: 1, maximum: 99, description: "Warn when this share of the target is used; defaults to SLA_MANAGEMENT_DEFAULT_WARNING_PERCENT" }
+        pause_on_hold_reasons: { type: array, items: { $ref: "#/components/schemas/HoldReason" }, default: [waiting_requester, waiting_third_party] }
+        escalation_levels: { type: array, items: { $ref: "#/components/schemas/EscalationLevel" }, description: "At most SLA_MANAGEMENT_MAX_ESCALATION_LEVELS" }
+        active: { type: boolean, default: true }
+    Policy:
+      allOf:
+        - { $ref: "#/components/schemas/PolicyInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+    Clock:
+      type: object
+      required: [id, organisation_id, ticket_id, ticket_number, kind, policy_id, target_minutes, state, started_at, breached]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        ticket_id: { type: string, format: uuid }
+        ticket_number: { type: string, description: "Helpdesk number, such as HD-000123" }
+        kind: { $ref: "#/components/schemas/ClockKind" }
+        policy_id: { type: string, format: uuid }
+        calendar_id: { type: string, format: uuid }
+        priority: { $ref: "#/components/schemas/Priority" }
+        category_id: { type: string, format: uuid }
+        queue_id: { type: [string, "null"], format: uuid }
+        assignee_id: { type: [string, "null"], format: uuid }
+        target_minutes: { type: integer }
+        business_minutes_used: { type: integer, description: "Business minutes counted so far, excluding paused time" }
+        state: { $ref: "#/components/schemas/ClockState" }
+        started_at: { type: string, format: date-time }
+        warn_at: { type: [string, "null"], format: date-time, description: "Null while paused" }
+        due_at: { type: [string, "null"], format: date-time, description: "Null while paused" }
+        paused_at: { type: [string, "null"], format: date-time }
+        stopped_at: { type: [string, "null"], format: date-time }
+        outcome: { type: [string, "null"], enum: [met, breached, null], description: "Set when stopped" }
+        warned: { type: boolean }
+        breached: { type: boolean }
+        breached_at: { type: [string, "null"], format: date-time }
+    Escalation:
+      type: object
+      required: [id, clock_id, level, sent_at, recipient_ids]
+      properties:
+        id: { type: string, format: uuid }
+        clock_id: { type: string, format: uuid }
+        level: { type: integer }
+        sent_at: { type: string, format: date-time }
+        recipient_ids: { type: array, items: { type: string, format: uuid } }
+    ClockDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Clock" }
+        - type: object
+          required: [escalations]
+          properties:
+            escalations: { type: array, items: { $ref: "#/components/schemas/Escalation" } }
+    TicketSla:
+      type: object
+      required: [ticket_id, ticket_number, clocks]
+      properties:
+        ticket_id: { type: string, format: uuid }
+        ticket_number: { type: string }
+        clocks: { type: array, items: { $ref: "#/components/schemas/Clock" }, description: "Response and resolution clocks" }
+    ClockPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Clock" } }
+        next_cursor: { type: [string, "null"] }
+    BreachSummary:
+      type: object
+      required: [scope, breached_open, at_risk, breached_last_24h, most_overdue]
+      properties:
+        scope: { type: string, enum: [mine, all] }
+        breached_open: { type: integer, description: "Running clocks past their due time" }
+        at_risk: { type: integer, description: "Running clocks past their warning time, not yet breached" }
+        breached_last_24h: { type: integer, description: "Breaches recorded in the last 24 hours, whatever the clock's state now" }
+        most_overdue:
+          type: array
+          items:
+            type: object
+            required: [clock_id, ticket_id, ticket_number, kind, priority, due_at]
+            properties:
+              clock_id: { type: string, format: uuid }
+              ticket_id: { type: string, format: uuid }
+              ticket_number: { type: string }
+              kind: { $ref: "#/components/schemas/ClockKind" }
+              priority: { $ref: "#/components/schemas/Priority" }
+              assignee_id: { type: [string, "null"], format: uuid }
+              due_at: { type: string, format: date-time }
+              overdue_business_minutes: { type: integer }
