@@ -5,7 +5,7 @@ kind: feature              # feature | platform | integration
 domain: facilities
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Generic resource-booking pattern: bookable resources, availability and bookings with optional approval. Field words come from the profile vocabulary."
 owners: [Ashritharooman]  # GitHub handles. Keep in sync with CODEOWNERS.
 
