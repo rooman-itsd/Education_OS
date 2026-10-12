@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: hostel API
-  version: 0.1.0
+  version: 0.2.0
   description: "Room allocation, mess, visitors, discipline and fee linkage. See docs/prd.md."
 servers:
   - url: /api/v1/hostel
@@ -101,11 +101,13 @@ paths:
       responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MessMenu" } } } } } }
   /leave-requests:
     get:
-      summary: Leave requests. Permission hostel:leave:approve.
+      summary: >-
+        Leave requests (gate passes). Permission hostel:leave:approve, or hostel:gate:record for the security desk,
+        which filters by status=approved to see who may leave and status=out to see who is away.
       parameters:
         - { name: status, in: query, schema: { $ref: "#/components/schemas/LeaveStatus" } }
         - { name: hostel_id, in: query, schema: { type: string, format: uuid } }
-        - { name: overdue, in: query, description: Approved leave whose end date has passed without a return, schema: { type: boolean } }
+        - { name: overdue, in: query, description: "Approved or out leave whose end has passed without a return", schema: { type: boolean } }
         - { $ref: "#/components/parameters/Cursor" }
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LeavePage" } } } } }
@@ -117,9 +119,25 @@ paths:
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LeaveRequest" } } } }, "409": { description: "Not in requested status" } }
   /leave-requests/{id}/return:
     post:
-      summary: Mark an approved leave as returned. Publishes hostel.leave.returned. Permission hostel:leave:approve.
+      summary: >-
+        Mark a leave as returned (approved or out -> returned) when the gate did not record it, for example a
+        hostel without a security desk. Publishes hostel.leave.returned. Permission hostel:leave:approve.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LeaveRequest" } } } }, "409": { description: "Not approved or out" } }
+  /leave-requests/{id}/gate-out:
+    post:
+      summary: >-
+        Security records the resident leaving through the gate on an approved pass (approved -> out). Publishes
+        hostel.leave.departed. Permission hostel:gate:record.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LeaveRequest" } } } }, "409": { description: "Not approved" } }
+  /leave-requests/{id}/gate-in:
+    post:
+      summary: >-
+        Security records the resident coming back through the gate (out -> returned). Publishes hostel.leave.returned.
+        Permission hostel:gate:record.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LeaveRequest" } } } }, "409": { description: "Not out" } }
   /visits:
     get:
       summary: Visitor log. Permission hostel:visitor:read.
@@ -326,7 +344,10 @@ components:
         date: { type: string, format: date }
         meal: { type: string, description: "Label from the organisation, such as breakfast, lunch, snacks or dinner" }
         items: { type: array, items: { type: string } }
-    LeaveStatus: { type: string, enum: [requested, approved, rejected, withdrawn, returned] }
+    LeaveStatus:
+      type: string
+      enum: [requested, approved, rejected, withdrawn, out, returned]
+      description: "A leave request is the gate pass. out: security recorded the resident leaving; returned: back in."
     LeaveInput:
       type: object
       required: [from, to, destination, reason]
@@ -350,7 +371,10 @@ components:
             status: { $ref: "#/components/schemas/LeaveStatus" }
             decided_by: { type: [string, "null"], format: uuid }
             decision_reason: { type: [string, "null"] }
+            departed_at: { type: [string, "null"], format: date-time, description: "When the gate recorded the resident leaving" }
+            departure_recorded_by: { type: [string, "null"], format: uuid }
             returned_at: { type: [string, "null"], format: date-time }
+            return_recorded_by: { type: [string, "null"], format: uuid, description: "Security at gate-in, or the warden on /return" }
     LeavePage:
       type: object
       required: [items]

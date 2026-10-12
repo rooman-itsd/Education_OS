@@ -14,6 +14,8 @@ permissions:
     description: Set the mess menu.
   - key: hostel:leave:approve
     description: View leave requests, approve or reject them, mark returns.
+  - key: hostel:gate:record
+    description: See approved gate passes and record a resident leaving and returning through the gate.
   - key: hostel:visitor:read
     description: View the visitor log.
   - key: hostel:visitor:record
@@ -49,19 +51,28 @@ roles:
       - hostel:allocation:read
       - hostel:allocation:manage
       - hostel:leave:approve
+      - hostel:gate:record
       - hostel:visitor:read
       - hostel:visitor:record
       - hostel:incident:read
       - hostel:incident:manage
       - hostel:notice:publish
   - name: hostel-security
-    description: Security desk. Records visitors.
+    description: Security desk. Records visitors and residents leaving and returning on a gate pass.
     grants:
       - hostel:hostel:read
+      - hostel:gate:record
       - hostel:visitor:read
       - hostel:visitor:record
   - name: hostel-resident
-    description: Students and other residents. Default for the student role.
+    description: Residents who do not hold the student role, for example staff living in. Students get the same grants through the student role below.
+    grants:
+      - hostel:self:read
+      - hostel:self:request
+  # Profile role (platform/identity/config/profiles). Granted directly, as fees-accounts does, so a student
+  # needs no hostel-specific role. Self-service only: every endpoint behind these keys is limited to the caller.
+  - name: student
+    description: Every student. Own allocation, notices, mess menu, leave and gate passes, visitors; request a room and apply for leave.
     grants:
       - hostel:self:read
       - hostel:self:request

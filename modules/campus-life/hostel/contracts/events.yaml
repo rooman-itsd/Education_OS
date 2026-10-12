@@ -35,11 +35,14 @@ events:
   - name: hostel.leave.rejected
     description: A warden rejected leave. Notification tells the resident.
     payload: { organisation_id: uuid, leave_id: uuid, person_id: uuid, decided_by: uuid }
+  - name: hostel.leave.departed
+    description: Security recorded the resident leaving through the gate on an approved pass.
+    payload: { organisation_id: uuid, leave_id: uuid, person_id: uuid, hostel_id: uuid, departed_at: datetime }
   - name: hostel.leave.returned
-    description: The resident returned from approved leave.
+    description: The resident is back, recorded by security at the gate or by the warden.
     payload: { organisation_id: uuid, leave_id: uuid, person_id: uuid, returned_at: datetime }
   - name: hostel.leave.overdue
-    description: Published once per leave by the daily job when a resident is not back by the end date.
+    description: Published once per leave by the daily job when a resident on approved or out leave is not back by the end date.
     payload: { organisation_id: uuid, leave_id: uuid, person_id: uuid, hostel_id: uuid, due_at: datetime }
   - name: hostel.notice.published
     description: A notice was published to one hostel or to every hostel (hostel_id null). Notification may alert residents.
