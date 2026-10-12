@@ -35,12 +35,15 @@ tests/<suite>/
 
 ## Running
 
-Commands are added with the first suite. Planned:
+```
+pnpm --filter e2e e2e                  # Playwright; starts its own API and web server, see e2e/README.md
+```
+
+Planned, added with their first suite:
 
 ```
 uv run pytest tests/integration        # needs apps/backend up with modules enabled
 uv run pytest tests/contract
-pnpm --filter e2e test                 # Playwright, needs full stack
 uv run pytest tests/performance -m load
 ```
 
