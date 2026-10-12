@@ -2,9 +2,380 @@ openapi: 3.1.0
 info:
   title: field-training API
   version: 0.1.0
-  description: "Field training placements: clinical rotations, teaching practice, farm rotations, internships, court visits."
+  description: >-
+    Generic field training pattern: sites offer openings, trainees get placements, log hours that supervisors
+    verify, and are assessed. Labels shown to users come from the academy profile vocabulary
+    (keys field-training.placement, field-training.site, field-training.supervisor). See docs/prd.md.
 servers:
   - url: /api/v1/field-training
-paths: {}
+paths:
+  /sites:
+    get:
+      summary: Host sites. Permission field-training:site:read.
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+        - { name: q, in: query, description: Name contains, schema: { type: string } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Site" } } } } } }
+    post:
+      summary: Add a host site. Permission field-training:site:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SiteInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Site" } } } } }
+  /sites/{id}:
+    get:
+      summary: One site. Permission field-training:site:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Site" } } } }, "404": { description: Not found } }
+    patch:
+      summary: "Update a site, its supervisors, or deactivate it. Permission field-training:site:manage."
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SiteInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Site" } } } } }
+  /openings:
+    get:
+      summary: >-
+        Openings with seats left. status=open backs the widget field-training.placements-open (coordinator and
+        supervisor dashboards); a supervisor without field-training:opening:read sees openings at their own sites.
+        Permission field-training:opening:read or field-training:supervision:read; a trainee with
+        field-training:self:apply sees open openings that accept applications.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OpeningStatus" } }
+        - { name: site_id, in: query, schema: { type: string, format: uuid } }
+        - { name: has_seats, in: query, schema: { type: boolean } }
+        - { name: starts_after, in: query, schema: { type: string, format: date } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpeningPage" } } } } }
+    post:
+      summary: Create an opening in draft. Permission field-training:opening:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/OpeningInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "409": { description: Site inactive } }
+  /openings/{id}:
+    get:
+      summary: One opening with seats filled. Permission field-training:opening:read or field-training:supervision:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "404": { description: Not found } }
+    patch:
+      summary: Update an opening. Seats cannot drop below seats filled; the period cannot change once a placement is active. Permission field-training:opening:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/OpeningInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "409": { description: "Seats below filled, or period locked" } }
+  /openings/{id}/publish:
+    post:
+      summary: Open a draft opening (draft → open). Publishes field-training.opening.published. Permission field-training:opening:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "409": { description: Not a draft } }
+  /openings/{id}/close:
+    post:
+      summary: Stop taking placements (open → closed). Existing placements continue. Publishes field-training.opening.closed. Permission field-training:opening:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "409": { description: Not open } }
+  /openings/{id}/cancel:
+    post:
+      summary: >-
+        Cancel an opening. Requested and assigned placements in it are withdrawn; refused if any placement is active.
+        Publishes field-training.opening.cancelled. Permission field-training:opening:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }, "409": { description: An active placement exists } }
+  /openings/{id}/apply:
+    post:
+      summary: >-
+        The caller applies for an open opening that allows applications (→ requested). One request per opening;
+        no overlap with the caller's other placements. Publishes field-training.placement.requested. Permission field-training:self:apply.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { statement: { type: string, maxLength: 2000 } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: "Not open, applications not allowed, no seats, already applied, or overlapping placement" } }
+  /placements:
+    get:
+      summary: >-
+        Placements. status=active backs the widget field-training.active-placements. A caller with only
+        field-training:supervision:read sees the placements they supervise. Permission field-training:placement:read or field-training:supervision:read.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/PlacementStatus" } }
+        - { name: opening_id, in: query, schema: { type: string, format: uuid } }
+        - { name: site_id, in: query, schema: { type: string, format: uuid } }
+        - { name: trainee_id, in: query, schema: { type: string, format: uuid } }
+        - { name: supervisor_id, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementPage" } } } } }
+    post:
+      summary: Assign a trainee to an opening (→ assigned). Publishes field-training.placement.assigned. Permission field-training:placement:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementAssignInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: "No seats, opening not open, or overlapping placement" } }
+  /placements/{id}:
+    get:
+      summary: One placement with hours summary. Permission field-training:placement:read; field-training:supervision:read if the caller supervises it; field-training:self:read if it is the caller's.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "404": { description: Not found } }
+    patch:
+      summary: Change the supervisor or dates of a placement not yet completed. Permission field-training:placement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { supervisor_id: { type: string, format: uuid }, starts_on: { type: string, format: date }, ends_on: { type: string, format: date } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: "Completed, or new dates overlap another placement" } }
+  /placements/{id}/decision:
+    post:
+      summary: >-
+        Approve (requested → assigned) or reject an application. Publishes field-training.placement.assigned or
+        field-training.placement.rejected. Permission field-training:placement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [approved, rejected] }, supervisor_id: { type: string, format: uuid }, reason: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: "Not requested, or no seats left" } }
+  /placements/{id}/start:
+    post:
+      summary: Start an assigned placement early (assigned → active). The daily job does this on the start date. Publishes field-training.placement.started. Permission field-training:placement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: Not assigned } }
+  /placements/{id}/complete:
+    post:
+      summary: >-
+        Complete an active placement. Needs a final assessment; if verified hours are below the requirement it needs
+        override with a reason. Publishes field-training.placement.completed. Permission field-training:placement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { override: { type: boolean, default: false }, reason: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: Refused, content: { application/json: { schema: { $ref: "#/components/schemas/Refusal" } } } } }
+  /placements/{id}/withdraw:
+    post:
+      summary: >-
+        Withdraw a placement before completion, with a reason. Frees the seat. Publishes field-training.placement.withdrawn.
+        Permission field-training:placement:manage, or field-training:self:apply for the caller's own placement that is not yet active.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Placement" } } } }, "409": { description: "Already completed, rejected or withdrawn" } }
+  /placements/{id}/logs:
+    get:
+      summary: Log entries of a placement, newest first. Same visibility as GET /placements/{id}.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/LogStatus" } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LogEntry" } } } } } }
+    post:
+      summary: >-
+        The trainee adds a log entry to their active placement. Daily hours across entries stay at or under 24.
+        Publishes field-training.log.submitted. Permission field-training:self:log.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntryInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntry" } } } }, "409": { description: "Placement not active, date outside the placement, or over 24 hours that day" } }
+  /logs/{id}:
+    patch:
+      summary: The trainee edits a submitted or returned entry; a returned entry goes back to submitted. Verified entries are locked. Permission field-training:self:log.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntryInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntry" } } } }, "409": { description: Entry verified } }
+  /logs/{id}/verify:
+    post:
+      summary: The placement's supervisor verifies an entry; its hours now count. Never the caller's own entry. Publishes field-training.log.verified. Permission field-training:log:verify.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntry" } } } }, "403": { description: "Not the placement's supervisor, or own entry" }, "409": { description: Not submitted } }
+  /logs/{id}/return:
+    post:
+      summary: The placement's supervisor returns an entry for correction with a reason. Publishes field-training.log.returned. Permission field-training:log:verify.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LogEntry" } } } }, "409": { description: Not submitted } }
+  /placements/{id}/assessments:
+    get:
+      summary: Assessments of a placement. Same visibility as GET /placements/{id}.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Assessment" } } } } } }
+    post:
+      summary: >-
+        The placement's supervisor records a mid or final assessment of an active placement. One final per placement.
+        Publishes field-training.assessment.recorded. Permission field-training:assessment:record.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssessmentInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Assessment" } } } }, "403": { description: Not the placement's supervisor }, "409": { description: "Placement not active, or final already recorded" } }
+  /me/placements:
+    get:
+      summary: >-
+        The caller's placements as trainee: active first, then upcoming, then requested; completed with
+        include_past. Backs the widget field-training.my-placement. Permission field-training:self:read.
+      parameters: [{ name: include_past, in: query, schema: { type: boolean, default: false } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Placement" } } } } } }
+  /me/hours:
+    get:
+      summary: >-
+        Hours for the caller's active or most recent placement: required, verified, awaiting verification and
+        returned, plus the last 14 days by date. Backs the widget field-training.hours-logged. Permission field-training:self:read.
+      parameters: [{ name: placement_id, in: query, description: Defaults to the active or most recent placement, schema: { type: string, format: uuid } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/HoursSummary" } } } } }
+  /me/trainees:
+    get:
+      summary: >-
+        Active placements the caller supervises that need action, most urgent first: entries awaiting verification,
+        final assessment due (within 7 days of the end date or past it). Backs the widget field-training.trainees-to-assess.
+        Permission field-training:supervision:read.
+      parameters: [{ $ref: "#/components/parameters/Limit" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TraineeToAssess" } } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Reason:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 3 } }
+    Refusal:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [not-active, no-final-assessment, hours-short, reason-required] }
+        message: { type: string }
+    Hours: { type: number, minimum: 0, multipleOf: 0.25, description: "Hours in steps of 0.25" }
+    SiteInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        kind: { type: string, description: "Organisation's label for the kind of site" }
+        address: { type: string }
+        contact_name: { type: string }
+        contact_email: { type: string, format: email }
+        supervisor_ids: { type: array, items: { type: string, format: uuid }, description: "person_ids of supervisors at this site" }
+        active: { type: boolean, default: true }
+    Site:
+      allOf:
+        - { $ref: "#/components/schemas/SiteInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties: { id: { type: string, format: uuid }, organisation_id: { type: string, format: uuid } }
+    OpeningStatus: { type: string, enum: [draft, open, closed, cancelled] }
+    OpeningInput:
+      type: object
+      required: [site_id, title, starts_on, ends_on, seats]
+      properties:
+        site_id: { type: string, format: uuid }
+        title: { type: string }
+        discipline: { type: string, description: "Organisation's label for the area of training" }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        seats: { type: integer, minimum: 1 }
+        required_hours: { $ref: "#/components/schemas/Hours" }
+        allow_applications: { type: boolean, default: false }
+        eligibility: { type: string, description: Free text shown to trainees }
+        supervisor_ids: { type: array, items: { type: string, format: uuid } }
+    Opening:
+      allOf:
+        - { $ref: "#/components/schemas/OpeningInput" }
+        - type: object
+          required: [id, organisation_id, status, seats_filled]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            site_name: { type: string }
+            status: { $ref: "#/components/schemas/OpeningStatus" }
+            seats_filled: { type: integer, minimum: 0 }
+    OpeningPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Opening" } }
+        next_cursor: { type: [string, "null"] }
+    PlacementStatus: { type: string, enum: [requested, assigned, active, completed, rejected, withdrawn] }
+    PlacementAssignInput:
+      type: object
+      required: [opening_id, trainee_id]
+      properties:
+        opening_id: { type: string, format: uuid }
+        trainee_id: { type: string, format: uuid }
+        supervisor_id: { type: string, format: uuid, description: "Defaults to the opening's first supervisor" }
+        starts_on: { type: string, format: date, description: "Defaults to the opening's period; must fall inside it" }
+        ends_on: { type: string, format: date }
+    Placement:
+      type: object
+      required: [id, organisation_id, opening_id, site_id, trainee_id, starts_on, ends_on, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        opening_id: { type: string, format: uuid }
+        opening_title: { type: string }
+        site_id: { type: string, format: uuid }
+        site_name: { type: string }
+        trainee_id: { type: string, format: uuid }
+        trainee_name: { type: string, description: "Cached from student-information" }
+        supervisor_id: { type: [string, "null"], format: uuid }
+        supervisor_name: { type: [string, "null"] }
+        starts_on: { type: string, format: date }
+        ends_on: { type: string, format: date }
+        status: { $ref: "#/components/schemas/PlacementStatus" }
+        statement: { type: [string, "null"], description: "Trainee's application statement" }
+        required_hours: { $ref: "#/components/schemas/Hours" }
+        verified_hours: { $ref: "#/components/schemas/Hours" }
+        pending_hours: { $ref: "#/components/schemas/Hours" }
+        final_outcome: { type: [string, "null"] }
+        reason: { type: [string, "null"], description: "Rejection, withdrawal or override reason" }
+    PlacementPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Placement" } }
+        next_cursor: { type: [string, "null"] }
+    LogStatus: { type: string, enum: [submitted, verified, returned] }
+    LogEntryInput:
+      type: object
+      required: [date, hours, activities]
+      properties:
+        date: { type: string, format: date }
+        hours: { allOf: [{ $ref: "#/components/schemas/Hours" }], maximum: 24, exclusiveMinimum: 0 }
+        activities: { type: string, maxLength: 4000, description: "What the trainee did. No third-party personal data." }
+        reflection: { type: string, maxLength: 4000 }
+    LogEntry:
+      allOf:
+        - { $ref: "#/components/schemas/LogEntryInput" }
+        - type: object
+          required: [id, organisation_id, placement_id, status, submitted_at]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            placement_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/LogStatus" }
+            submitted_at: { type: string, format: date-time }
+            verified_by: { type: [string, "null"], format: uuid }
+            verified_at: { type: [string, "null"], format: date-time }
+            return_reason: { type: [string, "null"] }
+    AssessmentInput:
+      type: object
+      required: [stage, outcome]
+      properties:
+        stage: { type: string, enum: [mid, final] }
+        outcome: { type: string, description: "Value on the organisation's outcome scale" }
+        score: { type: [number, "null"], minimum: 0, maximum: 100 }
+        comments: { type: string, maxLength: 4000 }
+    Assessment:
+      allOf:
+        - { $ref: "#/components/schemas/AssessmentInput" }
+        - type: object
+          required: [id, organisation_id, placement_id, assessor_id, recorded_at]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            placement_id: { type: string, format: uuid }
+            assessor_id: { type: string, format: uuid }
+            recorded_at: { type: string, format: date-time }
+    HoursSummary:
+      type: object
+      required: [placement_id, required_hours, verified_hours, pending_hours, returned_hours, by_date]
+      properties:
+        placement_id: { type: [string, "null"], format: uuid, description: "Null when the caller has no placement" }
+        required_hours: { $ref: "#/components/schemas/Hours" }
+        verified_hours: { $ref: "#/components/schemas/Hours" }
+        pending_hours: { $ref: "#/components/schemas/Hours" }
+        returned_hours: { $ref: "#/components/schemas/Hours" }
+        by_date:
+          type: array
+          items:
+            type: object
+            required: [date, verified_hours, pending_hours]
+            properties:
+              date: { type: string, format: date }
+              verified_hours: { $ref: "#/components/schemas/Hours" }
+              pending_hours: { $ref: "#/components/schemas/Hours" }
+    TraineeToAssess:
+      type: object
+      required: [placement, entries_awaiting, final_assessment_due]
+      properties:
+        placement: { $ref: "#/components/schemas/Placement" }
+        entries_awaiting: { type: integer, minimum: 0 }
+        final_assessment_due: { type: boolean }

@@ -5,13 +5,13 @@ kind: feature              # feature | platform | integration
 domain: practice
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress         # planned | in-progress | stable | deprecated
 description: "Projects with milestones, teams and reviews: capstone, film, live business, research, artwork."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [tejaswini-rooman]              # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, notification, scheduler, documents]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.

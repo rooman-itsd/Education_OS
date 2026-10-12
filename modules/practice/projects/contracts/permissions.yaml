@@ -1,11 +1,44 @@
 # Permission catalogue for projects. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Roles below are generic. Each academy profile maps its own roles onto them (for example its learner,
+# guide and coordinator roles); the module never names an academy role.
 module: projects
-permissions: []
-#  - key: projects:record:read
-#    description: ...
-#  - key: projects:record:write
-#    description: ...
-roles: []
-#  - name: projects-admin
-#    grants: [projects:record:read, projects:record:write]
+permissions:
+  - key: projects:project:read
+    description: View every project with its team, milestones and submissions.
+  - key: projects:project:manage
+    description: Create projects, approve or reject proposals, change teams and guides, manage milestones, cancel projects.
+  - key: projects:guidance:read
+    description: View the projects the caller guides and the work awaiting their review.
+  - key: projects:milestone:manage
+    description: Add, change and cancel milestones of projects the caller guides.
+  - key: projects:review:record
+    description: Accept or return milestones and evaluate final submissions of projects the caller guides.
+  - key: projects:self:read
+    description: View own projects, milestones, submissions and feedback.
+  - key: projects:self:propose
+    description: Propose a project and, as its lead while proposed, edit it and its team.
+  - key: projects:self:submit
+    description: Submit milestones and the final work of own projects.
+roles:
+  - name: projects-coordinator
+    description: Coordinates projects for the organisation; approves proposals and assigns guides.
+    grants:
+      - projects:project:read
+      - projects:project:manage
+  - name: projects-guide
+    description: Guides project teams; sets milestones, reviews and evaluates.
+    grants:
+      - projects:guidance:read
+      - projects:milestone:manage
+      - projects:review:record
+  - name: projects-member
+    description: Learner who works on projects.
+    grants:
+      - projects:self:read
+      - projects:self:propose
+      - projects:self:submit
+  - name: projects-viewer
+    description: Management and org admin oversight, read only.
+    grants:
+      - projects:project:read

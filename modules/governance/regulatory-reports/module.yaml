@@ -5,13 +5,13 @@ kind: feature              # feature | platform | integration
 domain: governance
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "UGC, AISHE, NIRF and other statutory reporting."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [madhumitha-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, notification]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -21,7 +21,7 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events: []        # none in v1; see docs/prd.md open question 2
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

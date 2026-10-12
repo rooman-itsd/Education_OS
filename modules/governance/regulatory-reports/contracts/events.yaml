@@ -1,9 +1,16 @@
 # Domain events published by regulatory-reports.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Payloads carry identifiers and metadata only: never preparation notes, links, review comments, or submission and
+# acknowledgement references. No module consumes these events yet; whether to keep them is docs/prd.md open question 9.
+# This module consumes no events in v1 (docs/prd.md open question 2).
+# The event-bus envelope proposed in PR #189 differs from this convention: docs/prd.md open question 11.
 module: regulatory-reports
 version: 1
-events: []
-#  - name: regulatory-reports.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: regulatory-reports.filing.submitted
+    description: A filing was recorded as submitted to its authority.
+    payload: { organisation_id: uuid, filing_id: uuid, obligation_id: uuid, period_label: string, submitted_on: date }
+  - name: regulatory-reports.filing.acknowledged
+    description: The authority's acknowledgement of a filing was recorded. Final.
+    payload: { organisation_id: uuid, filing_id: uuid, obligation_id: uuid, acknowledged_on: date }

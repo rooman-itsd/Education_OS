@@ -1,9 +1,85 @@
 # Domain events published by examinations.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries organisation_id, in the envelope and in the payload.
+#
+# STATUS: PROPOSED (week 1, issue #63). `consumers` lists the modules expected to subscribe; each
+# owner confirms before this file is locked (see docs/prd.md section 11).
+# academic_period_id, course_offering_id and instructor_assignment_id are academic-management IDs
+# (vocabulary aligned by owner decision C5, docs/prd.md Q8); student_id and staff_id are external person IDs.
 module: examinations
 version: 1
-events: []
-#  - name: examinations.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+# Envelope fields as stored by the outbox in packages/core (eos_core.events.OutboxEvent).
+# actor is the acting user's id, null when the system acts. The outbox stores no per-event
+# version; the contract version is `version` above.
+envelope:
+  id: uuid
+  name: string
+  organisation_id: uuid
+  actor: "uuid?"
+  occurred_at: datetime
+  payload: object
+events:
+  - name: examinations.exam-cycle.created
+    description: An exam cycle was created for an academic period.
+    consumers: [reporting]
+    payload: { organisation_id: uuid, exam_cycle_id: uuid, academic_period_id: uuid, code: string, name: string, cycle_type: string, starts_on: date, ends_on: date }
+
+  - name: examinations.exam-cycle.closed
+    description: An exam cycle was closed; only result revision is possible afterwards.
+    consumers: [reporting]
+    payload: { organisation_id: uuid, exam_cycle_id: uuid, academic_period_id: uuid, closed_at: datetime }
+
+  - name: examinations.exam-session.scheduled
+    description: An exam session was scheduled with the papers written in it.
+    consumers: [notification]
+    payload: { organisation_id: uuid, exam_session_id: uuid, exam_cycle_id: uuid, starts_at: datetime, ends_at: datetime, venue_label: "string?", papers: "{ exam_paper_id: uuid, course_offering_id: uuid }[]" }
+
+  - name: examinations.exam-session.rescheduled
+    description: An exam session's time or venue changed.
+    consumers: [notification]
+    payload: { organisation_id: uuid, exam_session_id: uuid, exam_cycle_id: uuid, previous_starts_at: datetime, previous_ends_at: datetime, starts_at: datetime, ends_at: datetime, venue_label: "string?", reason: "string?" }
+
+  - name: examinations.exam-session.cancelled
+    description: An exam session was cancelled; its papers return to draft for rescheduling.
+    consumers: [notification]
+    payload: { organisation_id: uuid, exam_session_id: uuid, exam_cycle_id: uuid, exam_paper_ids: "uuid[]", reason: string, cancelled_at: datetime }
+
+  - name: examinations.candidate.eligibility-determined
+    description: Eligibility was determined or overridden for one student in an exam cycle. One event per student per run.
+    consumers: [notification, student-information]
+    payload: { organisation_id: uuid, exam_cycle_id: uuid, student_id: uuid, papers: "{ exam_paper_id: uuid, course_offering_id: uuid, eligibility_status: string, reasons: string[] }[]", determined_at: datetime }
+
+  - name: examinations.hall-ticket.issued
+    description: A hall ticket was issued (or issued again after being withheld).
+    consumers: [notification]
+    payload: { organisation_id: uuid, hall_ticket_id: uuid, exam_cycle_id: uuid, student_id: uuid, exam_paper_ids: "uuid[]", document_id: uuid, issued_at: datetime }
+
+  - name: examinations.hall-ticket.withheld
+    description: A hall ticket was withheld, with a reason.
+    consumers: [notification]
+    payload: { organisation_id: uuid, hall_ticket_id: uuid, exam_cycle_id: uuid, student_id: uuid, reason: string, withheld_at: datetime }
+
+  - name: examinations.hall-ticket.revoked
+    description: A hall ticket was revoked, with a reason. Revocation is final.
+    consumers: [notification]
+    payload: { organisation_id: uuid, hall_ticket_id: uuid, exam_cycle_id: uuid, student_id: uuid, reason: string, revoked_at: datetime }
+
+  - name: examinations.duty.assigned
+    description: A staff member was assigned an invigilation, evaluation or moderation duty.
+    consumers: [notification]
+    payload: { organisation_id: uuid, exam_duty_id: uuid, exam_cycle_id: uuid, staff_id: uuid, duty_type: string, exam_session_id: "uuid?", exam_paper_id: "uuid?", starts_at: "datetime?" }
+
+  - name: examinations.duty.cancelled
+    description: An exam duty was cancelled, with a reason.
+    consumers: [notification]
+    payload: { organisation_id: uuid, exam_duty_id: uuid, exam_cycle_id: uuid, staff_id: uuid, duty_type: string, reason: string, cancelled_at: datetime }
+
+  - name: examinations.result.published
+    description: Results were published for one student in an exam cycle. One event per student, listing the course results published now, at their current version.
+    consumers: [enrolment-registration, student-information, reporting, regulatory-reports, nad, digilocker, notification]
+    payload: { organisation_id: uuid, exam_cycle_id: uuid, academic_period_id: uuid, student_id: uuid, courses: "{ result_id: uuid, course_offering_id: uuid, version: integer, weighted_percent: number, grade: string, grade_point: number, passed: boolean }[]", grade_point_average: "number?", published_at: datetime }
+
+  - name: examinations.result.revised
+    description: A published result was revised, with a reason; a new version replaces the previous one.
+    consumers: [enrolment-registration, student-information, reporting, regulatory-reports, nad, digilocker, notification]
+    payload: { organisation_id: uuid, result_id: uuid, exam_cycle_id: uuid, student_id: uuid, course_offering_id: uuid, previous_version: integer, version: integer, previous: "{ weighted_percent: number, grade: string, grade_point: number, passed: boolean }", current: "{ weighted_percent: number, grade: string, grade_point: number, passed: boolean }", grade_point_average: "number?", reason: string, revised_at: datetime }

@@ -1,9 +1,47 @@
 # Domain events published by field-training.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Payloads use only generic terms; consumers take labels from the academy profile vocabulary.
+# Log entry text and assessment comments are never published; read them through the API.
 module: field-training
 version: 1
-events: []
-#  - name: field-training.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: field-training.opening.published
+    description: An opening is open for placements. Notification may tell eligible trainees when it accepts applications.
+    payload: { organisation_id: uuid, opening_id: uuid, site_id: uuid, starts_on: date, ends_on: date, seats: integer, allow_applications: boolean }
+  - name: field-training.opening.closed
+    description: An opening stopped taking placements. Existing placements continue.
+    payload: { organisation_id: uuid, opening_id: uuid }
+  - name: field-training.opening.cancelled
+    description: An opening was cancelled; its requested and assigned placements were withdrawn.
+    payload: { organisation_id: uuid, opening_id: uuid, reason: string }
+  - name: field-training.placement.requested
+    description: A trainee applied for an opening. Notification tells the coordinators.
+    payload: { organisation_id: uuid, placement_id: uuid, opening_id: uuid, trainee_id: uuid }
+  - name: field-training.placement.assigned
+    description: A trainee was assigned to an opening, directly or by approving an application.
+    payload: { organisation_id: uuid, placement_id: uuid, opening_id: uuid, site_id: uuid, trainee_id: uuid, supervisor_id: uuid, starts_on: date, ends_on: date, required_hours: number }
+  - name: field-training.placement.rejected
+    description: An application was rejected. Notification tells the trainee.
+    payload: { organisation_id: uuid, placement_id: uuid, trainee_id: uuid, reason: string }
+  - name: field-training.placement.started
+    description: A placement became active, on its start date or early. Notification tells the supervisor.
+    payload: { organisation_id: uuid, placement_id: uuid, trainee_id: uuid, supervisor_id: uuid, started_on: date }
+  - name: field-training.placement.completed
+    description: A placement was completed. skill-progress and portfolio may record it.
+    payload: { organisation_id: uuid, placement_id: uuid, opening_id: uuid, site_id: uuid, trainee_id: uuid, verified_hours: number, required_hours: number, final_outcome: string, hours_overridden: boolean }
+  - name: field-training.placement.withdrawn
+    description: A placement was withdrawn before completion; its seat is free.
+    payload: { organisation_id: uuid, placement_id: uuid, trainee_id: uuid, was_active: boolean, reason: string }
+  - name: field-training.log.submitted
+    description: A trainee submitted or resubmitted a log entry. The supervisor's to-assess list updates.
+    payload: { organisation_id: uuid, log_id: uuid, placement_id: uuid, trainee_id: uuid, supervisor_id: uuid, date: date, hours: number }
+  - name: field-training.log.verified
+    description: A supervisor verified a log entry; its hours now count.
+    payload: { organisation_id: uuid, log_id: uuid, placement_id: uuid, trainee_id: uuid, hours: number, verified_by: uuid }
+  - name: field-training.log.returned
+    description: A supervisor returned a log entry for correction. Notification tells the trainee.
+    payload: { organisation_id: uuid, log_id: uuid, placement_id: uuid, trainee_id: uuid }
+  - name: field-training.assessment.recorded
+    description: A supervisor recorded a mid or final assessment of a placement.
+    payload: { organisation_id: uuid, assessment_id: uuid, placement_id: uuid, trainee_id: uuid, assessor_id: uuid, stage: string, outcome: string }
