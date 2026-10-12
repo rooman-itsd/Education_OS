@@ -2,12 +2,19 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 IQAC data collection, NAAC/NBA metrics, evidence repository.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** the organisation's accreditation frameworks and their metrics; collection cycles; assigning metrics to
+owners; responses (values or narratives) with evidence as links or references; review (accept or return); quality action
+items; the counts behind the Governance widget `iqac-accreditation.action-items`. No accreditation content is built in.
+
+**Not in scope:** evidence files, computing metric values from other modules, submitting to accrediting bodies' portals,
+grades and peer team outcomes, statutory returns (regulatory-reports), reminders and timers.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

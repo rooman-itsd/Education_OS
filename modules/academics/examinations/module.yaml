@@ -5,13 +5,13 @@ kind: feature              # feature | platform | integration
 domain: academics
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Exam scheduling, hall tickets, evaluation, results, transcripts."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [shivanisinghrooman-09]  # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, event-bus, documents]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -21,6 +21,11 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
+# Pending confirmation from owners (docs/prd.md section 12): academic period, course offering and
+# instructor assignment events from academic-management; course registration from
+# enrolment-registration; student status from student-information; attendance from
+# timetable-attendance and dues from fees-accounts if events are chosen (Q4, Q5).
+# platform/workflow is not a dependency until Q10 is decided.
 consumes_events: []
 
 # Config this module needs. Document every key in config/env.example.

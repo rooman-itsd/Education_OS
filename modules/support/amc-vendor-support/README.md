@@ -2,12 +2,21 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 AMC contracts, vendor support engagements, renewals.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** AMC contracts with vendors (period, coverage type, value, response terms, contacts) and the items they
+cover; activation, renewal and early termination; expiring and expired contracts worked out when read; support calls
+and service visits (engagements) under a contract; the coverage lookup for other modules' screens; the statistics
+behind the Support Staff widget `amc-vendor-support.contracts-expiring`.
+
+**Not in scope:** the vendor master, vendor approval and blacklisting, purchase orders, invoices and payments
+(procurement); repairs (maintenance); the asset register and warranties (asset-management); SLA clocks
+(sla-management); contract documents; renewal reminders.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
