@@ -24,7 +24,7 @@ jobs:
           cache: pip
       - run: tools/scripts/py-setup.sh
       - name: Tests on SQLite
-        run: .venv/bin/python -m pytest apps/backend packages/core platform/identity/backend -q
+        run: .venv/bin/python -m pytest apps/backend packages/core packages/testing platform/identity/backend -q
       - name: Tests on Postgres with row-level security
         env:
           EOS_DATABASE_URL: postgresql+psycopg://eos:eos@localhost:5432/eos
