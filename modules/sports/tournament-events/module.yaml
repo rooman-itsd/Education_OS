@@ -8,7 +8,7 @@ field: sports       # only for specialized: sports | music | arts | ...
 version: 0.1.0
 status: planned           # planned | in-progress | stable | deprecated
 description: "Tournaments, fixtures, results, officials and event logistics."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [akshatatrathodrooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
