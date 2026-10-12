@@ -1,11 +1,142 @@
 # Permission catalogue for lms. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Scope rules (docs/prd.md section 13). Modules check keys, never roles. Each scope is its own key,
+# and a key always means the same scope whoever holds it:
+# - *-own: the caller's own records (submissions, attempts, released grades), and the course spaces
+#   the caller belongs to as student or instructor.
+# - *-assigned: course spaces the caller teaches (instructor assignment, docs/prd.md LQ5; no
+#   teaching-assistant role in Week 1, owner decision C18).
+# - *-department: course spaces of the caller's department. How the caller's department is obtained
+#   from platform/identity is pending confirmation (docs/prd.md LQ13).
+# - *-all: every course space in the organisation.
+# An operation's x-permission is its narrowest key; holding a wider key of the same action widens the
+# scope, and the widest key held applies. Roles therefore hold the narrowest key plus any wider ones.
 module: lms
-permissions: []
-#  - key: lms:record:read
-#    description: ...
-#  - key: lms:record:write
-#    description: ...
-roles: []
-#  - name: lms-admin
-#    grants: [lms:record:read, lms:record:write]
+permissions:
+  - key: lms:course-space:read-own
+    description: View the course spaces the caller belongs to and their published content
+  - key: lms:course-space:read-department
+    description: View the course spaces of the caller's department and their published content
+  - key: lms:course-space:read-all
+    description: View every course space and its published content
+  - key: lms:course-space:manage-assigned
+    description: Edit settings, activate and archive the course spaces the caller teaches
+  - key: lms:course-space:manage-all
+    description: Create course spaces and edit, activate or archive any course space
+  - key: lms:material:manage-assigned
+    description: Create, edit, publish and unpublish content units and materials in course spaces the caller teaches
+  - key: lms:material:manage-all
+    description: Manage content units and materials in any course space
+  - key: lms:assignment:manage-assigned
+    description: Create, edit, publish and close assignments in course spaces the caller teaches
+  - key: lms:assignment:manage-all
+    description: Manage assignments in any course space
+  - key: lms:quiz:manage-assigned
+    description: Create, edit, publish and close quizzes in course spaces the caller teaches, including answer keys
+  - key: lms:quiz:manage-all
+    description: Manage quizzes in any course space
+  - key: lms:submission:submit-own
+    description: Submit to assignments in the caller's own course spaces
+  - key: lms:submission:read-own
+    description: View the caller's own submissions
+  - key: lms:submission:read-assigned
+    description: View submissions in course spaces the caller teaches
+  - key: lms:submission:read-all
+    description: View submissions in any course space
+  - key: lms:quiz-attempt:attempt-own
+    description: Start, answer and submit quiz attempts in the caller's own course spaces
+  - key: lms:quiz-attempt:read-own
+    description: View the caller's own quiz attempts
+  - key: lms:quiz-attempt:read-assigned
+    description: View quiz attempts in course spaces the caller teaches
+  - key: lms:quiz-attempt:read-all
+    description: View quiz attempts in any course space
+  - key: lms:grade:read-own
+    description: View the caller's own released coursework grades
+  - key: lms:grade:read-assigned
+    description: View gradebooks, including draft grades, of course spaces the caller teaches
+  - key: lms:grade:read-department
+    description: View gradebooks of course spaces in the caller's department
+  - key: lms:grade:read-all
+    description: View gradebooks of any course space
+  - key: lms:grade:manage-assigned
+    description: Grade, give feedback, score essay questions and release grades in course spaces the caller teaches
+  - key: lms:grade:manage-all
+    description: Grade and release grades in any course space
+  - key: lms:discussion:post-own
+    description: Start threads and post replies in the caller's own course spaces
+  - key: lms:discussion:moderate-assigned
+    description: Lock, unlock, hide and unhide threads and posts in course spaces the caller teaches
+  - key: lms:discussion:moderate-all
+    description: Moderate discussions in any course space
+  - key: lms:report:read-department
+    description: View coursework activity reports for the caller's department
+  - key: lms:report:read-all
+    description: View coursework activity reports for the organisation
+roles:
+  - name: lms-admin
+    description: Administers lms for the organisation. Default for org-admin.
+    grants:
+      - lms:course-space:read-own
+      - lms:course-space:read-all
+      - lms:course-space:manage-assigned
+      - lms:course-space:manage-all
+      - lms:material:manage-assigned
+      - lms:material:manage-all
+      - lms:assignment:manage-assigned
+      - lms:assignment:manage-all
+      - lms:quiz:manage-assigned
+      - lms:quiz:manage-all
+      - lms:submission:read-assigned
+      - lms:submission:read-all
+      - lms:quiz-attempt:read-assigned
+      - lms:quiz-attempt:read-all
+      - lms:grade:read-assigned
+      - lms:grade:read-all
+      - lms:grade:manage-assigned
+      - lms:grade:manage-all
+      - lms:discussion:post-own
+      - lms:discussion:moderate-assigned
+      - lms:discussion:moderate-all
+      - lms:report:read-department
+      - lms:report:read-all
+  - name: lms-department-head
+    description: Oversees coursework in the department. Default for department-admin.
+    grants:
+      - lms:course-space:read-own
+      - lms:course-space:read-department
+      - lms:grade:read-assigned
+      - lms:grade:read-department
+      - lms:report:read-department
+  - name: lms-instructor
+    description: Teaches in course spaces. Default for faculty. No teaching-assistant role in Week 1 (owner decision C18).
+    grants:
+      - lms:course-space:read-own
+      - lms:course-space:manage-assigned
+      - lms:material:manage-assigned
+      - lms:assignment:manage-assigned
+      - lms:quiz:manage-assigned
+      - lms:submission:read-assigned
+      - lms:quiz-attempt:read-assigned
+      - lms:grade:read-assigned
+      - lms:grade:manage-assigned
+      - lms:discussion:post-own
+      - lms:discussion:moderate-assigned
+  - name: lms-student
+    description: Learns in the course spaces they belong to. Default for student.
+    grants:
+      - lms:course-space:read-own
+      - lms:submission:submit-own
+      - lms:submission:read-own
+      - lms:quiz-attempt:attempt-own
+      - lms:quiz-attempt:read-own
+      - lms:grade:read-own
+      - lms:discussion:post-own
+  - name: lms-viewer
+    description: Read-only access to course spaces and organisation-wide reports.
+    grants:
+      - lms:course-space:read-own
+      - lms:course-space:read-all
+      - lms:report:read-department
+      - lms:report:read-all
