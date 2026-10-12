@@ -1,9 +1,19 @@
 # Domain events published by knowledge-base.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Titles, bodies, feedback and reader identities are never published. No module consumes these events yet
+# (docs/prd.md "Events", open question 1). The review workflow (submit, return) is internal and publishes no event
+# (open question 7). The event-bus envelope proposed in PR #189 differs: open question 9.
 module: knowledge-base
 version: 1
-events: []
-#  - name: knowledge-base.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: knowledge-base.article.published
+    description: >-
+      The content readers see changed: an article's first publication, a republication, or the restore of a published
+      article. Intended for search indexing and for modules that show linked articles.
+    payload: { organisation_id: uuid, article_id: uuid, slug: string, revision_no: integer, type: string, category_id: uuid, audience: string, first_publication: boolean, published_at: datetime }
+  - name: knowledge-base.article.archived
+    description: >-
+      An article left browse and search; it stays readable by id with status archived. Intended for removing it from a
+      search index and for showing linked articles as archived.
+    payload: { organisation_id: uuid, article_id: uuid, slug: string, was_published: boolean, archived_at: datetime }

@@ -1,9 +1,88 @@
 # Domain events published by academic-management.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+#
+# STATUS: proposed. `consumers` lists the modules expected to subscribe; each owner confirms
+# before this file is locked (see docs/prd.md section 8.3).
 module: academic-management
 version: 1
-events: []
-#  - name: academic-management.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: academic-management.term.created
+    description: An academic term was created.
+    consumers: [timetable-attendance, examinations, lms, enrolment-registration]
+    payload: { organisation_id: uuid, academic_period_id: uuid, code: string, name: string, starts_on: date, ends_on: date }
+
+  - name: academic-management.term.activated
+    description: A term became the organisation's active term; the previous active term was closed.
+    consumers: [timetable-attendance, examinations, lms, enrolment-registration]
+    payload: { organisation_id: uuid, academic_period_id: uuid, previous_academic_period_id: "uuid?", activated_at: datetime }
+
+  - name: academic-management.programme.created
+    description: A programme was created.
+    consumers: [enrolment-registration, student-information]
+    payload: { organisation_id: uuid, programme_id: uuid, code: string, name: string, level: string, department_id: uuid, duration_terms: integer, credits_required: number }
+
+  - name: academic-management.programme.updated
+    description: A programme's details changed.
+    consumers: [enrolment-registration, student-information]
+    payload: { organisation_id: uuid, programme_id: uuid, changed_fields: "string[]" }
+
+  - name: academic-management.programme.archived
+    description: A programme was archived and accepts no new enrolment.
+    consumers: [enrolment-registration, student-information]
+    payload: { organisation_id: uuid, programme_id: uuid, archived_at: datetime }
+
+  - name: academic-management.curriculum.published
+    description: A curriculum version was published for a programme. Published versions are immutable.
+    consumers: [enrolment-registration, examinations]
+    payload: { organisation_id: uuid, curriculum_id: uuid, programme_id: uuid, version: integer, total_credits: number, published_at: datetime }
+
+  - name: academic-management.course.created
+    description: A course was added to the catalogue.
+    consumers: [examinations, lms, timetable-attendance]
+    payload: { organisation_id: uuid, course_id: uuid, code: string, title: string, credits: number, course_type: string, department_id: uuid }
+
+  - name: academic-management.course.updated
+    description: A course's details changed.
+    consumers: [examinations, lms, timetable-attendance]
+    payload: { organisation_id: uuid, course_id: uuid, changed_fields: "string[]" }
+
+  - name: academic-management.course.archived
+    description: A course was archived and can no longer be offered.
+    consumers: [examinations, lms, timetable-attendance]
+    payload: { organisation_id: uuid, course_id: uuid, archived_at: datetime }
+
+  - name: academic-management.offering.created
+    description: A course was offered in a term.
+    consumers: [timetable-attendance, lms, examinations, enrolment-registration]
+    payload: { organisation_id: uuid, course_offering_id: uuid, course_id: uuid, academic_period_id: uuid, programme_ids: "uuid[]", course_code: string, course_title: string, credits: number, course_type: string, department_id: uuid }
+
+  - name: academic-management.offering.updated
+    description: An offering's details changed (programmes it is open to, course snapshot).
+    consumers: [timetable-attendance, lms, examinations, enrolment-registration]
+    payload: { organisation_id: uuid, course_offering_id: uuid, changed_fields: "string[]" }
+
+  - name: academic-management.offering.status-changed
+    description: An offering moved between planned, open, in_progress, completed and cancelled.
+    consumers: [timetable-attendance, lms, examinations, enrolment-registration]
+    payload: { organisation_id: uuid, course_offering_id: uuid, from_status: string, to_status: string, changed_at: datetime }
+
+  - name: academic-management.section.created
+    description: A section was added to an offering.
+    consumers: [timetable-attendance, lms, enrolment-registration]
+    payload: { organisation_id: uuid, section_id: uuid, course_offering_id: uuid, code: string, capacity: integer }
+
+  - name: academic-management.section.updated
+    description: A section's capacity or status changed.
+    consumers: [timetable-attendance, lms, enrolment-registration]
+    payload: { organisation_id: uuid, section_id: uuid, course_offering_id: uuid, capacity: integer, status: string }
+
+  - name: academic-management.faculty-assignment.created
+    description: A faculty member was assigned to an offering, optionally to one section.
+    consumers: [timetable-attendance, lms, examinations]
+    payload: { organisation_id: uuid, instructor_assignment_id: uuid, course_offering_id: uuid, section_id: "uuid?", faculty_id: uuid, role: string, contact_hours: number }
+
+  - name: academic-management.faculty-assignment.ended
+    description: A faculty assignment was ended; the faculty member no longer teaches that offering or section.
+    consumers: [timetable-attendance, lms, examinations]
+    payload: { organisation_id: uuid, instructor_assignment_id: uuid, course_offering_id: uuid, section_id: "uuid?", faculty_id: uuid, ended_at: datetime }

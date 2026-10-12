@@ -2,13 +2,23 @@
 
 **Domain:** practice
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 Projects with milestones, teams and reviews: capstone, film, live business, research, artwork.
 
 
 ## Scope
-_What this module is responsible for, and what it explicitly is not._
+Owner: Tejaswini (@tejaswini-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+Generic "Projects" pattern used by every academy type. Labels come from the academy profile vocabulary
+(`projects.project`, `projects.milestone`, `projects.guide`); the module names no field.
+
+**In scope:** proposals and approval; teams with a lead; guides; milestones with versioned submissions
+and reviews; final submission and evaluation; cancellation.
+
+**Not in scope:** grants and budgets (budget-grants), rubric-based skill assessment (skill-progress), course
+grades (examinations), showcasing and staging finished work (portfolio, productions), plagiarism, ethics and
+viva workflows (later integrations or a specialized module).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

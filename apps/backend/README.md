@@ -22,7 +22,16 @@ Feature modules are added to `PLATFORM_ROUTERS`/`config/modules.enabled.yaml` as
 ```
 tools/scripts/py-setup.sh            # creates .venv and installs every backend package (editable)
 source .venv/bin/activate
-EOS_SUPER_ADMIN_EMAIL=root@local EOS_SUPER_ADMIN_PASSWORD=change-me uvicorn eos_backend.main:app --reload --port 8000
+EOS_SUPER_ADMIN_EMAIL=root@platform.example.com EOS_SUPER_ADMIN_PASSWORD=RootPassw0rd! uvicorn eos_backend.main:app --reload --port 8000
+```
+
+The super admin email must be a valid address with a dot after the `@`; sign-in rejects one like
+`root@local`. On Windows (PowerShell), after creating `.venv` with `py -3.12 -m venv .venv` and the same
+`pip install -e` lines as `py-setup.sh`:
+
+```
+$env:EOS_SUPER_ADMIN_EMAIL='root@platform.example.com'; $env:EOS_SUPER_ADMIN_PASSWORD='RootPassw0rd!'
+.\.venv\Scripts\python.exe -m uvicorn eos_backend.main:app --reload --port 8000
 ```
 
 SQLite by default (`EOS_DATABASE_URL=sqlite:///./eos.db`). For Postgres with row-level security:

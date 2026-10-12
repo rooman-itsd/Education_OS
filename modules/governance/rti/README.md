@@ -2,12 +2,21 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 RTI request intake, assignment, tracking and responses.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** recording RTI requests received by post, in person, by email or through an online portal, with the
+applicant's details and fee metadata; assignment to an officer; referrals to internal custodians; responses, transfers
+to other public authorities and closing; first appeals to the internal appellate authority; configurable due dates
+worked out when read; the deadline list behind the Governance widget `rti.nearing-deadline`. Applicant personal data is
+visible only to RTI officers and the appellate authority.
+
+**Not in scope:** collecting fees (fees-accounts), a public online form or applicant self-service, attachments, second
+appeals to outside bodies, messages to applicants, reminders and timers.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

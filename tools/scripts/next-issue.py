@@ -8,7 +8,7 @@ dashboards by wave, production), then the pool (label `pool`) in the same order.
 
   next-issue.py --event closed --issue 42      # the person who closed #42 gets their next issue
   next-issue.py --event kickoff                # everyone with a handle and no open issue gets their first
-  next-issue.py --event pr --pr 88             # a merged PR: close the issues it references that belong to its author, then hand them the next
+  next-issue.py --event pr --pr 88             # a merged PR: "Closes #N" closes (GitHub does it), "Part of #N" keeps the issue open, no reference gets a reminder
   add --dry-run to print without changing anything
 """
 
@@ -38,6 +38,8 @@ WAVE_ORDER = {
 }
 IN_PROGRESS = "status:in-progress"
 OWNER_RE = re.compile(r"\*\*Owner:\*\*\s*([^\n·]+?)\s*(?:·|$)", re.M)
+# The closing keywords GitHub honours in a PR body; anything else ("Part of #N") is a plain mention.
+CLOSES_RE = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)", re.I)
 
 
 def gh(*args: str, check: bool = True) -> str:
@@ -122,25 +124,21 @@ def main() -> int:
         if handle not in by_handle:
             print(f"PR author @{handle} is not in docs/team/members.yaml; nothing assigned")
             return 0
-        refs = {int(n) for n in re.findall(r"#(\d+)", (pr.get("title") or "") + "\n" + (pr.get("body") or ""))}
-        mine = [it for it in issues if handle in it["assignees"] and it["number"] in refs]
-        for it in mine:  # GitHub closes "Closes #N" on merge; this covers "#N" mentioned without the keyword
-            print(f"closing #{it['number']} ({it['title']}) merged by PR #{a.pr}")
-            if not a.dry_run:
-                gh(
-                    "issue",
-                    "close",
-                    str(it["number"]),
-                    "-R",
-                    REPO,
-                    "--comment",
-                    f"Closed by the merge of #{a.pr}.",
-                    check=False,
-                )
-            it["assignees"].discard(handle)
-            issues.remove(it)
+        text = (pr.get("title") or "") + "\n" + (pr.get("body") or "")
+        closing = {int(n) for n in CLOSES_RE.findall(text)}
+        mentioned = {int(n) for n in re.findall(r"#(\d+)", text)} - closing
+        if closing:
+            # GitHub closes these on merge; the issues.closed event then hands out the next issue.
+            print(
+                f"PR #{a.pr} closes {', '.join(f'#{n}' for n in sorted(closing))}; GitHub closes them, nothing more to do"
+            )
+            return 0
+        if mentioned:
+            # "Part of #N": the author chose to keep the issue open for the rest of its work.
+            print(f"PR #{a.pr} is part of {', '.join(f'#{n}' for n in sorted(mentioned))}; the issue stays open")
+            return 0
         still = busy(handle, issues)
-        if still and not mine:
+        if still:
             msg = (
                 f"@{handle}: this PR merged but your open issue is still open: "
                 + ", ".join(f"#{x['number']}" for x in still)

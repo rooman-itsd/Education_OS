@@ -2,9 +2,278 @@ openapi: 3.1.0
 info:
   title: regulatory-reports API
   version: 0.1.0
-  description: "UGC, AISHE, NIRF and other statutory reporting."
+  description: >-
+    UGC, AISHE, NIRF and other statutory reporting. See docs/prd.md. Obligations are the organisation's own records; no
+    regulator, return, form or deadline is built in.
 servers:
   - url: /api/v1/regulatory-reports
-paths: {}
+paths:
+  /obligations:
+    get:
+      summary: >-
+        Obligations of the organisation, by title. Permission regulatory-reports:data:read,
+        regulatory-reports:obligation:manage or regulatory-reports:filing:prepare.
+      parameters:
+        - { name: authority, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - { name: q, in: query, description: Matches title or authority, schema: { type: string } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Obligation" } } } } } }
+    post:
+      summary: Record an obligation. Permission regulatory-reports:obligation:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObligationInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Obligation" } } } } }
+  /obligations/{id}:
+    get:
+      summary: >-
+        One obligation with counts of its filings by status. Permission regulatory-reports:data:read,
+        regulatory-reports:obligation:manage or regulatory-reports:filing:prepare.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ObligationDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Change or deactivate an obligation. Existing filings keep their values. Permission regulatory-reports:obligation:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObligationUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Obligation" } } } } }
+  /obligations/{id}/filings:
+    post:
+      summary: >-
+        Create the filing of an active obligation for one period (status open). The owner defaults to the obligation's default
+        owner and is notified. Permission regulatory-reports:filing:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FilingInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "409": { description: "A filing for this period label exists, or the obligation is inactive" }, "422": { description: "period_end before period_start, or no owner" } }
+  /filings:
+    get:
+      summary: >-
+        Filings, soonest due first. With regulatory-reports:data:read or regulatory-reports:filing:manage, all; with
+        regulatory-reports:filing:prepare, the caller's own only. Permission regulatory-reports:data:read,
+        regulatory-reports:filing:manage or regulatory-reports:filing:prepare.
+      parameters:
+        - { name: obligation_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/FilingStatus" } } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { name: due_before, in: query, schema: { type: string, format: date } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FilingPage" } } } } }
+  /filings/{id}:
+    get:
+      summary: >-
+        One filing. Permission regulatory-reports:data:read or regulatory-reports:filing:manage, or
+        regulatory-reports:filing:prepare for the caller's own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "404": { description: "Not found or not visible to the caller" } }
+    patch:
+      summary: >-
+        Change a filing before submission. The owner may change preparation_notes and links of their own filing while open
+        or in_preparation (regulatory-reports:filing:prepare); owner_id, due_on and the period change only with
+        regulatory-reports:filing:manage. Permission regulatory-reports:filing:prepare or regulatory-reports:filing:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FilingUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "409": { description: "Filing submitted or final, or field not editable in its status" } }
+  /filings/{id}/status:
+    post:
+      summary: >-
+        Move the filing: open → in_preparation and in_preparation → under_review (the owner with
+        regulatory-reports:filing:prepare, or regulatory-reports:filing:manage); under_review → in_preparation (return, needs
+        comment; the owner is notified) and open or in_preparation → not_applicable (needs reason, final), with
+        regulatory-reports:filing:manage. Permission regulatory-reports:filing:prepare or regulatory-reports:filing:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FilingStatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "409": { description: "Transition not allowed" }, "422": { description: "comment or reason missing" } }
+  /filings/{id}/submit:
+    post:
+      summary: >-
+        Record that the filing was submitted to the authority, with the date and the authority's reference
+        (under_review → submitted). Publishes regulatory-reports.filing.submitted. Permission regulatory-reports:filing:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SubmitInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "409": { description: "Not under review" } }
+  /filings/{id}/acknowledge:
+    post:
+      summary: >-
+        Record the authority's acknowledgement (submitted → acknowledged, final). Publishes
+        regulatory-reports.filing.acknowledged. Permission regulatory-reports:filing:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AcknowledgeInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Filing" } } } }, "409": { description: "Not submitted" } }
+  /stats/due:
+    get:
+      summary: >-
+        Filings not yet submitted that are due within REGULATORY_REPORTS_DUE_SOON_DAYS or overdue: counts and the soonest
+        due. scope=mine (default) counts the caller's own filings; scope=all needs regulatory-reports:data:read. Backs the
+        widget regulatory-reports.due on the Governance, Hospital Coordinator and Research Office dashboards. Permission
+        regulatory-reports:stats:read.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all], default: mine } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DueStats" } } } }, "403": { description: "scope=all without regulatory-reports:data:read" } }
+  /calendar:
+    get:
+      summary: >-
+        Filings by due date between from and to (at most REGULATORY_REPORTS_CALENDAR_MAX_DAYS apart). Backs the Management
+        widget regulatory-reports.compliance-calendar. Permission regulatory-reports:data:read and
+        regulatory-reports:stats:read (both are required).
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Calendar" } } } }, "403": { description: "Caller lacks regulatory-reports:data:read or regulatory-reports:stats:read" }, "422": { description: "to before from, or range too long" } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    FilingStatus:
+      type: string
+      enum: [open, in_preparation, under_review, submitted, acknowledged, not_applicable]
+    Recurrence:
+      type: string
+      description: Informational only; filings are not created automatically.
+      enum: [once, monthly, quarterly, half_yearly, annual]
+    Link:
+      type: object
+      required: [title, url]
+      properties:
+        title: { type: string, maxLength: 200 }
+        url: { type: string, format: uri }
+    ObligationInput:
+      type: object
+      required: [title, authority, recurrence]
+      properties:
+        title: { type: string, maxLength: 200 }
+        authority: { type: string, maxLength: 120, description: "Label of the authority it is filed with, as the organisation names it" }
+        portal_url: { type: string, format: uri }
+        description: { type: string }
+        recurrence: { $ref: "#/components/schemas/Recurrence" }
+        default_owner_id: { type: string, format: uuid }
+        active: { type: boolean, default: true }
+    ObligationUpdateInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        authority: { type: string, maxLength: 120 }
+        portal_url: { type: [string, "null"], format: uri }
+        description: { type: string }
+        recurrence: { $ref: "#/components/schemas/Recurrence" }
+        default_owner_id: { type: [string, "null"], format: uuid }
+        active: { type: boolean }
+    Obligation:
+      allOf:
+        - { $ref: "#/components/schemas/ObligationInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+    ObligationDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Obligation" }
+        - type: object
+          required: [filing_counts]
+          properties:
+            filing_counts:
+              type: array
+              items:
+                type: object
+                required: [status, count]
+                properties:
+                  status: { $ref: "#/components/schemas/FilingStatus" }
+                  count: { type: integer }
+    FilingInput:
+      type: object
+      required: [period_label, period_start, period_end, due_on]
+      properties:
+        period_label: { type: string, maxLength: 60, description: "Unique per obligation, such as 2025-26 or Q2 2026" }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        due_on: { type: string, format: date }
+        owner_id: { type: string, format: uuid, description: "Defaults to the obligation's default owner" }
+    FilingUpdateInput:
+      type: object
+      properties:
+        preparation_notes: { type: string }
+        links: { type: array, items: { $ref: "#/components/schemas/Link" } }
+        owner_id: { type: string, format: uuid }
+        due_on: { type: string, format: date }
+        period_label: { type: string, maxLength: 60 }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+    FilingStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [in_preparation, under_review, not_applicable] }
+        comment: { type: string, minLength: 3, description: "Required when returning (under_review → in_preparation); shown to the owner" }
+        reason: { type: string, minLength: 3, description: "Required for not_applicable" }
+    SubmitInput:
+      type: object
+      required: [submitted_on, submission_reference]
+      properties:
+        submitted_on: { type: string, format: date }
+        submission_reference: { type: string, maxLength: 120, description: "Reference the authority gave, such as an acknowledgement or application number" }
+    AcknowledgeInput:
+      type: object
+      required: [acknowledged_on]
+      properties:
+        acknowledged_on: { type: string, format: date }
+        acknowledgement_reference: { type: string, maxLength: 120 }
+    Filing:
+      type: object
+      required: [id, organisation_id, obligation_id, period_label, period_start, period_end, due_on, owner_id, status, overdue, due_soon]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        obligation_id: { type: string, format: uuid }
+        obligation_title: { type: string }
+        authority: { type: string }
+        period_label: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        due_on: { type: string, format: date }
+        owner_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/FilingStatus" }
+        preparation_notes: { type: [string, "null"] }
+        links: { type: array, items: { $ref: "#/components/schemas/Link" } }
+        review_comment: { type: [string, "null"] }
+        submitted_on: { type: [string, "null"], format: date }
+        submission_reference: { type: [string, "null"] }
+        submitted_by: { type: [string, "null"], format: uuid }
+        acknowledged_on: { type: [string, "null"], format: date }
+        acknowledgement_reference: { type: [string, "null"] }
+        not_applicable_reason: { type: [string, "null"] }
+        overdue: { type: boolean, description: "Not yet submitted and past due_on; worked out when read" }
+        due_soon: { type: boolean, description: "Not yet submitted and due within REGULATORY_REPORTS_DUE_SOON_DAYS; worked out when read" }
+    FilingPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Filing" } }
+        next_cursor: { type: [string, "null"] }
+    FilingSummary:
+      type: object
+      required: [filing_id, obligation_title, authority, period_label, due_on, status, overdue]
+      properties:
+        filing_id: { type: string, format: uuid }
+        obligation_title: { type: string }
+        authority: { type: string }
+        period_label: { type: string }
+        due_on: { type: string, format: date }
+        status: { $ref: "#/components/schemas/FilingStatus" }
+        overdue: { type: boolean }
+    DueStats:
+      type: object
+      required: [scope, due_soon_days, due_soon, overdue, soonest]
+      properties:
+        scope: { type: string, enum: [mine, all] }
+        due_soon_days: { type: integer }
+        due_soon: { type: integer }
+        overdue: { type: integer }
+        soonest: { type: array, description: Up to ten filings, soonest due first, items: { $ref: "#/components/schemas/FilingSummary" } }
+    Calendar:
+      type: object
+      required: [from, to, items]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        items: { type: array, description: Filings due in the range, by due date, items: { $ref: "#/components/schemas/FilingSummary" } }

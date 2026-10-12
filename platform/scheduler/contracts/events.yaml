@@ -1,9 +1,66 @@
 # Domain events published by scheduler.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it.
 module: scheduler
 version: 1
-events: []
-#  - name: scheduler.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+# scheduler.job.due is not a notification about the bus - it IS how work is handed to the
+# module that owns it. Scheduler cannot import billing to call expire_trials(), because
+# module-to-module imports are forbidden, so it publishes and the owner consumes:
+#
+#   schedule fires -> scheduler.job.due { job: "billing.expire-trials" }
+#                  -> billing consumes -> expire_trials() -> billing.trial.expired
+#                  -> notification consumes -> "your trial ended" mail
+#
+# Delivery is at-least-once, so every handler must be idempotent. A job whose definition
+# declares idempotent: false cannot be scheduled.
+events:
+  - name: scheduler.job.due
+    version: 1
+    description: >-
+      A schedule fired and its job should now run. Consumed by the module that declared the
+      job, never by anyone else.
+    payload:
+      run_id: uuid            # echo back on completion so the run can be closed
+      schedule_id: uuid
+      job: string             # <module>.<job-name>
+      scope: string           # platform | organisation
+      trigger: string         # schedule | manual | catch_up
+      arguments: object
+      missed_windows: integer
+
+  - name: scheduler.run.succeeded
+    version: 1
+    description: >-
+      A run finished and the handler reported success. Raised by scheduler once the owning
+      module confirms, not when the due event was published.
+    payload:
+      run_id: uuid
+      schedule_id: uuid
+      job: string
+      duration_ms: integer
+      detail: string
+
+  - name: scheduler.run.failed
+    version: 1
+    description: >-
+      A run failed, or the handler never confirmed within its timeout. Raised once per run,
+      not per attempt, so it is usable as an alert.
+    payload:
+      run_id: uuid
+      schedule_id: uuid
+      job: string
+      detail: string
+
+  - name: scheduler.run.skipped
+    version: 1
+    description: >-
+      A window passed without running: the previous run was still going and the schedule does
+      not allow overlap, or the schedule was disabled. Published because silently skipping
+      work is how a nightly job goes unnoticed for a month.
+    payload:
+      schedule_id: uuid
+      job: string
+      reason: string          # overlap | disabled
+      window_at: datetime
+
+consumes: []

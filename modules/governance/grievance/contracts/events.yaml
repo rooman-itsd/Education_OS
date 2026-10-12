@@ -1,9 +1,18 @@
 # Domain events published by grievance.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Cases are confidential. Payloads carry identifiers and metadata only: never the complainant, respondent, category,
+# description, proceedings, updates, decision outcome, findings or any other case text. Whether these events should be
+# public at all is docs/prd.md open question 6. No module consumes them yet.
+# The event-bus envelope proposed in PR #189 differs from this convention: docs/prd.md open question 11.
 module: grievance
 version: 1
-events: []
-#  - name: grievance.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: grievance.case.filed
+    description: A case was filed. Identifiers, track and committee only.
+    payload: { organisation_id: uuid, case_id: uuid, number: string, track: string, committee_id: uuid, filed_at: datetime }
+  - name: grievance.case.closed
+    description: >-
+      A case reached a final state: closed after a decision (closure decided), withdrawn, or not admitted. appealed says
+      whether an SGRC appeal was made. No outcome and no case content.
+    payload: { organisation_id: uuid, case_id: uuid, number: string, track: string, committee_id: uuid, closure: string, appealed: boolean, closed_at: datetime }

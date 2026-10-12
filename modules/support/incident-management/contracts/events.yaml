@@ -1,9 +1,28 @@
 # Domain events published by incident-management.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Titles, descriptions, timeline updates and RCA text are never published; they go to audit only.
+# The event-bus envelope proposed in PR #189 differs from this convention: docs/prd.md open question 1.
 module: incident-management
 version: 1
-events: []
-#  - name: incident-management.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: incident-management.incident.reported
+    description: An incident was reported. Notification tells the lead and responders.
+    payload: { organisation_id: uuid, incident_id: uuid, number: string, severity: string, affected_services: "string[]", lead_id: uuid, responder_ids: "uuid[]", started_at: datetime }
+  - name: incident-management.incident.status-changed
+    description: >-
+      An incident moved status, including resolve, close, cancel and reopen. Notification tells the lead and responders;
+      helpdesk may react in future (docs/prd.md open question 3).
+    payload: { organisation_id: uuid, incident_id: uuid, number: string, severity: string, from_status: string, to_status: string, problem_id: uuid, changed_at: datetime }
+  - name: incident-management.incident.severity-changed
+    description: An incident's severity was raised or lowered, for example escalated to critical. Notification tells the lead and responders.
+    payload: { organisation_id: uuid, incident_id: uuid, number: string, severity: string, previous_severity: string, status: string, changed_by: uuid }
+  - name: incident-management.problem.status-changed
+    description: A problem moved status, including known_error and resolved. Consumers to be decided (docs/prd.md open question 7).
+    payload: { organisation_id: uuid, problem_id: uuid, number: string, from_status: string, to_status: string, affected_services: "string[]", changed_at: datetime }
+  - name: incident-management.problem.rca-published
+    description: A problem's root-cause analysis was published and is now read-only. Consumers to be decided (docs/prd.md open question 7).
+    payload: { organisation_id: uuid, problem_id: uuid, number: string, published_by: uuid, published_at: datetime }
+  - name: incident-management.action.assigned
+    description: A corrective action was created with an owner, or given a new owner. Notification tells the owner.
+    payload: { organisation_id: uuid, action_id: uuid, problem_id: uuid, problem_number: string, owner_id: uuid, due_date: date }
