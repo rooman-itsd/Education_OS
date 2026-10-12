@@ -1,9 +1,38 @@
 # Domain events published by helpdesk.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Ticket titles, descriptions, replies and internal notes are personal data and are never published; they go to audit only.
+# sla-management runs response and resolution clocks from these events (see docs/prd.md, open question 1).
 module: helpdesk
 version: 1
-events: []
-#  - name: helpdesk.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: helpdesk.ticket.created
+    description: A ticket was raised, by the requester or by an agent on their behalf. Starts the SLA response and resolution clocks.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, requester_id: uuid, raised_by_id: uuid, channel: string, category_id: uuid, queue_id: uuid, priority: string, created_at: datetime }
+  - name: helpdesk.ticket.assigned
+    description: A ticket was assigned to an agent, unassigned (assignee_id null) or moved to another queue. Notification tells the new assignee.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, queue_id: uuid, previous_queue_id: uuid, assignee_id: uuid, previous_assignee_id: uuid, assigned_by: uuid }
+  - name: helpdesk.ticket.responded
+    description: Published once per ticket, on the first public reply by an agent. Stops the SLA response clock.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, responded_by: uuid, responded_at: datetime }
+  - name: helpdesk.ticket.status-changed
+    description: >-
+      A ticket moved between new, in_progress and on_hold: the agent started work or put it on hold, a first public agent
+      reply moved a new ticket to in_progress, or a requester's reply moved a ticket waiting on them back to in_progress.
+      sla-management pauses the resolution clock while on_hold and resumes it after.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, from_status: string, to_status: string, hold_reason: string, changed_at: datetime }
+  - name: helpdesk.ticket.reclassified
+    description: The category or priority of an open ticket changed. SLA targets may need recalculating.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, category_id: uuid, previous_category_id: uuid, priority: string, previous_priority: string, changed_by: uuid }
+  - name: helpdesk.ticket.resolved
+    description: The assignee resolved the ticket. Stops the SLA resolution clock. Notification asks the requester to confirm.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, requester_id: uuid, resolved_by: uuid, resolved_at: datetime }
+  - name: helpdesk.ticket.reopened
+    description: The requester reopened a resolved ticket within the reopen window. The SLA resolution clock resumes.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, requester_id: uuid, assignee_id: uuid, reopen_count: integer, reopened_at: datetime }
+  - name: helpdesk.ticket.closed
+    description: A resolved ticket was confirmed by the requester (closed_by = requester's id) or closed by the daily auto-close job (closed_by null). Final.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, closed_by: uuid, satisfaction_rating: integer, closed_at: datetime }
+  - name: helpdesk.ticket.cancelled
+    description: A ticket was withdrawn by its requester or cancelled by a lead, possibly as a duplicate. Final; any SLA clock is discarded.
+    payload: { organisation_id: uuid, ticket_id: uuid, number: string, cancelled_by: uuid, duplicate_of: uuid, cancelled_at: datetime }

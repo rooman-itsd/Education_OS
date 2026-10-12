@@ -2,9 +2,358 @@ openapi: 3.1.0
 info:
   title: amc-vendor-support API
   version: 0.1.0
-  description: "AMC contracts, vendor support engagements, renewals."
+  description: "AMC contracts, vendor support engagements, renewals. See docs/prd.md."
 servers:
   - url: /api/v1/amc-vendor-support
-paths: {}
+paths:
+  /contracts:
+    get:
+      summary: >-
+        AMC contracts, soonest end date first. expiring and expired are worked out when read from end_date and
+        renewal_notice_days. Permission amc-vendor-support:contract:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ContractStatus" } } }
+        - { name: vendor_id, in: query, description: A procurement vendor id, schema: { type: string, format: uuid } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: expiring, in: query, description: "Active and ending within renewal_notice_days", schema: { type: boolean } }
+        - { name: expired, in: query, description: "Active and past end_date", schema: { type: boolean } }
+        - { name: q, in: query, description: Matches contract number or title, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ContractPage" } } } } }
+    post:
+      summary: Record a contract as a draft. Permission amc-vendor-support:contract:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ContractInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }, "422": { description: "end_date not after start_date" } }
+  /contracts/{id}:
+    get:
+      summary: One contract with its covered items, engagement counts and renewal links. Permission amc-vendor-support:contract:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ContractDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: >-
+        Edit a draft contract freely. An active contract can change only owner_id, vendor_contacts and renewal_notice_days;
+        its terms change through a renewal. Permission amc-vendor-support:contract:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ContractUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }, "409": { description: "Field not editable in the contract's status, or the contract is terminated or renewed" }, "422": { description: "end_date not after start_date" } }
+  /contracts/{id}/activate:
+    post:
+      summary: >-
+        Activate a draft (draft → active). Publishes amc-vendor-support.contract.activated. When the draft renews another
+        contract, that contract becomes renewed and amc-vendor-support.contract.renewed is also published.
+        Permission amc-vendor-support:contract:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }, "409": { description: "Not a draft, or the contract it renews is no longer active" } }
+  /contracts/{id}/terminate:
+    post:
+      summary: >-
+        End an active contract early (active → terminated). Open engagements stay open. Publishes
+        amc-vendor-support.contract.terminated. Permission amc-vendor-support:contract:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TerminateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }, "409": { description: "Not active" } }
+  /contracts/{id}/renew:
+    post:
+      summary: >-
+        Start a renewal: create a draft successor copied from this active contract (terms and covered items) for the next
+        period. The original becomes renewed when the successor is activated. Permission amc-vendor-support:contract:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RenewInput" } } } }
+      responses: { "201": { description: Draft successor created, content: { application/json: { schema: { $ref: "#/components/schemas/Contract" } } } }, "409": { description: "Not active, or a successor already exists" }, "422": { description: "end_date not after start_date" } }
+  /contracts/{id}/covered-items:
+    post:
+      summary: Add a covered item to a draft or active contract. Permission amc-vendor-support:contract:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CoveredItemInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CoveredItem" } } } }, "409": { description: "Contract is terminated or renewed, or the same reference is already covered" } }
+  /contracts/{id}/covered-items/{item_id}:
+    delete:
+      summary: Remove a covered item added by mistake. Audited. Permission amc-vendor-support:contract:manage.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: item_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed }, "404": { description: "Not found" }, "409": { description: "Contract is terminated or renewed" } }
+  /engagements:
+    get:
+      summary: Support calls and service visits, newest first. Permission amc-vendor-support:contract:read.
+      parameters:
+        - { name: contract_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/EngagementStatus" } } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/EngagementKind" } }
+        - { name: within_terms, in: query, description: "false returns engagements outside the contract's response or resolution hours", schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EngagementPage" } } } } }
+    post:
+      summary: Raise a breakdown call or preventive visit against an active contract that has not expired (status open). Permission amc-vendor-support:engagement:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EngagementInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Engagement" } } } }, "409": { description: "Contract not active or expired" }, "422": { description: "covered_item_id does not belong to the contract" } }
+  /engagements/{id}:
+    get:
+      summary: One engagement. Permission amc-vendor-support:contract:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Engagement" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Update description, covered item, references, the vendor's call reference or reported_at. Permission amc-vendor-support:engagement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EngagementUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Engagement" } } } }, "409": { description: "Engagement is closed or cancelled" }, "422": { description: "covered_item_id does not belong to the contract" } }
+  /engagements/{id}/status:
+    post:
+      summary: >-
+        Move the engagement: open → in_progress (records vendor_responded_at); in_progress → resolved (needs
+        resolution_note; records resolved_at); resolved → closed; open or in_progress → cancelled (needs note).
+        Permission amc-vendor-support:engagement:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EngagementStatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Engagement" } } } }, "409": { description: "Transition not allowed from the current status" }, "422": { description: "resolution_note or note missing" } }
+  /coverage:
+    get:
+      summary: >-
+        Active contracts that cover a given record, for example an asset, found through covered items' references. Used
+        by maintenance and asset screens to choose the AMC to reference. Permission amc-vendor-support:contract:read.
+      parameters:
+        - { name: module, in: query, required: true, schema: { type: string } }
+        - { name: entity, in: query, required: true, schema: { type: string } }
+        - { name: id, in: query, required: true, schema: { type: string } }
+        - { name: include_expired, in: query, schema: { type: boolean, default: false } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Contract" } } } } } }
+  /stats/contracts-expiring:
+    get:
+      summary: >-
+        Active contracts ending within within_days (default AMC_VENDOR_SUPPORT_EXPIRY_WINDOW_DAYS) and active contracts
+        already past their end date, soonest first, with whether a renewal draft exists. Backs the Support Staff widget
+        amc-vendor-support.contracts-expiring. Permission amc-vendor-support:contract:read.
+      parameters:
+        - { name: within_days, in: query, schema: { type: integer, minimum: 1, maximum: 366 } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExpiringContracts" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    ContractStatus:
+      type: string
+      description: "Stored status. expiring and expired are worked out when read."
+      enum: [draft, active, terminated, renewed]
+    CoverageType:
+      type: string
+      description: "comprehensive: parts and labour. non_comprehensive: labour only."
+      enum: [comprehensive, non_comprehensive]
+    EngagementKind:
+      type: string
+      enum: [breakdown_call, preventive_visit]
+    EngagementStatus:
+      type: string
+      enum: [open, in_progress, resolved, closed, cancelled]
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: string, pattern: "^[0-9]+(\\.[0-9]{1,2})?$", description: "Decimal as a string, never a float" }
+        currency: { type: string, pattern: "^[A-Z]{3}$", description: "ISO 4217, defaults to AMC_VENDOR_SUPPORT_DEFAULT_CURRENCY" }
+    Reference:
+      type: object
+      description: "Link to a record in another module, by id only, e.g. a procurement purchase order or an asset."
+      required: [module, entity, id]
+      properties:
+        module: { type: string }
+        entity: { type: string }
+        id: { type: string }
+    VendorContact:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+    ContractInput:
+      type: object
+      required: [vendor_id, title, coverage_type, start_date, end_date]
+      properties:
+        vendor_id: { type: string, format: uuid, description: "A vendor in procurement; vendor details are read from procurement" }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        coverage_type: { $ref: "#/components/schemas/CoverageType" }
+        scope: { type: string, description: What the vendor will do }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, description: After start_date }
+        value: { $ref: "#/components/schemas/Money" }
+        purchase_order_reference: { $ref: "#/components/schemas/Reference" }
+        response_hours: { type: integer, minimum: 1, description: Hours within which the vendor must respond to a call }
+        resolution_hours: { type: integer, minimum: 1, description: Hours within which the vendor must resolve a call }
+        preventive_visits_per_year: { type: integer, minimum: 0 }
+        vendor_contacts: { type: array, items: { $ref: "#/components/schemas/VendorContact" } }
+        owner_id: { type: string, format: uuid, description: "Defaults to the caller" }
+        renewal_notice_days: { type: integer, minimum: 0, maximum: 366, default: 60 }
+    ContractUpdateInput:
+      type: object
+      description: "Any ContractInput field while draft; only owner_id, vendor_contacts and renewal_notice_days while active."
+      properties:
+        vendor_id: { type: string, format: uuid }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        coverage_type: { $ref: "#/components/schemas/CoverageType" }
+        scope: { type: string }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        value: { $ref: "#/components/schemas/Money" }
+        purchase_order_reference: { oneOf: [{ $ref: "#/components/schemas/Reference" }, { type: "null" }] }
+        response_hours: { type: integer, minimum: 1 }
+        resolution_hours: { type: integer, minimum: 1 }
+        preventive_visits_per_year: { type: integer, minimum: 0 }
+        vendor_contacts: { type: array, items: { $ref: "#/components/schemas/VendorContact" } }
+        owner_id: { type: string, format: uuid }
+        renewal_notice_days: { type: integer, minimum: 0, maximum: 366 }
+    TerminateInput:
+      type: object
+      required: [reason, effective_date]
+      properties:
+        reason: { type: string, minLength: 3 }
+        effective_date: { type: string, format: date }
+    RenewInput:
+      type: object
+      required: [end_date]
+      properties:
+        start_date: { type: string, format: date, description: "Defaults to the day after the current end_date" }
+        end_date: { type: string, format: date }
+        value: { $ref: "#/components/schemas/Money" }
+        purchase_order_reference: { $ref: "#/components/schemas/Reference" }
+    Contract:
+      type: object
+      required: [id, organisation_id, number, vendor_id, title, coverage_type, start_date, end_date, status, owner_id, renewal_notice_days, expiring, expired]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as AMC-000012" }
+        vendor_id: { type: string, format: uuid }
+        title: { type: string }
+        coverage_type: { $ref: "#/components/schemas/CoverageType" }
+        scope: { type: [string, "null"] }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        value: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        purchase_order_reference: { oneOf: [{ $ref: "#/components/schemas/Reference" }, { type: "null" }] }
+        response_hours: { type: [integer, "null"] }
+        resolution_hours: { type: [integer, "null"] }
+        preventive_visits_per_year: { type: [integer, "null"] }
+        vendor_contacts: { type: array, items: { $ref: "#/components/schemas/VendorContact" } }
+        owner_id: { type: string, format: uuid }
+        renewal_notice_days: { type: integer }
+        status: { $ref: "#/components/schemas/ContractStatus" }
+        expiring: { type: boolean, description: "Active and end_date within renewal_notice_days; worked out when read" }
+        expired: { type: boolean, description: "Active and end_date passed; worked out when read" }
+        renewed_from_id: { type: [string, "null"], format: uuid }
+        renewed_to_id: { type: [string, "null"], format: uuid }
+        activated_at: { type: [string, "null"], format: date-time }
+        terminated_at: { type: [string, "null"], format: date-time }
+        termination_effective_date: { type: [string, "null"], format: date }
+        termination_reason: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+    CoveredItemInput:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string, minLength: 2, maxLength: 200, description: "What is covered, such as 'Main block lift 2'" }
+        reference: { $ref: "#/components/schemas/Reference" }
+    CoveredItem:
+      allOf:
+        - { $ref: "#/components/schemas/CoveredItemInput" }
+        - type: object
+          required: [id, contract_id]
+          properties:
+            id: { type: string, format: uuid }
+            contract_id: { type: string, format: uuid }
+    ContractDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Contract" }
+        - type: object
+          required: [covered_items, engagement_counts]
+          properties:
+            covered_items: { type: array, items: { $ref: "#/components/schemas/CoveredItem" } }
+            engagement_counts:
+              type: object
+              properties:
+                open: { type: integer }
+                resolved: { type: integer }
+                outside_terms: { type: integer }
+    ContractPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Contract" } }
+        next_cursor: { type: [string, "null"] }
+    EngagementInput:
+      type: object
+      required: [contract_id, kind, description]
+      properties:
+        contract_id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/EngagementKind" }
+        description: { type: string, minLength: 3 }
+        covered_item_id: { type: string, format: uuid, description: Must belong to the contract }
+        references: { type: array, items: { $ref: "#/components/schemas/Reference" }, description: "Maintenance ticket, helpdesk ticket or incident behind the call" }
+        vendor_call_reference: { type: string, description: "The vendor's own call or job number" }
+        reported_at: { type: string, format: date-time, description: "When the vendor was told; defaults to now" }
+    EngagementUpdateInput:
+      type: object
+      properties:
+        description: { type: string, minLength: 3 }
+        covered_item_id: { type: [string, "null"], format: uuid }
+        references: { type: array, items: { $ref: "#/components/schemas/Reference" } }
+        vendor_call_reference: { type: string }
+        reported_at: { type: string, format: date-time }
+    EngagementStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [in_progress, resolved, closed, cancelled] }
+        at: { type: string, format: date-time, description: "When the vendor responded or resolved; defaults to now" }
+        resolution_note: { type: string, minLength: 3, description: "Required when status is resolved" }
+        note: { type: string, minLength: 3, description: "Required when status is cancelled" }
+    Engagement:
+      type: object
+      required: [id, organisation_id, number, contract_id, kind, description, status, reported_at, raised_by, within_terms]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as AVS-000034" }
+        contract_id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/EngagementKind" }
+        description: { type: string }
+        covered_item_id: { type: [string, "null"], format: uuid }
+        references: { type: array, items: { $ref: "#/components/schemas/Reference" } }
+        vendor_call_reference: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/EngagementStatus" }
+        reported_at: { type: string, format: date-time }
+        vendor_responded_at: { type: [string, "null"], format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        resolution_note: { type: [string, "null"] }
+        raised_by: { type: string, format: uuid }
+        within_terms: { type: [boolean, "null"], description: "Response and resolution within the contract's hours; null while not yet measurable or when the contract sets no hours. Worked out when read." }
+    EngagementPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Engagement" } }
+        next_cursor: { type: [string, "null"] }
+    ExpiringContracts:
+      type: object
+      required: [within_days, expiring_count, expired_count, items]
+      properties:
+        within_days: { type: integer }
+        expiring_count: { type: integer }
+        expired_count: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [contract_id, number, vendor_id, title, end_date, days_left, renewal_draft_exists]
+            properties:
+              contract_id: { type: string, format: uuid }
+              number: { type: string }
+              vendor_id: { type: string, format: uuid }
+              title: { type: string }
+              end_date: { type: string, format: date }
+              days_left: { type: integer, description: "Negative when already past the end date" }
+              renewal_draft_exists: { type: boolean }

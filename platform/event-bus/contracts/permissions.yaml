@@ -1,11 +1,32 @@
 # Permission catalogue for event-bus. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# The bus has no end-user surface. These are operator permissions. Per ADR-0005, platform:*
+# keys belong to the super admin and are never grantable inside an organisation.
 module: event-bus
-permissions: []
-#  - key: event-bus:record:read
-#    description: ...
-#  - key: event-bus:record:write
-#    description: ...
-roles: []
-#  - name: event-bus-admin
-#    grants: [event-bus:record:read, event-bus:record:write]
+permissions:
+  - key: event-bus:event:read
+    description: Inspect events raised by this organisation and their delivery state
+  - key: event-bus:event:replay
+    description: Replay a dead-lettered event of this organisation
+  - key: event-bus:relay:read
+    description: View relay health, backlog and stall state
+  - key: platform:event-bus:admin
+    description: >-
+      Super admin only. Inspect and replay events across every organisation, including
+      platform-level events that belong to none.
+
+roles:
+  - name: event-bus-operator
+    description: >-
+      Diagnoses delivery problems inside one organisation. Intended for an organisation admin,
+      not a general user; seeing an event payload means seeing the data that changed.
+    grants:
+      - event-bus:event:read
+      - event-bus:event:replay
+      - event-bus:relay:read
+
+  - name: event-bus-viewer
+    description: Read-only relay health, without access to event payloads
+    grants:
+      - event-bus:relay:read
