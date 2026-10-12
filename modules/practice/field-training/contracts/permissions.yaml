@@ -1,11 +1,59 @@
 # Permission catalogue for field-training. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Roles below are generic. Each academy profile maps its own roles onto them (for example its trainee,
+# supervisor and coordinator roles); the module never names an academy role.
 module: field-training
-permissions: []
-#  - key: field-training:record:read
-#    description: ...
-#  - key: field-training:record:write
-#    description: ...
-roles: []
-#  - name: field-training-admin
-#    grants: [field-training:record:read, field-training:record:write]
+permissions:
+  - key: field-training:site:read
+    description: View host sites.
+  - key: field-training:site:manage
+    description: Add and update host sites and their supervisors.
+  - key: field-training:opening:read
+    description: View every opening.
+  - key: field-training:opening:manage
+    description: Create, update, publish, close and cancel openings.
+  - key: field-training:placement:read
+    description: View every placement, its logbook and assessments.
+  - key: field-training:placement:manage
+    description: Assign, approve, reject, start, complete and withdraw placements; change supervisor or dates.
+  - key: field-training:supervision:read
+    description: View the placements the caller supervises, their logbooks and assessments, and openings at the caller's sites.
+  - key: field-training:log:verify
+    description: Verify or return log entries of placements the caller supervises.
+  - key: field-training:assessment:record
+    description: Record assessments of placements the caller supervises.
+  - key: field-training:self:read
+    description: View own placements, hours, log entries and assessments.
+  - key: field-training:self:apply
+    description: See open openings that accept applications, apply, and withdraw own placement before it starts.
+  - key: field-training:self:log
+    description: Add and edit own log entries.
+roles:
+  - name: field-training-coordinator
+    description: Coordinates sites, openings and placements for the organisation.
+    grants:
+      - field-training:site:read
+      - field-training:site:manage
+      - field-training:opening:read
+      - field-training:opening:manage
+      - field-training:placement:read
+      - field-training:placement:manage
+  - name: field-training-supervisor
+    description: Supervises trainees at a site; verifies logs and assesses.
+    grants:
+      - field-training:site:read
+      - field-training:supervision:read
+      - field-training:log:verify
+      - field-training:assessment:record
+  - name: field-training-trainee
+    description: Learner who does placements.
+    grants:
+      - field-training:self:read
+      - field-training:self:apply
+      - field-training:self:log
+  - name: field-training-viewer
+    description: Management and org admin oversight, read only.
+    grants:
+      - field-training:site:read
+      - field-training:opening:read
+      - field-training:placement:read
