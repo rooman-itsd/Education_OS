@@ -34,7 +34,11 @@ jobs:
         run: ruff check --config tools/config/ruff.toml . && ruff format --config tools/config/ruff.toml --check .
       - name: Conventional commits scoped by module
         if: github.event_name == 'pull_request'
-        run: tools/scripts/check-commits.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
+        # Measure from the merge base with the live base branch, not the event's base.sha: that value can lag
+        # behind main, which made a PR updated right after another merge inherit that squash commit's message.
+        run: |
+          git fetch -q origin ${{ github.event.pull_request.base.ref }}
+          tools/scripts/check-commits.sh "$(git merge-base origin/${{ github.event.pull_request.base.ref }} ${{ github.event.pull_request.head.sha }})" ${{ github.event.pull_request.head.sha }}
       - name: One module per PR
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'repo-wide')
         run: |
