@@ -1,0 +1,128 @@
+/*
+ * Education OS design tokens. The one source of colour, type, spacing, radius, shadow and motion
+ * for every screen: the role dashboards, the admin console and every module's pages and widgets.
+ * Taken from the admin console design (apps/frontend/src/admin). Components reference these
+ * variables; nothing else in the repo should carry a raw colour.
+ *
+ * Roles: coral is the primary action, indigo the accent (links, selection, charts), the hero
+ * gradient is for page headers only, green is positive, amber and red are status.
+ */
+:root {
+  color-scheme: light;
+
+  /* Brand */
+  --eos-primary: #f65b66;
+  --eos-primary-hover: #e9505c;
+  --eos-primary-tint: #fff0f1;
+  --eos-accent: #4338ca;
+  --eos-accent-hover: #3730a3;
+  --eos-accent-tint: #eeeefd;
+  --eos-accent-ring: #dcdcfb;
+  --eos-accent-bar: linear-gradient(90deg, #3730a3, #4f46e5);
+  --eos-hero-gradient: linear-gradient(100deg, #8a1170 0%, #5b21b6 55%, #3730a3 100%);
+  --eos-wordmark: #001e57;
+  --eos-wordmark-gradient: linear-gradient(135deg, #fd8305 0%, #fb6406 45%, #e0073f 100%);
+
+  /* Surfaces */
+  --eos-background: #f6f8fb;
+  --eos-surface: #ffffff;
+  --eos-surface-raised: #f6f8fb;
+  --eos-surface-hover: #f1f5f9;
+  --eos-border: #e2e8f0;
+  --eos-border-soft: #f1f5f9;
+  --eos-sidebar: #2a254e;
+  --eos-sidebar-gradient: linear-gradient(180deg, #241f46 0%, #2b264f 50%, #251f49 100%);
+  --eos-sidebar-border: #3a3466;
+  --eos-sidebar-hover: rgba(255, 255, 255, 0.08);
+  --eos-sidebar-text: #ffffff;
+  --eos-sidebar-muted: #c9cfe6;
+  --eos-sidebar-faint: #b3bce3;
+
+  /* Text */
+  --eos-text: #12233f;
+  --eos-text-2: #334155;
+  --eos-text-3: #475569;
+  --eos-muted: #64748b;
+  --eos-faint: #94a3b8;
+  --eos-on-dark: #ffffff;
+
+  /* Status: each has an ink and a tint, used together with an icon or a word, never colour alone */
+  --eos-success: #126b3d;
+  --eos-success-tint: #eef7f1;
+  --eos-success-ring: #cde8d8;
+  --eos-warning: #8a4f00;
+  --eos-warning-tint: #fef3e2;
+  --eos-warning-ring: #fbe3bd;
+  --eos-danger: #b91c1c;
+  --eos-danger-tint: #fef2f2;
+  --eos-danger-ring: #fecaca;
+  --eos-info: #0369a1;
+  --eos-info-tint: #e8f4fd;
+  --eos-positive: #08875d;
+  --eos-avatar: #d03f1b;
+
+  /* Charts: three series that read apart for colour-blind viewers */
+  --eos-chart-1: #4338ca;
+  --eos-chart-2: #059669;
+  --eos-chart-3: #db2777;
+  --eos-chart-grid: #f1f5f9;
+
+  /* Type */
+  --eos-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --eos-font-display: "Montserrat", "Inter", sans-serif;
+  --eos-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --eos-text-xs: 11px;
+  --eos-text-sm: 12px;
+  --eos-text-base: 13px;
+  --eos-text-md: 14px;
+  --eos-text-lg: 15px;
+  --eos-text-xl: 20px;
+  --eos-text-2xl: 24px;
+  --eos-text-3xl: 30px;
+  --eos-text-4xl: 32px;
+
+  /* Space (4px scale) */
+  --eos-space-1: 4px;
+  --eos-space-2: 8px;
+  --eos-space-3: 12px;
+  --eos-space-4: 16px;
+  --eos-space-5: 20px;
+  --eos-space-6: 24px;
+  --eos-space-8: 32px;
+  --eos-space-10: 40px;
+
+  /* Radius: controls 8, panels 12, cards 14, hero 12, pills 999 */
+  --eos-radius-sm: 6px;
+  --eos-radius: 8px;
+  --eos-radius-md: 10px;
+  --eos-radius-lg: 12px;
+  --eos-radius-xl: 14px;
+  --eos-radius-pill: 999px;
+
+  /* Elevation */
+  --eos-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.03);
+  --eos-shadow-lift: 0 10px 24px -16px rgba(18, 35, 63, 0.22);
+  --eos-shadow-pop: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --eos-shadow-menu: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --eos-shadow-hero: 0 12px 32px -18px rgba(155, 0, 240, 0.55);
+
+  /* Layout */
+  --eos-sidebar-width: 260px;
+  --eos-sidebar-collapsed: 72px;
+  --eos-topbar-height: 64px;
+  --eos-content-max: 1280px;
+
+  /* Motion */
+  --eos-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --eos-ease-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
+  --eos-fast: 180ms;
+  --eos-normal: 250ms;
+  --eos-slow: 450ms;
+
+  /* Page accent: a suite's page sets these to recolour chips, links and charts (ThemeScope) */
+  --accent: var(--eos-accent);
+  --accent-tint: var(--eos-accent-tint);
+  --accent-ring: var(--eos-accent-ring);
+  --accent-bar: var(--eos-accent-bar);
+  --hero-gradient: var(--eos-hero-gradient);
+}
