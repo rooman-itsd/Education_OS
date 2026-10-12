@@ -79,7 +79,9 @@ def location_holds_stock(db: Session, location_id: str) -> bool:
 
 
 def lines_of(db: Session, loan_id: str) -> list[LoanLine]:
-    return list(db.scalars(_scoped(db, LoanLine).where(LoanLine.loan_id == loan_id).order_by(LoanLine.position, LoanLine.id)))
+    return list(
+        db.scalars(_scoped(db, LoanLine).where(LoanLine.loan_id == loan_id).order_by(LoanLine.position, LoanLine.id))
+    )
 
 
 def loans(db: Session) -> list[Loan]:
