@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { WidgetFrame } from "../src/widget/WidgetFrame";
+import { WidgetFrame } from "../src";
 
 describe("WidgetFrame", () => {
-  it("renders children when ready", () => {
+  it("renders the title and children when ready", () => {
     render(
       <WidgetFrame title="Fee dues" size="1x1">
         <span>₹ 1,200</span>
@@ -15,24 +15,22 @@ describe("WidgetFrame", () => {
 
   it("shows the loading, empty and error states instead of children", () => {
     const { rerender } = render(
-      <WidgetFrame title="t" size="1x1" state="loading">
+      <WidgetFrame title="x" size="1x1" state="loading">
         <span>body</span>
       </WidgetFrame>,
     );
-    expect(screen.getByText("Loading…")).toBeTruthy();
     expect(screen.queryByText("body")).toBeNull();
-
-    rerender(<WidgetFrame title="t" size="1x1" state="empty" message="No dues" />);
+    expect(screen.getByLabelText("Loading")).toBeTruthy();
+    rerender(<WidgetFrame title="x" size="1x1" state="empty" message="No dues" />);
     expect(screen.getByText("No dues")).toBeTruthy();
-
-    rerender(<WidgetFrame title="t" size="1x1" state="error" />);
-    expect(screen.getByRole("alert").textContent).toBe("Could not load");
+    rerender(<WidgetFrame title="x" size="1x1" state="error" message="Timed out" />);
+    expect(screen.getByRole("alert").textContent).toContain("Timed out");
   });
 
-  it("spans the grid according to size", () => {
-    const { container } = render(<WidgetFrame title="t" size="2x2" />);
-    const el = container.querySelector("section") as HTMLElement;
-    expect(el.style.gridColumn).toBe("span 2");
-    expect(el.style.gridRow).toBe("span 2");
+  it("marks its grid span and kind for the dashboard grid", () => {
+    render(<WidgetFrame title="x" size="2x1" kind="table" state="empty" />);
+    const el = document.querySelector(".eos-widget")!;
+    expect(el.getAttribute("data-span")).toBe("2x1");
+    expect(el.getAttribute("data-kind")).toBe("table");
   });
 });

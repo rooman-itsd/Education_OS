@@ -10,7 +10,8 @@ import { MODULE_WIDGETS, DashboardWidget, WidgetSize } from '../data/widgets';
 const SPAN: Record<WidgetSize, string> = {
   '1x1': 'sm:col-span-1',
   '2x1': 'sm:col-span-2',
-  '2x2': 'sm:col-span-2 sm:row-span-2'
+  '2x2': 'sm:col-span-2 sm:row-span-2',
+  full: 'sm:col-span-2'
 };
 
 type CardState =

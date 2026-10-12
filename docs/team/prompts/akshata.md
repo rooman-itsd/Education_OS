@@ -48,6 +48,9 @@ The module owner reviews that PR. If their contract lacks what I need, stop and 
 ## 7. Build standard for every module
 Contracts first (`contracts/openapi.yaml`, `events.yaml`, `permissions.yaml`) · own database schema with `organisation_id` and a row-level-security policy on every table · platform services only through `packages/sdk` · imports only from the module itself and `packages/` · approved libraries only (`docs/architecture/approved-stack.yaml`) · unit tests plus the cross-tenant leak test from `eos_testing` · widgets in `frontend/src/widgets/` with tests · ruff with `--config tools/config/ruff.toml` · nothing at the top of the repository.
 
+## 7a. Frontend: build on the UI kit
+Every screen uses `packages/ui-kit` (the admin console design the team chose): import `@eos/ui-kit/styles.css` once, build pages from `PageHero`, `StatGrid`, `Panel`, `DataTable`, `List` and friends, and give every widget a `kind` (`figure`, `list`, `table`, `chart`, `panel`) so the shell lays it out. No hex colours, no Tailwind, no other UI library, one coral primary button per screen, four states for every async piece. The rules and examples: `docs/architecture/frontend-design-system.md`. If the kit lacks something, open an issue for Faizan instead of styling around it.
+
 ## 8. My context
 - **First dashboard:** Examination Staff (wave A), built on Shivani's examinations module
 - **Academy I own in waves B to D:** Sports college (athlete, coach, medical staff)

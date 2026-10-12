@@ -1,49 +1,39 @@
 import type { ReactNode } from "react";
-import type { WidgetSize } from "./types";
+import { Lock } from "../icons";
+import { Panel, PanelBody, PanelHeader } from "../components/Panel";
+import { ErrorState, SkeletonLines } from "../components/States";
+import type { WidgetKind, WidgetSize } from "./types";
 
-export type WidgetState = "ready" | "loading" | "empty" | "error";
+export type WidgetState = "ready" | "loading" | "empty" | "error" | "locked";
 
 export interface WidgetFrameProps {
   title: string;
   size: WidgetSize;
+  kind?: WidgetKind;
+  subtitle?: string;
   state?: WidgetState;
-  /** Message for the empty or error state. */
+  /** Message for the empty, error or locked state. */
   message?: string;
+  /** Top-right action, e.g. a "View all" link. */
+  action?: ReactNode;
   children?: ReactNode;
 }
 
-const SPAN: Record<WidgetSize, { col: number; row: number }> = {
-  "1x1": { col: 1, row: 1 },
-  "2x1": { col: 2, row: 1 },
-  "2x2": { col: 2, row: 2 },
-};
-
 /**
- * The card every widget renders inside. Owns the header and the loading,
- * empty and error states so individual widgets do not repeat them.
+ * The panel every non-figure widget renders inside. Owns the header and the loading, empty,
+ * error and locked states so individual widgets do not repeat them. Tables render flush.
  */
-export function WidgetFrame({ title, size, state = "ready", message, children }: WidgetFrameProps) {
-  const span = SPAN[size];
+export function WidgetFrame({ title, size, kind = "panel", subtitle, state = "ready", message, action, children }: WidgetFrameProps) {
   return (
-    <section
-      className="eos-widget"
-      data-state={state}
-      style={{ gridColumn: `span ${span.col}`, gridRow: `span ${span.row}` }}
-      aria-busy={state === "loading"}
-    >
-      <header className="eos-widget__header">
-        <h2 className="eos-widget__title">{title}</h2>
-      </header>
-      <div className="eos-widget__body">
-        {state === "loading" && <p className="eos-widget__status">Loading…</p>}
+    <Panel className="eos-widget" data-state={state} data-span={size} data-kind={kind} aria-busy={state === "loading"} lift={state === "ready"}>
+      <PanelHeader title={title} subtitle={subtitle} action={action} as="h2" icon={state === "locked" ? <Lock /> : undefined} />
+      <PanelBody flush={kind === "table" && state === "ready"}>
+        {state === "loading" && <SkeletonLines lines={kind === "figure" ? 1 : 3} />}
         {state === "empty" && <p className="eos-widget__status">{message ?? "Nothing to show"}</p>}
-        {state === "error" && (
-          <p className="eos-widget__status eos-widget__status--error" role="alert">
-            {message ?? "Could not load"}
-          </p>
-        )}
+        {state === "locked" && <p className="eos-widget__status">{message ?? "Not in your plan"}</p>}
+        {state === "error" && <ErrorState>{message}</ErrorState>}
         {state === "ready" && children}
-      </div>
-    </section>
+      </PanelBody>
+    </Panel>
   );
 }

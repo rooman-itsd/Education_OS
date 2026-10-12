@@ -1,0 +1,282 @@
+/* Base styles for every Education OS page: reset, type, focus, motion and the entrance keyframes. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  overflow-x: clip;
+}
+
+body {
+  font-family: var(--eos-font);
+  font-size: var(--eos-text-md);
+  line-height: 1.5;
+  background: var(--eos-background);
+  color: var(--eos-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Every button and link moves a little: lift on hover, press on click. */
+button,
+a {
+  transition:
+    transform var(--eos-fast) var(--eos-ease),
+    box-shadow var(--eos-fast) ease,
+    background-color var(--eos-fast) ease,
+    color var(--eos-fast) ease,
+    border-color var(--eos-fast) ease;
+}
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.96);
+}
+
+:focus-visible {
+  outline: 2px solid var(--eos-primary);
+  outline-offset: 2px;
+}
+
+.eos-tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.eos-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--eos-muted);
+}
+
+/* ---------- Entrances ---------- */
+@keyframes eos-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes eos-nav-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes eos-bar-in {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes eos-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes eos-slide {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes eos-sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes eos-ping {
+  75%,
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+@keyframes eos-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes eos-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* A page fades up when it mounts; children of .eos-stagger follow one after another. */
+.eos-page-enter {
+  animation: eos-fade-up var(--eos-slow) var(--eos-ease) both;
+}
+.eos-stagger > * {
+  animation: eos-fade-up 550ms var(--eos-ease) both;
+}
+.eos-stagger > *:nth-child(1) { animation-delay: 20ms; }
+.eos-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.eos-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.eos-stagger > *:nth-child(4) { animation-delay: 200ms; }
+.eos-stagger > *:nth-child(5) { animation-delay: 260ms; }
+.eos-stagger > *:nth-child(6) { animation-delay: 320ms; }
+.eos-stagger > *:nth-child(7) { animation-delay: 380ms; }
+.eos-stagger > *:nth-child(n + 8) { animation-delay: 440ms; }
+
+.eos-nav-in {
+  animation: eos-nav-in 400ms var(--eos-ease) both;
+}
+.eos-bar-in {
+  transform-origin: center;
+  animation: eos-bar-in 350ms var(--eos-ease) both;
+}
+
+/* A panel fades in and rises once it scrolls into view (useInView sets .is-in). */
+.eos-enter:not(.is-in) {
+  opacity: 0;
+  translate: 0 16px;
+}
+.eos-enter.is-in {
+  animation: eos-fade-up 700ms var(--eos-ease) var(--enter-delay, 0ms) both;
+}
+/* Panels lift 1px with a soft shadow on hover. */
+.eos-lift {
+  transition:
+    transform var(--eos-normal) var(--eos-ease),
+    box-shadow var(--eos-normal) ease;
+}
+.eos-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--eos-shadow-lift);
+}
+/* Progress fills grow from 0 to their value once in view. */
+.eos-fill {
+  transition: width 1s var(--eos-ease);
+}
+/* List rows fade and rise in turn once their panel is in view (--i set inline per row). */
+.eos-reveal > * {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.eos-reveal.is-in > * {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--eos-slow) ease,
+    transform 500ms var(--eos-ease);
+  transition-delay: calc(var(--i, 0) * 90ms);
+}
+.eos-reveal.is-in .eos-pop-in {
+  animation: eos-pop 500ms var(--eos-ease-spring) calc(var(--i, 0) * 90ms + 150ms) both;
+}
+.eos-reveal.is-in .eos-slide-in {
+  animation: eos-slide 500ms var(--eos-ease) calc(var(--i, 0) * 90ms + 250ms) both;
+}
+/* A soft light sweeps once across a progress bar after it fills. */
+.eos-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.eos-sheen.is-in::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.6) 50%, transparent 75%);
+  transform: translateX(-100%);
+  animation: eos-sheen 1.1s ease-in-out var(--sheen-delay, 0ms) 1 forwards;
+}
+.eos-ping {
+  animation: eos-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.eos-pulse {
+  animation: eos-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .eos-enter,
+  .eos-enter.is-in,
+  .eos-reveal > *,
+  .eos-reveal.is-in > * {
+    opacity: 1;
+    translate: none;
+    transform: none;
+  }
+  .eos-lift:hover {
+    transform: none;
+  }
+}
