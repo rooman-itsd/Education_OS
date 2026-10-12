@@ -1,9 +1,23 @@
 # Domain events published by web-portal-cms.
 # Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+#
+# No event here duplicates organisation lifecycle facts: tenancy.organisation.registered/verified/
+# approved and billing.subscription.started already cover sign-up (platform/tenancy,
+# platform/billing's own contracts, unmodified by this module). web-portal-cms only publishes
+# events about its own CMS content.
 module: web-portal-cms
 version: 1
-events: []
-#  - name: web-portal-cms.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: web-portal-cms.page.published
+    description: A page became publicly visible.
+    payload: { organisation_id: uuid, page_id: uuid, slug: string, type: string }
+  - name: web-portal-cms.page.unpublished
+    description: A page was taken down from public view; the record is kept.
+    payload: { organisation_id: uuid, page_id: uuid, slug: string }
+  - name: web-portal-cms.announcement.published
+    description: An announcement became publicly visible.
+    payload: { organisation_id: uuid, announcement_id: uuid, title: string }
+  - name: web-portal-cms.announcement.unpublished
+    description: An announcement was taken down from public view.
+    payload: { organisation_id: uuid, announcement_id: uuid }

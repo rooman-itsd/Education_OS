@@ -2,9 +2,170 @@ openapi: 3.1.0
 info:
   title: web-portal-cms API
   version: 0.1.0
-  description: "Public website, CMS pages, announcements, news and notices."
+  description: >-
+    Public website, CMS pages, announcements, news and notices — including the organisation
+    sign-up page's own content. This contract covers web-portal-cms's own surface only.
+    Organisation registration is platform/tenancy's POST /register and GET /academy-types
+    (public, unmodified by this module); plan data is platform/billing's GET /plans (public,
+    unmodified by this module). The sign-up page calls those two APIs directly; no equivalent
+    endpoint is duplicated here, and this module never creates a Person, Student or Application
+    record. See docs/prd.md.
 servers:
   - url: /api/v1/web-portal-cms
-paths: {}
+paths:
+  /pages:
+    get:
+      summary: >
+        Published pages of the caller's organisation. Public. A pre-registration visitor (no
+        organisation yet) sees the platform-level public pages (e.g. the sign-up page's own
+        marketing/terms content) instead — see the `scope` parameter.
+      security: []
+      parameters:
+        - { name: scope, in: query, description: "organisation (default, needs an active organisation context) or public (platform-level pages shown before sign-up, e.g. the sign-up page's own content)", schema: { type: string, enum: [organisation, public], default: organisation } }
+        - { name: type, in: query, schema: { $ref: "#/components/schemas/PageType" } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/PageSummary" } } } } } }
+    post:
+      summary: Create a page as a draft. Permission web-portal-cms:page:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PageInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }, "409": { description: Slug already in use } }
+
+  /pages/{slug}:
+    parameters: [{ name: slug, in: path, required: true, schema: { type: string } }]
+    get:
+      summary: One published page by slug. Public.
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "404": { description: No published page with this slug }
+    patch:
+      summary: Update a page's content. Does not change publish state (use /pages/{slug}/publish). Permission web-portal-cms:page:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PageInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete a page. Permission web-portal-cms:page:manage.
+      responses: { "204": { description: Deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /pages/{slug}/publish:
+    parameters: [{ name: slug, in: path, required: true, schema: { type: string } }]
+    post:
+      summary: Publish a draft page, or unpublish a published one. Permission web-portal-cms:page:manage.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [published], properties: { published: { type: boolean } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Page" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /announcements:
+    get:
+      summary: Published announcements/notices of the caller's organisation, most recent first. Public.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AnnouncementPage" } } } } }
+    post:
+      summary: Create an announcement as a draft. Permission web-portal-cms:announcement:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AnnouncementInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } } }
+
+  /announcements/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One announcement. Public if published; permission web-portal-cms:announcement:manage required to view a draft.
+      security: []
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: Update an announcement. Permission web-portal-cms:announcement:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AnnouncementInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Delete an announcement. Permission web-portal-cms:announcement:manage.
+      responses: { "204": { description: Deleted }, "404": { $ref: "#/components/responses/NotFound" } }
+
+  /announcements/{id}/publish:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Publish or unpublish an announcement. Permission web-portal-cms:announcement:manage.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [published], properties: { published: { type: boolean } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Announcement" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    NotFound: { description: Not found in the caller's organisation }
+
+  schemas:
+    PageType:
+      type: string
+      enum: [standard, landing, signup_marketing, terms]
+      description: >-
+        signup_marketing and terms are typically `scope=public` pages shown on or linked from the
+        sign-up page; they carry no organisation_id because they exist before any organisation
+        does (see docs/prd.md §10). standard/landing pages belong to one organisation.
+
+    PageInput:
+      type: object
+      required: [slug, title, type, body]
+      properties:
+        slug: { type: string, pattern: "^[a-z0-9-]{1,120}$" }
+        title: { type: string, maxLength: 200 }
+        type: { $ref: "#/components/schemas/PageType" }
+        body: { type: string, description: "Rendered content (HTML or a rich-text document, decided at implementation time)" }
+        seo_description: { type: string }
+    PageSummary:
+      type: object
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        type: { $ref: "#/components/schemas/PageType" }
+        published: { type: boolean }
+        updated_at: { type: string, format: date-time }
+    Page:
+      allOf:
+        - $ref: "#/components/schemas/PageInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, nullable: true, description: "Null for scope=public pages that exist before any organisation (module-standard rule 11 exception, see docs/prd.md §10)" }
+            published: { type: boolean, default: false }
+            published_at: { type: string, format: date-time, nullable: true }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    AnnouncementInput:
+      type: object
+      required: [title, body]
+      properties:
+        title: { type: string, maxLength: 200 }
+        body: { type: string }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true, description: "Stops showing after this time; the record is kept" }
+    Announcement:
+      allOf:
+        - $ref: "#/components/schemas/AnnouncementInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            published: { type: boolean, default: false }
+            published_at: { type: string, format: date-time, nullable: true }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    AnnouncementPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Announcement" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }

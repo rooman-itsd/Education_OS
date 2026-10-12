@@ -1,9 +1,34 @@
 # Domain events published by sla-management.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+# Clocks are driven by helpdesk.ticket.* events (see module.yaml consumes_events); no ticket text is ever published.
 module: sla-management
 version: 1
-events: []
-#  - name: sla-management.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: sla-management.clock.started
+    description: A response or resolution clock started for a new helpdesk ticket under a matching policy.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, ticket_number: string, kind: string, policy_id: uuid, priority: string, target_minutes: integer, started_at: datetime, warn_at: datetime, due_at: datetime }
+  - name: sla-management.clock.paused
+    description: The ticket went on hold for a reason the policy pauses on. due_at no longer applies until resumed.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, kind: string, paused_at: datetime, business_minutes_used: integer }
+  - name: sla-management.clock.resumed
+    description: The ticket came off hold, or a stopped resolution clock resumed on reopen. Carries the new due time.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, kind: string, resumed_at: datetime, warn_at: datetime, due_at: datetime }
+  - name: sla-management.clock.recalculated
+    description: The ticket was reclassified and the clock moved to another policy, keeping the business time already used.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, kind: string, policy_id: uuid, previous_policy_id: uuid, target_minutes: integer, warn_at: datetime, due_at: datetime }
+  - name: sla-management.clock.warning-raised
+    description: A running clock passed its warning threshold. Published once per clock run. The assignee is notified.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, ticket_number: string, kind: string, priority: string, assignee_id: uuid, due_at: datetime }
+  - name: sla-management.clock.breached
+    description: A running clock passed its due time. Published once per clock run; the clock keeps running to measure lateness.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, ticket_number: string, kind: string, priority: string, assignee_id: uuid, due_at: datetime, breached_at: datetime }
+  - name: sla-management.clock.escalated
+    description: An escalation level fired for a breached clock and its recipients were notified.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, ticket_number: string, kind: string, level: integer, recipient_ids: "uuid[]", escalated_at: datetime }
+  - name: sla-management.clock.stopped
+    description: The response clock stopped on the first response, or the resolution clock stopped on resolve.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, kind: string, outcome: string, stopped_at: datetime, business_minutes_used: integer }
+  - name: sla-management.clock.cancelled
+    description: The helpdesk ticket was cancelled; the clock stops counting and has no outcome.
+    payload: { organisation_id: uuid, clock_id: uuid, ticket_id: uuid, kind: string, cancelled_at: datetime }

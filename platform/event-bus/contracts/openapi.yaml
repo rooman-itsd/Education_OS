@@ -2,9 +2,191 @@ openapi: 3.1.0
 info:
   title: event-bus API
   version: 0.1.0
-  description: "Domain event contracts and broker abstraction. The only async channel between modules."
+  description: >-
+    Operator view of the event bus: inspect the outbox, watch relay health, replay
+    dead-lettered events. Modules do NOT publish through this API - they call
+    eos_core.publish() inside their own transaction and the relay does the rest.
+    The event envelope itself is defined in contracts/events.yaml.
 servers:
   - url: /api/v1/event-bus
-paths: {}
+
+paths:
+  /events:
+    get:
+      summary: List events in the outbox
+      description: >-
+        Most recent first. Scoped to the caller's organisation; a super admin with
+        platform:event-bus:admin may pass organisation_id to look across tenants.
+      operationId: listEvents
+      parameters:
+        - name: name
+          in: query
+          description: Exact event name, or a prefix ending in '*' (e.g. admissions.*)
+          schema: { type: string }
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum: [pending, published, dead_lettered]
+        - name: organisation_id
+          in: query
+          description: Super admin only. Ignored for other callers.
+          schema: { type: string, format: uuid }
+        - name: occurred_from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: occurred_to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, maximum: 200 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: A page of events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Event" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /events/{event_id}:
+    get:
+      summary: Get one event
+      operationId: getEvent
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The event, with its envelope and payload
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{event_id}/replay:
+    post:
+      summary: Replay a dead-lettered event
+      description: >-
+        Resets attempts and returns the event to pending so the relay delivers it again.
+        Only a dead-lettered event may be replayed; replaying a delivered event would
+        re-trigger every consumer. Writes an audit record.
+      operationId: replayEvent
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Accepted; the event is pending again
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Event" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The event is not dead-lettered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /relay/health:
+    get:
+      summary: Relay health and backlog
+      description: Powers monitoring and the Super Admin dashboard widget.
+      operationId: getRelayHealth
+      responses:
+        "200":
+          description: Current relay state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transport, backlog, dead_lettered, stalled]
+                properties:
+                  transport:
+                    type: string
+                    description: Active transport, e.g. inprocess
+                  backlog:
+                    type: integer
+                    description: Events pending delivery
+                  dead_lettered:
+                    type: integer
+                  oldest_unpublished_at:
+                    type: [string, "null"]
+                    format: date-time
+                  stalled:
+                    type: boolean
+                    description: Oldest pending event is older than the stall threshold
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  schemas:
+    Event:
+      type: object
+      description: >-
+        One event: the envelope defined in contracts/events.yaml, plus its delivery state.
+      required: [id, name, version, occurred_at, payload, state]
+      properties:
+        id: { type: string, format: uuid }
+        name:
+          type: string
+          description: "<module>.<entity>.<past-tense-verb>"
+          examples: ["admissions.application.accepted"]
+        version:
+          type: integer
+          description: Payload schema version, starting at 1
+        organisation_id:
+          type: [string, "null"]
+          format: uuid
+          description: Null only for platform-level events outside any organisation
+        actor:
+          type: [string, "null"]
+          format: uuid
+          description: Null when the system caused the change
+        occurred_at:
+          type: string
+          format: date-time
+          description: When the change happened, not when it was delivered
+        payload:
+          type: object
+          additionalProperties: true
+          description: Event-specific. Never repeats envelope fields.
+        state:
+          type: string
+          enum: [pending, published, dead_lettered]
+        attempts: { type: integer }
+        last_error: { type: [string, "null"] }
+        published_at: { type: [string, "null"], format: date-time }
+
+    Error:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+  responses:
+    Forbidden:
+      description: Missing permission, or the event belongs to another organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such event in this organisation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

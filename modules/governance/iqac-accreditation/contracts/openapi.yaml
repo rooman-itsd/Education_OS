@@ -2,9 +2,423 @@ openapi: 3.1.0
 info:
   title: iqac-accreditation API
   version: 0.1.0
-  description: "IQAC data collection, NAAC/NBA metrics, evidence repository."
+  description: "IQAC data collection, NAAC/NBA metrics, evidence repository. See docs/prd.md."
 servers:
   - url: /api/v1/iqac-accreditation
-paths: {}
+paths:
+  /frameworks:
+    get:
+      summary: Frameworks of the organisation. Permission iqac-accreditation:data:read, iqac-accreditation:framework:manage or iqac-accreditation:response:submit.
+      parameters: [{ name: active, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Framework" } } } } } }
+    post:
+      summary: Record a framework. Permission iqac-accreditation:framework:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FrameworkInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Framework" } } } }, "409": { description: "Code already used" } }
+  /frameworks/{id}:
+    patch:
+      summary: Rename, describe or deactivate a framework. One used by an open cycle cannot be deactivated. Permission iqac-accreditation:framework:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FrameworkInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Framework" } } } }, "409": { description: "Used by an open cycle" } }
+  /frameworks/{id}/metrics:
+    get:
+      summary: Metrics of a framework, by code. Permission iqac-accreditation:data:read, iqac-accreditation:framework:manage or iqac-accreditation:response:submit.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: criterion, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Metric" } } } } } }
+    post:
+      summary: Add a metric to a framework. Permission iqac-accreditation:framework:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MetricInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Metric" } } } }, "409": { description: "Code already used in this framework" } }
+  /metrics/{id}:
+    patch:
+      summary: Correct or deactivate a metric. Existing responses keep their values. Permission iqac-accreditation:framework:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MetricUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Metric" } } } } }
+  /cycles:
+    get:
+      summary: Cycles, newest first. Permission iqac-accreditation:data:read or iqac-accreditation:cycle:manage.
+      parameters:
+        - { name: framework_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/CycleStatus" } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Cycle" } } } } } }
+    post:
+      summary: Open a cycle for one active framework and period (status planning). Permission iqac-accreditation:cycle:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CycleInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Cycle" } } } }, "422": { description: "period_end not after period_start, or framework inactive" } }
+  /cycles/{id}:
+    get:
+      summary: One cycle with response counts by status. Permission iqac-accreditation:data:read or iqac-accreditation:cycle:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CycleDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Rename or change the period of a cycle while planning. Permission iqac-accreditation:cycle:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CycleUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Cycle" } } } }, "409": { description: "Not planning" } }
+  /cycles/{id}/status:
+    post:
+      summary: >-
+        Move the cycle: planning → collecting; collecting → under_review; under_review → submitted (needs submitted_on; every
+        response must be accepted); submitted → closed. Publishes iqac-accreditation.cycle.status-changed. Permission
+        iqac-accreditation:cycle:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CycleStatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Cycle" } } } }, "409": { description: "Transition not allowed, or responses not all accepted" }, "422": { description: "submitted_on missing" } }
+  /cycles/{id}/assignments:
+    post:
+      summary: >-
+        Assign metrics of the cycle's framework to owners with a due date, creating one pending response per metric. Owners
+        are notified. Allowed while planning or collecting. Permission iqac-accreditation:cycle:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssignmentInput" } } } }
+      responses: { "201": { description: Responses created, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Response" } } } } }, "409": { description: "Cycle not planning or collecting, or a metric already assigned in this cycle" }, "422": { description: "Metric not in the cycle's framework or inactive" } }
+  /responses:
+    get:
+      summary: >-
+        Responses. With iqac-accreditation:data:read or iqac-accreditation:cycle:manage, all; with
+        iqac-accreditation:response:submit, the caller's own only. Permission iqac-accreditation:data:read,
+        iqac-accreditation:cycle:manage or iqac-accreditation:response:submit.
+      parameters:
+        - { name: cycle_id, in: query, schema: { type: string, format: uuid } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ResponseStatus" } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResponsePage" } } } } }
+  /responses/{id}:
+    get:
+      summary: One response with its evidence. Permission iqac-accreditation:data:read or iqac-accreditation:cycle:manage, or iqac-accreditation:response:submit for the caller's own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ResponseDetail" } } } }, "404": { description: "Not found or not visible to the caller" } }
+    put:
+      summary: >-
+        Save the value or narrative of the caller's own response while pending or returned, in a cycle that is collecting or
+        under_review. Permission iqac-accreditation:response:submit.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ResponseInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Response" } } } }, "409": { description: "Not pending or returned, or cycle not collecting or under_review" } }
+  /responses/{id}/submit:
+    post:
+      summary: Submit the caller's own response (pending or returned → submitted). Permission iqac-accreditation:response:submit.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Response" } } } }, "409": { description: "Not pending or returned" }, "422": { description: "Value or narrative missing for the metric's kind" } }
+  /responses/{id}/review:
+    post:
+      summary: >-
+        Accept (submitted → accepted, publishes iqac-accreditation.response.accepted) or return with a comment
+        (submitted → returned; the owner is notified). Permission iqac-accreditation:cycle:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Response" } } } }, "409": { description: "Not submitted" }, "422": { description: "comment missing when returning" } }
+  /responses/{id}/evidence:
+    post:
+      summary: Add a link or a reference as evidence to the caller's own response while it is not accepted. Permission iqac-accreditation:response:submit.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EvidenceInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Evidence" } } } }, "409": { description: "Response accepted" } }
+  /responses/{id}/evidence/{evidence_id}:
+    delete:
+      summary: Remove evidence added by mistake while the response is not accepted. Audited. Permission iqac-accreditation:response:submit for the caller's own response.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: evidence_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed }, "404": { description: "Not found" }, "409": { description: "Response accepted" } }
+  /action-items:
+    get:
+      summary: >-
+        Action items, soonest due first. With iqac-accreditation:data:read or iqac-accreditation:action-item:manage, all; with
+        iqac-accreditation:action-item:update-own, the caller's own only. Permission iqac-accreditation:data:read,
+        iqac-accreditation:action-item:manage or iqac-accreditation:action-item:update-own.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ActionStatus" } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: cycle_id, in: query, schema: { type: string, format: uuid } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItemPage" } } } } }
+    post:
+      summary: Record an action item with an owner and due date (status open). The owner is notified. Permission iqac-accreditation:action-item:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItemInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItem" } } } } }
+  /action-items/{id}:
+    patch:
+      summary: >-
+        Change an action item. iqac-accreditation:action-item:manage may change any field and cancel (open or in_progress →
+        cancelled); iqac-accreditation:action-item:update-own lets the owner move their own item open → in_progress → done.
+        Permission iqac-accreditation:action-item:manage or iqac-accreditation:action-item:update-own.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItemUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItem" } } } }, "409": { description: "Transition not allowed, or item done or cancelled" } }
+  /stats/action-items:
+    get:
+      summary: >-
+        Action items open, in progress, overdue and due within IQAC_ACCREDITATION_DUE_SOON_DAYS, with the soonest due. Backs the
+        Governance widget iqac-accreditation.action-items. Permission iqac-accreditation:stats:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionItemStats" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    CycleStatus:
+      type: string
+      enum: [planning, collecting, under_review, submitted, closed]
+    ResponseStatus:
+      type: string
+      enum: [pending, submitted, returned, accepted]
+    ActionStatus:
+      type: string
+      enum: [open, in_progress, done, cancelled]
+    MetricKind:
+      type: string
+      enum: [quantitative, qualitative]
+    Reference:
+      type: object
+      description: "A record in another module, by id only."
+      required: [module, entity, id]
+      properties:
+        module: { type: string }
+        entity: { type: string }
+        id: { type: string }
+    FrameworkInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, maxLength: 40, description: "The organisation's own code, such as NAAC or NBA" }
+        name: { type: string, maxLength: 200 }
+        description: { type: string }
+        active: { type: boolean, default: true }
+    Framework:
+      allOf:
+        - { $ref: "#/components/schemas/FrameworkInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+    MetricInput:
+      type: object
+      required: [code, title, kind]
+      properties:
+        code: { type: string, maxLength: 40, description: "The organisation's own code, unique in the framework" }
+        title: { type: string, maxLength: 500 }
+        criterion: { type: string, maxLength: 200, description: "Label of the criterion the metric belongs to" }
+        kind: { $ref: "#/components/schemas/MetricKind" }
+        unit: { type: string, maxLength: 40 }
+        guidance: { type: string }
+        active: { type: boolean, default: true }
+    MetricUpdateInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 500 }
+        criterion: { type: string, maxLength: 200 }
+        unit: { type: string, maxLength: 40 }
+        guidance: { type: string }
+        active: { type: boolean }
+    Metric:
+      allOf:
+        - { $ref: "#/components/schemas/MetricInput" }
+        - type: object
+          required: [id, organisation_id, framework_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            framework_id: { type: string, format: uuid }
+    CycleInput:
+      type: object
+      required: [framework_id, name, period_start, period_end]
+      properties:
+        framework_id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+    CycleUpdateInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 200 }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+    CycleStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [collecting, under_review, submitted, closed] }
+        submitted_on: { type: string, format: date, description: "Required for submitted: the date the cycle was submitted to the accrediting body" }
+    Cycle:
+      type: object
+      required: [id, organisation_id, framework_id, name, period_start, period_end, status]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        framework_id: { type: string, format: uuid }
+        name: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        status: { $ref: "#/components/schemas/CycleStatus" }
+        submitted_on: { type: [string, "null"], format: date }
+        closed_at: { type: [string, "null"], format: date-time }
+    CycleDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Cycle" }
+        - type: object
+          required: [response_counts]
+          properties:
+            response_counts:
+              type: object
+              properties:
+                pending: { type: integer }
+                submitted: { type: integer }
+                returned: { type: integer }
+                accepted: { type: integer }
+                overdue: { type: integer }
+    AssignmentInput:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [metric_id, owner_id, due_on]
+            properties:
+              metric_id: { type: string, format: uuid }
+              owner_id: { type: string, format: uuid }
+              due_on: { type: string, format: date }
+    ResponseInput:
+      type: object
+      properties:
+        value: { type: [number, "null"], description: For quantitative metrics }
+        narrative: { type: [string, "null"], description: For qualitative metrics, or a note on a value }
+    Response:
+      type: object
+      required: [id, organisation_id, cycle_id, metric_id, owner_id, due_on, status, overdue]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        cycle_id: { type: string, format: uuid }
+        metric_id: { type: string, format: uuid }
+        metric_code: { type: string }
+        owner_id: { type: string, format: uuid }
+        due_on: { type: string, format: date }
+        status: { $ref: "#/components/schemas/ResponseStatus" }
+        value: { type: [number, "null"] }
+        narrative: { type: [string, "null"] }
+        review_comment: { type: [string, "null"] }
+        submitted_at: { type: [string, "null"], format: date-time }
+        reviewed_by: { type: [string, "null"], format: uuid }
+        reviewed_at: { type: [string, "null"], format: date-time }
+        overdue: { type: boolean, description: "Pending or returned and past due_on; worked out when read" }
+    EvidenceInput:
+      type: object
+      required: [title, kind]
+      description: "kind link needs url; kind reference needs reference."
+      properties:
+        title: { type: string, maxLength: 200 }
+        kind: { type: string, enum: [link, reference] }
+        url: { type: string, format: uri }
+        reference: { $ref: "#/components/schemas/Reference" }
+        note: { type: string }
+    Evidence:
+      allOf:
+        - { $ref: "#/components/schemas/EvidenceInput" }
+        - type: object
+          required: [id, response_id, added_by, added_at]
+          properties:
+            id: { type: string, format: uuid }
+            response_id: { type: string, format: uuid }
+            added_by: { type: string, format: uuid }
+            added_at: { type: string, format: date-time }
+    ResponseDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Response" }
+        - type: object
+          required: [evidence]
+          properties:
+            evidence: { type: array, items: { $ref: "#/components/schemas/Evidence" } }
+    ResponsePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Response" } }
+        next_cursor: { type: [string, "null"] }
+    ReviewInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [accept, return] }
+        comment: { type: string, minLength: 3, description: "Required when returning; shown to the owner" }
+    ActionItemInput:
+      type: object
+      required: [title, owner_id, due_on]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string }
+        source: { type: string, maxLength: 120, description: "Free text, such as an IQAC meeting, a peer team visit or an internal audit" }
+        cycle_id: { type: string, format: uuid }
+        metric_id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+        due_on: { type: string, format: date }
+    ActionItemUpdateInput:
+      type: object
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string }
+        source: { type: string, maxLength: 120 }
+        owner_id: { type: string, format: uuid }
+        due_on: { type: string, format: date }
+        status: { type: string, enum: [in_progress, done, cancelled] }
+        note: { type: string, description: "Optional note recorded with a status change" }
+    ActionItem:
+      type: object
+      required: [id, organisation_id, title, owner_id, due_on, status, overdue]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        source: { type: [string, "null"] }
+        cycle_id: { type: [string, "null"], format: uuid }
+        metric_id: { type: [string, "null"], format: uuid }
+        owner_id: { type: string, format: uuid }
+        due_on: { type: string, format: date }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        overdue: { type: boolean, description: "Open or in progress and past due_on; worked out when read" }
+        completed_at: { type: [string, "null"], format: date-time }
+    ActionItemPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ActionItem" } }
+        next_cursor: { type: [string, "null"] }
+    ActionItemStats:
+      type: object
+      required: [open, in_progress, overdue, due_soon, due_soon_days, soonest]
+      properties:
+        open: { type: integer }
+        in_progress: { type: integer }
+        overdue: { type: integer }
+        due_soon: { type: integer }
+        due_soon_days: { type: integer }
+        soonest:
+          type: array
+          description: Up to ten open or in-progress items, soonest due first
+          items:
+            type: object
+            required: [id, title, owner_id, due_on, status, overdue]
+            properties:
+              id: { type: string, format: uuid }
+              title: { type: string }
+              owner_id: { type: string, format: uuid }
+              due_on: { type: string, format: date }
+              status: { $ref: "#/components/schemas/ActionStatus" }
+              overdue: { type: boolean }

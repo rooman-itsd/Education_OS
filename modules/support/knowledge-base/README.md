@@ -2,12 +2,22 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 Articles, FAQs and how-to guides for self-service.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** articles, FAQs and how-to guides for every signed-in person, with `everyone` and `staff` audiences;
+a two-level category tree and tags; drafts and immutable revisions with history and rollback; review, publish,
+archive and restore; browse and full-text search (`GET /articles?q=`); helpful / not-helpful feedback; the usage
+statistics behind the Support Staff widget `knowledge-base.top-articles`. Article ids are stable so helpdesk tickets
+can link to them.
+
+**Not in scope:** helpdesk tickets and their links (helpdesk), incidents and problems (incident-management), public
+website pages and news (web-portal-cms), course content (lms), the library catalogue (library), the search engine and
+file storage themselves (platform/search, platform/documents), attachments in v1, AI answers, translation.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

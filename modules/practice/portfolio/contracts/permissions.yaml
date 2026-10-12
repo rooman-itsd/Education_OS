@@ -1,11 +1,31 @@
 # Permission catalogue for portfolio. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Each academy profile maps its learner, reviewer and staff roles to the module roles below.
 module: portfolio
-permissions: []
-#  - key: portfolio:record:read
-#    description: ...
-#  - key: portfolio:record:write
-#    description: ...
-roles: []
-#  - name: portfolio-admin
-#    grants: [portfolio:record:read, portfolio:record:write]
+permissions:
+  - key: portfolio:item-type:read
+    description: See the item types configured for the organisation.
+  - key: portfolio:item-type:manage
+    description: Create and edit item types, including who may review each type.
+  - key: portfolio:item:read
+    description: See one's own items, and items one may review.
+  - key: portfolio:item:read-all
+    description: See every item in the organisation, regardless of owner or reviewer.
+  - key: portfolio:item:write
+    description: Create, edit, submit, withdraw and delete one's own items.
+  - key: portfolio:item:manage
+    description: Act on any item — create or edit for another person, submit, withdraw, delete at any status.
+  - key: portfolio:review:write
+    description: Review items of a type one is a named reviewer for.
+  - key: portfolio:review:manage
+    description: Review any item in the organisation, regardless of the item type's reviewer list.
+roles:
+  - name: portfolio-learner
+    description: Learners who build and submit their own items.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: portfolio-reviewer
+    description: Instructors or staff who review items of the types they are named on.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
+  - name: portfolio-manager
+    description: Runs the portfolio register for the organisation — configures types and may act on or review any item.
+    grants: [portfolio:item-type:read, portfolio:item-type:manage, portfolio:item:read, portfolio:item:read-all, portfolio:item:write, portfolio:item:manage, portfolio:review:write, portfolio:review:manage]

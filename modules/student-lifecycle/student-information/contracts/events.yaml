@@ -1,9 +1,31 @@
 # Domain events published by student-information.
 # Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+#
+# student-information is the Person system of record. Other modules consume these events to keep
+# a read-only cached copy of the fields they need (name, status) next to their own person_id
+# reference, never by querying this module's database (ADR-0003). No event here is triggered by,
+# or assumes the existence of, a public sign-up flow — every person.created is staff-initiated.
 module: student-information
 version: 1
-events: []
-#  - name: student-information.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: student-information.person.created
+    description: >-
+      A Person record was created by an authorised staff role. Consumers may start caching this
+      person's name and status against their own person_id reference.
+    payload: { organisation_id: uuid, person_id: uuid, first_name: string, last_name: string, email: string, status: string, source: { module: string, entity: string, id: string } }
+  - name: student-information.person.updated
+    description: Profile fields changed. Consumers refresh their cached copy of name/contact fields.
+    payload: { organisation_id: uuid, person_id: uuid, first_name: string, last_name: string, email: string }
+  - name: student-information.person.status-changed
+    description: >-
+      The person's status changed (pending, active, suspended, graduated, withdrawn, alumnus).
+      Consumers that gate behaviour on a person's status (e.g. library loans, hostel allocation)
+      react to this.
+    payload: { organisation_id: uuid, person_id: uuid, status: string, previous_status: string, reason: string, effective_date: date }
+  - name: student-information.id-card.issued
+    description: An ID card was issued to a person.
+    payload: { organisation_id: uuid, person_id: uuid, card_id: uuid, card_number: string }
+  - name: student-information.id-card.revoked
+    description: An ID card was revoked with a reason.
+    payload: { organisation_id: uuid, person_id: uuid, card_id: uuid, reason: string }

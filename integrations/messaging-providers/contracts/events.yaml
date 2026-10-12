@@ -1,0 +1,39 @@
+# Domain events published by messaging-providers.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it.
+module: messaging-providers
+version: 1
+
+events:
+  - name: messaging-providers.receipt.received
+    version: 1
+    description: >-
+      A provider reported the outcome of a message, by webhook. Normalised from the vendor's
+      own payload to one shape. platform/notification consumes this to update the message.
+    payload:
+      message_id: uuid
+      provider: string
+      provider_message_id: string
+      status: string            # delivered | bounced | complained | failed
+      bounce_type: string       # hard | soft; null unless bounced
+      detail: string
+
+  - name: messaging-providers.provider.unreachable
+    version: 1
+    description: >-
+      A provider failed its healthcheck or refused connections. Raised once per transition,
+      not per failed send, so it is usable as an alert.
+    payload:
+      provider: string
+      channel: string
+      detail: string
+
+  - name: messaging-providers.provider.throttled
+    version: 1
+    description: >-
+      A provider rate limited us. platform/notification owns the queue and uses this to slow
+      down rather than keep retrying.
+    payload:
+      provider: string
+      retry_after_s: integer
+
+consumes: []

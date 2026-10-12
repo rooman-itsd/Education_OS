@@ -1,9 +1,25 @@
 # Domain events published by selection-process.
 # Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+#
+# Generic pattern (ADR-0004): no event name or payload field names a field/domain. type_id,
+# process_id and person_id are opaque references; their labels (e.g. "Audition") are profile
+# vocabulary, never part of this contract.
 module: selection-process
 version: 1
-events: []
-#  - name: selection-process.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: selection-process.candidate.registered
+    description: A candidate was registered on an open process.
+    payload: { organisation_id: uuid, process_id: uuid, candidate_id: uuid, person_id: uuid }
+  - name: selection-process.decision.recorded
+    description: A panel decision was recorded for a candidate's current stage.
+    payload: { organisation_id: uuid, process_id: uuid, candidate_id: uuid, stage_id: uuid, outcome: string }
+  - name: selection-process.candidate.finalized
+    description: >-
+      A candidate reached a final outcome (selected, waitlisted or rejected). Consumers that act
+      on a selection outcome (e.g. admissions deciding an offer, or a programme confirming a
+      place) react to this.
+    payload: { organisation_id: uuid, process_id: uuid, candidate_id: uuid, person_id: uuid, outcome: string }
+  - name: selection-process.candidate.withdrawn
+    description: A candidate withdrew, or was withdrawn, before a final outcome.
+    payload: { organisation_id: uuid, process_id: uuid, candidate_id: uuid }

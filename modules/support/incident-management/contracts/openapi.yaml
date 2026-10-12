@@ -2,9 +2,397 @@ openapi: 3.1.0
 info:
   title: incident-management API
   version: 0.1.0
-  description: "Incident and problem records, root cause analysis."
+  description: "Incident and problem records, root cause analysis. See docs/prd.md."
 servers:
   - url: /api/v1/incident-management
-paths: {}
+paths:
+  /incidents:
+    get:
+      summary: Incidents, newest first. Permission incident-management:incident:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/IncidentStatus" } } }
+        - { name: severity, in: query, schema: { $ref: "#/components/schemas/Severity" } }
+        - { name: lead, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: problem_id, in: query, schema: { type: string, format: uuid } }
+        - { name: service, in: query, description: Matches one affected service label, schema: { type: string } }
+        - { name: q, in: query, description: Matches incident number or title, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/IncidentPage" } } } } }
+    post:
+      summary: Report an incident (status open). The reporter is the lead unless lead_id is given. Publishes incident-management.incident.reported. Permission incident-management:incident:report.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/IncidentInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Incident" } } } } }
+  /incidents/{id}:
+    get:
+      summary: One incident with its timeline and references. Permission incident-management:incident:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/IncidentDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: >-
+        Update details, lead, responders or severity, or link the incident to a problem (problem_id; null unlinks). A severity
+        change publishes incident-management.incident.severity-changed. Permission incident-management:incident:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/IncidentUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Incident" } } } }, "404": { description: "Problem not found" }, "409": { description: "Incident is closed or cancelled" } }
+  /incidents/{id}/status:
+    post:
+      summary: >-
+        Move the incident: open → investigating; investigating ⇄ mitigated; investigating or mitigated → resolved (needs
+        resolution_summary); resolved → closed; resolved → investigating (reopen); open or investigating → cancelled (needs note).
+        Publishes incident-management.incident.status-changed. Permission incident-management:incident:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/IncidentStatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Incident" } } } }, "409": { description: "Transition not allowed from the current status" }, "422": { description: "resolution_summary or note missing" } }
+  /incidents/{id}/updates:
+    post:
+      summary: Add a timeline update. Permission incident-management:incident:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string, minLength: 1 } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TimelineUpdate" } } } }, "409": { description: "Incident is closed or cancelled" } }
+  /incidents/{id}/references:
+    post:
+      summary: Record a related record in another module, by id only. Permission incident-management:incident:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReferenceInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Reference" } } } }, "409": { description: "Same reference already recorded" } }
+  /incidents/{id}/references/{reference_id}:
+    delete:
+      summary: Remove a reference recorded by mistake. Audited. Permission incident-management:incident:manage.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: reference_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed }, "404": { description: "Not found" } }
+  /problems:
+    get:
+      summary: Problems, newest first. Permission incident-management:problem:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/ProblemStatus" } } }
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: service, in: query, schema: { type: string } }
+        - { name: q, in: query, description: Matches problem number or title, schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProblemPage" } } } } }
+    post:
+      summary: Open a problem (status open). Incidents are linked to it from the incident (PATCH /incidents/{id}). Permission incident-management:problem:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProblemInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Problem" } } } } }
+  /problems/{id}:
+    get:
+      summary: One problem with its linked incidents, RCA status and corrective actions. Permission incident-management:problem:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProblemDetail" } } } }, "404": { description: "Not found" } }
+    patch:
+      summary: Update title, description, affected services, owner or workaround. Permission incident-management:problem:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProblemUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Problem" } } } }, "409": { description: "Problem is closed" } }
+  /problems/{id}/status:
+    post:
+      summary: >-
+        Move the problem: open → investigating; investigating → known_error (needs a workaround); investigating or known_error →
+        resolved (needs a published RCA); resolved → closed. Publishes incident-management.problem.status-changed. Permission
+        incident-management:problem:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProblemStatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Problem" } } } }, "409": { description: "Transition not allowed, or RCA not published" }, "422": { description: "Workaround missing" } }
+  /problems/{id}/rca:
+    get:
+      summary: The problem's root-cause analysis. Permission incident-management:problem:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rca" } } } }, "404": { description: "No RCA drafted yet" } }
+    put:
+      summary: Create or replace the RCA draft. Permission incident-management:problem:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RcaInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rca" } } } }, "409": { description: "RCA already published" } }
+  /problems/{id}/rca/publish:
+    post:
+      summary: Publish the RCA; it becomes read-only. Publishes incident-management.problem.rca-published. Permission incident-management:problem:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rca" } } } }, "404": { description: "No RCA drafted" }, "409": { description: "Already published" } }
+  /problems/{id}/actions:
+    post:
+      summary: Add a corrective action with an owner and due date. Publishes incident-management.action.assigned. Permission incident-management:problem:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ActionInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CorrectiveAction" } } } }, "409": { description: "Problem is closed" } }
+  /problems/{id}/actions/{action_id}:
+    patch:
+      summary: >-
+        Update description, owner, due date or reference, or set status done or cancelled. A new owner publishes
+        incident-management.action.assigned. Permission incident-management:problem:manage; the action's owner may set
+        status done with incident-management:problem:read.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: action_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ActionUpdateInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CorrectiveAction" } } } }, "409": { description: "Action already done or cancelled" } }
+  /actions:
+    get:
+      summary: Corrective actions across problems, soonest due first. overdue=true returns open actions past their due date. Permission incident-management:problem:read.
+      parameters:
+        - { name: owner, in: query, description: "A person id, or me", schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ActionStatus" } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ActionPage" } } } } }
+  /stats/open:
+    get:
+      summary: >-
+        Incidents in open, investigating or mitigated, counted by severity and by status, with the total. Backs the Support Staff
+        widget incident-management.open. Permission incident-management:incident:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpenCounts" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Severity:
+      type: string
+      enum: [critical, high, medium, low]
+    IncidentStatus:
+      type: string
+      enum: [open, investigating, mitigated, resolved, closed, cancelled]
+    ProblemStatus:
+      type: string
+      enum: [open, investigating, known_error, resolved, closed]
+    RcaStatus:
+      type: string
+      enum: [draft, published]
+    ActionStatus:
+      type: string
+      enum: [open, done, cancelled]
+    ServiceLabels:
+      type: array
+      description: Free-text labels for the affected services, such as Wi-Fi or LMS
+      items: { type: string, maxLength: 80 }
+    IncidentInput:
+      type: object
+      required: [title, description, severity]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string, minLength: 3 }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        severity: { $ref: "#/components/schemas/Severity" }
+        started_at: { type: string, format: date-time, description: "When the disruption began; defaults to now" }
+        lead_id: { type: string, format: uuid, description: "Defaults to the reporter" }
+        responder_ids: { type: array, items: { type: string, format: uuid } }
+    IncidentUpdateInput:
+      type: object
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        severity: { $ref: "#/components/schemas/Severity" }
+        started_at: { type: string, format: date-time }
+        lead_id: { type: string, format: uuid }
+        responder_ids: { type: array, items: { type: string, format: uuid } }
+        problem_id: { type: [string, "null"], format: uuid, description: "Link to a problem, or null to unlink" }
+    IncidentStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [investigating, mitigated, resolved, closed, cancelled] }
+        resolution_summary: { type: string, minLength: 3, description: "Required when status is resolved" }
+        note: { type: string, minLength: 3, description: "Required when status is cancelled, and when reopening; saved as a timeline update" }
+    Incident:
+      type: object
+      required: [id, organisation_id, number, title, severity, status, lead_id, reported_by, started_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as INC-000123" }
+        title: { type: string }
+        description: { type: string }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        severity: { $ref: "#/components/schemas/Severity" }
+        status: { $ref: "#/components/schemas/IncidentStatus" }
+        lead_id: { type: string, format: uuid }
+        responder_ids: { type: array, items: { type: string, format: uuid } }
+        reported_by: { type: string, format: uuid }
+        problem_id: { type: [string, "null"], format: uuid }
+        resolution_summary: { type: [string, "null"] }
+        started_at: { type: string, format: date-time }
+        mitigated_at: { type: [string, "null"], format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TimelineUpdate:
+      type: object
+      required: [id, incident_id, author_id, body, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        incident_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+    ReferenceInput:
+      type: object
+      required: [module, entity, id, relation]
+      properties:
+        module: { type: string, description: "Module name, such as helpdesk, asset-management or maintenance" }
+        entity: { type: string, description: "Entity in that module, such as ticket or asset" }
+        id: { type: string, description: Id of the record in that module }
+        relation: { type: string, enum: [related_ticket, affected_asset, work_order] }
+        note: { type: string }
+    Reference:
+      allOf:
+        - { $ref: "#/components/schemas/ReferenceInput" }
+        - type: object
+          required: [reference_id, created_by, created_at]
+          properties:
+            reference_id: { type: string, format: uuid }
+            created_by: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+    IncidentDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Incident" }
+        - type: object
+          required: [updates, references]
+          properties:
+            updates: { type: array, items: { $ref: "#/components/schemas/TimelineUpdate" }, description: Oldest first }
+            references: { type: array, items: { $ref: "#/components/schemas/Reference" } }
+    IncidentPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+        next_cursor: { type: [string, "null"] }
+    ProblemInput:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string, minLength: 3 }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        owner_id: { type: string, format: uuid, description: "Defaults to the caller" }
+    ProblemUpdateInput:
+      type: object
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        owner_id: { type: string, format: uuid }
+        workaround: { type: string }
+    ProblemStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [investigating, known_error, resolved, closed] }
+        workaround: { type: string, minLength: 3, description: "Required when moving to known_error unless already recorded" }
+    Problem:
+      type: object
+      required: [id, organisation_id, number, title, status, owner_id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation number, such as PRB-000045" }
+        title: { type: string }
+        description: { type: string }
+        affected_services: { $ref: "#/components/schemas/ServiceLabels" }
+        status: { $ref: "#/components/schemas/ProblemStatus" }
+        owner_id: { type: string, format: uuid }
+        workaround: { type: [string, "null"] }
+        incident_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+    ProblemDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Problem" }
+        - type: object
+          required: [incidents, actions]
+          properties:
+            incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+            rca_status: { oneOf: [{ $ref: "#/components/schemas/RcaStatus" }, { type: "null" }], description: "Null when no RCA is drafted" }
+            actions: { type: array, items: { $ref: "#/components/schemas/CorrectiveAction" } }
+    ProblemPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Problem" } }
+        next_cursor: { type: [string, "null"] }
+    RcaInput:
+      type: object
+      required: [summary, root_cause]
+      properties:
+        summary: { type: string, minLength: 3 }
+        root_cause: { type: string, minLength: 3 }
+        contributing_factors: { type: array, items: { type: string } }
+        attachment_document_ids: { type: array, items: { type: string }, description: Ids from platform/documents }
+    Rca:
+      allOf:
+        - { $ref: "#/components/schemas/RcaInput" }
+        - type: object
+          required: [problem_id, organisation_id, status]
+          properties:
+            problem_id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/RcaStatus" }
+            published_at: { type: [string, "null"], format: date-time }
+            published_by: { type: [string, "null"], format: uuid }
+            updated_at: { type: string, format: date-time }
+    ActionInput:
+      type: object
+      required: [description, owner_id, due_date]
+      properties:
+        description: { type: string, minLength: 3 }
+        owner_id: { type: string, format: uuid }
+        due_date: { type: string, format: date }
+        reference: { $ref: "#/components/schemas/ReferenceInput" }
+    ActionUpdateInput:
+      type: object
+      properties:
+        description: { type: string, minLength: 3 }
+        owner_id: { type: string, format: uuid }
+        due_date: { type: string, format: date }
+        reference: { oneOf: [{ $ref: "#/components/schemas/ReferenceInput" }, { type: "null" }] }
+        status: { type: string, enum: [done, cancelled] }
+    CorrectiveAction:
+      type: object
+      required: [id, organisation_id, problem_id, description, owner_id, due_date, status, overdue]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        problem_id: { type: string, format: uuid }
+        description: { type: string }
+        owner_id: { type: string, format: uuid }
+        due_date: { type: string, format: date }
+        status: { $ref: "#/components/schemas/ActionStatus" }
+        overdue: { type: boolean, description: "Open and past its due date; worked out when read" }
+        reference: { oneOf: [{ $ref: "#/components/schemas/ReferenceInput" }, { type: "null" }] }
+        completed_at: { type: [string, "null"], format: date-time }
+    ActionPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CorrectiveAction" } }
+        next_cursor: { type: [string, "null"] }
+    OpenCounts:
+      type: object
+      required: [total_open, by_severity, by_status]
+      properties:
+        total_open: { type: integer }
+        by_severity:
+          type: array
+          description: One row per severity, critical first; zero counts included
+          items:
+            type: object
+            required: [severity, count]
+            properties:
+              severity: { $ref: "#/components/schemas/Severity" }
+              count: { type: integer }
+        by_status:
+          type: array
+          description: One row each for open, investigating and mitigated
+          items:
+            type: object
+            required: [status, count]
+            properties:
+              status: { type: string, enum: [open, investigating, mitigated] }
+              count: { type: integer }
