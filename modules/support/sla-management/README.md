@@ -2,12 +2,20 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts proposed)
 
 SLA definitions, timers, escalation and breach tracking.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Owner: Madhumita (@madhumitha-rooman). Requirements: [docs/prd.md](docs/prd.md).
+
+**In scope:** business-hours calendars; SLA policies per helpdesk priority and category with response and
+resolution targets, warning thresholds, pausing hold reasons and escalation levels; response and resolution
+clocks per helpdesk ticket, driven by helpdesk's ticket events; warnings, breaches and escalation notices
+through notification; the breach counts behind the Support Staff widget `sla-management.breaches`.
+
+**Not in scope:** tickets and their status (helpdesk), SLAs of maintenance, incident-management and
+amc-vendor-support, deadlines on approval steps (workflow), escalation by reassignment or approval.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

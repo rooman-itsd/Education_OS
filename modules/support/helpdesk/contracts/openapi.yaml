@@ -2,9 +2,400 @@ openapi: 3.1.0
 info:
   title: helpdesk API
   version: 0.1.0
-  description: "Ticketing for all user roles with categories and routing."
+  description: "Ticketing for all user roles with categories and routing. See docs/prd.md."
 servers:
   - url: /api/v1/helpdesk
-paths: {}
+paths:
+  /queues:
+    get:
+      summary: Support queues of the organisation. Permission helpdesk:ticket:read or helpdesk:settings:manage.
+      parameters: [{ name: active, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Queue" } } } } } }
+    post:
+      summary: Create a support queue. Permission helpdesk:settings:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QueueInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Queue" } } } }, "409": { description: "Queue name already exists" } }
+  /queues/{id}:
+    patch:
+      summary: Rename, change members or deactivate a queue. A queue with open tickets cannot be deactivated. Permission helpdesk:settings:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QueueInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Queue" } } } }, "409": { description: "Queue has open tickets" } }
+  /categories:
+    get:
+      summary: Ticket categories as a two-level list. Permission helpdesk:self:raise, helpdesk:ticket:read or helpdesk:settings:manage.
+      parameters: [{ name: active, in: query, schema: { type: boolean } }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Category" } } } } } }
+    post:
+      summary: Create a category or sub-category. Permission helpdesk:settings:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CategoryInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Category" } } } }, "409": { description: "Name already exists under this parent, or parent is itself a sub-category" } }
+  /categories/{id}:
+    patch:
+      summary: Update name, default queue, default priority or deactivate. Existing tickets keep their values. Permission helpdesk:settings:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CategoryInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Category" } } } } }
+  /tickets:
+    get:
+      summary: >-
+        Tickets in the caller's queues, or in every queue with helpdesk:ticket:read-all. Newest first unless sort is given.
+        Permission helpdesk:ticket:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/TicketStatus" } } }
+        - { name: priority, in: query, schema: { $ref: "#/components/schemas/Priority" } }
+        - { name: queue_id, in: query, schema: { type: string, format: uuid } }
+        - { name: category_id, in: query, schema: { type: string, format: uuid } }
+        - { name: assignee, in: query, description: "A person id, or me, or unassigned", schema: { type: string } }
+        - { name: requester_id, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, description: Matches ticket number or title, schema: { type: string } }
+        - { name: created_from, in: query, schema: { type: string, format: date } }
+        - { name: created_to, in: query, schema: { type: string, format: date } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, oldest, priority], default: newest } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TicketPage" } } } } }
+    post:
+      summary: Raise a ticket on behalf of a requester (phone, walk-in, email). Publishes helpdesk.ticket.created. Permission helpdesk:ticket:work.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentTicketInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "422": { description: "Category inactive or too many attachments" } }
+  /tickets/{id}:
+    get:
+      summary: One ticket with all replies and internal notes, and its links. Permission helpdesk:ticket:read for a ticket in the caller's queues.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TicketDetail" } } } }, "404": { description: "Not found or not in the caller's queues" } }
+    patch:
+      summary: >-
+        Change title, category or priority. A category or priority change publishes helpdesk.ticket.reclassified.
+        Changing the category does not move the ticket to another queue; use /assign for that. Permission helpdesk:ticket:work
+        for title and priority on tickets assigned to the caller, helpdesk:ticket:manage otherwise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TicketUpdate" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Ticket is resolved, closed or cancelled" } }
+  /tickets/{id}/assign:
+    post:
+      summary: >-
+        Assign to an agent, unassign or move to another queue; see AssignInput for how the fields combine. Never changes the
+        status. The assignee must be a member of the target queue. Publishes helpdesk.ticket.assigned. Permission helpdesk:ticket:work to assign an unassigned ticket in the caller's
+        queue to themselves; helpdesk:ticket:manage for anything else.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssignInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Ticket is closed or cancelled, or assignee is not in the queue" } }
+  /tickets/{id}/comments:
+    post:
+      summary: >-
+        Reply to the requester (public) or add an internal note. The first public reply by an agent publishes
+        helpdesk.ticket.responded. A public reply on a new ticket also moves it to in_progress and publishes
+        helpdesk.ticket.status-changed. Permission helpdesk:ticket:work.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentCommentInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Comment" } } } }, "409": { description: "Ticket is closed or cancelled" } }
+  /tickets/{id}/status:
+    post:
+      summary: Start work or put on hold with a reason (new or on_hold → in_progress, in_progress → on_hold). Publishes helpdesk.ticket.status-changed. Permission helpdesk:ticket:work.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StatusInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Transition not allowed from the current status" } }
+  /tickets/{id}/resolve:
+    post:
+      summary: Resolve with a resolution note visible to the requester (new, in_progress or on_hold → resolved). Publishes helpdesk.ticket.resolved. Permission helpdesk:ticket:work.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ResolveInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Already resolved, closed or cancelled" } }
+  /tickets/{id}/cancel:
+    post:
+      summary: Cancel a ticket, optionally as a duplicate of another open ticket. Publishes helpdesk.ticket.cancelled. Permission helpdesk:ticket:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CancelInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Already resolved, closed or cancelled, or duplicate_of is this ticket" } }
+  /tickets/{id}/links:
+    post:
+      summary: Record a link to a record in another module, by reference only. Permission helpdesk:ticket:work.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LinkInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/TicketLink" } } } }, "409": { description: "Same link already exists" } }
+  /tickets/{id}/links/{link_id}:
+    delete:
+      summary: Remove a link recorded by mistake. Audited. Permission helpdesk:ticket:work.
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+        - { name: link_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { "204": { description: Removed }, "404": { description: "Not found" } }
+  /stats/open-by-priority:
+    get:
+      summary: >-
+        Open tickets (new, in_progress, on_hold) counted per priority, urgent first, with unassigned and assigned-to-caller counts.
+        scope=mine counts tickets assigned to the caller; my_queues (default) tickets in the caller's queues; all every queue and
+        needs helpdesk:ticket:read-all. Backs the Support Staff widget helpdesk.open-by-priority. Permission helpdesk:ticket:read.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, my_queues, all], default: my_queues } }
+        - { name: queue_id, in: query, description: Narrow to one queue the caller may see, schema: { type: string, format: uuid } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpenByPriority" } } } }, "403": { description: "scope=all without helpdesk:ticket:read-all" } }
+  /me/tickets:
+    get:
+      summary: The caller's own tickets, newest first. Permission helpdesk:self:read.
+      parameters:
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/TicketStatus" } } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TicketPage" } } } } }
+    post:
+      summary: Raise a ticket for oneself (channel portal). Publishes helpdesk.ticket.created. Permission helpdesk:self:raise.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TicketInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "422": { description: "Category inactive or too many attachments" } }
+  /me/tickets/{id}:
+    get:
+      summary: One of the caller's own tickets with public replies only; internal notes and links are never returned. Permission helpdesk:self:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyTicketDetail" } } } }, "404": { description: "Not found or not the caller's ticket" } }
+  /me/tickets/{id}/comments:
+    post:
+      summary: Reply on the caller's own ticket. A reply to a ticket on hold waiting on the requester moves it back to in_progress (helpdesk.ticket.status-changed). Permission helpdesk:self:raise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CommentInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Comment" } } } }, "409": { description: "Ticket is closed or cancelled" } }
+  /me/tickets/{id}/confirm:
+    post:
+      summary: Confirm a resolved ticket is fixed, with an optional rating (resolved → closed). Publishes helpdesk.ticket.closed. Permission helpdesk:self:raise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ConfirmInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Not resolved" } }
+  /me/tickets/{id}/reopen:
+    post:
+      summary: Reopen a resolved ticket within HELPDESK_REOPEN_WINDOW_DAYS (resolved → in_progress). Publishes helpdesk.ticket.reopened. Permission helpdesk:self:raise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Not resolved, or the reopen window has passed" } }
+  /me/tickets/{id}/withdraw:
+    post:
+      summary: Withdraw the caller's own ticket before it is resolved. Publishes helpdesk.ticket.cancelled. Permission helpdesk:self:raise.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Reason" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "Already resolved, closed or cancelled" } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, description: Opaque cursor from the previous page, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  schemas:
+    Priority:
+      type: string
+      enum: [low, medium, high, urgent]
+    TicketStatus:
+      type: string
+      enum: [new, in_progress, on_hold, resolved, closed, cancelled]
+    HoldReason:
+      type: string
+      enum: [waiting_requester, waiting_third_party, waiting_internal]
+    Channel:
+      type: string
+      enum: [portal, email, phone, walk_in]
+    Reason:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, minLength: 3 } }
+    QueueInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 80, description: "Label from the organisation, such as IT, Academic office or Accounts help" }
+        description: { type: string }
+        member_ids: { type: array, items: { type: string, format: uuid }, description: Person ids of the agents in this queue }
+        active: { type: boolean, default: true }
+    Queue:
+      allOf:
+        - { $ref: "#/components/schemas/QueueInput" }
+        - type: object
+          required: [id, organisation_id, open_count]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+            open_count: { type: integer, description: "Tickets in new, in_progress or on_hold" }
+    CategoryInput:
+      type: object
+      required: [name, default_queue_id, default_priority]
+      properties:
+        parent_id: { type: [string, "null"], format: uuid, description: "Null for a top-level category. Only two levels." }
+        name: { type: string, maxLength: 80 }
+        description: { type: string }
+        default_queue_id: { type: string, format: uuid }
+        default_priority: { $ref: "#/components/schemas/Priority" }
+        active: { type: boolean, default: true }
+    Category:
+      allOf:
+        - { $ref: "#/components/schemas/CategoryInput" }
+        - type: object
+          required: [id, organisation_id]
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid }
+    TicketInput:
+      type: object
+      required: [category_id, title, description]
+      properties:
+        category_id: { type: string, format: uuid }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        description: { type: string, minLength: 3 }
+        attachment_document_ids: { type: array, items: { type: string }, description: "Ids from platform/documents; at most HELPDESK_MAX_ATTACHMENTS" }
+    AgentTicketInput:
+      allOf:
+        - { $ref: "#/components/schemas/TicketInput" }
+        - type: object
+          required: [requester_id, channel]
+          properties:
+            requester_id: { type: string, format: uuid }
+            channel: { $ref: "#/components/schemas/Channel" }
+            priority: { $ref: "#/components/schemas/Priority", description: "Defaults to the category's default priority" }
+            assign_to_me: { type: boolean, default: false }
+    TicketUpdate:
+      type: object
+      properties:
+        title: { type: string, minLength: 3, maxLength: 200 }
+        category_id: { type: string, format: uuid }
+        priority: { $ref: "#/components/schemas/Priority" }
+        reason: { type: string, description: "Required when category or priority changes; kept in the audit record" }
+    AssignInput:
+      type: object
+      description: >-
+        Both omitted: assign to the caller in the current queue. assignee_id only: assign within the current queue.
+        assignee_id null: unassign, staying in the current queue. queue_id only: move to that queue, unassigned.
+        Both given: move to that queue and assign to that agent.
+      properties:
+        queue_id: { type: string, format: uuid, description: "Target queue. Omit to stay in the current queue." }
+        assignee_id: { type: [string, "null"], format: uuid, description: "Agent to assign, or null to unassign." }
+    StatusInput:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [in_progress, on_hold] }
+        hold_reason: { $ref: "#/components/schemas/HoldReason", description: "Required when status is on_hold" }
+        note: { type: string, description: "Optional public message to the requester, saved as a public reply" }
+    ResolveInput:
+      type: object
+      required: [resolution_note]
+      properties:
+        resolution_note: { type: string, minLength: 3, description: Shown to the requester }
+    CancelInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3 }
+        duplicate_of: { type: [string, "null"], format: uuid, description: "Another open ticket this one duplicates" }
+    ConfirmInput:
+      type: object
+      properties:
+        satisfaction_rating: { type: integer, minimum: 1, maximum: 5 }
+        feedback: { type: string }
+    CommentInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1 }
+        attachment_document_ids: { type: array, items: { type: string } }
+    AgentCommentInput:
+      allOf:
+        - { $ref: "#/components/schemas/CommentInput" }
+        - type: object
+          required: [visibility]
+          properties:
+            visibility: { type: string, enum: [public, internal] }
+    Comment:
+      type: object
+      required: [id, ticket_id, author_id, visibility, body, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        ticket_id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        author_is_requester: { type: boolean }
+        visibility: { type: string, enum: [public, internal] }
+        body: { type: string }
+        attachment_document_ids: { type: array, items: { type: string } }
+        created_at: { type: string, format: date-time }
+    LinkInput:
+      type: object
+      required: [module, entity, ref_id]
+      properties:
+        module: { type: string, description: "Module name, such as maintenance, knowledge-base or incident-management" }
+        entity: { type: string, description: "Entity in that module, such as ticket, article or incident" }
+        ref_id: { type: string, description: Id of the record in that module }
+        note: { type: string }
+    TicketLink:
+      allOf:
+        - { $ref: "#/components/schemas/LinkInput" }
+        - type: object
+          required: [id, ticket_id, created_by, created_at]
+          properties:
+            id: { type: string, format: uuid }
+            ticket_id: { type: string, format: uuid }
+            created_by: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+    Ticket:
+      type: object
+      required: [id, organisation_id, number, requester_id, raised_by_id, channel, category_id, queue_id, priority, status, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        number: { type: string, description: "Per-organisation ticket number, such as HD-000123" }
+        requester_id: { type: string, format: uuid }
+        raised_by_id: { type: string, format: uuid, description: "The requester, or the agent who raised it on their behalf" }
+        channel: { $ref: "#/components/schemas/Channel" }
+        category_id: { type: string, format: uuid }
+        queue_id: { type: string, format: uuid }
+        assignee_id: { type: [string, "null"], format: uuid }
+        priority: { $ref: "#/components/schemas/Priority" }
+        status: { $ref: "#/components/schemas/TicketStatus" }
+        hold_reason: { oneOf: [{ $ref: "#/components/schemas/HoldReason" }, { type: "null" }] }
+        title: { type: string }
+        description: { type: string }
+        attachment_document_ids: { type: array, items: { type: string } }
+        resolution_note: { type: [string, "null"] }
+        duplicate_of: { type: [string, "null"], format: uuid }
+        reopen_count: { type: integer, minimum: 0 }
+        satisfaction_rating: { type: [integer, "null"], minimum: 1, maximum: 5 }
+        feedback: { type: [string, "null"], description: "Requester's comment given when confirming the fix" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        first_responded_at: { type: [string, "null"], format: date-time }
+        resolved_at: { type: [string, "null"], format: date-time }
+        closed_at: { type: [string, "null"], format: date-time }
+    TicketDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Ticket" }
+        - type: object
+          required: [comments, links]
+          properties:
+            comments: { type: array, items: { $ref: "#/components/schemas/Comment" }, description: Public replies and internal notes, oldest first }
+            links: { type: array, items: { $ref: "#/components/schemas/TicketLink" } }
+    MyTicketDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Ticket" }
+        - type: object
+          required: [comments, can_reopen]
+          properties:
+            comments: { type: array, items: { $ref: "#/components/schemas/Comment" }, description: Public replies only, oldest first }
+            can_reopen: { type: boolean, description: "True while resolved and inside the reopen window" }
+    TicketPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Ticket" } }
+        next_cursor: { type: [string, "null"] }
+    OpenByPriority:
+      type: object
+      required: [scope, total_open, rows]
+      properties:
+        scope: { type: string, enum: [mine, my_queues, all] }
+        total_open: { type: integer }
+        rows:
+          type: array
+          description: One row per priority, urgent first; priorities with no open tickets have zero counts
+          items:
+            type: object
+            required: [priority, open, unassigned, assigned_to_me, on_hold]
+            properties:
+              priority: { $ref: "#/components/schemas/Priority" }
+              open: { type: integer, description: "new + in_progress + on_hold" }
+              unassigned: { type: integer }
+              assigned_to_me: { type: integer }
+              on_hold: { type: integer }
+              oldest_created_at: { type: [string, "null"], format: date-time }

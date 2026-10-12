@@ -1,9 +1,75 @@
 # Domain events published by timetable-attendance.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
+#
+# STATUS: proposed (week 1, issue #63). `consumers` lists the modules expected to subscribe; each
+# owner confirms before this file is locked (see docs/prd.md section 10).
+# IDs ending in academic_period_id, course_offering_id, section_id and instructor_assignment_id
+# are academic-management IDs; student_id and instructor_id are external person IDs.
 module: timetable-attendance
 version: 1
-events: []
-#  - name: timetable-attendance.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+# Envelope fields as stored by the outbox in packages/core (eos_core.events.OutboxEvent), plus the
+# version required by this header. actor is the acting user's id, null when the system acts.
+envelope:
+  id: uuid
+  name: string
+  occurred_at: datetime
+  actor: "uuid?"
+  organisation_id: uuid
+  version: integer
+  payload: object
+events:
+  - name: timetable-attendance.timetable.created
+    description: A draft timetable was created for an academic period.
+    consumers: []
+    payload: { organisation_id: uuid, timetable_id: uuid, academic_period_id: uuid, department_id: "uuid?", name: string }
+
+  - name: timetable-attendance.timetable.updated
+    description: A draft or unpublished timetable's details or slots changed.
+    consumers: []
+    payload: { organisation_id: uuid, timetable_id: uuid, changed_fields: "string[]", slot_count: integer }
+
+  - name: timetable-attendance.timetable.published
+    description: A timetable was published and its scheduled classes were generated.
+    consumers: []
+    payload: { organisation_id: uuid, timetable_id: uuid, academic_period_id: uuid, department_id: "uuid?", version: integer, published_at: datetime, scheduled_class_count: integer }
+
+  - name: timetable-attendance.timetable.unpublished
+    description: A timetable was unpublished; future classes without attendance were cancelled.
+    consumers: []
+    payload: { organisation_id: uuid, timetable_id: uuid, academic_period_id: uuid, version: integer, unpublished_at: datetime, cancelled_class_count: integer }
+
+  - name: timetable-attendance.scheduled-class.created
+    description: A class occurrence was generated from a timetable slot or created ad hoc.
+    consumers: []
+    payload: { organisation_id: uuid, scheduled_class_id: uuid, timetable_id: "uuid?", academic_period_id: uuid, course_offering_id: uuid, section_id: uuid, instructor_assignment_id: uuid, instructor_id: uuid, class_date: date, starts_at: datetime, ends_at: datetime, location_label: "string?" }
+
+  - name: timetable-attendance.scheduled-class.updated
+    description: A class was rescheduled or its location or instructor changed.
+    consumers: []
+    payload: { organisation_id: uuid, scheduled_class_id: uuid, changed_fields: "string[]", class_date: date, starts_at: datetime, ends_at: datetime, location_label: "string?" }
+
+  - name: timetable-attendance.scheduled-class.cancelled
+    description: A class was cancelled.
+    consumers: []
+    payload: { organisation_id: uuid, scheduled_class_id: uuid, course_offering_id: uuid, section_id: uuid, class_date: date, reason: "string?", cancelled_at: datetime }
+
+  - name: timetable-attendance.attendance-session.opened
+    description: Attendance taking was opened for a class.
+    consumers: []
+    payload: { organisation_id: uuid, attendance_session_id: uuid, scheduled_class_id: uuid, course_offering_id: uuid, section_id: uuid, class_date: date, eligible_count: integer, marking_deadline: datetime }
+
+  - name: timetable-attendance.attendance-record.marked
+    description: Attendance was marked in an open session. One event per submission, listing the records it set.
+    consumers: []
+    payload: { organisation_id: uuid, attendance_session_id: uuid, scheduled_class_id: uuid, course_offering_id: uuid, section_id: uuid, class_date: date, records: "{ attendance_record_id: uuid, student_id: uuid, status: string }[]" }
+
+  - name: timetable-attendance.attendance-record.updated
+    description: A record in a closed session was corrected, with a reason.
+    consumers: []
+    payload: { organisation_id: uuid, attendance_record_id: uuid, attendance_session_id: uuid, course_offering_id: uuid, student_id: uuid, class_date: date, from_status: string, to_status: string, reason: string }
+
+  - name: timetable-attendance.attendance-session.closed
+    description: Attendance taking was closed; unmarked students became absent. closed_by is null when closed by the system at the deadline.
+    consumers: [reporting]
+    payload: { organisation_id: uuid, attendance_session_id: uuid, scheduled_class_id: uuid, course_offering_id: uuid, section_id: uuid, class_date: date, closed_by: "uuid?", closed_at: datetime, present: integer, absent: integer, late: integer, excused: integer }

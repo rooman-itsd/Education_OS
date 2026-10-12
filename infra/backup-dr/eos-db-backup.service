@@ -1,0 +1,10 @@
+[Unit]
+Description=Education OS: back up the Postgres database
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/eos-db-backup
+Nice=10
+IOSchedulingClass=idle

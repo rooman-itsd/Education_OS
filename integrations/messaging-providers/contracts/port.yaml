@@ -1,0 +1,63 @@
+# The OutboundMessaging port this adapter implements.
+#
+# Defined by platform/integration-hub; copied here because a portable module must carry the
+# contract it implements (module-standard.md, "Moving a module to another repo").
+# platform/notification depends on this port and never on a provider, so changing provider is
+# configuration, not code.
+port: OutboundMessaging
+version: 1
+implemented_by: messaging-providers
+
+operations:
+  - name: send
+    description: >-
+      Hand one rendered message to the provider. Returns as soon as the provider accepts or
+      rejects it. Acceptance is not delivery: delivery is reported later by webhook.
+    input:
+      message_id: uuid            # notification's id, echoed back on receipts
+      organisation_id: uuid       # for attribution and per-academy rate reasoning
+      channel: string             # email | sms | whatsapp
+      to: string                  # address or E.164 phone number
+      from: string                # sending identity; platform-level in v1
+      subject: string             # email only, null otherwise
+      body: string                # already rendered by notification
+      body_html: string           # optional, email only
+      attachments: array          # { document_id, filename }, fetched from platform/documents
+      metadata: object            # opaque, echoed back on receipts
+    output:
+      accepted: boolean
+      provider_message_id: string # null when rejected
+      reason: string              # null when accepted
+      retryable: boolean          # whether notification should try again
+    errors:
+      - transport_unavailable     # provider unreachable; retryable
+      - rejected                  # provider refused the message; not retryable
+      - throttled                 # rate limited; retryable after retry_after_s
+      - invalid_recipient         # malformed address; not retryable
+
+  - name: capabilities
+    description: What this provider supports, so notification can validate before sending.
+    output:
+      channels: array             # e.g. [email]
+      max_body_bytes: integer
+      supports_attachments: boolean
+      supports_html: boolean
+      rate_limit_per_minute: integer
+
+  - name: healthcheck
+    description: >-
+      Whether the provider is reachable with the configured credentials. Used by the adapter
+      registry and the Super Admin dashboard. Must not send a message.
+    output:
+      reachable: boolean
+      detail: string
+
+# Inbound, the other direction: providers report outcomes by webhook. The adapter verifies the
+# signature, normalises the vendor payload to this shape and publishes it as an event.
+receipt:
+  provider_message_id: string
+  message_id: uuid
+  status: string                  # delivered | bounced | complained | failed
+  bounce_type: string             # hard | soft; null unless bounced
+  detail: string
+  occurred_at: datetime
