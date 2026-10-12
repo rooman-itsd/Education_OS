@@ -1,0 +1,12 @@
+[Unit]
+Description=Education OS: back up the Postgres database every night
+
+[Timer]
+# 02:30 server time, give or take 10 minutes. Persistent: a run missed while the host was off
+# happens as soon as it is back.
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
