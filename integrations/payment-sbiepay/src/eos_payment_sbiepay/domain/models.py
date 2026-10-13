@@ -163,3 +163,8 @@ class Notification(Base, TenantMixin, TimestampMixin):
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+# Used by the Alembic chain (db/migrations) to touch only this adapter's tables.
+PREFIX = "payment_sbiepay_"
+TABLES = [m.__table__ for m in (MerchantAccount, Payment, Refund, ReconciliationRun, Notification)]

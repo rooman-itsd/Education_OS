@@ -6,7 +6,7 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
 
 - `contracts/` holds the API (`openapi.yaml`), events and permissions. Callers use only these.
 - `src/eos_payment_sbiepay/` is the adapter (package `eos-payment-sbiepay`). Its layers:
-  - `domain/models.py`: tables, each with `organisation_id`. Row-level security is applied by `eos_core.init_db()`.
+  - `domain/models.py`: tables, each with `organisation_id` and the `tenant_isolation` row-level-security policy on Postgres.
   - `application/service.py`: the use cases and the scheduled jobs.
   - `infrastructure/gateway.py`: the gateway port, `MockGateway` and `SbiepayGateway`.
   - `infrastructure/notifier.py`: signed notifications to `notify_url`.
@@ -50,6 +50,21 @@ These are plain functions that `platform/scheduler` will call. They aren't wired
 
 - **`sandbox`** (the default) and **`live`**: use `SbiepayGateway`. Both need `PAYMENT_SBIEPAY_CALLBACK_BASE_URL`, so `payment_url` and the gateway's return URL are absolute. Without it, payment calls answer `503`. The gateway can't talk to SBIePay yet; see the limitations below.
 - **`mock`**: an in-memory gateway for development and tests. The redirect form posts straight back to the callback. It must be set explicitly (`PAYMENT_SBIEPAY_MODE=mock`) and is refused unless `EOS_DEV_MODE=true`, so a missing setting never selects it.
+
+## Migrations
+
+`db/` holds this adapter's own Alembic chain:
+- It touches only `payment_sbiepay_*` tables.
+- It records its revision in `payment_sbiepay_alembic_version`, so it shares a database with every other module's chain.
+- On Postgres, the first revision (`psb_0001`) applies the `tenant_isolation` policy to every table.
+
+```sh
+cd integrations/payment-sbiepay/db
+alembic upgrade head                     # uses EOS_DATABASE_URL
+alembic -x url=postgresql+psycopg://... upgrade head
+```
+
+`tests/test_migrations.py` upgrades a throwaway SQLite file, checks that the schema matches the models exactly, then downgrades. Any later change to the models needs a new revision in `db/migrations/versions`.
 
 ## Running the tests
 
