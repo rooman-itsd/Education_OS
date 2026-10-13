@@ -123,6 +123,53 @@ organisations exist.
 Postgres tables get row-level-security policies automatically at startup (`eos_core.rls`). Nightly
 backups and restores: [infra/backup-dr](../backup-dr/README.md).
 
+#### Check the live site after the proxy change
+
+```
+curl -s https://<public-hostname>/api/v1/health
+```
+
+It must print the JSON above. An HTML page (`<!doctype html>...`) means `/api/` still goes to the web
+vhost, which answers every path with `index.html`: the `proxy_pass` line is missing or nginx was not
+reloaded. Then open the site in a browser: the "Preview mode" banner is gone and the sign-in page shows.
+
+#### Dev mode on or off
+
+Until `platform/notification` sends email, the verification token is only written to the API log, so
+with `EOS_DEV_MODE=false` nobody can finish registering. `true` returns the token to the sign-up page
+instead. Every new organisation still waits for a super admin's approval, so nothing goes live unseen;
+turn it off once email works. The platform lead decides which applies on a shared host.
+
+```
+cd /opt/education-os
+sed -i 's/^EOS_DEV_MODE=.*/EOS_DEV_MODE=true/' infra/docker/.env.api    # or =false
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d
+curl -s http://127.0.0.1:8000/api/v1/health                             # shows the new dev_mode
+```
+
+`up -d` recreates only the `api` container; the database keeps running and keeps its data.
+
+#### Allow port 8000 only from the proxy
+
+Docker publishes the API on every interface, so anyone on the LAN can call it directly and skip the
+proxy. Restrict it with the Proxmox firewall on the API container. It filters on the Proxmox host,
+outside the container, so Docker's own iptables rules cannot open a way around it (a firewall inside
+the container could be bypassed that way). Proxmox applies container rules only while the firewall is
+enabled at Datacenter level; turning that on is the platform lead's call, since it also filters the host.
+
+In the order below, so SSH is allowed before anything is blocked. In the web UI, on the API container:
+
+1. **Firewall → Add**: direction `in`, action `ACCEPT`, protocol `tcp`, dest. port `22`,
+   source `<office-subnet>` (or the admins' addresses). Enable it.
+2. **Firewall → Add**: direction `in`, action `ACCEPT`, protocol `tcp`, dest. port `8000`,
+   source `<nginx-container-ip>`. Enable it.
+3. **Network → net0 → Edit**: tick **Firewall**.
+4. **Firewall → Options**: `Input Policy` `DROP`, then `Firewall` `Yes`.
+
+Check: the live site's `/api/v1/health` still answers, SSH still works, and from a laptop
+`curl -m 5 http://<container-ip>:8000/api/v1/health` now times out. If SSH is lost, set
+`Firewall` back to `No` under Firewall → Options in the Proxmox UI.
+
 ### Local check
 
 ```
