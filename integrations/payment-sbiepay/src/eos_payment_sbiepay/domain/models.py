@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from eos_core.db import Base, TenantMixin, TimestampMixin, new_id, utcnow
@@ -18,6 +18,9 @@ def money(value: Decimal | None) -> str | None:
 
 
 def iso(value: datetime | date | None) -> str | None:
+    """ISO 8601. Datetimes are UTC; SQLite returns them without a zone, so one is added before formatting."""
+    if isinstance(value, datetime) and value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
     return value.isoformat() if value else None
 
 

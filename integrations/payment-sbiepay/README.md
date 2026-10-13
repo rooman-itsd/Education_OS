@@ -24,7 +24,16 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
    - its session was never opened before it ran out;
    - it stayed pending longer than `PAYMENT_SBIEPAY_PENDING_VERIFY_AFTER_MINUTES` and the gateway doesn't know it.
 
-Final payments never change again, so repeated callbacks are harmless.
+Final payments never change again, so repeated callbacks are harmless:
+- Every status change is a compare-and-set on the row. Of a callback, a verify and a sweep racing each other, only one publishes.
+- The one exception is `expired` → `succeeded`. A payer may finish at the gateway after the sweep expired the session, and the gateway's confirmation wins. Consumers may therefore see `succeeded` after `expired` for the same reference.
+
+Each purpose has one caller: `fee` must come from `fees-accounts` and `subscription` from `billing`; anything else answers `422`.
+
+Refunds:
+- They are for fee payments only. A subscription was paid into the platform account, so an organisation gets `403`.
+- The payment row is locked while a refund runs.
+- Refunds the gateway accepted but hasn't settled yet count against the refundable balance.
 
 ## Notifications to `notify_url`
 
@@ -77,6 +86,7 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
 
 ## Known limitations (tracked on #97)
 
+- **Starting a payment needs only the payer's token.** A payer could start a payment for the right module but someone else's invoice, or a different amount. Consumers must check `amount` and `source_reference` against their own record before acting on `payment-sbiepay.payment.succeeded`. Service-to-service authentication is the platform's decision (raised on #97).
 - **The SBIePay gateway isn't implemented.** The request and response fields, the encryption, double verification, refunds and the settlement report format all come from the SBIePay merchant integration kit, which hasn't been received. AES also needs a library on the approved stack. Until then, `sandbox` and `live` answer `503`.
 - **Merchant encryption keys aren't stored.** `PUT /merchant-account` with an `encryption_key` answers `501`, because keys must be stored encrypted.
 - **Settlement reports uploaded through `platform/documents`** (`report_document_id`) answer `501` until the documents SDK exists.

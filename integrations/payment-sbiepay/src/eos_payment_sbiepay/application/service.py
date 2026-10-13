@@ -13,9 +13,10 @@ from urllib.parse import urlencode, urlparse
 from eos_core import events
 from eos_core.db import scoped, utcnow
 from eos_core.tenant import organisation_scope, platform_scope
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ..domain.models import (
     OPEN_STATUSES,
@@ -40,7 +41,9 @@ from ..infrastructure.gateway import (
 
 API_PREFIX = "/api/v1/payment-sbiepay"
 MOCK_PLATFORM_MERCHANT_ID = "MOCK-PLATFORM"
-PURPOSES = ("subscription", "fee")
+# Each purpose has one calling module: fees go through fees-accounts, plan upgrades through billing.
+SOURCE_FOR_PURPOSE = {"fee": "fees-accounts", "subscription": "billing"}
+PURPOSES = tuple(SOURCE_FOR_PURPOSE)
 MAX_RETRY_DELAY = timedelta(hours=6)
 
 
@@ -165,24 +168,55 @@ def _base_payload(p: Payment) -> dict:
     }
 
 
+def _transition(db: Session, p: Payment, allowed_from: tuple[str, ...], **values) -> bool:
+    """Compare-and-set: change the row only if its status in the database is still one of allowed_from.
+    Of two racing callers (callback, verify, sweep) exactly one wins and publishes; the other sees the
+    winner's row. On Postgres the second UPDATE waits for the first to commit, then matches nothing."""
+    db.flush()
+    result = db.execute(
+        update(Payment)
+        .where(Payment.id == p.id, Payment.status.in_(allowed_from))
+        .values(**values)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        db.refresh(p)
+        return False
+    for key, value in values.items():
+        set_committed_value(p, key, value)
+    return True
+
+
 def _expire(db: Session, p: Payment) -> None:
-    p.status, p.completed_at = "expired", utcnow()
-    _publish(db, p, "payment-sbiepay.payment.expired", _base_payload(p))
+    if _transition(db, p, OPEN_STATUSES, status="expired", completed_at=utcnow()):
+        _publish(db, p, "payment-sbiepay.payment.expired", _base_payload(p))
 
 
 def _apply(db: Session, p: Payment, result: VerifyResult) -> None:
-    """Record the outcome of double verification. Final payments never change again (idempotent)."""
-    if p.status not in OPEN_STATUSES:
+    """Record the outcome of double verification. Final payments never change again (idempotent), with one
+    exception: an expired payment the gateway confirms as paid becomes succeeded, because the payer may finish
+    at the gateway after the sweep expired the session, and the money is real."""
+    if p.status not in OPEN_STATUSES and not (p.status == "expired" and result.status == "succeeded"):
         return
     if result.status == "succeeded" and result.amount is not None and Decimal(result.amount) != Decimal(p.amount):
+        if p.status == "expired":
+            return  # left for reconciliation (status_differs) rather than reopening it as failed
         result = VerifyResult(
             "failed",
             gateway_transaction_id=result.gateway_transaction_id,
             failure_reason=f"gateway amount {money(result.amount)} differs from requested {money(p.amount)}",
         )
     if result.status == "succeeded":
-        p.status, p.completed_at = "succeeded", utcnow()
-        p.gateway_transaction_id, p.payment_mode = result.gateway_transaction_id, result.payment_mode
+        if not _transition(
+            db,
+            p,
+            (*OPEN_STATUSES, "expired"),
+            status="succeeded",
+            completed_at=utcnow(),
+            gateway_transaction_id=result.gateway_transaction_id,
+            payment_mode=result.payment_mode,
+        ):
+            return
         _publish(
             db,
             p,
@@ -197,9 +231,16 @@ def _apply(db: Session, p: Payment, result: VerifyResult) -> None:
             },
         )
     elif result.status == "failed":
-        p.status, p.completed_at = "failed", utcnow()
-        p.gateway_transaction_id = result.gateway_transaction_id
-        p.failure_reason = (result.failure_reason or "failed at gateway")[:300]
+        if not _transition(
+            db,
+            p,
+            OPEN_STATUSES,
+            status="failed",
+            completed_at=utcnow(),
+            gateway_transaction_id=result.gateway_transaction_id,
+            failure_reason=(result.failure_reason or "failed at gateway")[:300],
+        ):
+            return
         _publish(
             db,
             p,
@@ -207,12 +248,14 @@ def _apply(db: Session, p: Payment, result: VerifyResult) -> None:
             {**_base_payload(p), "amount": money(p.amount), "currency": p.currency, "failure_reason": p.failure_reason},
         )
     else:  # pending or not_found: the gateway has no final answer yet
-        p.status = "pending"
+        _transition(db, p, ("created",), status="pending")
 
 
-def deliver_notifications(db: Session, organisation_id: str | None = None) -> int:
-    """Post due notifications. Scheduled job (all organisations) and called right after a request (one).
-    Failures back off exponentially up to MAX_RETRY_DELAY and keep retrying until a 2xx answer."""
+def deliver_notifications(db: Session, organisation_id: str | None = None, payment_id: str | None = None) -> int:
+    """Post due notifications. The scheduler calls it for all organisations; a request calls it for the one
+    payment it changed, so a slow notify_url of another payment never delays the payer. Rows another worker
+    is sending are skipped (Postgres). Failures back off exponentially up to MAX_RETRY_DELAY and keep
+    retrying until a 2xx answer."""
     cfg = _config()
     scope = organisation_scope(organisation_id) if organisation_id else platform_scope()
     delivered = 0
@@ -223,7 +266,9 @@ def deliver_notifications(db: Session, organisation_id: str | None = None) -> in
                 select(Notification)
                 .where(Notification.delivered_at.is_(None), Notification.next_attempt_at <= now)
                 .where(*([Notification.organisation_id == organisation_id] if organisation_id else []))
+                .where(*([Notification.payment_id == payment_id] if payment_id else []))
                 .order_by(Notification.next_attempt_at)
+                .with_for_update(skip_locked=True)
             )
         )
         for n in due:
@@ -249,6 +294,8 @@ def initiate(db: Session, *, organisation_id: str, user_id: str, body: dict) -> 
     purpose = body["purpose"]
     if purpose not in PURPOSES:
         raise PaymentError("purpose must be subscription or fee", 422)
+    if body["source_module"] != SOURCE_FOR_PURPOSE[purpose]:
+        raise PaymentError(f"purpose {purpose} payments are started by {SOURCE_FOR_PURPOSE[purpose]}", 422)
     if body["currency"] != "INR":
         raise PaymentError("currency must be INR", 422)
     amount = _amount(body["amount"])
@@ -313,6 +360,8 @@ def list_payments(db: Session, *, filters: dict, cursor: str | None, limit: int)
         offset = int(cursor) if cursor else 0
     except ValueError as e:
         raise PaymentError("invalid cursor", 400) from e
+    if offset < 0:
+        raise PaymentError("invalid cursor", 400)
     q = scoped(db, q, Payment).order_by(Payment.created_at.desc(), Payment.id).offset(offset).limit(limit + 1)
     rows = list(db.scalars(q))
     more = len(rows) > limit
@@ -373,7 +422,7 @@ def handle_callback(db: Session, form: dict[str, str]) -> str:
     if p is None:
         raise PaymentError("gateway response does not match a payment", 400)
     with organisation_scope(p.organisation_id):
-        if p.status in OPEN_STATUSES:
+        if p.status in (*OPEN_STATUSES, "expired"):
             try:
                 result = gateway.verify(_order(p))  # double verification: the browser response alone is never trusted
             except GatewayUnavailableError as e:
@@ -381,7 +430,7 @@ def handle_callback(db: Session, form: dict[str, str]) -> str:
             _apply(db, p, result)
             db.add(p)
             db.commit()
-    deliver_notifications(db, p.organisation_id)
+    deliver_notifications(db, p.organisation_id, p.id)
     joiner = "&" if urlparse(p.return_url).query else "?"
     return f"{p.return_url}{joiner}{urlencode({'reference': p.reference, 'status': p.status})}"
 
@@ -391,7 +440,7 @@ def _reverify(db: Session, p: Payment, cfg: config_module.Config) -> None:
         result = gateway_for(cfg).verify(_order(p))
     except GatewayUnavailableError as e:
         raise PaymentError(str(e), 503) from e
-    if result.status == "not_found" and _aware(p.expires_at) <= utcnow():
+    if result.status == "not_found" and p.status in OPEN_STATUSES and _aware(p.expires_at) <= utcnow():
         _expire(db, p)
     else:
         _apply(db, p, result)
@@ -400,10 +449,10 @@ def _reverify(db: Session, p: Payment, cfg: config_module.Config) -> None:
 def verify(db: Session, reference: str) -> dict:
     cfg = _config()
     p = get_payment(db, reference)
-    if p.status in OPEN_STATUSES:
+    if p.status in (*OPEN_STATUSES, "expired"):
         _reverify(db, p, cfg)
         db.commit()
-        deliver_notifications(db, p.organisation_id)
+        deliver_notifications(db, p.organisation_id, p.id)
     return p.to_dict()
 
 
@@ -420,12 +469,15 @@ def sweep_open_payments(db: Session) -> int:
     for p in candidates:
         with organisation_scope(p.organisation_id):
             before = p.status
-            if p.status == "created" and _aware(p.expires_at) <= now:
-                _expire(db, p)
-            elif p.status == "pending" and _aware(p.created_at) <= pending_cutoff:
-                _reverify(db, p, cfg)
-            db.add(p)
-            db.commit()
+            try:
+                if p.status == "created" and _aware(p.expires_at) <= now:
+                    _expire(db, p)
+                elif p.status == "pending" and _aware(p.created_at) <= pending_cutoff:
+                    _reverify(db, p, cfg)
+                db.commit()
+            except PaymentError:
+                db.rollback()  # gateway unavailable for this payment: retried on the next sweep
+                continue
             changed += p.status != before
     deliver_notifications(db)
     return changed
@@ -436,11 +488,27 @@ def sweep_open_payments(db: Session) -> int:
 
 def refund(db: Session, *, reference: str, user_id: str, amount: str, reason: str) -> dict:
     cfg = _config()
-    p = get_payment(db, reference)
+    # Lock the payment row until commit, so two refunds of the same payment run one after the other (Postgres).
+    q = select(Payment).where(Payment.reference == reference).with_for_update()
+    p = db.scalar(scoped(db, q, Payment))
+    if p is None:
+        raise PaymentError("payment not found", 404)
+    if p.purpose == "subscription":
+        raise PaymentError("subscription payments went to the platform account; the platform refunds them", 403)
     if p.status not in ("succeeded", "partially_refunded"):
         raise PaymentError("payment is not in status succeeded or partially_refunded", 409)
     value = _amount(amount)
-    refundable = Decimal(p.amount) - Decimal(p.refunded_amount or 0)
+    in_flight = db.scalar(
+        scoped(
+            db,
+            select(func.coalesce(func.sum(Refund.amount), 0)).where(
+                Refund.payment_id == p.id, Refund.status == "requested"
+            ),
+            Refund,
+        )
+    )
+    # Refunds the gateway accepted but has not settled still count against the balance.
+    refundable = Decimal(p.amount) - Decimal(p.refunded_amount or 0) - Decimal(in_flight or 0)
     if value > refundable:
         raise PaymentError(f"amount exceeds the refundable balance of {money(refundable)}", 422)
     r = Refund(
@@ -477,7 +545,7 @@ def refund(db: Session, *, reference: str, user_id: str, amount: str, reason: st
             actor=user_id,
         )
     db.commit()
-    deliver_notifications(db, p.organisation_id)
+    deliver_notifications(db, p.organisation_id, p.id)
     return r.to_dict()
 
 
@@ -497,6 +565,13 @@ def run_reconciliation(
     cfg = _config()
     if report_document_id:
         raise PaymentError("settlement reports from platform/documents are not supported yet", 501)
+    with organisation_scope(organisation_id):
+        return _reconcile(db, organisation_id, user_id, settlement_date, cfg)
+
+
+def _reconcile(
+    db: Session, organisation_id: str, user_id: str, settlement_date: date, cfg: config_module.Config
+) -> dict:
     run = ReconciliationRun(
         organisation_id=organisation_id, settlement_date=settlement_date, status="running", requested_by=user_id
     )

@@ -182,3 +182,136 @@ def test_signature_helpers():
     assert notifier.verify_signature(raw, sig, "k")
     assert not notifier.verify_signature(raw + b" ", sig, "k")
     assert not notifier.verify_signature(raw, sig, "")
+
+
+def _force_expired(reference: str) -> None:
+    db = SessionLocal()
+    try:
+        with platform_scope():
+            p = db.scalar(select(Payment).where(Payment.reference == reference))
+            p.expires_at = utcnow() - timedelta(minutes=1)
+            p.created_at = utcnow() - timedelta(hours=1)
+            db.commit()
+        service.sweep_open_payments(db)
+    finally:
+        db.close()
+
+
+def _events(name: str, org_id: str, reference: str) -> list:
+    return [e for e in outbox(name, org_id) if e.payload["reference"] == reference]
+
+
+def test_payer_who_finishes_after_the_sweep_expired_the_session_is_paid(client, org):
+    """The gateway is the truth: an expired payment that the gateway confirms becomes succeeded, once."""
+    s = start(client, org.admin)
+    assert client.get(s["payment_url"]).status_code == 200  # payer is at the gateway
+    _force_expired(s["reference"])
+    assert _payment(s["reference"]).status == "expired"
+    r = client.post(
+        f"{PREFIX}/callbacks/sbiepay",
+        data={"mock_reference": s["reference"], "mock_outcome": "success"},
+        follow_redirects=False,
+    )
+    assert "status=succeeded" in r.headers["location"]
+    assert len(_events("payment-sbiepay.payment.succeeded", org.id, s["reference"])) == 1
+
+
+def test_verify_picks_up_a_late_success(client, org):
+    s = start(client, org.admin)
+    client.get(s["payment_url"])
+    _force_expired(s["reference"])
+    MockGateway.transactions[s["reference"]] = VerifyResult(
+        "succeeded", gateway_transaction_id="LATE", payment_mode="upi"
+    )
+    v = client.post(f"{PREFIX}/payments/{s['reference']}/verify", headers=org.staff)
+    assert v.json()["status"] == "succeeded" and v.json()["gateway_transaction_id"] == "LATE"
+
+
+def test_a_late_failure_does_not_reopen_an_expired_payment(client, org):
+    s = start(client, org.admin)
+    client.get(s["payment_url"])
+    _force_expired(s["reference"])
+    r = client.post(
+        f"{PREFIX}/callbacks/sbiepay",
+        data={"mock_reference": s["reference"], "mock_outcome": "failure"},
+        follow_redirects=False,
+    )
+    assert "status=expired" in r.headers["location"]
+    assert _events("payment-sbiepay.payment.failed", org.id, s["reference"]) == []
+
+
+def test_a_stale_copy_cannot_apply_the_final_status_twice(client, org, receiver):
+    """Callback and verify (or the sweep) racing: whoever loaded the payment earlier must not publish again."""
+    from eos_core.tenant import organisation_scope
+
+    s = start(client, org.admin)
+    client.get(s["payment_url"])
+    db = SessionLocal()
+    try:
+        with platform_scope():
+            stale = db.scalar(select(Payment).where(Payment.reference == s["reference"]))
+            db.commit()
+        assert stale.status == "pending"
+        r = client.post(
+            f"{PREFIX}/callbacks/sbiepay",
+            data={"mock_reference": s["reference"], "mock_outcome": "success"},
+            follow_redirects=False,
+        )
+        assert "status=succeeded" in r.headers["location"]
+        with organisation_scope(org.id):
+            service._apply(db, stale, VerifyResult("succeeded", gateway_transaction_id="X", payment_mode="card"))
+            db.commit()
+        assert stale.status == "succeeded" and stale.gateway_transaction_id != "X"
+    finally:
+        db.close()
+    assert len(_events("payment-sbiepay.payment.succeeded", org.id, s["reference"])) == 1
+    assert len([q for q in receiver.requests if json.loads(q.content)["reference"] == s["reference"]]) == 1
+
+
+def test_one_gateway_error_does_not_stop_the_sweep(client, org, monkeypatch):
+    from eos_payment_sbiepay.infrastructure.gateway import GatewayUnavailableError
+
+    broken, fine = start(client, org.admin), start(client, org.admin)
+    for s in (broken, fine):
+        client.get(s["payment_url"])
+    real_verify = MockGateway.verify
+
+    def verify(self, order):
+        if order.reference == broken["reference"]:
+            raise GatewayUnavailableError("gateway down for this one")
+        return real_verify(self, order)
+
+    monkeypatch.setattr(MockGateway, "verify", verify)
+    db = SessionLocal()
+    try:
+        with platform_scope():
+            refs = [broken["reference"], fine["reference"]]
+            for p in db.scalars(select(Payment).where(Payment.reference.in_(refs))):
+                p.expires_at = utcnow() - timedelta(minutes=1)
+                p.created_at = utcnow() - timedelta(hours=1)
+            db.commit()
+        service.sweep_open_payments(db)
+    finally:
+        db.close()
+    assert _payment(broken["reference"]).status == "pending"  # retried on the next sweep
+    assert _payment(fine["reference"]).status == "expired"
+
+
+def test_a_request_delivers_only_its_own_payments_notifications(client, org, receiver):
+    """A broken notify_url of one payment never delays another payer's redirect."""
+    receiver.status = 500
+    first = start(client, org.admin)
+    browser_pays(client, first)  # its notification fails and waits for the scheduler
+    receiver.status = 200
+    receiver.requests.clear()
+    db = SessionLocal()
+    try:
+        with platform_scope():
+            for n in db.scalars(select(Notification).where(Notification.delivered_at.is_(None))):
+                n.next_attempt_at = utcnow() - timedelta(seconds=1)  # due again
+            db.commit()
+    finally:
+        db.close()
+    second = start(client, org.admin)
+    browser_pays(client, second)
+    assert {json.loads(q.content)["reference"] for q in receiver.requests} == {second["reference"]}
