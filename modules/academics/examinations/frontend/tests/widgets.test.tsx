@@ -197,6 +197,17 @@ describe("examinations.results-pending", () => {
     expect(screen.queryByRole("region", { name: "Finished cycle" })).toBeNull();
   });
 
+  it("leaves out the age when oldest_since is not a valid timestamp", async () => {
+    respond(200, {
+      items: [{ exam_cycle_id: "c1", exam_cycle_name: "Odd Semester 2026", stages: [{ stage: "marks_entry", count: 4, oldest_since: "not-a-date" }] }],
+    });
+    render(<ResultsPending role="examination-staff" />);
+    const cycle = await screen.findByRole("region", { name: "Odd Semester 2026" });
+    const row = within(cycle).getAllByRole("listitem")[0]!;
+    expect(row.textContent).toBe("Marks entry4papers");
+    expect(cycle.textContent).not.toContain("NaN");
+  });
+
   it("shows an empty state when nothing is pending", async () => {
     respond(200, { items: [{ exam_cycle_id: "c2", stages: [{ stage: "marks_entry", count: 0 }] }] });
     render(<ResultsPending role="examination-staff" />);

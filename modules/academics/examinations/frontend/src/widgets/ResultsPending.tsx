@@ -13,8 +13,11 @@ export const STAGES: { stage: ResultsStage; label: string; unit: "paper" | "cour
   { stage: "awaiting_publication", label: "Awaiting publication", unit: "course offering" },
 ];
 
-export function daysSince(iso: string, now = Date.now()): number {
-  return Math.max(0, Math.floor((now - Date.parse(iso)) / 86_400_000));
+/** Whole days since `iso`, or null when it is not a valid timestamp. */
+export function daysSince(iso: string, now = Date.now()): number | null {
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
+  return Math.max(0, Math.floor((now - at) / 86_400_000));
 }
 
 /** examinations.results-pending: papers and results by pipeline stage (GET /reports/results-pending). */
@@ -34,13 +37,14 @@ export function ResultsPending(_props: WidgetProps) {
                 {STAGES.map(({ stage, label, unit }) => {
                   const s = byStage.get(stage);
                   const count = s?.count ?? 0;
+                  const age = s?.oldest_since ? daysSince(s.oldest_since) : null;
                   return (
                     <li key={stage} data-pending={count > 0 || undefined}>
                       <span className="eos-exam__stage-label">{label}</span>
                       <strong>{count}</strong>
                       <span className="eos-exam__muted">
                         {count > 0
-                          ? `${unit}${count === 1 ? "" : "s"}${s?.oldest_since ? ` · oldest ${daysSince(s.oldest_since)} d` : ""}`
+                          ? `${unit}${count === 1 ? "" : "s"}${age !== null ? ` · oldest ${age} d` : ""}`
                           : "none"}
                       </span>
                     </li>
