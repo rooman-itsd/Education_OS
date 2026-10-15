@@ -9,7 +9,8 @@
 #
 # Optional: PROXY_CTID (nginx container, default 101), GATEWAY (default: the host's default gateway),
 # ROOTFS_STORAGE (default local-lvm), BRIDGE (default vmbr0), CORES/MEMORY_MB/DISK_GB,
-# PUBLIC_URL (default https://educationos.futureacad.ae), SSH_PUBKEY (default ~/.ssh/id_*.pub).
+# PUBLIC_URL (default https://educationos.futureacad.ae), SSH_PUBKEY (default ~/.ssh/id_*.pub),
+# REPO_REF (branch deployed by this run, default main; the timer resets the container to main later).
 # The super admin email and password are only needed the first time (.env.api is created once and kept).
 set -euo pipefail
 
@@ -24,6 +25,7 @@ MEMORY_MB="${MEMORY_MB:-4096}"
 DISK_GB="${DISK_GB:-16}"
 PUBLIC_URL="${PUBLIC_URL:-https://educationos.futureacad.ae}"
 REPO_URL="${REPO_URL:-https://github.com/rooman-itsd/Education_OS.git}"
+REPO_REF="${REPO_REF:-main}"   # branch to deploy first; the auto-deploy timer follows main afterwards
 APP=/opt/education-os
 COMPOSE="docker compose -f $APP/infra/docker/docker-compose.api.yml --env-file $APP/infra/docker/.env.api"
 
@@ -71,10 +73,10 @@ echo "   docker ok"
 
 # ---------- 3. repository and settings ----------
 if in_ct "[ -d $APP/.git ]"; then
-  in_ct "cd $APP && git fetch -q origin main && git reset -q --hard origin/main"
+  in_ct "cd $APP && git fetch -q origin $REPO_REF && git reset -q --hard FETCH_HEAD"
 else
-  echo "==> cloning the repository"
-  in_ct "git clone -q $REPO_URL $APP"
+  echo "==> cloning the repository ($REPO_REF)"
+  in_ct "git clone -q --branch $REPO_REF $REPO_URL $APP"
 fi
 if ! in_ct "[ -f $APP/infra/docker/.env.api ]"; then
   echo "==> writing .env.api (secrets generated here, super admin from your environment)"
@@ -112,13 +114,10 @@ in_ct "bash $APP/infra/autodeploy/install-api.sh"
 
 # ---------- 6. proxy ----------
 echo "==> pointing /api/ on the nginx container $PROXY_CTID at $CT_IP"
-pve "pct exec $PROXY_CTID -- bash -c '
-  set -e
-  V=\$(grep -rlE \"proxy_pass http://(<api-host>|[0-9.]+):8000/api/\" /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ 2>/dev/null | head -1)
-  if [ -z \"\$V\" ]; then echo \"no vhost with an /api/ location found; add the location block from infra/docker/nginx.public-vhost.conf\" >&2; exit 1; fi
-  sed -i -E \"s#proxy_pass http://(<api-host>|[0-9.]+):8000/api/#proxy_pass http://$CT_IP:8000/api/#\" \"\$V\"
-  grep -n \"proxy_pass\" \"\$V\"
-  nginx -t -q && nginx -s reload'"
+scp -q "$ROOT/infra/docker/wire-api-proxy.sh" "$PVE:/tmp/wire-api-proxy.sh"
+pve "pct push $PROXY_CTID /tmp/wire-api-proxy.sh /tmp/wire-api-proxy.sh && rm -f /tmp/wire-api-proxy.sh
+  pct exec $PROXY_CTID -- bash /tmp/wire-api-proxy.sh $CT_IP $(printf %q "${PUBLIC_URL#https://}")
+  pct exec $PROXY_CTID -- rm -f /tmp/wire-api-proxy.sh"
 
 echo "==> verifying $PUBLIC_URL/api/v1/health"
 body="$(curl -s --max-time 10 "$PUBLIC_URL/api/v1/health" || true)"
