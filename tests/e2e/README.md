@@ -7,6 +7,7 @@ touches a dev server you have running, and stops them afterwards.
 | Journey | Spec |
 |---|---|
 | Register an organisation, verify the email, sign-in refused until a super admin approves, sign in, land on the Organisation Admin dashboard | [onboarding/register-approve-signin.spec.ts](onboarding/register-approve-signin.spec.ts) |
+| Smoke: the API answers through `/api/` and the site leaves preview mode (also runs against staging) | [smoke/site-is-live.spec.ts](smoke/site-is-live.spec.ts) |
 
 The approval step calls the API until the super admin approval queue exists in `apps/frontend`.
 
@@ -25,6 +26,19 @@ pnpm --filter e2e e2e            # headless
 pnpm --filter e2e e2e:headed     # watch it click through
 pnpm --filter e2e e2e:report     # open the HTML report of the last run
 ```
+
+### Against staging (smoke only)
+
+```
+E2E_BASE_URL=https://<staging-host> pnpm --filter e2e e2e                    # bash
+$env:E2E_BASE_URL='https://<staging-host>'; pnpm --filter e2e e2e           # PowerShell
+```
+
+With `E2E_BASE_URL` set the suite starts no servers and runs only `smoke/`, which reads and never writes:
+`/api/v1/health` must answer JSON from Postgres through the site's `/api/` path, and the home page must
+show sign-in with no preview banner. Every other journey registers organisations, so it never runs
+against a deployed site. A "returned a web page, not the API" failure means the proxy's `/api/`
+location does not reach the API host (see `infra/docker/README.md`).
 
 Failures keep a screenshot and a trace in `tests/e2e/.cache/test-results/`
 (`pnpm exec playwright show-trace <trace.zip>` replays it step by step).
