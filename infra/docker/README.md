@@ -78,10 +78,29 @@ certbot --nginx -d educationos.futureacad.ae
 
 ### API
 
-The API needs Docker and Postgres, so it does not run in the nginx container. It runs in a
-container with Docker (the Debian LXC from option B, with nesting on), reachable from the proxy.
+The API needs Docker and Postgres, so it does not run in the nginx container. It runs in its own
+LXC container named `education-os` (the Debian 12 container from option B, with nesting on), reachable
+from the proxy. One script creates that container, deploys the API and Postgres into it with Docker
+Compose, installs the auto-deploy timer and points the public vhost's `/api/` at it. Run it from a
+laptop on the office LAN, with root SSH access to the Proxmox host:
 
-On that Docker host, as root, once:
+```
+PVE_HOST=root@<proxmox-ip> CTID=<free container id> CT_IP=<free LAN ip> \
+EOS_SUPER_ADMIN_EMAIL=<a real address with a dot after @> EOS_SUPER_ADMIN_PASSWORD='<password>' \
+tools/scripts/deploy-api-lxc.sh
+```
+
+It is safe to re-run: an existing container, Docker install, clone or `.env.api` is kept and refreshed.
+The super admin values are read only the first time, when `.env.api` is created (database password and
+JWT secret are generated then). The last line of the script fetches
+`https://educationos.futureacad.ae/api/v1/health` through the public proxy; `{"status":"ok","database":"postgres",...}`
+means the site has left preview mode (hard refresh with Ctrl+Shift+R once). From then on every push to
+`main` reaches the container within two minutes (`../autodeploy/README.md`, section "API").
+
+To move the API to another container later, run the same script with the new `CTID` and `CT_IP`; it
+repoints the proxy. Stop the old one with `pct stop <old id>` once the health check answers from the new one.
+
+By hand, the same steps are: on the Docker host as root,
 
 ```
 apt-get update && apt-get install -y ca-certificates curl git openssl nano
@@ -94,23 +113,14 @@ cd /opt/education-os
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps
 curl -s http://127.0.0.1:8000/api/v1/health
+bash infra/autodeploy/install-api.sh
 ```
 
-The first build takes a few minutes. `ps` shows `api` and `db` both `(healthy)`; health returns
-`{"status":"ok","database":"postgres","dev_mode":false}`. Check it from another machine on the LAN at
-`http://<container-ip>:8000/api/v1/health` too: that is the path the proxy takes. Postgres is not
-published outside Docker's network; only the API's port 8000 is. Both services restart on their own
-(`restart: unless-stopped`), so the API comes back after a reboot as long as the container starts at boot.
-
-Every deploy: `git pull && docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build`.
-
-Then wire the proxy. In the nginx container (CT 101), with the Docker host's LAN IP in place of
-`192.168.1.122`. The first line finds the vhost that still carries the placeholder:
+then in the nginx container, with the API container's LAN IP in place of `192.168.1.122`:
 
 ```
 V=$(grep -rl '<api-host>' /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ | head -1); echo "$V"
 sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' "$V"
-grep -n proxy_pass "$V"
 nginx -t && nginx -s reload
 curl -s https://educationos.futureacad.ae/api/v1/health
 ```
@@ -119,13 +129,8 @@ If the first line prints nothing, the live vhost has no `/api/` location yet: co
 `location /api/` block from `nginx.public-vhost.conf` into the server block for
 `educationos.futureacad.ae` and run the rest.
 
-Health must return `{"status":"ok","database":"postgres",...}`. If it returns HTML, the vhost still
-has the placeholder or the `/api/` location is missing. The web shell detects the API on load and
-switches from preview mode to real sign-up and sign-in (hard refresh with Ctrl+Shift+R once).
-
-Schema changes ship as Alembic chains, one per service, under `platform/<service>/db`. The API still
-runs `init_db()` at startup as a safety net, so a deploy today needs no extra step; once a chain has a
-second revision, run it before `up -d`:
+Schema changes ship as Alembic chains, one per service, under `platform/<service>/db`. The auto-deploy
+runs them before restarting the API; the API also runs `init_db()` at startup as a safety net. By hand:
 
 ```
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm api \

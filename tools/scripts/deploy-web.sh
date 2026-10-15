@@ -13,7 +13,7 @@ HOST="${DEPLOY_HOST:?set DEPLOY_HOST, e.g. root@<container-ip>}"
 MODE="${DEPLOY_MODE:-remote}"
 PORT="${EOS_WEB_PORT:-80}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-REPO_URL="${REPO_URL:-https://github.com/faizanrooman/Education_OS.git}"
+REPO_URL="${REPO_URL:-https://github.com/rooman-itsd/Education_OS.git}"
 REMOTE_DIR="/opt/education-os"
 TAG="$(git -C "$ROOT" rev-parse --short HEAD)"
 
