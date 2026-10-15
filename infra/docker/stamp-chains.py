@@ -2,15 +2,24 @@
 (init_db), so record each platform service's Alembic chain as being at head. Skips chains that already
 have a version table. Used by tools/scripts/deploy-api-lxc.sh."""
 
+import logging
 import os
-import subprocess
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
-names = set(inspect(create_engine(os.environ["EOS_DATABASE_URL"])).get_table_names())
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+log = logging.getLogger("stamp-chains")
+
+url = os.environ["EOS_DATABASE_URL"]
+names = set(inspect(create_engine(url)).get_table_names())
 for service in ("identity", "tenancy", "billing"):
     if f"{service}_alembic_version" in names:
-        print(f"{service}: chain already recorded")
+        log.info("%s: chain already recorded", service)
         continue
-    subprocess.run(["alembic", "stamp", "head"], cwd=f"platform/{service}/db", check=True)
-    print(f"{service}: stamped head")
+    cfg = Config(str(Path("platform") / service / "db" / "alembic.ini"))
+    cfg.cmd_opts = type("Opts", (), {"x": [f"url={url}"]})()
+    command.stamp(cfg, "head")
+    log.info("%s: stamped head", service)
