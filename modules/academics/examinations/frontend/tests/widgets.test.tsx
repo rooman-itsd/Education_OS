@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExamSessionPage, HallTicketReport, ResultsPendingReport } from "../src/api/types";
 import { today } from "../src/api/client";
@@ -72,7 +72,7 @@ describe("examinations.schedule", () => {
   it("shows loading, then asks for today's scheduled sessions with the session token", async () => {
     respond(200, page);
     render(<ExamSchedule role="examination-staff" />);
-    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.getByLabelText("Loading").getAttribute("aria-busy")).toBe("true");
     await screen.findByText("Hall A");
     const url = calledUrl();
     expect(url.pathname).toBe("/api/v1/examinations/sessions");
@@ -87,11 +87,12 @@ describe("examinations.schedule", () => {
     const first = (await screen.findByText("SPS101 · Sports Physiology (T)")).closest("li")!;
     expect(within(first).getByText("Hall A")).toBeTruthy();
     expect(within(first).getByText("120")).toBeTruthy();
-    const invig = within(first).getByText("3/4");
+    const invig = within(first).getByText("3/4 · short");
     expect(invig.closest("[data-warn]")).toBeTruthy();
     const second = screen.getByText("Paper").closest("li")!;
     expect(within(second).getByText("Venue not set")).toBeTruthy();
     expect(within(second).getByText("2/2").closest("[data-warn]")).toBeNull();
+    expect(within(second).queryByText(/short/)).toBeNull();
     expect(screen.getByText("Showing 2 of 9 upcoming sessions")).toBeTruthy();
   });
 
@@ -104,13 +105,26 @@ describe("examinations.schedule", () => {
   it("says the data is not available while the examinations service is missing", async () => {
     respond(404, { detail: "Not Found" });
     render(<ExamSchedule role="examination-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toBe("Examinations data is not available yet.");
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Examinations data is not available yet.")).toBeTruthy();
   });
 
   it("reports a network failure as unavailable", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     render(<ExamSchedule role="examination-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toBe("Examinations data is not available yet.");
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Examinations data is not available yet.")).toBeTruthy();
+  });
+
+  it("loads again when the error state's retry is pressed", async () => {
+    respond(503, { detail: "Service Unavailable" });
+    respond(200, page);
+    render(<ExamSchedule role="examination-staff" />);
+    const alert = await screen.findByRole("alert");
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await screen.findByText("Hall A");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
@@ -154,7 +168,17 @@ describe("examinations.hall-tickets-issued", () => {
   it("shows a permission error from the API", async () => {
     respond(403, { code: "forbidden", message: "missing examinations:hall-ticket:read-all" });
     render(<HallTicketsIssued role="examination-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toBe("You do not have access to this.");
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("You do not have access to this.")).toBeTruthy();
+    expect(within(alert).queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("asks to sign in again, without a retry, when the session has expired", async () => {
+    respond(401, { code: "unauthenticated", message: "token expired" });
+    render(<HallTicketsIssued role="examination-staff" />);
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Sign in again to see this.")).toBeTruthy();
+    expect(within(alert).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });
 
@@ -217,6 +241,7 @@ describe("examinations.results-pending", () => {
   it("shows the contract's error message for other failures", async () => {
     respond(500, { code: "internal", message: "results report failed" });
     render(<ResultsPending role="examination-staff" />);
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("results report failed"));
+    await waitFor(() => expect(within(screen.getByRole("alert")).getByText("results report failed")).toBeTruthy());
+    expect(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

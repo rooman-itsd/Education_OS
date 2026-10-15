@@ -47,6 +47,7 @@ export function ExamSchedule(_props: WidgetProps) {
                       <dt>Invigilators</dt>
                       <dd title={short ? "Fewer invigilators assigned than required" : undefined}>
                         {s.invigilators_assigned}/{s.invigilators_required}
+                        {short ? " · short" : null}
                       </dd>
                     </div>
                   </dl>
