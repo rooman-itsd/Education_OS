@@ -24,7 +24,24 @@ jobs:
           cache: pip
       - run: tools/scripts/py-setup.sh
       - name: Tests on SQLite
-        run: .venv/bin/python -m pytest apps/backend packages/core packages/testing platform/identity/backend -q
+        run: .venv/bin/python -m pytest apps/backend packages/core packages/testing platform/identity/backend platform/tenancy/backend platform/billing/backend -q
+      - name: Platform migration chains on Postgres (upgrade, policies present, downgrade)
+        env:
+          EOS_DATABASE_URL: postgresql+psycopg://eos:eos@localhost:5432/eos
+        run: |
+          for s in identity tenancy billing; do (cd platform/$s/db && ../../../.venv/bin/alembic upgrade head); done
+          .venv/bin/python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, text
+          want = {"identity_user", "tenancy_registration_token", "tenancy_organisation_module", "billing_subscription"}
+          with create_engine(os.environ["EOS_DATABASE_URL"]).connect() as c:
+              rows = c.execute(text("select tablename, policyname from pg_policies")).all()
+              forced = {r[0] for r in c.execute(text("select relname from pg_class where relrowsecurity and relforcerowsecurity"))}
+          have = {t for t, name in rows if name == "tenant_isolation"}
+          assert want <= have and want <= forced, f"policies: {sorted(have)}, forced: {sorted(forced & want)}"
+          print("tenant_isolation forced on", sorted(want))
+          PY
+          for s in billing tenancy identity; do (cd platform/$s/db && ../../../.venv/bin/alembic downgrade base); done
       - name: Tests on Postgres with row-level security
         env:
           EOS_DATABASE_URL: postgresql+psycopg://eos:eos@localhost:5432/eos
