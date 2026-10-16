@@ -39,8 +39,10 @@ describe("role & access reads the backend routers", () => {
   const superAdmin = { permissions: findRole("super-admin")!.permissions, organisationId: null };
 
   it("parses each endpoint's requirement", () => {
-    expect(find("POST", "/api/v1/identity/users").requires).toEqual({ kind: "permission", key: "tenancy:organisation:manage" });
-    expect(find("GET", "/api/v1/identity/users").requires).toEqual({ kind: "organisation" });
+    expect(find("POST", "/api/v1/identity/users").requires).toEqual({ kind: "permission", key: "identity:user:manage", organisation: true });
+    expect(find("GET", "/api/v1/identity/users").requires).toEqual({ kind: "permission", key: "identity:user:read", organisation: true });
+    expect(find("GET", "/api/v1/tenancy/organisation").requires).toEqual({ kind: "permission", key: "tenancy:organisation:read", organisation: true });
+    expect(find("GET", "/api/v1/identity/auth/me").requires).toEqual({ kind: "signed-in" });
     expect(find("POST", "/api/v1/identity/auth/login").requires).toEqual({ kind: "public" });
     expect(find("POST", "/api/v1/tenancy/admin/organisations/{org_id}/approve").requires).toEqual({ kind: "permission", key: "platform:organisations:manage" });
   });
@@ -50,6 +52,11 @@ describe("role & access reads the backend routers", () => {
     expect(allows(find("GET", "/api/v1/tenancy/admin/organisations"), orgAdmin)).toBe(false);
     expect(allows(find("GET", "/api/v1/tenancy/admin/organisations"), superAdmin)).toBe(true);
     expect(allows(find("GET", "/api/v1/identity/users"), superAdmin)).toBe(false);
+    // an organisation user with no explicit grants still opens the shell through the implicit member role
+    const student = { permissions: [], organisationId: "org-1" };
+    expect(allows(find("GET", "/api/v1/tenancy/organisation"), student)).toBe(true);
+    expect(allows(find("GET", "/api/v1/identity/users"), student)).toBe(false);
+    expect(allows(find("GET", "/api/v1/tenancy/organisation"), superAdmin)).toBe(false);
   });
 });
 
