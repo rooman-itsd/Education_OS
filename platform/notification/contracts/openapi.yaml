@@ -16,10 +16,11 @@ paths:
     post:
       summary: Send a notification
       description: >-
-        Queues a message for one recipient. Idempotent on client_token: a retry, or an event
-        redelivered by the at-least-once bus, returns the original message instead of sending
-        twice. Prefer reacting to an event over calling this inline; a message sent before its
-        transaction commits cannot be unsent.
+        Queues a message for one recipient. Idempotent on client_token, which is the only
+        idempotency key: a retry, or an event redelivered by the at-least-once bus, returns the
+        original message instead of sending twice. A redelivery whose variables differ from the
+        first is a 422, not a silent return. Prefer reacting to an event over calling this inline;
+        a message sent before its transaction commits cannot be unsent.
       operationId: sendMessage
       requestBody:
         required: true
@@ -33,7 +34,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Message" }
         "200":
-          description: Already accepted with this client_token; the original is returned
+          description: Already accepted with this client_token; the original is returned, even if
+            the recipient's preferences or account changed since
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Message" }
@@ -326,9 +328,15 @@ components:
       properties:
         client_token:
           type: string
+          maxLength: 120
           description: >-
-            Idempotency key, unique per logical notification. Required in practice, because
-            event delivery is at-least-once and the same event may arrive twice.
+            The ONLY idempotency key. Unique per logical notification, and required in practice,
+            because event delivery is at-least-once and the same event may arrive twice. The same
+            token with a different request is a 422, comparing the template, the requested channel,
+            the recipient as given and the non-secret variables; an omitted channel and an explicit
+            one are different requests. An event-linked send does not supply this: it derives
+            "evt:" + sha256("<event>|<template>|<channel>|<recipient>"), and supplying a token that
+            disagrees with the derived one is a 422.
         template:
           type: string
           description: Template key
