@@ -2,8 +2,8 @@
 
 **Domain:** campus-life
 **Kind:** feature
-**Status:** in-progress (contract 0.2.0 reviewed; backend, migrations and tests built; the `hostel.notices` widget
-follows; not yet mounted in `apps/`)
+**Status:** in-progress (contract 0.2.0 reviewed; backend, migrations, tests and the `hostel.notices` widget built;
+not yet mounted in `apps/`)
 
 Room allocation, mess, visitors, discipline and fee linkage.
 
@@ -22,6 +22,7 @@ purchasing (inventory-equipment, procurement), room repairs (maintenance), guest
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
+- Dashboard widget: `hostel.notices` (Student dashboard), exported from `frontend/src/widgets/index.ts`
 
 
 ## Dependencies
@@ -30,7 +31,7 @@ See `module.yaml`. This module must not import code from any other module under 
 What it needs from the host repo:
 - `packages/core` (`eos_core`): database base and tenant scoping, row-level-security policy, token checks,
   permission catalogue, outbox for events. `packages/testing` for the cross-tenant leak test.
-- No platform service is called directly yet: events go to the outbox, and
+- `packages/ui-kit` for the widget. No platform service is called directly yet: events go to the outbox, and
   the overdue-leave job (`backend/src/eos_hostel/application/jobs.py`, `flag_overdue_leave`) waits for
   `platform/scheduler` to call it daily.
 - The API router is `eos_hostel.api.router:router`, to be mounted under `/api/v1/hostel`.
@@ -39,6 +40,7 @@ What it needs from the host repo:
 ```
 pip install -e modules/campus-life/hostel/backend[test]       # into the repo .venv
 cd modules/campus-life/hostel/backend && python -m pytest -q  # throwaway SQLite, never a real database
+pnpm --filter @eos/hostel typecheck && pnpm --filter @eos/hostel test
 cd modules/campus-life/hostel/db && alembic upgrade head      # own tables and hostel_alembic_version only
 ```
 
