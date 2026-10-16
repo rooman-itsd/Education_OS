@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contract 0.2.1: every permission-checked operation in `contracts/openapi.yaml` now declares the shared
+  `403` (`components.responses.Forbidden`, body `ErrorResponse`); 32 operations had left it out.
 - Domain rules for terms, programmes, curricula, courses, offerings, faculty assignments and faculty load.
 - Contract 0.2.0, `GET /faculty-load` (owner decisions on PR #168): `faculty_name` required; the report carries
   `academic_period_code`, `academic_period_name`, `faculty_count` and `over_load_count`; items are ordered over-load
