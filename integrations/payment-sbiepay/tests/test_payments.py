@@ -1,5 +1,7 @@
 """Starting payments: validation, idempotency, merchant accounts, who may read a payment."""
 
+import uuid
+
 from eos_core import settings as core_settings_module
 from eos_payment_sbiepay.infrastructure import config
 from sbiepay_support import PREFIX, payment_body, start
@@ -166,13 +168,15 @@ def test_the_index_itself_refuses_a_second_open_payment(client, org):
     from eos_payment_sbiepay.domain.models import Payment
     from sqlalchemy.exc import IntegrityError
 
+    source = f"inv-{uuid.uuid4()}"  # unique, so a rerun against the same database cannot collide
+
     def row(ref):
         return Payment(
             organisation_id=org.id,
             reference=ref,
             purpose="fee",
             source_module="fees-accounts",
-            source_reference="inv-direct",
+            source_reference=source,
             merchant_id="M",
             amount=1,
             return_url="https://x.example.com",
@@ -183,11 +187,42 @@ def test_the_index_itself_refuses_a_second_open_payment(client, org):
     db = SessionLocal()
     try:
         with organisation_scope(org.id):
-            db.add(row("EOSDIRECT1"))
+            db.add(row(f"EOS{uuid.uuid4().hex[:12].upper()}"))
             db.commit()
-            db.add(row("EOSDIRECT2"))
+            db.add(row(f"EOS{uuid.uuid4().hex[:12].upper()}"))
             with pytest.raises(IntegrityError):
                 db.commit()
             db.rollback()
     finally:
         db.close()
+
+
+def test_purpose_and_source_module_go_together(client, org):
+    """A payer cannot dress a payment up as another module's: fees come from fees-accounts, upgrades from billing."""
+    client.put(f"{PREFIX}/merchant-account", json={"merchant_id": "M-P", "mode": "sandbox"}, headers=org.admin)
+    for bad in (
+        {"purpose": "fee", "source_module": "billing"},
+        {"purpose": "subscription", "source_module": "fees-accounts"},
+        {"purpose": "fee", "source_module": "hostel"},
+    ):
+        r = client.post(f"{PREFIX}/payments", json=payment_body(**bad), headers=org.student)
+        assert r.status_code == 422, bad
+
+
+def test_negative_cursor_is_rejected(client, org):
+    assert client.get(f"{PREFIX}/payments?cursor=-5", headers=org.admin).status_code == 400
+
+
+def test_token_without_subject_is_401(client, org):
+    import jwt
+    from eos_core.settings import settings
+
+    token = jwt.encode({"org": org.id, "roles": ["org-admin"]}, settings.jwt_secret, algorithm="HS256")
+    assert client.get(f"{PREFIX}/payments", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+def test_datetimes_carry_a_time_zone(client, org):
+    s = start(client, org.admin)
+    p = client.get(f"{PREFIX}/payments/{s['reference']}", headers=org.admin).json()
+    assert p["created_at"].endswith("+00:00")
+    assert s["expires_at"].endswith("+00:00")

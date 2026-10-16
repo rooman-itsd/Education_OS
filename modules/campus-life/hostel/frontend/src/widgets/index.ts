@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "@eos/ui-kit";
+import { NoticesWidget } from "./NoticesWidget";
 
 /**
  * Dashboard widgets exported by hostel.
@@ -7,4 +8,14 @@ import type { DashboardWidget } from "@eos/ui-kit";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's generated API client in ../api.
  */
-export const widgets: DashboardWidget[] = [];
+export const widgets: DashboardWidget[] = [
+  {
+    id: "hostel.notices",
+    title: "Hostel notices",
+    permission: "hostel:self:read",
+    size: "2x1",
+    kind: "list",
+    subtitle: "Your hostel and all hostels",
+    component: NoticesWidget,
+  },
+];

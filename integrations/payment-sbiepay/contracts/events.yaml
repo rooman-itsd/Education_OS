@@ -9,6 +9,8 @@ events:
   - name: payment-sbiepay.payment.succeeded
     description: >-
       Payment confirmed by double verification. fees-accounts marks the invoice paid and issues a receipt.
+      May follow payment-sbiepay.payment.expired for the same reference when the payer completed at the gateway
+      after the session expired; consumers must accept it and check the amount against their own record.
       billing receives the same outcome on its POST /webhooks/payment (notify_url) and activates the upgrade.
     payload: { organisation_id: uuid, reference: string, purpose: string, source_module: string, source_reference: string, amount: string, currency: string, gateway_transaction_id: string, payment_mode: string, completed_at: datetime }
   - name: payment-sbiepay.payment.failed

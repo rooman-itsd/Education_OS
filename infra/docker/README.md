@@ -69,7 +69,7 @@ sites. `nginx.public-vhost.conf` is the vhost for the reverse-proxy container; i
 the static vhost on port 8080. After DNS resolves, inside the container:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/faizanrooman/Education_OS/main/infra/docker/nginx.public-vhost.conf \
+curl -fsSL https://raw.githubusercontent.com/rooman-itsd/Education_OS/main/infra/docker/nginx.public-vhost.conf \
   -o /etc/nginx/sites-available/educationos.futureacad.ae
 ln -sfn /etc/nginx/sites-available/educationos.futureacad.ae /etc/nginx/sites-enabled/
 nginx -t && nginx -s reload
@@ -104,8 +104,33 @@ published outside Docker's network; only the API's port 8000 is. Both services r
 
 Every deploy: `git pull && docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build`.
 
-Then in the nginx container, set `<api-host>` in the public vhost's `/api/` location to that host's IP
-and reload. The web shell detects the API on load and switches from preview mode to real sign-up and sign-in.
+Then wire the proxy. In the nginx container (CT 101), with the Docker host's LAN IP in place of
+`192.168.1.122`. The first line finds the vhost that still carries the placeholder:
+
+```
+V=$(grep -rl '<api-host>' /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ | head -1); echo "$V"
+sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' "$V"
+grep -n proxy_pass "$V"
+nginx -t && nginx -s reload
+curl -s https://educationos.futureacad.ae/api/v1/health
+```
+
+If the first line prints nothing, the live vhost has no `/api/` location yet: copy the
+`location /api/` block from `nginx.public-vhost.conf` into the server block for
+`educationos.futureacad.ae` and run the rest.
+
+Health must return `{"status":"ok","database":"postgres",...}`. If it returns HTML, the vhost still
+has the placeholder or the `/api/` location is missing. The web shell detects the API on load and
+switches from preview mode to real sign-up and sign-in (hard refresh with Ctrl+Shift+R once).
+
+Schema changes ship as Alembic chains, one per service, under `platform/<service>/db`. The API still
+runs `init_db()` at startup as a safety net, so a deploy today needs no extra step; once a chain has a
+second revision, run it before `up -d`:
+
+```
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm api \
+  sh -c 'for s in identity tenancy billing; do (cd platform/$s/db && alembic upgrade head); done'
+```
 
 **Settings applied only once.** Editing `.env.api` and running `up -d` changes most settings
 (`EOS_DEV_MODE`, `EOS_JWT_SECRET`, which signs everyone out). Two do not:
@@ -122,6 +147,53 @@ organisations exist.
 
 Postgres tables get row-level-security policies automatically at startup (`eos_core.rls`). Nightly
 backups and restores: [infra/backup-dr](../backup-dr/README.md).
+
+#### Check the live site after the proxy change
+
+```
+curl -s https://<public-hostname>/api/v1/health
+```
+
+It must print the JSON above. An HTML page (`<!doctype html>...`) means `/api/` still goes to the web
+vhost, which answers every path with `index.html`: the `proxy_pass` line is missing or nginx was not
+reloaded. Then open the site in a browser: the "Preview mode" banner is gone and the sign-in page shows.
+
+#### Dev mode on or off
+
+Until `platform/notification` sends email, the verification token is only written to the API log, so
+with `EOS_DEV_MODE=false` nobody can finish registering. `true` returns the token to the sign-up page
+instead. Every new organisation still waits for a super admin's approval, so nothing goes live unseen;
+turn it off once email works. The platform lead decides which applies on a shared host.
+
+```
+cd /opt/education-os
+sed -i 's/^EOS_DEV_MODE=.*/EOS_DEV_MODE=true/' infra/docker/.env.api    # or =false
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d
+curl -s http://127.0.0.1:8000/api/v1/health                             # shows the new dev_mode
+```
+
+`up -d` recreates only the `api` container; the database keeps running and keeps its data.
+
+#### Allow port 8000 only from the proxy
+
+Docker publishes the API on every interface, so anyone on the LAN can call it directly and skip the
+proxy. Restrict it with the Proxmox firewall on the API container. It filters on the Proxmox host,
+outside the container, so Docker's own iptables rules cannot open a way around it (a firewall inside
+the container could be bypassed that way). Proxmox applies container rules only while the firewall is
+enabled at Datacenter level; turning that on is the platform lead's call, since it also filters the host.
+
+In the order below, so SSH is allowed before anything is blocked. In the web UI, on the API container:
+
+1. **Firewall → Add**: direction `in`, action `ACCEPT`, protocol `tcp`, dest. port `22`,
+   source `<office-subnet>` (or the admins' addresses). Enable it.
+2. **Firewall → Add**: direction `in`, action `ACCEPT`, protocol `tcp`, dest. port `8000`,
+   source `<nginx-container-ip>`. Enable it.
+3. **Network → net0 → Edit**: tick **Firewall**.
+4. **Firewall → Options**: `Input Policy` `DROP`, then `Firewall` `Yes`.
+
+Check: the live site's `/api/v1/health` still answers, SSH still works, and from a laptop
+`curl -m 5 http://<container-ip>:8000/api/v1/health` now times out. If SSH is lost, set
+`Firewall` back to `No` under Firewall → Options in the Proxmox UI.
 
 ### Local check
 

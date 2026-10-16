@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from ..application import service
-from .deps import Principal, current_principal, require, require_organisation
+from .deps import Principal, current_principal, require
 
 router = APIRouter(tags=["identity"])
 
@@ -47,16 +47,16 @@ def me(p: Principal = Depends(current_principal), db: Session = Depends(get_db))
 
 
 @router.get("/users")
-def list_users(p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def list_users(p: Principal = Depends(require("identity:user:read", organisation=True)), db: Session = Depends(get_db)):
     return [u.to_dict() for u in service.list_users(db)]
 
 
 @router.post("/users", status_code=201)
 def create_user(
-    body: CreateUser, p: Principal = Depends(require("tenancy:organisation:manage")), db: Session = Depends(get_db)
+    body: CreateUser,
+    p: Principal = Depends(require("identity:user:manage", organisation=True)),
+    db: Session = Depends(get_db),
 ):
-    if not p.organisation_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "organisation users only")
     if any(r in ("super-admin",) for r in body.roles):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "platform roles are never grantable inside an organisation")
     user = service.create_user(
