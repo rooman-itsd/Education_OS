@@ -6,7 +6,7 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
 
 - `contracts/` holds the API (`openapi.yaml`), events and permissions. Callers use only these.
 - `src/eos_payment_sbiepay/` is the adapter (package `eos-payment-sbiepay`). Its layers:
-  - `domain/models.py`: tables, each with `organisation_id`. Row-level security is applied by `eos_core.init_db()`.
+  - `domain/models.py`: tables, each with `organisation_id` and the `tenant_isolation` row-level-security policy on Postgres.
   - `application/service.py`: the use cases and the scheduled jobs.
   - `infrastructure/gateway.py`: the gateway port, `MockGateway` and `SbiepayGateway`.
   - `infrastructure/notifier.py`: signed notifications to `notify_url`.
@@ -24,7 +24,16 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
    - its session was never opened before it ran out;
    - it stayed pending longer than `PAYMENT_SBIEPAY_PENDING_VERIFY_AFTER_MINUTES` and the gateway doesn't know it.
 
-Final payments never change again, so repeated callbacks are harmless.
+Final payments never change again, so repeated callbacks are harmless:
+- Every status change is a compare-and-set on the row. Of a callback, a verify and a sweep racing each other, only one publishes.
+- The one exception is `expired` → `succeeded`. A payer may finish at the gateway after the sweep expired the session, and the gateway's confirmation wins. Consumers may therefore see `succeeded` after `expired` for the same reference.
+
+Each purpose has one caller: `fee` must come from `fees-accounts` and `subscription` from `billing`; anything else answers `422`.
+
+Refunds:
+- They are for fee payments only. A subscription was paid into the platform account, so an organisation gets `403`.
+- The payment row is locked while a refund runs.
+- Refunds the gateway accepted but hasn't settled yet count against the refundable balance.
 
 ## Notifications to `notify_url`
 
@@ -51,6 +60,21 @@ These are plain functions that `platform/scheduler` will call. They aren't wired
 - **`sandbox`** (the default) and **`live`**: use `SbiepayGateway`. Both need `PAYMENT_SBIEPAY_CALLBACK_BASE_URL`, so `payment_url` and the gateway's return URL are absolute. Without it, payment calls answer `503`. The gateway can't talk to SBIePay yet; see the limitations below.
 - **`mock`**: an in-memory gateway for development and tests. The redirect form posts straight back to the callback. It must be set explicitly (`PAYMENT_SBIEPAY_MODE=mock`) and is refused unless `EOS_DEV_MODE=true`, so a missing setting never selects it.
 
+## Migrations
+
+`db/` holds this adapter's own Alembic chain:
+- It touches only `payment_sbiepay_*` tables.
+- It records its revision in `payment_sbiepay_alembic_version`, so it shares a database with every other module's chain.
+- On Postgres, the first revision (`psb_0001`) applies the `tenant_isolation` policy to every table.
+
+```sh
+cd integrations/payment-sbiepay/db
+alembic upgrade head                     # uses EOS_DATABASE_URL
+alembic -x url=postgresql+psycopg://... upgrade head
+```
+
+`tests/test_migrations.py` upgrades a throwaway SQLite file, checks that the schema matches the models exactly, then downgrades. Any later change to the models needs a new revision in `db/migrations/versions`.
+
 ## Running the tests
 
 ```sh
@@ -62,6 +86,7 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
 
 ## Known limitations (tracked on #97)
 
+- **Starting a payment needs only the payer's token.** A payer could start a payment for the right module but someone else's invoice, or a different amount. Consumers must check `amount` and `source_reference` against their own record before acting on `payment-sbiepay.payment.succeeded`. Service-to-service authentication is the platform's decision (raised on #97).
 - **The SBIePay gateway isn't implemented.** The request and response fields, the encryption, double verification, refunds and the settlement report format all come from the SBIePay merchant integration kit, which hasn't been received. AES also needs a library on the approved stack. Until then, `sandbox` and `live` answer `503`.
 - **Merchant encryption keys aren't stored.** `PUT /merchant-account` with an `encryption_key` answers `501`, because keys must be stored encrypted.
 - **Settlement reports uploaded through `platform/documents`** (`report_document_id`) answer `501` until the documents SDK exists.
