@@ -9,6 +9,12 @@ export const SCHEDULE_LIMIT = 6;
 const day = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
 const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
+/** Formats an ISO timestamp, or returns null when it is not a valid date (Intl throws on an invalid Date). */
+function when(iso: string, fmt: Intl.DateTimeFormat): string | null {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : fmt.format(d);
+}
+
 function paperLabel(p: ExamSession["papers"][number]): string {
   const name = [p.course_code, p.course_title].filter(Boolean).join(" · ") || "Paper";
   return p.component_code ? `${name} (${p.component_code})` : name;
@@ -24,15 +30,14 @@ export function ExamSchedule(_props: WidgetProps) {
         <div className="eos-exam">
           <ul className="eos-exam__list">
             {page.items.map((s) => {
-              const starts = new Date(s.starts_at);
+              const starts = when(s.starts_at, time);
+              const ends = when(s.ends_at, time);
               const short = s.invigilators_assigned < s.invigilators_required;
               return (
                 <li key={s.id} className="eos-exam__session">
                   <div className="eos-exam__when">
-                    <strong>{day.format(starts)}</strong>
-                    <span>
-                      {time.format(starts)}–{time.format(new Date(s.ends_at))}
-                    </span>
+                    <strong>{when(s.starts_at, day) ?? "Date not set"}</strong>
+                    <span>{starts && ends ? `${starts}–${ends}` : "Time not set"}</span>
                   </div>
                   <div className="eos-exam__what">
                     <strong>{s.papers.length ? s.papers.map(paperLabel).join(", ") : "No papers"}</strong>

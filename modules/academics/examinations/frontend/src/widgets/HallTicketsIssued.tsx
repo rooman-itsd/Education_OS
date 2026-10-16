@@ -1,4 +1,4 @@
-import type { WidgetProps } from "@eos/ui-kit";
+import { ProgressBar, type WidgetProps } from "@eos/ui-kit";
 import { getHallTicketReport } from "../api/client";
 import { useWidgetData, WidgetStatus } from "./useWidgetData";
 
@@ -19,16 +19,7 @@ export function HallTicketsIssued(_props: WidgetProps) {
             return (
               <section key={c.exam_cycle_id} className="eos-exam__cycle" aria-label={c.exam_cycle_name ?? "Exam cycle"}>
                 <h3 className="eos-exam__cycle-name">{c.exam_cycle_name ?? "Exam cycle"}</h3>
-                <div
-                  className="eos-exam__bar"
-                  role="progressbar"
-                  aria-label="Hall tickets issued"
-                  aria-valuemin={0}
-                  aria-valuemax={c.eligible_students}
-                  aria-valuenow={c.issued}
-                >
-                  <span style={{ width: `${pct}%` }} />
-                </div>
+                <ProgressBar value={pct} label="Hall tickets issued" />
                 <dl className="eos-exam__counts">
                   <div>
                     <dt>Eligible</dt>

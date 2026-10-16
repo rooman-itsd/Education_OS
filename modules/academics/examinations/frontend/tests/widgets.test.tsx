@@ -102,6 +102,15 @@ describe("examinations.schedule", () => {
     expect(await screen.findByText("No upcoming exam sessions.")).toBeTruthy();
   });
 
+  it("renders a session whose timestamps are not valid dates instead of crashing", async () => {
+    respond(200, { total: 1, items: [{ ...page.items[0]!, starts_at: "not-a-date", ends_at: "" }] });
+    render(<ExamSchedule role="examination-staff" />);
+    const first = (await screen.findByText("SPS101 · Sports Physiology (T)")).closest("li")!;
+    expect(within(first).getByText("Date not set")).toBeTruthy();
+    expect(within(first).getByText("Time not set")).toBeTruthy();
+    expect(first.textContent).not.toContain("Invalid Date");
+  });
+
   it("says the data is not available while the examinations service is missing", async () => {
     respond(404, { detail: "Not Found" });
     render(<ExamSchedule role="examination-staff" />);
@@ -154,7 +163,8 @@ describe("examinations.hall-tickets-issued", () => {
     expect(calledUrl().pathname).toBe("/api/v1/examinations/reports/hall-tickets");
     const value = (label: string) => within(cycle).getByText(label).nextSibling?.textContent;
     expect([value("Eligible"), value("Issued"), value("Not issued"), value("Withheld"), value("Revoked")]).toEqual(["200", "180", "8", "12", "2"]);
-    expect(within(cycle).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("180");
+    // the kit's ProgressBar reports the percentage issued (180 of 200)
+    expect(within(cycle).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("90");
     const reasons = within(cycle).getByRole("list", { name: "Withheld reasons" });
     expect(reasons.textContent).toBe("Attendance shortage9Fee dues3");
   });

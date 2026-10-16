@@ -27,8 +27,6 @@
 /* examinations.hall-tickets-issued and examinations.results-pending */
 .eos-exam__cycle { display: flex; flex-direction: column; gap: 8px; }
 .eos-exam__cycle-name { margin: 0; font-size: 13px; font-weight: 600; }
-.eos-exam__bar { height: 6px; border-radius: 999px; background: var(--eos-border); overflow: hidden; }
-.eos-exam__bar span { display: block; height: 100%; background: var(--eos-success); }
 .eos-exam__counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; margin: 0; }
 .eos-exam__reasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .eos-exam__reasons li { display: flex; justify-content: space-between; gap: 8px; color: var(--eos-muted); }
