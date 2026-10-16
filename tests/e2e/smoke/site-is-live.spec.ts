@@ -25,7 +25,7 @@ test("the API answers health through the site's /api/ path", async ({ request })
 });
 
 test("the site leaves preview mode and offers sign-in", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/app"); // the dashboard app lives at /app; / is the public site
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await expect(page.getByText("Preview mode")).toHaveCount(0);
 });
