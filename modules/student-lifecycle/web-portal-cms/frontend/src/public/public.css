@@ -1,225 +1,252 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap");
+
 /*
- * web-portal-cms — public website layout.
+ * Education OS public website (web-portal-cms). Every class is prefixed `wpc-`.
  *
- * Marketing-site structure the dashboard shell (packages/ui-kit AppShell) does not cover: a public
- * top bar, hero and feature sections, and a footer. It uses ONLY design tokens (var(--eos-*),
- * var(--accent*)) — no raw colours — per docs/architecture/frontend-design-system.md rule 1.
- * Components themselves (Button, Panel, Badge, PageHero, EduMark/Wordmark) come from the kit.
- * Scope: every class is prefixed `wpc-` so it never collides with the kit or another module.
+ * Design iteration informed by editorial SaaS references (warm canvas, product-led page rhythm,
+ * interface fragments as imagery), translated into Education OS's own system:
+ * - Colour: warm cream canvas, white surfaces, the admin sidebar's navy (#2a254e) as ink (type,
+ *   navigation, dark sections), and the logo's own "OS" orange for primary actions and highlights.
+ *   On the Features page each product area carries its admin sidebar colour.
+ * - Type: one sans (Geist), weight 500 for display with tracking that tightens as size grows.
+ * - Surfaces: white panels with a warm hairline and 12-16px corners; only floating interface pieces
+ *   carry a shadow. A navy band is the one deep moment; the footer closes every page in the same navy.
+ * - Motion: the field relabel is the focal moment; elsewhere motion explains state and gives feedback.
+ * The logo (EduMark + Wordmark from @eos/ui-kit) is untouched.
  */
 
 .wpc {
-  min-height: 100vh;
+  /* Colour */
+  --c-canvas: #f5f1ec;
+  --c-surface: #ffffff;
+  --c-surface-2: #ebe6df;
+  --c-surface-3: #ded8ce;
+  --c-hairline: #ddd6cc;
+  /* Admin sidebar navy (.eos-sidebar-bg) for ink: headings, navigation, strong text, dark buttons. */
+  --c-ink: #2a254e;
+  --c-ink-2: #334155;
+  --c-muted: #475569;
+  --c-accent: #f2600c;
+  --c-accent-strong: #c2410c;
+  --c-accent-soft: #fde4d3;
+  --c-accent-mark: #fdba8c;
+  /* Dark sections use the sidebar itself: its navy, its border, and its muted text on dark. */
+  --c-inverse: #2a254e;
+  --c-inverse-2: #3a3466;
+  --c-inverse-line: #3a3466;
+  --c-inverse-muted: #c9cfe6;
+  --accent: var(--c-accent-strong);
+
+  /* Type */
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-small: 0.875rem;
+  --fs-body: 1.0625rem;
+  --fs-lead: 1.25rem;
+  --fs-h3: 1.5rem;
+  --fs-h2: clamp(2rem, 1.35rem + 2.2vw, 3rem);
+  --fs-h1: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
+
+  /* Space, shape, depth, motion */
+  --m: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+  --sp-section: clamp(4rem, 3rem + 3.5vw, 6rem);
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --sh-float: 0 1px 2px rgba(42, 37, 78, 0.06), 0 18px 40px -18px rgba(42, 37, 78, 0.28);
+  --sh-hover: 0 1px 2px rgba(42, 37, 78, 0.05), 0 10px 24px -12px rgba(42, 37, 78, 0.18);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --header-h: 64px;
+
   min-height: 100svh;
   display: flex;
   flex-direction: column;
-  background: var(--eos-surface);
-  color: var(--eos-text);
-  font-family: var(--eos-font);
-  font-size: var(--eos-text-md);
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font);
+  font-size: var(--fs-body);
   line-height: 1.55;
-
-  /*
-   * Brand palette: lighter variations of the one primary colour, --accent (set by PUBLIC_THEME to the
-   * admin sidebar's #2a254e). That colour is dark and low in chroma, so simply mixing it into white
-   * washes out to grey; where the browser supports relative colours (below) each step keeps the
-   * sidebar's own hue and chroma and only raises the lightness, which reads as lavender. These
-   * fallbacks mix in OKLCH, which holds the hue better than sRGB. No other hue is introduced.
-   */
-  --wave-1: color-mix(in oklch, var(--accent) 6%, white);
-  --wave-2: color-mix(in oklch, var(--accent) 10%, white);
-  --wave-3: color-mix(in oklch, var(--accent) 14%, white);
-  --wave-4: color-mix(in oklch, var(--accent) 18%, white);
-  --wave-5: color-mix(in oklch, var(--accent) 22%, white);
-  --wave-6: color-mix(in oklch, var(--accent) 27%, white);
-  --wave-7: color-mix(in oklch, var(--accent) 32%, white);
-  --wave-8: color-mix(in oklch, var(--accent) 38%, white);
-  --brand-hi: color-mix(in oklch, var(--accent) 70%, white);
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--c-accent-strong);
+  accent-color: var(--c-accent-strong);
 }
-@supports (color: oklch(from red l c h)) {
-  .wpc {
-    --wave-1: oklch(from var(--accent) 0.975 calc(c * 0.45) h);
-    --wave-2: oklch(from var(--accent) 0.958 calc(c * 0.6) h);
-    --wave-3: oklch(from var(--accent) 0.94 calc(c * 0.75) h);
-    --wave-4: oklch(from var(--accent) 0.92 calc(c * 0.9) h);
-    --wave-5: oklch(from var(--accent) 0.9 c h);
-    --wave-6: oklch(from var(--accent) 0.875 c h);
-    --wave-7: oklch(from var(--accent) 0.85 c h);
-    --wave-8: oklch(from var(--accent) 0.82 c h);
-    --brand-hi: oklch(from var(--accent) 0.52 calc(c * 1.6) h);
-  }
+:root:has(.wpc) {
+  scrollbar-color: #c9c1b6 #f5f1ec;
 }
-
 .wpc a {
-  color: var(--accent);
-  text-decoration: none;
+  color: inherit;
 }
-.wpc a:hover {
-  text-decoration: underline;
+.wpc ::selection {
+  background: var(--c-accent-mark);
+  color: var(--c-ink);
 }
-
-/* ---- shared layout ---- */
+.wpc h1,
+.wpc h2,
+.wpc h3 {
+  font-weight: 500;
+  text-wrap: balance;
+}
 
 .wpc-container {
   width: 100%;
-  max-width: var(--eos-content-max);
+  max-width: 1280px;
   margin-inline: auto;
-  padding-inline: var(--eos-space-6);
+  padding-inline: var(--m);
 }
-
 .wpc-main {
   flex: 1 0 auto;
 }
-
-/* A page fades up when the route changes (reuses the kit keyframe; off under reduced motion). */
 .wpc-page {
-  animation: eos-fade-up var(--eos-normal) var(--eos-ease) both;
+  animation: wpc-fade 0.35s var(--ease) both;
 }
 
-.wpc-section {
-  padding-block: var(--eos-space-10);
+/* ---- buttons and links ---- */
+
+.wpc .eos-btn {
+  height: 46px;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 0.96875rem;
+  font-weight: 500;
+  box-shadow: none; /* taste-skill-ignore: removes the kit's button shadow */
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
+    transform 0.12s var(--ease);
 }
-.wpc-section--tight {
-  padding-block: var(--eos-space-8);
+.wpc .eos-btn:active {
+  transform: scale(0.98);
+}
+.wpc .eos-btn--primary {
+  background: var(--c-accent-strong);
+  color: #ffffff;
+}
+.wpc .eos-btn--primary:hover {
+  background: #9a3412;
+}
+.wpc .eos-btn--ghost,
+.wpc .eos-btn--secondary {
+  background: transparent;
+  color: var(--c-ink);
+}
+.wpc .eos-btn--ghost:hover,
+.wpc .eos-btn--secondary:hover {
+  background: var(--c-surface-2);
 }
 
-.wpc-eyebrow {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
-  color: var(--accent);
+.wpc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  color: var(--c-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+  transition:
+    color 0.2s var(--ease),
+    text-decoration-color 0.2s var(--ease);
 }
-.wpc-section__title {
-  margin: var(--eos-space-2) 0 0;
-  font-size: var(--eos-text-2xl);
-  font-weight: 700;
-  color: var(--eos-text);
+.wpc-link:hover {
+  color: var(--c-accent-strong);
+  text-decoration-color: currentColor;
 }
-.wpc-section__lead {
-  margin: var(--eos-space-3) 0 0;
-  max-width: 62ch;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-lg);
+.wpc-link__arrow,
+.wpc-btn-arrow {
+  transition: transform 0.25s var(--ease);
+}
+.wpc-link:hover .wpc-link__arrow,
+.wpc-link:focus-visible .wpc-link__arrow {
+  transform: translateX(3px);
+}
+
+/* ---- reveal (components/Reveal.tsx): visible by default, hidden only while waiting below the fold ---- */
+
+.wpc-rv.is-waiting {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.wpc-rv.is-in {
+  animation: wpc-rise 0.7s var(--ease) var(--rv-delay, 0ms) both;
+}
+.wpc-rvg.is-waiting > * {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.wpc-rvg.is-in > * {
+  animation: wpc-rise 0.6s var(--ease) calc(var(--i, 0) * 70ms) both;
+}
+
+@keyframes wpc-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wpc-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---- header ---- */
 
-/*
- * A "resizable" navbar: logo left, links centred, actions right. At the top of the page the bar is a
- * full-width frosted strip; with `.is-scrolled` (set by SiteHeader, with hysteresis so it never
- * flickers at the threshold) it condenses into a floating, rounded pill.
- *
- * Stability notes:
- * - The <header> keeps a fixed height in both states, so the page below never shifts; only the inner
- *   bar changes, using transform (the float) plus width, height, padding and radius.
- * - One element (the bar) owns the background, blur, border and shadow in both states, so they
- *   cross-fade instead of jumping between two elements. Blur animates between two blur() values,
- *   never to/from `none`, and the radius between two small values, never to a 9999px pill.
- * - The header band itself ignores the pointer, so the transparent strip beside the floating pill
- *   never blocks clicks on the page beneath it.
- *
- * The navbar scopes the hero's violet palette onto the accent tokens, so every accent inside it
- * (letter swap, active link, hover pill, toggle, mobile panel, focus rings) is the same purple.
- * Below 820px the links and "Sign in" move into the slide-down panel (see the end of this block).
- */
 .wpc-header {
-  --accent: #7c3aed;
-  --accent-tint: #f3e8ff;
-  --accent-ring: #ddd6fe;
-  --nav-ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --nav-dur: 0.5s;
-  --nav-compact-h: 52px;
   position: sticky;
   top: 0;
   z-index: 20;
-  height: var(--eos-topbar-height);
-  pointer-events: none;
+  height: var(--header-h);
+  background: var(--c-canvas);
+  box-shadow: inset 0 -1px 0 transparent;
+  transition:
+    background-color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
 }
-
+.wpc-header.is-scrolled {
+  background: var(--c-canvas);
+  box-shadow: inset 0 -1px 0 var(--c-hairline);
+}
 .wpc-header__bar {
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: var(--eos-space-4);
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  height: var(--eos-topbar-height);
+  gap: 1rem;
+  height: 100%;
+  max-width: 1280px;
   margin-inline: auto;
-  padding-inline: var(--eos-space-6);
-  border: 1px solid transparent;
-  border-bottom-color: var(--eos-border);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--eos-surface) 80%, transparent);
-  backdrop-filter: saturate(1.1) blur(20px);
-  -webkit-backdrop-filter: saturate(1.1) blur(20px);
-  box-shadow: 0 0 0 0 rgba(76, 29, 149, 0);
-  transform: translateY(0);
-  transition:
-    max-width var(--nav-dur) var(--nav-ease),
-    height var(--nav-dur) var(--nav-ease),
-    padding var(--nav-dur) var(--nav-ease),
-    border-radius var(--nav-dur) var(--nav-ease),
-    transform var(--nav-dur) var(--nav-ease),
-    background-color var(--nav-dur) var(--nav-ease),
-    border-color var(--nav-dur) var(--nav-ease),
-    box-shadow var(--nav-dur) var(--nav-ease),
-    backdrop-filter var(--nav-dur) var(--nav-ease),
-    -webkit-backdrop-filter var(--nav-dur) var(--nav-ease);
+  padding-inline: var(--m);
 }
-.wpc-header.is-scrolled .wpc-header__bar {
-  max-width: min(1000px, calc(100% - 2rem));
-  height: var(--nav-compact-h);
-  padding-inline: var(--eos-space-5) var(--eos-space-2);
-  border-color: color-mix(in srgb, var(--accent-ring) 85%, transparent);
-  border-radius: 28px;
-  background: color-mix(in srgb, var(--eos-surface) 86%, transparent);
-  backdrop-filter: saturate(1.2) blur(14px);
-  -webkit-backdrop-filter: saturate(1.2) blur(14px);
-  box-shadow: 0 12px 32px -14px rgba(76, 29, 149, 0.3);
-  transform: translateY(6px);
-}
-
 .wpc-brand {
   justify-self: start;
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
+  gap: 0.5rem;
   min-width: 0;
   white-space: nowrap;
-  color: var(--eos-text);
-}
-.wpc-brand:hover {
   text-decoration: none;
 }
-
 .wpc-nav {
   position: relative;
   justify-self: center;
   display: flex;
   align-items: center;
-  gap: var(--eos-space-1);
-  padding: 4px;
+  gap: 0.25rem;
 }
-/* The soft purple pill that slides behind whichever link the pointer is over. */
 .wpc-nav__pill {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 0;
   width: 0;
-  border-radius: var(--eos-radius-pill);
-  background: color-mix(in srgb, var(--accent-tint) 85%, transparent);
+  border-radius: var(--r-sm);
+  background: var(--c-surface-2);
   opacity: 0;
   pointer-events: none;
   transition:
-    transform 0.35s var(--nav-ease),
-    width 0.35s var(--nav-ease),
-    opacity 0.2s var(--eos-ease);
+    transform 0.35s var(--ease),
+    width 0.35s var(--ease),
+    opacity 0.2s var(--ease);
 }
 .wpc-nav__pill.is-visible {
   opacity: 1;
@@ -227,43 +254,31 @@
 .wpc-nav__link {
   position: relative;
   z-index: 1;
-  padding: var(--eos-space-2) var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  color: var(--eos-text-2);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  color: var(--c-muted);
+  font-size: 0.96875rem;
   font-weight: 500;
-  white-space: nowrap;
-  transition: color var(--eos-fast) var(--eos-ease), background var(--eos-fast) var(--eos-ease);
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
 }
-/* A hairline indicator that grows in under the link on hover/focus, and stays for the active page. */
-.wpc-nav__link::after {
+.wpc-nav__link:hover,
+.wpc-nav__link.is-active {
+  color: var(--c-ink);
+}
+.wpc-nav__link.is-active::after {
   content: "";
   position: absolute;
-  left: var(--eos-space-4);
-  right: var(--eos-space-4);
-  bottom: 3px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.5s var(--eos-ease);
+  left: 50%;
+  bottom: 4px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--c-accent);
 }
-.wpc-nav__link:hover {
-  text-decoration: none;
-}
-.wpc-nav__link:hover::after,
-.wpc-nav__link:focus-visible::after,
-.wpc-nav__link.is-active::after {
-  transform: scaleX(1);
-}
-.wpc-nav__link.is-active {
-  color: var(--accent);
-  background: var(--accent-tint);
-}
-
-/* Each letter sits in a clipped box with a duplicate (accent-coloured) copy stacked behind it; on
-   hover/focus the top copy slides up and out while the duplicate slides up into view, one letter after
-   another (`--i`, via the shared `stagger()` helper). Reduced motion turns this into an instant swap. */
 .wpc-nav__swap {
   display: inline-flex;
 }
@@ -271,19 +286,19 @@
   position: relative;
   display: inline-block;
   overflow: hidden;
-  height: 1.15em;
-  line-height: 1.15em;
+  height: 1.25em;
+  line-height: 1.25em;
   vertical-align: top;
 }
 .wpc-nav__letter-face {
   display: block;
-  transition: transform 0.8s var(--eos-ease);
-  transition-delay: calc(var(--i, 0) * 40ms);
+  transition: transform 0.6s var(--ease);
+  transition-delay: calc(var(--i, 0) * 30ms);
 }
 .wpc-nav__letter-face--alt {
   position: absolute;
   inset: 0;
-  color: var(--accent);
+  color: var(--c-accent-strong);
   transform: translateY(100%);
 }
 .wpc-nav__link:hover .wpc-nav__letter-face--base,
@@ -294,1933 +309,1174 @@
 .wpc-nav__link:focus-visible .wpc-nav__letter-face--alt {
   transform: translateY(0);
 }
-
 .wpc-header__actions {
   justify-self: end;
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
+  gap: 0.35rem;
   white-space: nowrap;
 }
-/* Actions in the navbar's purple: violet "Get started", lavender-tinted "Sign in", smooth hovers. */
 .wpc-header__actions .eos-btn {
-  border-radius: var(--eos-radius-pill);
-  transition:
-    background-color var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease),
-    color var(--eos-fast) var(--eos-ease),
-    box-shadow var(--eos-fast) var(--eos-ease),
-    transform var(--eos-fast) var(--eos-ease);
+  height: 40px;
+  padding-inline: 1rem;
 }
-.wpc-header__actions .eos-btn--primary {
-  background: #7c3aed;
-  border-color: #8b5cf6;
-  color: #ffffff;
-  box-shadow: 0 6px 16px -8px rgba(124, 58, 237, 0.65);
+.wpc-header__cta-short {
+  display: none;
 }
-.wpc-header__actions .eos-btn--primary:hover {
-  background: #6d28d9;
-  box-shadow: 0 8px 20px -8px rgba(124, 58, 237, 0.8);
-  transform: translateY(-1px);
-}
-.wpc-header__actions .eos-btn--ghost {
-  color: var(--eos-text-2);
-}
-.wpc-header__actions .eos-btn--ghost:hover {
-  background: var(--accent-tint);
-  color: #6d28d9;
-}
-.wpc-header__actions .eos-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ---- mobile nav toggle + slide-down panel (below 820px; see the end of this block) ---- */
 
 .wpc-nav-toggle {
   display: none;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid var(--accent-ring);
-  background: var(--eos-surface);
-  color: var(--eos-text-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink);
   cursor: pointer;
-  transition:
-    background-color var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease),
-    color var(--eos-fast) var(--eos-ease);
+  transition: background-color 0.2s var(--ease);
 }
 .wpc-nav-toggle:hover,
-.wpc-nav-toggle:focus-visible,
 .wpc-nav-toggle[aria-expanded="true"] {
-  background: var(--accent-tint);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--accent-ring));
-  color: var(--accent);
+  background: var(--c-surface-2);
 }
-/* Hamburger lines that shorten from the left in a stagger on hover (after the animated Lucide menu
-   icon, done in CSS: each line slides right and narrows, the lower ones a beat later and further). */
 .wpc-burger__line {
   transform-box: fill-box;
   transform-origin: left center;
   transition: transform 0.25s ease-out;
 }
-.wpc-burger__line--2 {
-  transition-delay: 50ms;
-}
-.wpc-burger__line--3 {
-  transition-delay: 100ms;
-}
-.wpc-nav-toggle:hover .wpc-burger__line--1 {
-  transform: translateX(3px) scaleX(0.85);
-}
-.wpc-nav-toggle:hover .wpc-burger__line--2 {
-  transform: translateX(5px) scaleX(0.7);
-}
-.wpc-nav-toggle:hover .wpc-burger__line--3 {
-  transform: translateX(7px) scaleX(0.55);
-}
+.wpc-burger__line--2 { transition-delay: 50ms; }
+.wpc-burger__line--3 { transition-delay: 100ms; }
+.wpc-nav-toggle:hover .wpc-burger__line--1 { transform: translateX(3px) scaleX(0.85); }
+.wpc-nav-toggle:hover .wpc-burger__line--2 { transform: translateX(5px) scaleX(0.7); }
+.wpc-nav-toggle:hover .wpc-burger__line--3 { transform: translateX(7px) scaleX(0.55); }
 
-.wpc-mobile-nav {
-  pointer-events: auto;
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  z-index: 0;
-  display: grid;
-  gap: var(--eos-space-1);
-  padding: var(--eos-space-3) var(--eos-space-4) var(--eos-space-4);
-  background: var(--eos-surface);
-  border-bottom: 1px solid var(--eos-border);
-  box-shadow: var(--eos-shadow-pop);
-  animation: wpc-mnav-in 0.22s var(--eos-ease) both;
+
+/* ---- shared: field control ---- */
+
+.wpc-fs {
+  margin-top: 1.75rem;
 }
-/* Once the bar is a floating pill, the panel floats under it as a rounded card, aligned to its edges. */
-.wpc-header.is-scrolled .wpc-mobile-nav {
-  top: calc(100% + 2px);
-  inset-inline: max(1rem, (100% - 1000px) / 2);
-  border: 1px solid var(--accent-ring);
-  border-radius: var(--eos-radius-lg);
+.wpc-fs__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
 }
-.wpc-mobile-nav__link {
-  padding: var(--eos-space-3);
-  border-radius: var(--eos-radius);
-  color: var(--eos-text-2);
+.wpc-fs__chip {
+  min-height: 40px;
+  padding: 0 0.95rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 0.96875rem;
   font-weight: 500;
-  transition: background-color var(--eos-fast) var(--eos-ease), color var(--eos-fast) var(--eos-ease);
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    transform 0.12s var(--ease);
 }
-.wpc-mobile-nav__link:hover,
-.wpc-mobile-nav__link:focus-visible {
-  background: var(--accent-tint);
-  color: var(--accent);
-  text-decoration: none;
+.wpc-fs__chip:hover {
+  background: var(--c-surface-3);
 }
-.wpc-mobile-nav__link.is-active {
-  color: var(--accent);
-  background: var(--accent-tint);
+.wpc-fs__chip:active {
+  transform: scale(0.97);
 }
-
-@keyframes wpc-mnav-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ---- navbar: responsive ---- */
-
-/* Below 820px the centred links and "Sign in" no longer fit beside the logo and "Get started", so
-   they move into the slide-down panel; the logo, "Get started" and the menu button stay visible. */
-@media (max-width: 820px) {
-  .wpc-header__bar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: var(--eos-space-3);
-    padding-inline: var(--eos-space-4);
-  }
-  .wpc-header.is-scrolled .wpc-header__bar {
-    max-width: calc(100% - 1rem);
-    padding-inline: var(--eos-space-4) var(--eos-space-2);
-  }
-  .wpc-header.is-scrolled .wpc-mobile-nav {
-    inset-inline: 0.5rem;
-  }
-  .wpc-nav,
-  .wpc-header__signin {
-    display: none; /* reachable instead from the slide-down panel behind the menu button */
-  }
-  .wpc-nav-toggle {
-    display: inline-flex;
-  }
-}
-
-/* Small phones: tighten spacing and the CTA so logo, "Get started" and the menu button all fit on
-   one row down to 320px without clipping. */
-@media (max-width: 400px) {
-  .wpc-header__bar {
-    gap: var(--eos-space-2);
-    padding-inline: var(--eos-space-3);
-  }
-  .wpc-header.is-scrolled .wpc-header__bar {
-    max-width: calc(100% - 0.75rem);
-    padding-inline: var(--eos-space-3) 6px;
-  }
-  .wpc-header.is-scrolled .wpc-mobile-nav {
-    inset-inline: 0.375rem;
-  }
-  .wpc-brand {
-    gap: 6px;
-  }
-  /* Wordmark sets its size inline (a prop), so the small-screen size needs !important to win. */
-  .wpc-brand .eos-wordmark {
-    font-size: 15px !important;
-  }
-  .wpc-header__actions {
-    gap: 6px;
-  }
-  .wpc-header__actions .eos-btn--primary {
-    height: 34px;
-    padding-inline: 12px;
-    font-size: var(--eos-text-sm);
-  }
-  .wpc-nav-toggle {
-    width: 36px;
-    height: 36px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-header__bar,
-  .wpc-nav__pill,
-  .wpc-header__actions .eos-btn,
-  .wpc-burger__line {
-    transition: none;
-  }
-  .wpc-header__actions .eos-btn--primary:hover,
-  .wpc-nav-toggle:hover .wpc-burger__line {
-    transform: none;
-  }
-}
-
-/* ---- hero: very light, centred, with a subtle animated lavender background ---- */
-
-.wpc-herowrap {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border-bottom: 1px solid var(--eos-border-soft);
-  /*
-   * The hero owns the first viewport: it fills the height below the sticky header so the next
-   * section always starts below the fold. min-height (not height) lets the hero grow and scroll
-   * naturally when content is taller than the viewport (small screens / large text), never clipping.
-   * svh tracks mobile browser chrome; the vh line is the fallback for older engines.
-   */
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: calc(100vh - var(--eos-topbar-height) - 1px);
-  min-height: calc(100svh - var(--eos-topbar-height) - 1px);
-  /* White base; the lavender comes from the wave background. */
-  background: var(--eos-surface);
-}
-
-/*
- * Decorative hero background: twelve translucent lavender wave layers (inline SVG paths, no image, no
- * dots) — three ribbons sweeping from the left, three rising from the right, six staggered bands across
- * the bottom — each a different curve and a touch deeper than the one before, so they read as uneven,
- * overlapping silk. The top stays clean white. Colours are the page's accent token (--accent — the
- * admin sidebar's navy-violet, see PUBLIC_THEME in content.ts) mixed into white. Motion: on load every
- * layer rises and fades in slowly, one after another (outer <g>); afterwards each sways very gently
- * (inner <path>, transform only); the white highlight lines draw themselves in. Everything freezes in
- * its final state under reduced motion.
- */
-.wpc-herobg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.wpc-waves {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.wpc-waves__fill {
-  filter: blur(1.5px);
-}
-/* Slight translucency so overlapping layers deepen where they cross, like layered silk. */
-.wpc-waves__fill path {
-  fill-opacity: 0.92;
-}
-.wpc-tone--1 { fill: var(--wave-1); }
-.wpc-tone--2 { fill: var(--wave-2); }
-.wpc-tone--3 { fill: var(--wave-3); }
-.wpc-tone--4 { fill: var(--wave-4); }
-.wpc-tone--5 { fill: var(--wave-5); }
-.wpc-tone--6 { fill: var(--wave-6); }
-.wpc-tone--7 { fill: var(--wave-7); }
-.wpc-tone--8 { fill: var(--wave-8); }
-/* Gradient fills (defined in the SVG's <defs>) — every stop is a step of the same brand palette. */
-.wpc-tone--grad-left { fill: url(#wpc-grad-left); }
-.wpc-tone--grad-right { fill: url(#wpc-grad-right); }
-.wpc-tone--grad-floor { fill: url(#wpc-grad-floor); }
-.wpc-tone--grad-deep { fill: url(#wpc-grad-deep); }
-.wpc-stop--2 { stop-color: var(--wave-2); }
-.wpc-stop--3 { stop-color: var(--wave-3); }
-.wpc-stop--4 { stop-color: var(--wave-4); }
-.wpc-stop--5 { stop-color: var(--wave-5); }
-.wpc-stop--6 { stop-color: var(--wave-6); }
-.wpc-stop--7 { stop-color: var(--wave-7); }
-.wpc-stop--8 { stop-color: var(--wave-8); }
-
-/* Entrance: rise + fade, staggered by --i. */
-.wpc-layer {
-  opacity: 0;
-  animation: wpc-layer-in 3.2s cubic-bezier(0.22, 0.7, 0.2, 1) calc(var(--i, 0) * 170ms + 150ms) both;
-}
-/* Idle sway, started after the entrance has settled. */
-.wpc-sway {
-  will-change: transform;
-}
-.wpc-sway--a {
-  animation: wpc-sway-a 26s ease-in-out 4.5s infinite alternate;
-}
-.wpc-sway--b {
-  animation: wpc-sway-b 32s ease-in-out 4.5s infinite alternate;
-}
-/* White highlight lines draw along the layer edges. */
-.wpc-wave__line {
-  fill: none;
-  stroke: #fff;
-  stroke-opacity: 0.95;
-  stroke-width: 1.4;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  vector-effect: non-scaling-stroke;
-  animation: wpc-draw 4.2s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--i, 0) * 300ms + 1200ms) forwards;
-}
-
-@keyframes wpc-layer-in {
-  from {
-    opacity: 0;
-    transform: translateY(70px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes wpc-sway-a {
-  from {
-    transform: translate(0, 0);
-  }
-  to {
-    transform: translate(26px, -10px);
-  }
-}
-@keyframes wpc-sway-b {
-  from {
-    transform: translate(0, 0);
-  }
-  to {
-    transform: translate(-30px, 8px);
-  }
-}
-@keyframes wpc-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/*
- * Hero background video (HeroVideo in HomePage.tsx; it replaces the silk waves above, whose markup is
- * commented out). It covers the hero at any aspect ratio — on narrow screens the centre of the frame
- * shows. The pale brand tint behind it fills the hero while the video loads. The ::after wash keeps a
- * soft white glow behind the headline (the video's dashboard cards drift in from the edges) and fades
- * the bottom into the page, so text and the ticker stay readable over every frame.
- */
-.wpc-herovideo {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: var(--wave-1);
-}
-.wpc-herovideo__media {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  animation: wpc-video-in 1.2s var(--eos-ease) both;
-}
-.wpc-herovideo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 60% 50% at 50% 46%, color-mix(in srgb, var(--eos-surface) 22%, transparent), transparent 75%),
-    linear-gradient(180deg, transparent 72%, color-mix(in srgb, var(--eos-surface) 55%, transparent));
-}
-@keyframes wpc-video-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-/* The text block takes the space above the ticker and centres itself in it. */
-.wpc-hero {
-  position: relative;
-  z-index: 1; /* above the decorative .wpc-herobg */
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 100%;
-  padding-block: var(--eos-space-10) var(--eos-space-6);
-  text-align: center;
-}
-.wpc-hero__text {
-  max-width: 1080px;
-  margin-inline: auto;
-}
-/* Coordinated entrance: eyebrow, then the headline (its words rise in turn), then the supporting copy,
-   buttons and trust line, then the ticker. Each piece fades and rises gently (the kit's eos-fade-up);
-   the kit's reduced-motion rule shows everything in its final state at once. */
-.wpc-hero__text.eos-stagger > *:nth-child(1) { animation-delay: 60ms; }
-.wpc-hero__text.eos-stagger > *:nth-child(2) { animation-delay: 150ms; }
-.wpc-hero__text.eos-stagger > *:nth-child(3) { animation-delay: 700ms; }
-.wpc-hero__text.eos-stagger > *:nth-child(4) { animation-delay: 850ms; }
-.wpc-hero__text.eos-stagger > *:nth-child(5) { animation-delay: 1000ms; }
-
-/* The ticker sits in the hero's lower area, on top of the bottom wave layers. */
-.wpc-hero__ticker {
-  position: relative;
-  z-index: 1; /* above the decorative .wpc-herobg */
-  padding-bottom: var(--eos-space-8);
-  animation: eos-fade-up 700ms var(--eos-ease) 1150ms both;
-}
-/* Eyebrow as a centred pill, matching the reference's badge. */
-.wpc-eyebrow--pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-2);
-  padding: var(--eos-space-2) var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  /* Subtle white/lavender badge with deep-violet text, legible over the hero video. */
-  background: rgba(245, 240, 255, 0.9);
-  border: 1px solid rgba(216, 180, 254, 0.7);
-  color: #4c1d95;
-  letter-spacing: 0.04em;
-}
-.wpc-hero__title {
-  margin: var(--eos-space-5) 0 0;
-  /*
-   * The page's strongest element, so it deliberately goes past the kit's 32px type ceiling: 64px on
-   * desktop (two lines in the 1080px column), scaling with the viewport down to 24px. 6.8vw is chosen
-   * so the longest rotating phrase ("one connected system.") still fits on one line at 360px wide.
-   */
-  font-size: clamp(1.5rem, 6.8vw, 4rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.028em;
+.wpc-fs__chip[aria-pressed="true"] {
+  background: var(--c-ink);
   color: #ffffff;
 }
-/* "on" in the second headline line shares the rotating phrase's purple gradient. */
-.wpc-hero__title .wpc-title__line + .wpc-title__line .wpc-w__i {
-  background: linear-gradient(100deg, #f3e8ff, #d8b4fe 50%, #f3e8ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+
+/* ---- home: hero ---- */
+/*
+ * Centred hero (pattern borrowed from product-led references: a centred headline over a full-width,
+ * real workspace mock-up with a deep shadow), in Education OS's own palette. The copy and the field
+ * chips sit in the centre; below, the organisation admin's workspace spans the content width and sits
+ * on a tone band that anchors it to the page. Where the browser supports scroll-driven animation the
+ * window tilts up into place as the page scrolls; elsewhere it simply rises in once.
+ */
+.wpc-hx {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(3rem, 2rem + 3vw, 5rem) 0;
+  overflow-x: clip;
 }
-.wpc-hero__subtitle {
-  margin: var(--eos-space-4) auto 0;
+.wpc-hx__inner {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.wpc-hx__copy {
+  max-width: 56rem;
+}
+.wpc-hx__copy > * {
+  animation: wpc-rise 0.7s var(--ease) both;
+}
+.wpc-hx__copy > :nth-child(2) { animation-delay: 70ms; }
+.wpc-hx__copy > :nth-child(3) { animation-delay: 140ms; }
+.wpc-hx__copy > :nth-child(n + 4) { animation-delay: 210ms; }
+.wpc-hx__title {
+  margin: 0 auto;
+  max-width: 23ch;
+  font-size: clamp(2.5rem, 1.3rem + 4vw, 4.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+.wpc-hx__sub {
+  margin: 1.25rem auto 0;
   max-width: 58ch;
-  font-size: var(--eos-text-lg);
-  color: #e5e0f0;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
 }
-.wpc-hero__actions {
-  margin-top: var(--eos-space-6);
+.wpc-hx__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--eos-space-3);
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+.wpc-hx__fine {
+  margin: 0.6rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
 
-/* ---- headline: word-by-word reveal + rotating key phrase ---- */
-
-.wpc-title__line {
-  display: block;
+/* Field chips and the full select, centred under the copy. */
+.wpc-hx__picker {
+  position: relative;
+  z-index: 3;
+  margin-top: 2.25rem;
+  animation: wpc-rise 0.7s var(--ease) 0.28s both;
 }
-/* Each word sits in a clipping mask and rises into place. Padding/negative margin keep descenders visible. */
-.wpc-w {
-  display: inline-block;
-  overflow: hidden;
-  padding-block: 0.12em;
-  margin-block: -0.12em;
-  vertical-align: top;
+.wpc-hx .wpc-fs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-top: 0;
 }
-.wpc-w__i {
-  display: inline-block;
-  transform: translateY(110%);
-  opacity: 0;
-  filter: blur(3px);
-  animation: wpc-word-rise 0.9s cubic-bezier(0.22, 0.8, 0.24, 1) calc(var(--w, 0) * 90ms + 250ms) forwards;
+.wpc-hx .wpc-fs__chips {
+  justify-content: center;
+  margin-bottom: 0;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
 }
-.wpc-ah .wpc-w__i {
-  animation: none;
+.wpc-hx .wpc-fs__chip {
+  background: transparent;
 }
-.wpc-ah.is-in .wpc-w__i {
-  animation: wpc-word-rise 0.9s cubic-bezier(0.22, 0.8, 0.24, 1) calc(var(--w, 0) * 70ms) forwards;
+.wpc-hx .wpc-fs__chip:hover {
+  background: var(--c-surface-3);
 }
-
-.wpc-rot {
-  /* A soft dark halo lifts the light phrase off the video. On the wrapper, because the words animate `filter`. */
-  filter: drop-shadow(0 2px 10px rgba(30, 10, 60, 0.45));
-  display: inline-grid;
-  justify-items: start;
-  vertical-align: top;
-  overflow: hidden;
-  padding-block: 0.12em;
-  margin-block: -0.12em;
+.wpc-hx .wpc-fs__chip[aria-pressed="true"] {
+  background: var(--c-surface);
+  box-shadow: 0 1px 2px rgba(42, 37, 78, 0.08), 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
+}
+.wpc-hx .wpc-fs__select {
+  min-width: 17rem;
   text-align: left;
 }
-.wpc-rot__sizer {
-  grid-area: 1 / 1;
-  white-space: nowrap;
-  visibility: hidden;
-}
-.wpc-rot__word {
-  grid-area: 1 / 1;
-  white-space: nowrap;
-  /* Bright lavender gradient with a slow shimmer; the ends match so the shimmer loops without a seam. */
-  background: linear-gradient(100deg, #f3e8ff, #d8b4fe 50%, #f3e8ff);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation-fill-mode: both;
-}
-/* The first phrase rises in as part of the headline's own reveal, just above it. */
-.wpc-rot__word--first {
-  animation: wpc-word-rise 0.9s cubic-bezier(0.22, 0.8, 0.24, 1) 0.7s both, wpc-shimmer 6s linear 2s infinite;
-}
-/* Every later phrase swaps in with a short, blur-free crossfade — a shorter, quieter motion than the
-   rise above, deliberately distinct so it doesn't look like the entrance animation playing again. */
-.wpc-rot__word--in {
-  animation: wpc-word-swap-in 0.55s var(--eos-ease) both, wpc-shimmer 6s linear 0.55s infinite;
-}
-.wpc-rot__word--out {
-  animation: wpc-word-swap-out 0.45s var(--eos-ease) both;
-}
 
-@keyframes wpc-word-rise {
-  from {
-    transform: translateY(110%);
-    opacity: 0;
-    filter: blur(3px);
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-@keyframes wpc-word-swap-in {
-  from {
-    transform: translateY(14px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-@keyframes wpc-word-swap-out {
-  from {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  to {
-    transform: translateY(-14px);
-    opacity: 0;
-  }
-}
-@keyframes wpc-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-
-/* ---- simple grids ---- */
-
-.wpc-grid {
-  display: grid;
-  gap: var(--eos-space-4);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  margin-top: var(--eos-space-6);
-}
-
-/* ---- footer ---- */
-/*
- * Light, minimal footer: brand + tagline on the left, link columns spread across the rest of the row,
- * a hairline-divided legal bar, and an oversized low-contrast "EDUCATION OS" wordmark cropped along
- * the bottom edge as a brand signature. The wordmark is absolutely positioned behind the content
- * (z-index -1 inside an isolated footer), ignores the pointer, and never affects layout; the footer's
- * bottom padding reserves the strip it shows in. Links stay still on hover and give feedback only
- * while pressed (:active); keyboard focus shows the shared focus ring.
- */
-.wpc-footer {
-  --footer-mark-size: min(12vw, 10rem);
+/* The window, on a tone band that runs to the page edges. */
+.wpc-hx__stage {
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  flex-shrink: 0;
-  border-top: 1px solid var(--eos-border);
-  background: var(--eos-background);
-  padding-bottom: calc(var(--footer-mark-size) * 0.5);
+  z-index: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin-top: 2.75rem;
+  padding-bottom: var(--sp-section);
+  perspective: 1800px;
 }
-.wpc-footer__inner {
+.wpc-hx__stage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 32%;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  background: var(--c-surface-2);
+}
+.wpc-hx__caption {
+  margin: 1.25rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+.wpc-ws {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow:
+    0 0 0 1px var(--c-hairline),
+    0 2px 4px rgba(42, 37, 78, 0.04),
+    0 40px 80px -36px rgba(42, 37, 78, 0.38);
+  text-align: left;
+  transform-origin: 50% 0;
+  animation: wpc-float-in 0.9s var(--ease) 0.35s both;
+}
+@supports (animation-timeline: view()) {
+  .wpc-ws {
+    animation: wpc-tilt linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+}
+@keyframes wpc-tilt {
+  from {
+    transform: rotateX(16deg) scale(0.94);
+    opacity: 0.6;
+  }
+  to {
+    transform: rotateX(0) scale(1);
+    opacity: 1;
+  }
+}
+.wpc-ws__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 1.1rem;
+  background: #faf8f5;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.wpc-ws__org {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wpc-ws__role {
+  flex: none;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink-2);
+  font-weight: 500;
+}
+.wpc-ws__body {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(160px, 1fr));
-  gap: var(--eos-space-8);
+  grid-template-columns: 13rem minmax(0, 1fr);
+}
+.wpc-ws__nav {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0.75rem;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  background: #faf8f5;
+  box-shadow: inset -1px 0 0 var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 0.9375rem;
+}
+.wpc-ws__nav li {
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wpc-ws__nav li.is-current {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-surface-2);
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-ws__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1.4rem;
+}
+.wpc-ws__panel {
+  min-width: 0;
+}
+.wpc-ws__heading {
+  margin: 0 0 0.35rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-ws__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-ws__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+}
+.wpc-ws__name {
+  display: grid;
+  min-width: 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.wpc-ws__generic {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 400;
+}
+.wpc-ws__switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 21px;
+  border-radius: 11px;
+  background: var(--c-accent);
+}
+.wpc-ws__switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.wpc-ws__side {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+}
+.wpc-ws__photo {
+  position: relative;
+  margin: 0;
+}
+.wpc-ws__photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--r-md);
+}
+.wpc-ws__photo figcaption {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--c-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* The live status card, set inside the window. */
+.wpc-sc {
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: var(--r-md);
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-sc__label {
+  margin: 0;
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+}
+.wpc-sc__state {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.3rem 0 0.8rem;
+  font-weight: 500;
+}
+.wpc-sc__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  transition: background-color 0.3s var(--ease);
+}
+.wpc-sc__dot.is-live {
+  background: #4ade80;
+}
+.wpc-sc__track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.wpc-sc__track li {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--c-inverse-line);
+  transition: background-color 0.35s var(--ease);
+}
+.wpc-sc__track li.is-done {
+  background: var(--c-accent);
+}
+
+/* The focal move: a changed word rolls into place under a short orange marker. */
+.wpc-roll {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.wpc-roll__text {
+  display: inline-block;
+  animation: wpc-roll-in 0.55s var(--ease) both;
+}
+.wpc-roll::after {
+  content: "";
+  position: absolute;
+  left: -0.1em;
+  right: -0.1em;
+  bottom: 0.06em;
+  z-index: -1;
+  height: 0.45em;
+  border-radius: 2px;
+  background: var(--c-accent-mark);
+  transform-origin: left;
+  animation: wpc-mark 1.3s var(--ease) both;
+}
+.wpc-sc .wpc-roll::after {
+  background: var(--c-accent);
+}
+
+/* ---- home: the field's own words (a white panel) ---- */
+
+.wpc-ch {
+  padding-block: 0 var(--sp-section);
+}
+.wpc-ch__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
   align-items: start;
-  padding-block: var(--eos-space-10) var(--eos-space-8);
+  width: calc(100% - 2 * var(--m));
+  max-width: calc(1280px - 2 * var(--m));
+  padding: clamp(1.5rem, 1rem + 2.5vw, 3.5rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-ch__head {
+  grid-column: 1 / span 5;
+}
+.wpc-ch__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-ch__lead {
+  margin: 1.1rem 0 0;
+  max-width: 50ch;
+  color: var(--c-ink-2);
+}
+.wpc-ch__table {
+  grid-column: 7 / span 6;
+}
+.wpc-ch__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-ch__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) auto minmax(0, 1.4fr);
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.95rem 0;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
+  animation: wpc-row-in 0.5s var(--ease) calc(var(--i, 0) * 55ms) both;
+}
+.wpc-ch__row:first-child {
+  padding-top: 0.25rem;
+}
+.wpc-ch__generic {
+  color: var(--c-muted);
+}
+.wpc-ch__arrow {
+  color: var(--c-accent);
+}
+.wpc-ch__word {
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-ch__caption {
+  margin: 1.1rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.wpc-ch__caption strong {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-ch__note {
+  margin: 1.5rem 0 0;
+  padding: 1rem 1.15rem;
+  border-radius: var(--r-sm);
+  background: var(--c-canvas);
+  color: var(--c-ink-2);
+}
+
+/* ---- home: everything an institution runs ---- */
+
+.wpc-in {
+  padding-block: 0 var(--sp-section);
+}
+.wpc-in__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-in__col {
+  grid-column: 1 / span 6;
+}
+.wpc-in__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-in__lead {
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+}
+.wpc-in__group {
+  margin-top: 2rem;
+}
+.wpc-in__group-label {
+  margin: 0 0 0.35rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  transition: color 0.25s var(--ease);
+}
+.wpc-in__group.is-active .wpc-in__group-label {
+  color: var(--c-accent-strong);
+}
+.wpc-in__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-in__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  margin-inline: -0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  transition:
+    background-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.wpc-in__row:hover,
+.wpc-in__row:focus-visible {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-in__name {
+  font-weight: 600;
+}
+.wpc-in__summary {
+  display: block;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.wpc-in__summary em {
+  color: var(--c-accent-strong);
+  font-style: normal;
+  font-weight: 500;
+}
+.wpc-in__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.wpc-in__arrow {
+  transition: transform 0.25s var(--ease);
+}
+.wpc-in__row:hover .wpc-in__arrow,
+.wpc-in__row:focus-visible .wpc-in__arrow {
+  transform: translateX(3px);
+  color: var(--c-accent-strong);
+}
+.wpc-in__media {
+  grid-column: 8 / span 5;
+  position: sticky;
+  top: calc(var(--header-h) + 1.5rem);
+  margin: 0;
+}
+.wpc-in__media::before {
+  content: "";
+  display: block;
+  aspect-ratio: 4 / 5;
+}
+.wpc-in__media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: calc(100% - 2rem);
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  opacity: 0;
+  transform: scale(1.03);
+  transition:
+    opacity 0.5s var(--ease),
+    transform 0.9s var(--ease);
+}
+.wpc-in__media img.is-active {
+  opacity: 1;
+  transform: scale(1);
+}
+.wpc-in__media figcaption {
+  margin-top: 0.5rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+/* ---- home: trust (the one black band) ---- */
+
+.wpc-tr {
+  padding-block: var(--sp-section);
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-tr__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-tr__title {
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-tr__list {
+  grid-column: 7 / span 6;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.25rem 2.5rem;
+}
+.wpc-tr__point {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.wpc-tr__point::before {
+  content: "";
+  display: block;
+  width: 1.5rem;
+  height: 3px;
+  margin-bottom: 0.9rem;
+  border-radius: 2px;
+  background: var(--c-accent);
+}
+.wpc-tr__text {
+  margin: 0.4rem 0 0;
+  color: var(--c-inverse-muted);
+}
+
+/* ---- home: from sign-up to signed in ---- */
+
+.wpc-st {
+  padding-block: var(--sp-section);
+}
+.wpc-st__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-st__title {
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-st__steps {
+  grid-column: 7 / span 6;
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 2.5rem;
+  display: grid;
+  gap: 2.25rem;
+}
+.wpc-st__steps::before,
+.wpc-st__steps::after {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--c-surface-3);
+}
+.wpc-st__steps::after {
+  background: var(--c-accent);
+  transform: scaleY(var(--progress, 0));
+  transform-origin: top;
+  transition: transform 0.7s var(--ease);
+}
+.wpc-st__step {
+  position: relative;
+}
+.wpc-st__step::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -2.5rem;
+  top: 0.4em;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: var(--c-canvas);
+  box-shadow: inset 0 0 0 2px var(--c-surface-3);
+  transition:
+    background-color 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
+}
+.wpc-st__step.is-reached::before {
+  background: var(--c-accent);
+  box-shadow: inset 0 0 0 2px var(--c-accent), 0 0 0 5px var(--c-canvas);
+}
+.wpc-st__line {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  transition: color 0.4s var(--ease);
+}
+.wpc-st__step.is-reached .wpc-st__line {
+  color: var(--c-ink);
+}
+.wpc-st__text {
+  margin: 0.35rem 0 0;
+  max-width: 48ch;
+  color: var(--c-muted);
+}
+.wpc-st__cta {
+  grid-column: 7 / span 6;
+  margin-top: 1.25rem;
+  padding: 2rem 2.25rem;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-st__cta-text {
+  margin: 0;
+  max-width: 36ch;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.wpc-st__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.wpc-st__fine {
+  margin: 0.6rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+@keyframes wpc-wipe {
+  from { clip-path: inset(0 0 0 100% round 16px); }
+  to { clip-path: inset(0 0 0 0 round 16px); }
+}
+@keyframes wpc-settle {
+  from { opacity: 0; transform: scale(1.05); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes wpc-float-in {
+  from { opacity: 0; transform: translateY(24px); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes wpc-roll-in {
+  from { opacity: 0; transform: translateY(0.55em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wpc-mark {
+  0% { transform: scaleX(0); opacity: 0.9; }
+  35% { transform: scaleX(1); opacity: 0.9; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+@keyframes wpc-row-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ---- footer: near-black close ---- */
+
+.wpc-footer {
+  display: grid;
+  grid-template-rows: auto auto;
+  flex-shrink: 0;
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-footer__top {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  padding-top: 4rem;
 }
 .wpc-footer__brand {
-  display: grid;
-  gap: var(--eos-space-3);
-  align-content: start;
+  grid-column: 1 / span 6;
+}
+.wpc-footer__col {
+  grid-column: span 2;
 }
 .wpc-footer__logo {
-  justify-self: start;
-  border-radius: var(--eos-radius);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
 }
 .wpc-footer__tagline {
-  margin: 0;
-  max-width: 34ch;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-md);
-  line-height: 1.6;
+  margin: 1rem 0 0;
+  max-width: 30ch;
+  color: var(--c-inverse-muted);
 }
-.wpc-footer__col-heading {
-  margin: 0 0 var(--eos-space-3);
-  font-size: var(--eos-text-xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--eos-muted);
+.wpc-footer__heading {
+  margin: 0 0 0.5rem;
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
 }
 .wpc-footer__links {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: var(--eos-space-1);
 }
-/* Generous hit area; the negative inline margin keeps the label aligned with the column heading. */
 .wpc-footer__link {
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
-  min-height: 36px;
-  margin-inline: -8px;
-  padding: 4px 8px;
-  border-radius: var(--eos-radius);
-  color: var(--eos-text-2);
-  font-size: var(--eos-text-sm);
-  font-weight: 500;
-  transition:
-    background-color 0.12s var(--eos-ease),
-    color 0.12s var(--eos-ease),
-    transform 0.12s var(--eos-ease);
-}
-.wpc-footer__link:hover {
+  gap: 0.6rem;
+  min-height: 44px;
+  margin-inline: -0.6rem;
+  padding-inline: 0.6rem;
+  border-radius: var(--r-sm);
+  color: #ffffff;
   text-decoration: none;
+  transition:
+    background-color 0.12s var(--ease),
+    transform 0.12s var(--ease);
 }
 .wpc-footer__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--eos-surface);
-  border: 1px solid var(--eos-border);
-  color: var(--accent);
-  transition:
-    background-color 0.12s var(--eos-ease),
-    border-color 0.12s var(--eos-ease),
-    color 0.12s var(--eos-ease);
+  color: var(--c-inverse-muted);
+  transition: color 0.2s var(--ease), transform 0.25s var(--ease);
 }
-/* Pressed: a brief tint and slight press-in, then it settles back on release. */
+/* Hover: an orange underline draws in from the left and the icon warms to orange. */
+.wpc-footer__link span {
+  background: linear-gradient(var(--c-accent), var(--c-accent)) left bottom / 0 1.5px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size 0.3s var(--ease), color 0.2s var(--ease);
+}
+.wpc-footer__link:hover span {
+  background-size: 100% 1.5px;
+}
+.wpc-footer__link:hover .wpc-footer__icon {
+  color: var(--c-accent);
+  transform: translateX(2px);
+}
+.wpc-footer__legal-link {
+  background: linear-gradient(currentColor, currentColor) left calc(100% - 12px) / 0 1px no-repeat;
+}
+.wpc-footer__legal-link:hover {
+  background-size: 100% 1px;
+}
+/* Feedback only while pressed. */
 .wpc-footer__link:active {
-  background: var(--accent-tint);
-  color: var(--accent);
+  background: var(--c-inverse-2);
   transform: scale(0.97);
 }
-.wpc-footer__link:active .wpc-footer__icon {
-  background: var(--accent);
-  border-color: var(--accent);
+.wpc-footer__bottom {
+  padding-top: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  padding-bottom: 1.5rem;
+}
+.wpc-footer__mark {
+  margin: 0;
+  color: #3a3466;
+  font-size: min(13.5vw, 11.5rem);
+  font-weight: 600;
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  user-select: none;
+}
+.wpc-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin: 1.5rem 0 0;
+  padding-top: 1.25rem;
+  box-shadow: inset 0 1px 0 var(--c-inverse-line);
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+}
+.wpc-footer__legal p {
+  margin: 0;
+}
+.wpc-footer__legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wpc-footer__legal-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--c-inverse-muted);
+  text-decoration: none;
+  transition: color 0.15s var(--ease), background-size 0.3s var(--ease);
+}
+.wpc-footer__legal-link:hover {
   color: #ffffff;
 }
-
-.wpc-footer__legal {
-  position: relative;
-  border-top: 1px solid var(--eos-border);
-  padding-block: var(--eos-space-5);
-  color: var(--eos-muted);
-  font-size: var(--eos-text-sm);
+/* Social marks: round, quiet until pointed at. */
+.wpc-footer__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
 }
-
-/* The decorative wordmark: centred, cropped by the footer's bottom edge, very low contrast. */
-.wpc-footer__mark {
-  position: absolute;
-  inset-inline: 0;
-  bottom: calc(var(--footer-mark-size) * -0.2);
-  z-index: -1;
-  text-align: center;
-  white-space: nowrap;
-  font-size: var(--footer-mark-size);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.045em;
-  color: color-mix(in srgb, var(--accent) 7%, transparent);
-  user-select: none;
-  pointer-events: none;
+.wpc-footer__social-link {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--c-inverse-2);
+  color: #e2e6f5;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
 }
-
-/* Tablet: brand across the top, the two link columns side by side beneath it. */
-@media (max-width: 860px) {
-  .wpc-footer__inner {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--eos-space-6) var(--eos-space-5);
-    padding-block: var(--eos-space-8) var(--eos-space-6);
-  }
-  .wpc-footer__brand {
-    grid-column: 1 / -1;
-  }
+.wpc-footer__social-link:hover {
+  background: var(--c-accent);
+  color: #ffffff;
+  transform: translateY(-2px);
 }
-/* Phone: a slightly larger wordmark relative to the width, still inside the footer. */
-@media (max-width: 480px) {
-  .wpc-footer {
-    --footer-mark-size: 13vw;
-  }
-  .wpc-footer__legal {
-    font-size: var(--eos-text-xs);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-footer__link,
-  .wpc-footer__icon {
-    transition: none;
-  }
-  .wpc-footer__link:active {
-    transform: none;
-  }
+.wpc-footer__social-link:active {
+  transform: scale(0.94);
 }
 
 /* ---- branded loader ---- */
 
 .wpc-loader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--eos-space-4);
-  padding: var(--eos-space-10) var(--eos-space-6);
-  color: var(--eos-muted);
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding-block: 4rem;
+  color: var(--c-muted);
 }
 .wpc-loader--screen {
   min-height: 60vh;
+  align-content: center;
 }
 .wpc-loader__mark {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
-/* The ping ring reuses the kit's eos-ping keyframe (disabled automatically under reduced motion). */
 .wpc-loader__ping {
   position: absolute;
-  inset: -6px;
-  border-radius: var(--eos-radius-pill);
-  border: 2px solid var(--accent);
-  opacity: 0.6;
+  inset: -8px;
+  border-radius: 14px;
+  background: var(--c-accent);
+  opacity: 0.2;
 }
 .wpc-loader__label {
-  font-size: var(--eos-text-sm);
+  font-size: var(--fs-small);
 }
 
-/* ---- hero trust line ---- */
+/* ---- status tags (ui-kit Badge) ---- */
 
-.wpc-trust {
-  list-style: none;
-  margin: var(--eos-space-6) 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--eos-space-2) var(--eos-space-5);
-}
-.wpc-trust__item {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-2);
-  color: #ede9fe;
-  font-size: var(--eos-text-sm);
-}
-.wpc-trust__item svg {
-  color: #d8b4fe;
-}
-
-/* ---- a quiet, factual note under a section ---- */
-
-.wpc-note {
-  margin-top: var(--eos-space-4);
-  max-width: 68ch;
-  color: var(--eos-muted);
-  font-size: var(--eos-text-sm);
-}
-
-/* ---- icon tile ---- */
-
-.wpc-ic {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--eos-radius-md);
-  background: var(--accent-tint);
-  color: var(--accent);
-  border: 1px solid var(--accent-ring);
-}
-.wpc-ic--sm {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--eos-radius);
-}
-
-.wpc-ic {
-  transition:
-    background var(--eos-fast) var(--eos-ease),
-    color var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease);
-}
-
-/* ---- feature ticker (inside the hero, over the bottom waves) ---- */
-/* A full-bleed, continuously scrolling row of capability pills. The track holds the real list once
-   (announced to screen readers) plus one `aria-hidden` duplicate right after it (see FeatureTicker in
-   HomePage.tsx); animating the whole track by exactly -50% loops the two identical halves seamlessly.
-   A soft mask fades the pills in/out at the edges. It keeps scrolling on hover; keyboard focus pauses it. */
-.wpc-ticker {
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-}
-.wpc-ticker:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.wpc-ticker__track {
-  display: flex;
-  width: max-content;
-  gap: var(--eos-space-3);
-  padding: var(--eos-space-3) 0;
-  animation: wpc-ticker-scroll 42s linear infinite;
-}
-.wpc-ticker:focus-within .wpc-ticker__track {
-  animation-play-state: paused;
-}
-.wpc-ticker__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-2);
-  flex: none;
-  padding: 7px var(--eos-space-4) 7px 7px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--eos-surface);
-  border: 1px solid var(--wave-4);
-  box-shadow: 0 6px 16px -12px color-mix(in oklch, var(--accent) 55%, transparent);
-  color: var(--eos-text-2);
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
-  white-space: nowrap;
-}
-/* The aria-hidden duplicate set that makes a loop seamless; its children join the parent's flex row. */
-.wpc-dup {
-  display: contents;
-}
-.wpc-ticker__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--wave-2);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-@keyframes wpc-ticker-scroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-/* ---- section intro (centred) ---- */
-.wpc-section-intro {
-  max-width: 760px;
-  margin-inline: auto;
-  text-align: center;
-}
-.wpc-section-intro .wpc-section__lead {
-  margin-inline: auto;
-}
-.wpc-section__title--xl {
-  font-size: clamp(1.75rem, 4.2vw, 2.75rem);
-  font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.022em;
-}
-
-/* ---- product & module showcase ---- */
-/* A horizontally scrolling row of module cards that drifts slowly on its own (ShowcaseCarousel in
-   HomePage.tsx advances scrollLeft, so touch swipe, trackpad and the arrow buttons all act on the same
-   scroll position). Scroll-snap applies only when the row is not auto-scrolling (reduced motion), since
-   snapping would fight the continuous drift. Visual panels are branded icon illustrations, not
-   screenshots — the repository has no genuine capture of these modules to show. */
-.wpc-showcase {
-  position: relative;
-  margin-top: var(--eos-space-8);
-}
-.wpc-showcase__track {
-  position: relative;
-  display: flex;
-  gap: var(--eos-space-4);
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
-  scroll-padding-inline: var(--eos-space-2);
-  padding-block: var(--eos-space-2) var(--eos-space-5);
-  margin: 0 calc(var(--eos-space-2) * -1);
-  padding-inline: var(--eos-space-2);
-  scrollbar-width: none;
-}
-.wpc-showcase__track--loop {
-  scroll-snap-type: none;
-  /* Cards drift in and out through a soft fade rather than a hard cut at the container edge. */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
-}
-.wpc-showcase__track::-webkit-scrollbar {
-  display: none;
-}
-.wpc-showcase__track:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--eos-radius-lg);
-}
-.wpc-showcase__card {
-  flex: 0 0 calc((100% - 2 * var(--eos-space-4)) / 3);
-  scroll-snap-align: start;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  background: var(--eos-surface);
-  border: 1px solid var(--wave-4);
-  border-radius: var(--eos-radius-xl);
-  box-shadow: 0 10px 30px -26px color-mix(in oklch, var(--accent) 60%, transparent);
-  overflow: hidden;
-  transition:
-    transform var(--eos-normal) var(--eos-ease),
-    box-shadow var(--eos-normal) var(--eos-ease),
-    border-color var(--eos-normal) var(--eos-ease);
-}
-.wpc-showcase__card:hover,
-.wpc-showcase__card:focus-within {
-  transform: translateY(-4px);
-  border-color: var(--wave-7);
-  box-shadow: 0 22px 40px -26px color-mix(in oklch, var(--accent) 70%, transparent);
-}
-/* Branded illustration: layered tints of the brand colour, two white contour curves echoing the hero
-   waves, and the suite's icon on a white tile. A fixed 16:9 area so every card lines up. */
-.wpc-showcase__visual {
-  position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 100% 100%, var(--wave-6), transparent 60%),
-    radial-gradient(90% 80% at 0% 100%, var(--wave-4), transparent 65%),
-    linear-gradient(180deg, var(--wave-1), var(--wave-3));
-  border-bottom: 1px solid var(--wave-4);
-}
-.wpc-showcase__curves {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-.wpc-showcase__curves path {
-  fill: none;
-  stroke: #fff;
-  stroke-opacity: 0.9;
-  stroke-width: 1.4;
-  vector-effect: non-scaling-stroke;
-}
-.wpc-showcase__tile {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  border-radius: var(--eos-radius-xl);
-  background: var(--eos-surface);
-  color: var(--accent);
-  border: 1px solid var(--wave-3);
-  box-shadow: 0 16px 30px -18px color-mix(in oklch, var(--accent) 70%, transparent);
-  transition: transform var(--eos-normal) var(--eos-ease);
-}
-.wpc-showcase__card:hover .wpc-showcase__tile {
-  transform: translateY(-3px);
-}
-.wpc-showcase__body {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: var(--eos-space-2);
-  padding: var(--eos-space-5);
-}
-.wpc-showcase__label {
-  justify-self: start;
-  margin: 0;
-  padding: 3px var(--eos-space-2);
-  border-radius: var(--eos-radius-sm);
-  background: var(--wave-1);
-  border: 1px solid var(--wave-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: var(--eos-text-xs);
-  font-weight: 700;
-  color: var(--accent);
-}
-.wpc-showcase__headline {
-  margin: 0;
-  font-size: var(--eos-text-lg);
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--eos-text);
-}
-.wpc-showcase__text {
-  margin: 0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-}
-.wpc-showcase__link {
-  justify-self: start;
-  margin-top: var(--eos-space-2);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-1);
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
-  color: var(--accent);
-}
-.wpc-showcase__link:hover .wpc-btn-arrow {
-  transform: translateX(3px);
-}
-.wpc-showcase__nav {
-  margin-top: var(--eos-space-2);
-  display: flex;
-  justify-content: center;
-  gap: var(--eos-space-3);
-}
-.wpc-showcase__arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid var(--wave-4);
-  background: var(--eos-surface);
-  color: var(--accent);
-  cursor: pointer;
-  transition:
-    background var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease);
-}
-.wpc-showcase__arrow:hover:not(:disabled) {
-  background: var(--wave-2);
-  border-color: var(--wave-7);
-}
-.wpc-showcase__arrow:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.wpc-showcase__arrow:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-/* ---- academy field pills ---- */
-/* A proper auto-width pill for a text label (the shared ui-kit .eos-chip is a fixed 32x32 icon tile,
-   not meant for variable-length text). Each pill fades/rises in turn via RevealGroup + stagger(); on
-   hover it lifts slightly and tints with the accent, matching the card hover treatment elsewhere. */
-.wpc-fields {
-  list-style: none;
-  margin: var(--eos-space-5) 0 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--eos-space-2);
-}
-.wpc-field {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--eos-space-2) var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  background: var(--eos-surface);
-  border: 1px solid var(--eos-border);
-  color: var(--eos-text-2);
-  font-size: var(--eos-text-sm);
+.wpc .eos-badge {
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 0.8125rem;
   font-weight: 500;
-  transition:
-    transform var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease),
-    background var(--eos-fast) var(--eos-ease),
-    color var(--eos-fast) var(--eos-ease),
-    box-shadow var(--eos-fast) var(--eos-ease);
 }
-.wpc-field:hover {
-  border-color: var(--accent-ring);
-  background: var(--accent-tint);
-  color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: var(--eos-shadow-card);
-}
+.wpc .eos-badge--success { background: #dcf1e4; color: #136c3a; }
+.wpc .eos-badge--info { background: #e2ecf6; color: #1d4f7f; }
+.wpc .eos-badge--accent { background: var(--c-accent-soft); color: #9a3412; }
+.wpc .eos-badge--warning { background: #fbefd2; color: #7c5300; }
+.wpc .eos-badge--neutral { background: var(--c-surface-2); color: var(--c-ink-2); }
 
-/* ---- "One platform, many fields" band ---- */
-/*
- * A centred, content-only band. Its background eases from white to pale lavender as it enters the
- * viewport (FieldsSection adds `.is-in`), over a fine-line grid that fades out towards the edges, with
- * one soft violet glow at the top as the only accent. The top and bottom edges fade back to white so
- * the band blends into the sections around it. The section scopes the navbar's violet onto the accent
- * tokens so the badge, pills and grid share one purple. The content itself fades up via Reveal and
- * RevealGroup; under reduced motion everything shows in its final state with no transition.
- */
-.wpc-fieldsec {
-  --accent: #7c3aed;
-  --accent-tint: #f3e8ff;
-  --accent-ring: #ddd6fe;
-  --fieldsec-lavender: #f6f2ff;
-  --fieldsec-line: rgba(124, 58, 237, 0.07);
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  background-color: #ffffff;
-  background-image: radial-gradient(ellipse 46% 38% at 50% 0%, rgba(167, 139, 250, 0.16), transparent 72%);
-  transition: background-color 1.4s var(--eos-ease);
-}
-.wpc-fieldsec.is-in {
-  background-color: var(--fieldsec-lavender);
-}
-/* Fine-line grid: 1px lines every 44px, masked to a soft ellipse so it never reaches the edges. */
-.wpc-fieldsec::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image:
-    linear-gradient(to right, var(--fieldsec-line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--fieldsec-line) 1px, transparent 1px);
-  background-size: 44px 44px;
-  background-position: center top;
-  -webkit-mask-image: radial-gradient(ellipse 70% 75% at 50% 45%, #000 30%, transparent 100%);
-  mask-image: radial-gradient(ellipse 70% 75% at 50% 45%, #000 30%, transparent 100%);
-  pointer-events: none;
-}
-/* White fades at the top and bottom edges so the band blends into the white sections around it. */
-.wpc-fieldsec::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(180deg, #ffffff 0%, transparent 16%, transparent 84%, #ffffff 100%);
-  pointer-events: none;
-}
+/* ---- features page ---- */
 
-.wpc-fieldsec__inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding-block: calc(var(--eos-space-10) * 1.4);
-}
-.wpc-fieldsec .wpc-adapt {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-width: 760px;
-}
-/* Badge: a quiet white/lavender pill with deep-violet text, centred above the heading. */
-.wpc-fieldsec__badge {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 6px var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--accent-ring);
-  box-shadow: 0 4px 14px -10px rgba(124, 58, 237, 0.5);
-  color: #5b21b6;
-  letter-spacing: 0.1em;
-}
-.wpc-fieldsec .wpc-section__title {
-  margin-top: var(--eos-space-5);
-  font-size: clamp(1.625rem, 3.4vw, 2.375rem);
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-}
-.wpc-fieldsec .wpc-section__lead {
-  margin: var(--eos-space-4) auto 0;
-  max-width: 64ch;
-  font-size: var(--eos-text-lg);
-  line-height: 1.65;
-  text-wrap: pretty;
-}
-.wpc-fieldsec .wpc-fields {
-  justify-content: center;
-  max-width: 880px;
-  margin-top: var(--eos-space-8);
-  gap: var(--eos-space-3);
-}
-.wpc-fieldsec .wpc-field {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: color-mix(in srgb, var(--accent-ring) 75%, var(--eos-border));
-  color: var(--eos-text-2);
-}
-.wpc-fieldsec .wpc-field:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--accent-ring));
-  background: var(--accent-tint);
-  color: #6d28d9;
-  box-shadow: 0 8px 20px -12px rgba(124, 58, 237, 0.45);
-}
-/* Supporting note: centred under a short violet hairline, quieter than the lead. */
-.wpc-fieldsec .wpc-note {
-  margin: var(--eos-space-8) auto 0;
-  max-width: 60ch;
-  color: var(--eos-muted);
-}
-.wpc-fieldsec .wpc-note::before {
-  content: "";
-  display: block;
-  width: 40px;
-  height: 2px;
-  margin: 0 auto var(--eos-space-4);
-  border-radius: 1px;
-  background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.45), transparent);
-}
-
-@media (max-width: 720px) {
-  .wpc-fieldsec__inner {
-    padding-block: var(--eos-space-10);
-  }
-  .wpc-fieldsec .wpc-section__lead {
-    font-size: var(--eos-text-md);
-  }
-  .wpc-fieldsec .wpc-fields {
-    margin-top: var(--eos-space-6);
-    gap: var(--eos-space-2);
-  }
-  .wpc-fieldsec::before {
-    background-size: 32px 32px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-fieldsec {
-    transition: none;
-  }
-}
-
-/* ---- onboarding steps ---- */
-
-.wpc-steps {
-  list-style: none;
-  counter-reset: none;
-  margin: var(--eos-space-6) 0 0;
-  padding: 0;
-  display: grid;
-  gap: var(--eos-space-4);
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-}
-.wpc-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: start;
-  gap: var(--eos-space-3);
-  padding: var(--eos-space-4);
-  background: var(--eos-surface);
-  border: 1px solid var(--eos-border);
-  border-radius: var(--eos-radius-lg);
-}
-.wpc-step__num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--accent);
-  color: var(--eos-on-dark);
-  font-size: var(--eos-text-sm);
-  font-weight: 700;
-}
-.wpc-step__body {
-  display: grid;
-  gap: var(--eos-space-1);
-}
-.wpc-step__title {
-  font-weight: 700;
-  color: var(--eos-text);
-}
-.wpc-step__text {
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-}
-
-/* ---- "Getting started" band (homepage) ---- */
-/*
- * A deep band in the brand navy (#2a254e, the admin sidebar colour and the site's --accent). Its
- * background is alive but quiet: three soft navy-blue light pools drift slowly behind the content
- * (`.wpc-onboard__aura`), and a gentle spotlight follows the mouse (OnboardSection writes --spot-x/y
- * and toggles `.is-lit`). The four steps run left to right as frosted-glass cards with animated arrow
- * connectors; the "Get started" button, "Explore features" link and trial note close the same band.
- * Everything is scoped to `.wpc-onboard`, so the shared step classes elsewhere are untouched. Reduced
- * motion stops the drift, the arrows and the spotlight, and drops the hover transitions.
- */
-.wpc-onboard {
-  --ob-navy: #2a254e;
-  --ob-navy-deep: #1d1940;
-  --ob-text: #ffffff;
-  --ob-muted: #c9cfe6;
-  --ob-faint: #b3bce3;
-  --ob-glow: #9fb0f0;
-  --ob-line: rgba(255, 255, 255, 0.12);
-  --accent: var(--ob-muted);
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  color: var(--ob-text);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 30%),
-    linear-gradient(160deg, var(--ob-navy-deep) 0%, var(--ob-navy) 48%, #241f46 100%);
-}
-/* Pointer spotlight: invisible until the mouse is over the band, then it fades in and follows it. */
-.wpc-onboard::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(
-    460px circle at var(--spot-x, 50%) var(--spot-y, 50%),
-    rgba(159, 176, 240, 0.14),
-    transparent 65%
-  );
-  opacity: 0;
-  transition: opacity 0.5s var(--eos-ease);
-  pointer-events: none;
-}
-.wpc-onboard.is-lit::before {
-  opacity: 1;
-}
-/* A hairline of light along the top edge. */
-.wpc-onboard::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201, 207, 230, 0.35), transparent);
-  pointer-events: none;
-}
-
-/* Drifting light pools: blurred navy-blue circles on long, offset loops. */
-.wpc-onboard__aura {
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  overflow: hidden;
-  pointer-events: none;
-}
-.wpc-onboard__orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.55;
-  will-change: transform;
-}
-.wpc-onboard__orb--a {
-  width: 520px;
-  height: 520px;
-  top: -180px;
-  left: -120px;
-  background: radial-gradient(circle, #3f4a9a 0%, transparent 70%);
-  animation: wpc-orb-a 22s ease-in-out infinite alternate;
-}
-.wpc-onboard__orb--b {
-  width: 460px;
-  height: 460px;
-  bottom: -200px;
-  right: 8%;
-  background: radial-gradient(circle, #34508f 0%, transparent 70%);
-  animation: wpc-orb-b 26s ease-in-out infinite alternate;
-}
-.wpc-onboard__orb--c {
-  width: 360px;
-  height: 360px;
-  top: 30%;
-  left: 45%;
-  background: radial-gradient(circle, #4a3f86 0%, transparent 70%);
-  opacity: 0.4;
-  animation: wpc-orb-c 30s ease-in-out infinite alternate;
-}
-@keyframes wpc-orb-a {
-  to {
-    transform: translate(180px, 120px) scale(1.1);
-  }
-}
-@keyframes wpc-orb-b {
-  to {
-    transform: translate(-220px, -90px) scale(1.15);
-  }
-}
-@keyframes wpc-orb-c {
-  to {
-    transform: translate(-160px, 70px) scale(0.9);
-  }
-}
-
-.wpc-onboard__inner {
-  position: relative;
-  padding-block: calc(var(--eos-space-10) * 1.5);
-}
-
-.wpc-onboard__head {
-  max-width: 680px;
-}
-.wpc-onboard__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-3);
-  margin: 0;
-  color: var(--ob-muted);
-  letter-spacing: 0.16em;
-}
-.wpc-onboard__eyebrow::before {
-  content: "";
-  width: 36px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--ob-glow);
-}
-.wpc-onboard__title {
-  margin-top: var(--eos-space-4);
-  font-size: clamp(2rem, 4.4vw, 3.25rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.028em;
-  color: var(--ob-text);
-}
-/* "signed in" — the last two words — in a pale navy-blue gradient. */
-.wpc-onboard__title .wpc-w:nth-last-of-type(-n + 2) .wpc-w__i {
-  background: linear-gradient(90deg, #e3e7ff, var(--ob-glow));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* Steps: four frosted cards in one row, with room between them for the arrow connectors. */
-.wpc-onboard__steps {
-  max-width: 1120px;
-  margin-top: var(--eos-space-8);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--eos-space-8);
-}
-.wpc-onboard .wpc-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: var(--eos-space-6) var(--eos-space-5) var(--eos-space-5);
-  text-align: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--ob-line);
-  border-radius: 18px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 16px 36px -26px rgba(0, 0, 0, 0.6);
-}
-/* Reveal (opacity/transform, staggered) plus the hover lift on `translate`, which the reveal never
-   touches — so hovering never inherits the stagger delay. */
-.wpc-onboard .wpc-steps.is-in > .wpc-step {
-  transition:
-    opacity var(--eos-slow) ease calc(var(--i, 0) * 90ms),
-    transform 500ms var(--eos-ease) calc(var(--i, 0) * 90ms),
-    translate 0.35s var(--eos-ease) 0s,
-    background-color 0.35s var(--eos-ease) 0s,
-    box-shadow 0.35s var(--eos-ease) 0s,
-    border-color 0.35s var(--eos-ease) 0s;
-}
-.wpc-onboard .wpc-step:hover {
-  translate: 0 -4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(201, 207, 230, 0.35);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 24px 44px -26px rgba(0, 0, 0, 0.7);
-}
-/* Arrow connector centred in the gap after every card but the last; it nudges forward on a slow loop,
-   each one a beat after the previous, so the eye reads the flow left to right. */
-.wpc-onboard .wpc-step:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: calc(var(--eos-space-8) / -2 - 10px);
-  width: 20px;
-  height: 20px;
-  margin-top: -10px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b3bce3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14M13 6l6 6-6 6'/%3E%3C/svg%3E")
-    center / contain no-repeat;
-  opacity: 0.8;
-  animation: wpc-ob-arrow 2.4s ease-in-out calc(var(--i, 0) * 0.3s) infinite;
-  pointer-events: none;
-}
-@keyframes wpc-ob-arrow {
-  0%,
-  100% {
-    transform: translateX(-2px);
-    opacity: 0.45;
-  }
-  50% {
-    transform: translateX(3px);
-    opacity: 0.95;
-  }
-}
-.wpc-onboard .wpc-step__num {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 28px;
-  height: 28px;
-  background: #ffffff;
-  color: var(--ob-navy);
-  font-size: var(--eos-text-sm);
-  box-shadow: 0 6px 14px -6px rgba(0, 0, 0, 0.5);
-}
-/* Icon circle: glass at rest, turning solid white with a navy glyph when its card is hovered. */
-.wpc-step__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  margin-bottom: var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: var(--ob-text);
-  transition:
-    background-color 0.35s var(--eos-ease),
-    color 0.35s var(--eos-ease),
-    transform 0.35s var(--eos-ease);
-}
-.wpc-onboard .wpc-step:hover .wpc-step__icon {
-  background: #ffffff;
-  color: var(--ob-navy);
-  transform: scale(1.06);
-}
-.wpc-onboard .wpc-step__body {
-  gap: 6px;
-}
-.wpc-onboard .wpc-step__title {
-  font-size: 1.0625rem;
-  color: var(--ob-text);
-}
-.wpc-onboard .wpc-step__text {
-  color: var(--ob-muted);
-  line-height: 1.55;
-}
-
-/* Actions and trial note close the same band. */
-.wpc-onboard__foot {
-  margin-top: var(--eos-space-8);
-}
-.wpc-onboard__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--eos-space-5);
-}
-.wpc-onboard__actions .eos-btn--primary {
-  height: 48px;
-  padding-inline: var(--eos-space-6);
-  border-radius: 10px;
-  background: #ffffff;
-  border-color: #ffffff;
-  color: var(--ob-navy);
-  font-size: var(--eos-text-md);
-  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.7);
-  transition:
-    background-color 0.25s var(--eos-ease),
-    box-shadow 0.25s var(--eos-ease),
-    translate 0.25s var(--eos-ease);
-}
-.wpc-onboard__actions .eos-btn--primary:hover {
-  background: #e9ecfb;
-  box-shadow: 0 16px 30px -14px rgba(0, 0, 0, 0.75);
-  translate: 0 -1px;
-}
-.wpc-onboard__divider {
-  width: 1px;
-  height: 28px;
-  background: rgba(255, 255, 255, 0.2);
-}
-.wpc-onboard__link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-2);
-  color: var(--ob-text);
-  font-weight: 600;
-  transition: color 0.25s var(--eos-ease);
-}
-.wpc-onboard__link:hover,
-.wpc-onboard__link:focus-visible {
-  color: var(--ob-muted);
-  text-decoration: none;
-}
-.wpc-onboard__link:hover .wpc-btn-arrow,
-.wpc-onboard__link:focus-visible .wpc-btn-arrow {
-  transform: translateX(3px);
-}
-.wpc-onboard__actions .eos-btn:focus-visible,
-.wpc-onboard__link:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 3px;
-}
-.wpc-onboard__note {
-  margin: var(--eos-space-4) 0 0;
-  color: var(--ob-faint);
-  font-size: var(--eos-text-sm);
-}
-
-/* Tablet: steps in a 2 x 2 grid (no connectors). */
-@media (max-width: 1100px) {
-  .wpc-onboard__steps {
-    max-width: 720px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--eos-space-4);
-  }
-  .wpc-onboard .wpc-step:not(:last-child)::after {
-    display: none;
-  }
-}
-
-/* Phone: steps stack as compact rows with the icon on the left; smaller light pools. */
-@media (max-width: 720px) {
-  .wpc-onboard__inner {
-    padding-block: var(--eos-space-10);
-  }
-  .wpc-onboard__orb--a {
-    width: 340px;
-    height: 340px;
-  }
-  .wpc-onboard__orb--b {
-    width: 300px;
-    height: 300px;
-  }
-  .wpc-onboard__orb--c {
-    display: none;
-  }
-  .wpc-onboard__steps {
-    grid-template-columns: 1fr;
-    margin-top: var(--eos-space-6);
-    gap: var(--eos-space-3);
-  }
-  .wpc-onboard .wpc-step {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: var(--eos-space-4);
-    padding: var(--eos-space-4);
-    text-align: left;
-  }
-  .wpc-onboard .wpc-step__num {
-    top: 8px;
-    left: 8px;
-    width: 22px;
-    height: 22px;
-    font-size: var(--eos-text-xs);
-  }
-  .wpc-step__icon {
-    flex: none;
-    width: 52px;
-    height: 52px;
-    margin: 6px 0 0 6px;
-  }
-  .wpc-onboard__foot {
-    margin-top: var(--eos-space-6);
-  }
-}
-@media (max-width: 420px) {
-  .wpc-onboard__divider {
-    display: none;
-  }
-  .wpc-onboard__actions {
-    gap: var(--eos-space-4);
-  }
-  .wpc-onboard__actions .eos-btn--primary {
-    width: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-onboard__orb,
-  .wpc-onboard .wpc-step:not(:last-child)::after {
-    animation: none;
-  }
-  .wpc-onboard::before {
-    display: none;
-  }
-  .wpc-onboard .wpc-steps.is-in > .wpc-step,
-  .wpc-step__icon,
-  .wpc-onboard__actions .eos-btn--primary,
-  .wpc-onboard__link {
-    transition: none;
-  }
-  .wpc-onboard .wpc-step:hover,
-  .wpc-onboard__actions .eos-btn--primary:hover {
-    translate: none;
-  }
-  .wpc-onboard .wpc-step:hover .wpc-step__icon {
-    transform: none;
-  }
-}
-
-/* ---- Features page ---- */
-/*
- * A navy hero with catalogue counts; a sticky product-area index (sidebar on wide screens, a scrolling
- * chip bar below 1100px) that highlights the area in view; a status filter; and module cards that lift
- * on hover with an accent line sweeping across the top and a soft spotlight following the pointer
- * (FeaturesPage sets --mx / --my per card). Uses the site's navy (#2a254e, the public --accent) and the
- * kit's neutral tokens; status colours match the ui-kit Badge tones. Reduced motion drops the motion.
- */
 .wpc-fx {
-  --fx-navy: #2a254e;
-  --fx-navy-deep: #1d1940;
-  --fx-soft: #f4f3f9;
-  --fx-sticky-top: calc(var(--eos-topbar-height) + var(--eos-space-6));
-}
-
-/* ---- hero ---- */
-.wpc-fx-hero {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  color: #ffffff;
-  background: linear-gradient(160deg, var(--fx-navy-deep) 0%, var(--fx-navy) 55%, #241f46 100%);
-}
-.wpc-fx-hero__aura {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-.wpc-fx-hero__orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.5;
-  will-change: transform;
-}
-.wpc-fx-hero__orb--a {
-  width: 480px;
-  height: 480px;
-  top: -200px;
-  left: -100px;
-  background: radial-gradient(circle, #3f4a9a 0%, transparent 70%);
-  animation: wpc-orb-a 24s ease-in-out infinite alternate;
-}
-.wpc-fx-hero__orb--b {
-  width: 420px;
-  height: 420px;
-  bottom: -220px;
-  right: 6%;
-  background: radial-gradient(circle, #34508f 0%, transparent 70%);
-  animation: wpc-orb-b 28s ease-in-out infinite alternate;
+  --fx-sticky-top: calc(var(--header-h) + 1.5rem);
 }
 .wpc-fx-hero__inner {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  column-gap: clamp(2rem, 1rem + 4vw, 4.5rem);
   align-items: center;
-  text-align: center;
-  padding-block: calc(var(--eos-space-10) * 1.6) calc(var(--eos-space-10) * 1.3);
-  animation: eos-fade-up 0.7s var(--eos-ease) both;
+  padding-block: clamp(2.5rem, 1.5rem + 3vw, 4.5rem) clamp(2.5rem, 2rem + 2vw, 3.5rem);
 }
-.wpc-fx-hero__eyebrow {
+.wpc-fx-hero__inner > * {
+  grid-column: 1;
+}
+.wpc-fx-hero__title,
+.wpc-pricing__title {
   margin: 0;
-  padding: 6px var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.06);
-  color: #c9cfe6;
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.wpc-fx-hero__title {
-  margin: var(--eos-space-5) 0 0;
-  font-size: clamp(2.25rem, 5vw, 3.75rem);
-  font-weight: 800;
-  line-height: 1.06;
-  letter-spacing: -0.03em;
-  text-wrap: balance;
+  font-size: var(--fs-h1);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
 }
 .wpc-fx-hero__subtitle {
-  margin: var(--eos-space-4) 0 0;
-  max-width: 60ch;
-  color: #c9cfe6;
-  font-size: var(--eos-text-lg);
-  line-height: 1.6;
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
 }
+/* Facts as one line of text, not a metric board. */
 .wpc-fx-stats {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  margin: var(--eos-space-8) 0 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  gap: 0.5rem 1.75rem;
+  margin: 1.75rem 0 0;
 }
 .wpc-fx-stat {
   display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: 2px;
-  min-width: 150px;
-  padding: var(--eos-space-4) var(--eos-space-6);
-}
-.wpc-fx-stat + .wpc-fx-stat {
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-}
-.wpc-fx-stat dt {
-  color: #b3bce3;
-  font-size: var(--eos-text-sm);
+  align-items: baseline;
+  gap: 0.4rem;
 }
 .wpc-fx-stat dd {
+  order: -1;
   margin: 0;
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wpc-fx-stat dt {
+  color: var(--c-muted);
+}
+.wpc-fx-hero__photo {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1068 / 768;
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  animation: wpc-settle 1s var(--ease) 0.15s both;
 }
 .wpc-fx-hero__actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
-  gap: var(--eos-space-5);
-  margin-top: var(--eos-space-8);
+  gap: 1.25rem;
+  margin-top: 1.75rem;
 }
-.wpc-fx-hero__actions .eos-btn--primary,
-.wpc-fx-cta__actions .eos-btn--primary {
-  height: 46px;
-  padding-inline: var(--eos-space-6);
-  border-radius: 10px;
-  background: #ffffff;
-  border-color: #ffffff;
-  color: var(--fx-navy);
-  transition:
-    background-color 0.25s var(--eos-ease),
-    translate 0.25s var(--eos-ease);
-}
-.wpc-fx-hero__actions .eos-btn--primary:hover,
-.wpc-fx-cta__actions .eos-btn--primary:hover {
-  background: #e9ecfb;
-  translate: 0 -1px;
-}
-.wpc-fx-hero__link {
+.wpc-fx-hero__link,
+.wpc-pricing__compare {
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
-  padding: var(--eos-space-2) 0;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0;
   border: 0;
   background: none;
-  color: #ffffff;
+  color: var(--c-ink);
   font: inherit;
-  font-weight: 600;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
   cursor: pointer;
-  transition: color 0.2s var(--eos-ease);
+  transition: color 0.2s var(--ease), text-decoration-color 0.2s var(--ease);
 }
-.wpc-fx-hero__link:hover {
-  color: #c9cfe6;
+.wpc-fx-hero__link:hover,
+.wpc-pricing__compare:hover {
+  color: var(--c-accent-strong);
+  text-decoration-color: currentColor;
 }
-.wpc-fx-hero__link svg {
-  transition: transform 0.25s var(--eos-ease);
+.wpc-fx-hero__link svg,
+.wpc-pricing__compare svg {
+  transition: transform 0.25s var(--ease);
 }
-.wpc-fx-hero__link:hover svg {
-  transform: translateY(2px);
-}
-.wpc-fx-hero__link:focus-visible,
-.wpc-fx-hero__actions .eos-btn:focus-visible,
-.wpc-fx-cta__actions .eos-btn:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 3px;
+.wpc-fx-hero__link:hover svg,
+.wpc-pricing__compare:hover svg {
+  transform: translateY(3px);
 }
 
-/* ---- catalogue layout: sticky index + main column ---- */
 .wpc-fx-body {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
-  gap: var(--eos-space-10);
-  padding-block: var(--eos-space-10);
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 3.5rem;
+  padding-block: 1rem var(--sp-section);
 }
 .wpc-fx-index {
   position: sticky;
   top: var(--fx-sticky-top);
   align-self: start;
-  max-height: calc(100vh - var(--fx-sticky-top) - var(--eos-space-6));
-  overflow-y: auto;
 }
 .wpc-fx-index__label {
-  margin: 0 0 var(--eos-space-3);
-  padding-inline: var(--eos-space-3);
-  color: var(--eos-muted);
-  font-size: var(--eos-text-xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  margin: 0 0 0.6rem;
+  padding-inline: 0.75rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
 }
 .wpc-fx-index__list {
   list-style: none;
@@ -2230,123 +1486,95 @@
   gap: 2px;
 }
 .wpc-fx-index__link {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--eos-space-3);
+  gap: 0.75rem;
   width: 100%;
-  padding: 9px var(--eos-space-3);
+  min-height: 38px;
+  padding: 0 0.75rem;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   background: transparent;
-  color: var(--eos-text-3);
+  color: var(--c-muted);
   font: inherit;
-  font-size: var(--eos-text-sm);
+  font-size: 0.9375rem;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 0.2s var(--eos-ease),
-    color 0.2s var(--eos-ease);
-}
-.wpc-fx-index__link::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--fx-navy);
-  transform: scaleY(0);
-  transition: transform 0.3s var(--eos-ease);
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
 }
 .wpc-fx-index__link:hover {
-  background: var(--fx-soft);
-  color: var(--eos-text);
+  background: var(--c-surface-2);
+  color: var(--c-ink);
 }
 .wpc-fx-index__link.is-active {
-  background: var(--fx-soft);
-  color: var(--fx-navy);
-  font-weight: 600;
-}
-.wpc-fx-index__link.is-active::before {
-  transform: scaleY(1);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
 }
 .wpc-fx-index__name {
   flex: 1;
   min-width: 0;
 }
 .wpc-fx-index__count {
-  min-width: 24px;
-  padding: 1px 7px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--eos-surface);
-  border: 1px solid var(--eos-border);
-  color: var(--eos-muted);
-  font-size: var(--eos-text-xs);
-  text-align: center;
-}
-.wpc-fx-index__link:focus-visible,
-.wpc-fx-chip:focus-visible,
-.wpc-fx-legend summary:focus-visible {
-  outline: 2px solid var(--fx-navy);
-  outline-offset: 2px;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- status filter ---- */
-.wpc-fx-filter {
-  padding-bottom: var(--eos-space-6);
-  border-bottom: 1px solid var(--eos-border);
-}
 .wpc-fx-filter__title {
-  margin: 0 0 var(--eos-space-3);
-  color: var(--eos-muted);
-  font-size: var(--eos-text-xs);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  margin: 0 0 0.6rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
 }
 .wpc-fx-filter__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--eos-space-2);
+  gap: 0.4rem;
 }
 .wpc-fx-chip {
-  --chip-dot: var(--eos-faint);
+  --chip-dot: #8f8a82;
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
-  min-height: 36px;
-  padding: 0 var(--eos-space-2) 0 var(--eos-space-3);
-  border: 1px solid var(--eos-border);
-  border-radius: var(--eos-radius-pill);
-  background: var(--eos-surface);
-  color: var(--eos-text-2);
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
   font: inherit;
-  font-size: var(--eos-text-sm);
+  font-size: 0.9375rem;
   font-weight: 500;
   cursor: pointer;
   transition:
-    background-color 0.2s var(--eos-ease),
-    border-color 0.2s var(--eos-ease),
-    color 0.2s var(--eos-ease);
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease);
 }
-.wpc-fx-chip[data-status="implemented"] { --chip-dot: #059669; }
-.wpc-fx-chip[data-status="partial"] { --chip-dot: #0284c7; }
-.wpc-fx-chip[data-status="specified"] { --chip-dot: #4f46e5; }
-.wpc-fx-chip[data-status="scaffold"] { --chip-dot: #d97706; }
-.wpc-fx-chip[data-status="planned"] { --chip-dot: #94a3b8; }
+.wpc-fx-chip[data-status="implemented"] { --chip-dot: #1f9d5c; }
+.wpc-fx-chip[data-status="partial"] { --chip-dot: #2f6fb0; }
+.wpc-fx-chip[data-status="specified"] { --chip-dot: #ea580c; }
+.wpc-fx-chip[data-status="scaffold"] { --chip-dot: #b7791f; }
+.wpc-fx-chip[data-status="planned"] { --chip-dot: #8f8a82; }
 .wpc-fx-chip:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--fx-navy) 35%, var(--eos-border));
+  background: var(--c-surface-3);
 }
 .wpc-fx-chip.is-active {
-  background: var(--fx-navy);
-  border-color: var(--fx-navy);
+  background: var(--c-ink);
+  color: #ffffff;
+}
+/* The selected chip stays navy on hover (one step lighter, the sidebar's raised navy) so its white
+   label stays readable; the general hover rule above is more specific and would turn it light. */
+.wpc-fx-chip.is-active:hover:not(:disabled) {
+  background: var(--c-inverse-2);
   color: #ffffff;
 }
 .wpc-fx-chip:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .wpc-fx-chip__dot {
@@ -2354,80 +1582,58 @@
   height: 8px;
   border-radius: 50%;
   background: var(--chip-dot);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--chip-dot) 18%, transparent);
 }
 .wpc-fx-chip__count {
-  min-width: 22px;
-  padding: 1px 7px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--fx-soft);
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-xs);
-  text-align: center;
-}
-.wpc-fx-chip.is-active .wpc-fx-chip__count {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
 }
 .wpc-fx-filter__result {
-  margin: var(--eos-space-3) 0 0;
-  color: var(--eos-muted);
-  font-size: var(--eos-text-sm);
+  margin: 0.9rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
 .wpc-fx-legend {
-  margin-top: var(--eos-space-3);
+  margin-top: 0.25rem;
 }
 .wpc-fx-legend summary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border-radius: var(--eos-radius-sm);
-  color: var(--fx-navy);
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
+  min-height: 44px;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
   cursor: pointer;
   list-style: none;
 }
 .wpc-fx-legend summary::-webkit-details-marker {
   display: none;
 }
-.wpc-fx-legend summary::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  margin-top: -3px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform 0.25s var(--eos-ease);
-}
-.wpc-fx-legend[open] summary::after {
-  margin-top: 3px;
-  transform: rotate(-135deg);
-}
 .wpc-fx-legend__list {
   list-style: none;
-  margin: var(--eos-space-3) 0 0;
-  padding: var(--eos-space-4);
+  margin: 0.4rem 0 0;
+  padding: 1.25rem 1.5rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--eos-space-3) var(--eos-space-5);
-  border: 1px solid var(--eos-border);
-  border-radius: 14px;
-  background: var(--fx-soft);
-  animation: eos-fade-up 0.35s var(--eos-ease) both;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem 2rem;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  animation: wpc-rise 0.3s var(--ease) both;
 }
 .wpc-fx-legend__list li {
   display: grid;
-  gap: 4px;
   justify-items: start;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
+  gap: 0.35rem;
+  color: var(--c-ink-2);
+  font-size: var(--fs-small);
 }
 
-/* ---- product area ---- */
 .wpc-fx-cat {
-  margin-top: var(--eos-space-10);
+  margin-top: 3.5rem;
   scroll-margin-top: var(--fx-sticky-top);
 }
 .wpc-fx-cat:focus {
@@ -2435,862 +1641,363 @@
 }
 .wpc-fx-cat__head {
   display: flex;
-  align-items: center;
-  gap: var(--eos-space-4);
-  margin-bottom: var(--eos-space-5);
-}
-.wpc-fx-cat__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: linear-gradient(150deg, #3a3466, var(--fx-navy));
-  color: #ffffff;
-  box-shadow: 0 10px 22px -14px rgba(42, 37, 78, 0.8);
-}
-.wpc-fx-cat__heading {
-  flex: 1;
-  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
 }
 .wpc-fx-cat__title {
   margin: 0;
-  color: var(--eos-text);
-  font-size: var(--eos-text-xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 .wpc-fx-cat__sub {
-  margin: 2px 0 0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
+  margin: 0.25rem 0 0;
+  max-width: 65ch;
+  color: var(--c-muted);
 }
 .wpc-fx-cat__count {
   flex: none;
-  padding: 4px 12px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--fx-soft);
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
-
-/* ---- module cards ---- */
+/* Each area is one white panel of module rows. */
 .wpc-fx-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: var(--eos-space-4);
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
 }
 .wpc-fx-card {
-  --card-accent: var(--fx-navy);
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--eos-space-3);
-  padding: var(--eos-space-5);
-  border: 1px solid var(--eos-border);
-  border-radius: 16px;
-  background: var(--eos-surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.3rem;
+  padding: 1.15rem 1.4rem;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+  transition: background-color 0.2s var(--ease);
 }
-.wpc-fx-card[data-status="implemented"] { --card-accent: #059669; }
-.wpc-fx-card[data-status="partial"] { --card-accent: #0284c7; }
-.wpc-fx-card[data-status="specified"] { --card-accent: #4f46e5; }
-.wpc-fx-card[data-status="scaffold"] { --card-accent: #d97706; }
-.wpc-fx-card[data-status="planned"] { --card-accent: #94a3b8; }
-/* Accent line that sweeps across the top on hover, in the card's status colour. */
-.wpc-fx-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: linear-gradient(90deg, var(--fx-navy), var(--card-accent));
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.45s var(--eos-ease);
-}
-/* Spotlight that follows the pointer (position from --mx / --my). */
-.wpc-fx-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgba(42, 37, 78, 0.07), transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s var(--eos-ease);
-  pointer-events: none;
-}
-/* Reveal (opacity/transform, staggered) plus hover on `translate`, which the reveal never touches —
-   so the hover never inherits the stagger delay. */
-.wpc-fx-grid.is-in > .wpc-fx-card {
-  transition:
-    opacity var(--eos-slow) ease calc(var(--i, 0) * 60ms),
-    transform 500ms var(--eos-ease) calc(var(--i, 0) * 60ms),
-    translate 0.3s var(--eos-ease) 0s,
-    border-color 0.3s var(--eos-ease) 0s,
-    box-shadow 0.3s var(--eos-ease) 0s;
+.wpc-fx-card:first-child {
+  box-shadow: none;
 }
 .wpc-fx-card:hover {
-  translate: 0 -4px;
-  border-color: color-mix(in srgb, var(--fx-navy) 22%, var(--eos-border));
-  box-shadow: 0 20px 40px -26px rgba(42, 37, 78, 0.45);
+  background: #fbf9f6;
 }
-.wpc-fx-card:hover::before {
-  transform: scaleX(1);
-}
-.wpc-fx-card:hover::after {
-  opacity: 1;
-}
-.wpc-fx-card__glyph {
-  position: absolute;
-  top: var(--eos-space-4);
-  right: var(--eos-space-4);
-  display: inline-flex;
+.wpc-fx-card__head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--fx-soft);
-  color: var(--fx-navy);
-  transition:
-    background-color 0.3s var(--eos-ease),
-    color 0.3s var(--eos-ease),
-    transform 0.3s var(--eos-ease);
-}
-.wpc-fx-card:hover .wpc-fx-card__glyph {
-  background: var(--fx-navy);
-  color: #ffffff;
-  transform: rotate(-8deg) scale(1.05);
+  justify-content: space-between;
+  gap: 1rem;
 }
 .wpc-fx-card__title {
-  margin: var(--eos-space-1) 0 0;
-  padding-right: 44px;
-  color: var(--eos-text);
-  font-size: var(--eos-text-lg);
-  font-weight: 700;
-  line-height: 1.3;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.35;
 }
 .wpc-fx-card__text {
   margin: 0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-  line-height: 1.6;
+  max-width: 65ch;
+  color: var(--c-ink-2);
+  line-height: 1.5;
 }
 .wpc-fx-card__roles {
   list-style: none;
-  margin: auto 0 0;
-  padding: var(--eos-space-3) 0 0;
+  margin: 0.15rem 0 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  width: 100%;
-  border-top: 1px dashed var(--eos-border);
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
-.wpc-fx-card__roles li {
-  padding: 3px 10px;
-  border-radius: var(--eos-radius-pill);
-  background: var(--fx-soft);
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-xs);
-  font-weight: 500;
+.wpc-fx-card__roles li:not(:last-child)::after {
+  content: "·";
+  margin-inline: 0.5em;
 }
 
-/* ---- "At a glance": four pillar cards ---- */
-/*
- * Four tall summary cards, each with its own restrained accent (icon tile, ticks, hover tint). On hover a
- * card lifts, a soft wash of its accent fades in from the top, the icon tile turns solid, the ticks
- * fill and the title takes the accent; each module row also highlights on its own hover. Cards fade up
- * in turn via RevealGroup; the hover lift uses `translate` so it never inherits the stagger delay.
- */
 .wpc-fx-sum {
-  border-top: 1px solid var(--eos-border);
-  background: linear-gradient(180deg, #faf9fd 0%, var(--eos-surface) 100%);
-}
-.wpc-fx-sum__inner {
-  padding-block: calc(var(--eos-space-10) * 1.4);
+  padding-block: var(--sp-section);
+  background: var(--c-surface-2);
 }
 .wpc-fx-sum__head {
-  max-width: 680px;
-  margin-inline: auto;
-  text-align: center;
-}
-.wpc-fx-sum__eyebrow {
-  display: inline-flex;
-  margin: 0;
-  padding: 5px var(--eos-space-3);
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid var(--eos-border);
-  background: var(--eos-surface);
-  color: var(--fx-navy);
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  max-width: 44rem;
 }
 .wpc-fx-sum__title {
-  margin: var(--eos-space-4) 0 0;
-  color: var(--eos-text);
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
-  text-wrap: balance;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 .wpc-fx-sum__lead {
-  margin: var(--eos-space-3) auto 0;
-  max-width: 58ch;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-md);
-  line-height: 1.6;
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
 }
 .wpc-fx-sum__grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--eos-space-5);
-  margin-top: var(--eos-space-10);
+  gap: 1.25rem;
+  margin-top: 2.5rem;
 }
-
 .wpc-fx-pillar {
-  --p-accent: #4338ca;
-  --p-tint: #eef0fd;
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  padding: var(--eos-space-6) var(--eos-space-5) var(--eos-space-5);
-  border: 1px solid var(--eos-border);
-  border-radius: 22px;
-  background: var(--eos-surface);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-.wpc-fx-pillar[data-pillar="practice"] {
-  --p-accent: #be185d;
-  --p-tint: #fdf0f6;
-}
-.wpc-fx-pillar[data-pillar="operations"] {
-  --p-accent: #0f766e;
-  --p-tint: #ebf7f5;
-}
-.wpc-fx-pillar[data-pillar="governance"] {
-  --p-accent: #b45309;
-  --p-tint: #fdf5e8;
-}
-/* Accent wash that fades in from the top on hover. */
-.wpc-fx-pillar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(180deg, var(--p-tint) 0%, transparent 55%);
-  opacity: 0;
-  transition: opacity 0.4s var(--eos-ease);
-}
-.wpc-fx-sum__grid.is-in > .wpc-fx-pillar {
-  transition:
-    opacity var(--eos-slow) ease calc(var(--i, 0) * 110ms),
-    transform 500ms var(--eos-ease) calc(var(--i, 0) * 110ms),
-    translate 0.35s var(--eos-ease) 0s,
-    border-color 0.35s var(--eos-ease) 0s,
-    box-shadow 0.35s var(--eos-ease) 0s;
-}
-.wpc-fx-pillar:hover {
-  translate: 0 -6px;
-  border-color: color-mix(in srgb, var(--p-accent) 28%, var(--eos-border));
-  box-shadow: 0 26px 50px -30px color-mix(in srgb, var(--p-accent) 55%, transparent);
-}
-.wpc-fx-pillar:hover::before {
-  opacity: 1;
-}
-
-.wpc-fx-pillar__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  background: var(--p-tint);
-  color: var(--p-accent);
-  transition:
-    background-color 0.35s var(--eos-ease),
-    color 0.35s var(--eos-ease),
-    transform 0.35s var(--eos-ease);
-}
-.wpc-fx-pillar:hover .wpc-fx-pillar__icon {
-  background: var(--p-accent);
-  color: #ffffff;
-  transform: rotate(-6deg) scale(1.05);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.75rem 1.5rem;
+  align-items: start;
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2.25rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
 }
 .wpc-fx-pillar__title {
-  margin: var(--eos-space-5) 0 0;
-  color: var(--eos-text);
-  font-size: var(--eos-text-xl);
-  font-weight: 700;
-  line-height: 1.25;
-  transition: color 0.35s var(--eos-ease);
-}
-.wpc-fx-pillar:hover .wpc-fx-pillar__title {
-  color: var(--p-accent);
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 .wpc-fx-pillar__summary {
-  margin: var(--eos-space-2) 0 0;
-  padding-bottom: var(--eos-space-5);
-  border-bottom: 1px solid var(--eos-border);
-  color: var(--eos-muted);
-  font-size: var(--eos-text-sm);
-  line-height: 1.55;
+  grid-column: 1 / span 5;
+  margin: 0;
+  color: var(--c-muted);
 }
-
+.wpc-fx-pillar__photo {
+  grid-column: 1 / span 5;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  margin-top: 0.5rem;
+  border-radius: var(--r-md);
+}
 .wpc-fx-pillar__list {
-  flex: 1;
+  grid-column: 7 / span 6;
+  grid-row: 1 / span 4;
   list-style: none;
-  margin: var(--eos-space-4) 0 0;
+  margin: 0;
   padding: 0;
   display: grid;
-  align-content: start;
-  gap: 2px;
 }
 .wpc-fx-pillar__item {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--eos-space-3);
-  margin-inline: -8px;
-  padding: 8px;
-  border-radius: 12px;
-  transition:
-    background-color 0.25s var(--eos-ease),
-    translate 0.25s var(--eos-ease);
+  padding: 0.75rem 0;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
 }
-.wpc-fx-pillar__item:hover {
-  background: color-mix(in srgb, var(--p-tint) 70%, transparent);
-  translate: 3px 0;
-}
-.wpc-fx-pillar__tick {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--p-accent) 55%, transparent);
-  color: var(--p-accent);
-  transition:
-    background-color 0.3s var(--eos-ease),
-    color 0.3s var(--eos-ease),
-    border-color 0.3s var(--eos-ease);
-}
-.wpc-fx-pillar:hover .wpc-fx-pillar__tick {
-  background: var(--p-accent);
-  border-color: var(--p-accent);
-  color: #ffffff;
+.wpc-fx-pillar__item:first-child {
+  padding-top: 0;
 }
 .wpc-fx-pillar__body {
   display: grid;
-  gap: 2px;
-  min-width: 0;
 }
 .wpc-fx-pillar__name {
-  color: var(--eos-text);
-  font-size: var(--eos-text-sm);
-  font-weight: 700;
-  line-height: 1.35;
+  font-weight: 600;
 }
 .wpc-fx-pillar__desc {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-xs);
-  line-height: 1.55;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  line-height: 1.5;
 }
-
 .wpc-fx-pillar__more {
+  grid-column: 1 / span 5;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--eos-space-2);
-  width: 100%;
-  margin-top: var(--eos-space-4);
-  padding: var(--eos-space-3) 0 0;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--eos-border);
   background: none;
-  color: var(--p-accent);
+  color: var(--c-accent-strong);
   font: inherit;
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
 }
-.wpc-fx-pillar__more:hover .wpc-btn-arrow,
-.wpc-fx-pillar__more:focus-visible .wpc-btn-arrow {
-  transform: translateX(4px);
-}
-.wpc-fx-pillar__more:focus-visible {
-  outline: 2px solid var(--p-accent);
-  outline-offset: 4px;
-  border-radius: 4px;
+.wpc-fx-pillar__more:hover .wpc-link__arrow,
+.wpc-fx-pillar__more:focus-visible .wpc-link__arrow {
+  transform: translateX(3px);
 }
 
-@media (max-width: 1180px) {
-  .wpc-fx-sum__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 640px) {
-  .wpc-fx-sum__inner {
-    padding-block: var(--eos-space-10);
-  }
-  .wpc-fx-sum__grid {
-    grid-template-columns: 1fr;
-    margin-top: var(--eos-space-8);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-fx-sum__grid.is-in > .wpc-fx-pillar,
-  .wpc-fx-pillar::before,
-  .wpc-fx-pillar__icon,
-  .wpc-fx-pillar__title,
-  .wpc-fx-pillar__item,
-  .wpc-fx-pillar__tick {
-    transition: none;
-  }
-  .wpc-fx-pillar:hover,
-  .wpc-fx-pillar__item:hover {
-    translate: none;
-  }
-  .wpc-fx-pillar:hover .wpc-fx-pillar__icon {
-    transform: none;
-  }
-}
-
-/* ---- closing CTA ---- */
+/* Closing banner: white panel on the cream, before the black footer. */
 .wpc-fx-cta {
-  margin-top: 0;
-  color: #ffffff;
-  background: linear-gradient(120deg, var(--fx-navy-deep), var(--fx-navy) 60%, #34306a);
+  padding-block: var(--sp-section);
 }
 .wpc-fx-cta__inner {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--eos-space-6);
-  padding-block: var(--eos-space-10);
+  gap: 1.5rem;
+  width: calc(100% - 2 * var(--m));
+  max-width: calc(1280px - 2 * var(--m));
+  padding: clamp(1.75rem, 1rem + 3vw, 3.5rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
 }
 .wpc-fx-cta__title {
   margin: 0;
-  font-size: clamp(1.5rem, 3vw, 2.125rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 .wpc-fx-cta__text {
-  margin: var(--eos-space-2) 0 0;
-  max-width: 52ch;
-  color: #c9cfe6;
+  margin: 0.75rem 0 0;
+  max-width: 46ch;
+  color: var(--c-ink-2);
 }
 .wpc-fx-cta__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--eos-space-3);
-}
-.wpc-fx-cta__actions .eos-btn--ghost {
-  height: 46px;
-  padding-inline: var(--eos-space-5);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 10px;
-  color: #ffffff;
-  transition:
-    background-color 0.25s var(--eos-ease),
-    border-color 0.25s var(--eos-ease);
-}
-.wpc-fx-cta__actions .eos-btn--ghost:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.55);
-  color: #ffffff;
+  gap: 0.5rem;
 }
 
-/* ---- responsive ---- */
+/* ---- plans & pricing ---- */
 
-/* Below 1100px the index becomes a sticky, horizontally scrolling chip bar above the catalogue. */
-@media (max-width: 1100px) {
-  .wpc-fx {
-    --fx-sticky-top: calc(var(--eos-topbar-height) + 64px);
-  }
-  .wpc-fx-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding-top: 0;
-  }
-  .wpc-fx-index {
-    top: var(--eos-topbar-height);
-    z-index: 5;
-    max-height: none;
-    overflow: visible;
-    margin-inline: calc(var(--eos-space-6) * -1);
-    padding: var(--eos-space-3) var(--eos-space-6);
-    background: color-mix(in srgb, var(--eos-surface) 92%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--eos-border);
-  }
-  .wpc-fx-index__label {
-    display: none;
-  }
-  .wpc-fx-index__list {
-    display: flex;
-    gap: var(--eos-space-2);
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-  .wpc-fx-index__list::-webkit-scrollbar {
-    display: none;
-  }
-  .wpc-fx-index__link {
-    width: auto;
-    white-space: nowrap;
-    padding: 7px var(--eos-space-3);
-    border: 1px solid var(--eos-border);
-    border-radius: var(--eos-radius-pill);
-  }
-  .wpc-fx-index__link::before {
-    display: none;
-  }
-  .wpc-fx-index__link.is-active {
-    background: var(--fx-navy);
-    border-color: var(--fx-navy);
-    color: #ffffff;
-  }
-  .wpc-fx-index__link.is-active .wpc-fx-index__count {
-    background: rgba(255, 255, 255, 0.18);
-    border-color: transparent;
-    color: #ffffff;
-  }
-  .wpc-fx-filter {
-    padding-top: var(--eos-space-6);
-  }
-}
-
-@media (max-width: 720px) {
-  .wpc-fx-hero__inner {
-    padding-block: var(--eos-space-10);
-  }
-  .wpc-fx-hero__subtitle {
-    font-size: var(--eos-text-md);
-  }
-  .wpc-fx-stat {
-    min-width: 0;
-    flex: 1 1 33%;
-    padding: var(--eos-space-3) var(--eos-space-2);
-  }
-  .wpc-fx-stat dd {
-    font-size: 1.5rem;
-  }
-  .wpc-fx-stat dt {
-    font-size: var(--eos-text-xs);
-  }
-  .wpc-fx-index {
-    margin-inline: calc(var(--eos-space-4) * -1);
-    padding-inline: var(--eos-space-4);
-  }
-  .wpc-fx-cat {
-    margin-top: var(--eos-space-8);
-  }
-  .wpc-fx-cat__head {
-    align-items: flex-start;
-  }
-  .wpc-fx-cat__icon {
-    width: 42px;
-    height: 42px;
-  }
-  .wpc-fx-cat__count {
-    display: none;
-  }
-  .wpc-fx-grid {
-    grid-template-columns: 1fr;
-  }
-  .wpc-fx-cta__inner {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-fx-hero__orb,
-  .wpc-fx-hero__inner,
-  .wpc-fx-legend__list {
-    animation: none;
-  }
-  .wpc-fx-grid.is-in > .wpc-fx-card,
-  .wpc-fx-card::before,
-  .wpc-fx-card::after,
-  .wpc-fx-card__glyph,
-  .wpc-fx-index__link,
-  .wpc-fx-index__link::before,
-  .wpc-fx-chip,
-  .wpc-fx-hero__actions .eos-btn--primary,
-  .wpc-fx-cta__actions .eos-btn {
-    transition: none;
-  }
-  .wpc-fx-card:hover,
-  .wpc-fx-hero__actions .eos-btn--primary:hover,
-  .wpc-fx-cta__actions .eos-btn--primary:hover {
-    translate: none;
-  }
-  .wpc-fx-card:hover .wpc-fx-card__glyph {
-    transform: none;
-  }
-}
-
-/* ---- "Get started": plans & pricing ---- */
-/*
- * Heading that cuts in word by word from above, plan cards in a soft tinted tray, and the selectable
- * plan (the free trial) as a featured dark-navy card. Cards fade/blur in one after another; prices
- * count up (SignUpPage's useCountUp). The site's navy (#2a254e, the public --accent) with the kit's
- * neutral tokens. Reduced motion shows everything in its final state.
- */
-.wpc-pricing {
-  --pr-navy: #2a254e;
-  --pr-navy-deep: #1d1940;
-  --pr-soft: #f4f3f9;
-  --pr-line: #e4e2ee;
-}
 .wpc-pricing__inner {
-  padding-block: calc(var(--eos-space-10) * 1.4) var(--eos-space-10);
+  padding-block: clamp(2.5rem, 1.5rem + 3vw, 4.5rem) var(--sp-section);
 }
-
 .wpc-pricing__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--eos-space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(2rem, 1rem + 4vw, 4.5rem);
+  align-items: center;
 }
 .wpc-pricing__intro {
-  max-width: 640px;
+  max-width: 44rem;
 }
-.wpc-pricing__eyebrow {
-  display: inline-flex;
-  margin: 0;
-  padding: 5px var(--eos-space-3);
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid var(--pr-line);
-  background: var(--pr-soft);
-  color: var(--pr-navy);
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  animation: eos-fade-up 0.6s var(--eos-ease) both;
-}
-.wpc-pricing__title {
-  margin: var(--eos-space-4) 0 0;
-  color: var(--eos-text);
-  font-size: clamp(2.25rem, 4.6vw, 3.25rem);
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-}
-/* Each word is clipped and drops into place from above, one after another. */
 .wpc-pricing__word {
   display: inline-block;
   overflow: hidden;
-  padding-block: 0.1em;
-  margin-block: -0.1em;
+  padding-block: 0.12em 0.08em;
+  margin-block: -0.12em -0.08em;
   vertical-align: top;
 }
 .wpc-pricing__word > span {
   display: inline-block;
-  animation: wpc-pr-cut 0.8s cubic-bezier(0.22, 1.2, 0.36, 1) calc(var(--w, 0) * 140ms + 80ms) both;
+  animation: wpc-line-up 0.8s var(--ease) calc(var(--w, 0) * 100ms + 80ms) both;
 }
-@keyframes wpc-pr-cut {
-  from {
-    transform: translateY(-105%);
-  }
-  to {
-    transform: translateY(0);
-  }
+@keyframes wpc-line-up {
+  from { transform: translateY(105%); }
+  to { transform: translateY(0); }
 }
 .wpc-pricing__lead {
-  margin: var(--eos-space-3) 0 0;
-  max-width: 56ch;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-lg);
-  line-height: 1.6;
-  animation: wpc-pr-in 0.6s var(--eos-ease) 0.3s both;
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+  animation: wpc-rise 0.6s var(--ease) 0.3s both;
 }
-.wpc-pricing__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--eos-space-2);
-  margin: 0;
-  padding: 10px var(--eos-space-4);
-  border-radius: var(--eos-radius-pill);
-  border: 1px solid var(--pr-line);
-  background: var(--eos-surface);
-  box-shadow: 0 6px 18px -12px rgba(42, 37, 78, 0.45);
-  color: var(--pr-navy);
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
-  animation: wpc-pr-in 0.6s var(--eos-ease) 0.45s both;
-}
-
-/* ---- the tray of plan cards ---- */
-.wpc-pricing__tray {
+.wpc-pricing__aside {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  align-items: stretch;
-  gap: var(--eos-space-3);
-  margin-top: var(--eos-space-8);
-  padding: var(--eos-space-3);
-  border: 1px solid var(--pr-line);
-  border-radius: 22px;
-  background: linear-gradient(180deg, var(--pr-soft), #e9e7f2);
+  gap: 1rem;
+}
+.wpc-pricing__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 840 / 560;
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  animation: wpc-settle 1s var(--ease) 0.2s both;
+}
+.wpc-pricing__trial {
+  margin: 0;
+  text-align: center;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  line-height: 1.35;
+  animation: wpc-rise 0.6s var(--ease) 0.45s both;
+}
+.wpc-pricing__trial strong {
+  color: var(--c-accent-strong);
+  font-weight: 600;
+}
+.wpc-pricing__tray {
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1rem;
+  margin-top: 3rem;
 }
 .wpc-plan-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: var(--eos-space-6) var(--eos-space-5) var(--eos-space-5);
-  border-radius: 16px;
-  color: var(--eos-text);
-  animation: wpc-pr-in 0.6s var(--eos-ease) calc(0.35s + var(--i, 0) * 0.15s) both;
+  padding: 2rem 1.75rem 1.75rem;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
+  animation: wpc-rise 0.6s var(--ease) calc(0.3s + var(--i, 0) * 0.1s) both;
   transition:
-    background-color 0.3s var(--eos-ease),
-    box-shadow 0.3s var(--eos-ease),
-    translate 0.3s var(--eos-ease);
+    box-shadow 0.25s var(--ease),
+    translate 0.25s var(--ease);
 }
-.wpc-plan-card:not(.is-featured):hover {
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 16px 34px -24px rgba(42, 37, 78, 0.45);
-  translate: 0 -3px;
+.wpc-plan-card:hover {
+  box-shadow: 0 0 0 1px var(--c-hairline), var(--sh-hover);
+  translate: 0 -2px;
 }
 .wpc-plan-card.is-featured {
-  position: relative;
-  z-index: 1;
-  scale: 1.04;
-  color: #ffffff;
-  background: linear-gradient(170deg, #3a3466 0%, var(--pr-navy) 45%, var(--pr-navy-deep) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 30px 60px -30px rgba(29, 25, 64, 0.8);
-}
-.wpc-plan-card.is-featured:hover {
-  translate: 0 -3px;
-}
-@keyframes wpc-pr-in {
-  from {
-    opacity: 0;
-    transform: translateY(-16px);
-    filter: blur(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
-  }
-}
-
-.wpc-plan-card__tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: var(--eos-radius-pill);
-  background: #e6e4f0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-xs);
-  font-weight: 600;
-}
-.wpc-plan-card__tag.is-live {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--c-inverse);
+  box-shadow: none;
   color: #ffffff;
 }
-.wpc-plan-card__tag.is-live::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
+.wpc-plan-card__name {
+  margin: 0 0 0.3rem;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-plan-card__desc {
+  margin: 0;
+  color: var(--c-ink-2);
+  line-height: 1.5;
 }
 .wpc-plan-card__price {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin: var(--eos-space-5) 0 0;
+  gap: 0.35rem;
+  margin: 1.5rem 0 0;
 }
 .wpc-plan-card__amount {
-  font-size: 2.5rem;
-  font-weight: 800;
+  font-size: var(--fs-h2);
+  font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 .wpc-plan-card__per {
-  margin: 4px 0 0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
+  margin: 0.25rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
+.is-featured .wpc-plan-card__desc,
 .is-featured .wpc-plan-card__per,
-.is-featured .wpc-plan-card__desc {
-  color: #c9cfe6;
-}
-.wpc-plan-card__name {
-  margin: var(--eos-space-4) 0 var(--eos-space-1);
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.wpc-plan-card__desc {
-  margin: 0;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-  line-height: 1.6;
+.is-featured .wpc-plan-card__includes li,
+.is-featured .wpc-plan-card__note {
+  color: var(--c-inverse-muted);
 }
 .wpc-plan-card__features {
   list-style: none;
-  margin: var(--eos-space-5) 0 0;
-  padding: 0;
+  margin: 1.5rem 0 0;
+  padding: 1.25rem 0 0;
   display: grid;
-  gap: 10px;
+  gap: 0.5rem;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+}
+.is-featured .wpc-plan-card__features {
+  box-shadow: inset 0 1px 0 var(--c-inverse-line);
 }
 .wpc-plan-card__features li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--eos-text-sm);
-  font-weight: 600;
-}
-.wpc-plan-card__features svg {
-  flex: none;
-  color: var(--pr-navy);
-}
-.is-featured .wpc-plan-card__features svg {
-  color: #b3bce3;
+  font-weight: 500;
 }
 .wpc-plan-card__includes {
-  margin-top: var(--eos-space-5);
-  padding-top: var(--eos-space-4);
-  border-top: 1px solid rgba(42, 37, 78, 0.12);
-}
-.is-featured .wpc-plan-card__includes {
-  border-top-color: rgba(255, 255, 255, 0.14);
+  margin-top: 1.25rem;
 }
 .wpc-plan-card__includes h3 {
-  margin: 0 0 var(--eos-space-3);
-  font-size: var(--eos-text-sm);
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-small);
   font-weight: 600;
 }
 .wpc-plan-card__includes ul {
@@ -3298,281 +2005,1378 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 10px;
+  gap: 0.35rem;
 }
 .wpc-plan-card__includes li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-  font-weight: 500;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
 }
-.is-featured .wpc-plan-card__includes li {
-  color: #e3e7ff;
-}
-.wpc-plan-card__check {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
+.wpc-plan-card__includes li::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.6rem;
   border-radius: 50%;
-  border: 1px solid var(--pr-navy);
-  background: var(--eos-surface);
-  color: var(--pr-navy);
-}
-.is-featured .wpc-plan-card__check {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  background: var(--c-accent);
+  vertical-align: 0.15em;
 }
 .wpc-plan-card__note {
-  margin: var(--eos-space-4) 0 0;
-  color: #b3bce3;
-  font-size: var(--eos-text-xs);
+  margin: 1.25rem 0 0;
+  font-size: var(--fs-small);
   line-height: 1.5;
 }
-
 .wpc-plan-card__cta {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--eos-space-2);
-  width: 100%;
-  min-height: 52px;
-  margin-top: var(--eos-space-6);
-  border-radius: 12px;
-  font-size: var(--eos-text-md);
-  font-weight: 600;
+  gap: 0.5rem;
+  min-height: 48px;
+  margin-top: 1.75rem;
+  border-radius: var(--r-sm);
+  font-size: 0.96875rem;
+  font-weight: 500;
+  text-decoration: none;
 }
 .is-featured .wpc-plan-card__cta {
-  background: #ffffff;
-  color: var(--pr-navy);
-  box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.6);
+  background: var(--c-accent);
+  color: var(--c-ink);
   transition:
-    background-color 0.25s var(--eos-ease),
-    translate 0.25s var(--eos-ease);
+    background-color 0.2s var(--ease),
+    transform 0.12s var(--ease);
 }
 .is-featured .wpc-plan-card__cta:hover {
-  background: #e9ecfb;
-  text-decoration: none;
-  translate: 0 -1px;
+  background: #ff7a2e;
 }
-.wpc-plan-card__cta:hover .wpc-btn-arrow,
-.wpc-plan-card__cta:focus-visible .wpc-btn-arrow {
+.is-featured .wpc-plan-card__cta:active {
+  transform: scale(0.98);
+}
+.wpc-plan-card__cta:hover .wpc-btn-arrow {
   transform: translateX(3px);
 }
-.is-featured .wpc-plan-card__cta:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 3px;
-}
 .wpc-plan-card__cta.is-locked {
-  border: 1px dashed #cfcbe0;
-  color: var(--eos-muted);
-  font-size: var(--eos-text-sm);
+  background: var(--c-canvas);
+  color: var(--c-muted);
+  font-size: var(--fs-small);
   cursor: not-allowed;
+}
+
+/* FAQ rows */
+.wpc-faq {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin-top: var(--sp-section);
+}
+.wpc-faq__title {
+  grid-column: 1 / span 4;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-faq__list {
+  grid-column: 6 / span 7;
+  display: grid;
+  gap: 0.5rem;
+}
+.wpc-faq__item {
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-faq__item summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 0.9rem 3.25rem 0.9rem 1.25rem;
+  border-radius: var(--r-md);
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 0.2s var(--ease);
+}
+.wpc-faq__item summary::-webkit-details-marker {
+  display: none;
+}
+.wpc-faq__item summary:hover {
+  background: #fbf9f6;
+}
+.wpc-faq__item summary::before,
+.wpc-faq__item summary::after {
+  content: "";
+  position: absolute;
+  right: 1.35rem;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--c-ink);
+  transition: transform 0.3s var(--ease);
+}
+.wpc-faq__item summary::after {
+  transform: rotate(90deg);
+}
+.wpc-faq__item[open] summary::after {
+  transform: rotate(0deg);
+}
+.wpc-faq__item p {
+  margin: 0;
+  padding: 0 1.25rem 1.15rem;
+  max-width: 62ch;
+  color: var(--c-ink-2);
+  animation: wpc-rise 0.3s var(--ease) both;
 }
 
 .wpc-pricing__foot {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--eos-space-3);
-  margin-top: var(--eos-space-8);
+  gap: 1rem;
+  margin-top: 2.5rem;
 }
 .wpc-pricing__link {
-  color: var(--eos-text-3);
-  font-size: var(--eos-text-sm);
-}
-.wpc-pricing__link strong {
-  color: var(--pr-navy);
-}
-.wpc-pricing__link:hover {
-  color: var(--pr-navy);
-}
-
-/* Narrower screens: no scale on the featured card (it would touch the tray edge). */
-@media (max-width: 900px) {
-  .wpc-plan-card.is-featured {
-    scale: 1;
-  }
-}
-@media (max-width: 600px) {
-  .wpc-pricing__inner {
-    padding-top: var(--eos-space-10);
-  }
-  .wpc-pricing__lead {
-    font-size: var(--eos-text-md);
-  }
-  .wpc-pricing__tray {
-    padding: var(--eos-space-2);
-  }
-  .wpc-plan-card {
-    padding: var(--eos-space-5) var(--eos-space-4) var(--eos-space-4);
-  }
-  .wpc-plan-card__amount {
-    font-size: 2.125rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wpc-pricing__eyebrow,
-  .wpc-pricing__word > span,
-  .wpc-pricing__lead,
-  .wpc-pricing__pill,
-  .wpc-plan-card {
-    animation: none;
-  }
-  .wpc-plan-card,
-  .is-featured .wpc-plan-card__cta {
-    transition: none;
-  }
-  .wpc-plan-card:hover,
-  .is-featured .wpc-plan-card__cta:hover {
-    translate: none;
-  }
-}
-
-/* ---- CTA button with a nudging arrow ---- */
-
-.wpc-btn-inner {
   display: inline-flex;
   align-items: center;
-  gap: var(--eos-space-2);
+  gap: 0.3em;
+  min-height: 44px;
+  color: var(--c-muted);
 }
-.wpc-btn-arrow {
-  transition: transform var(--eos-fast) var(--eos-ease);
+.wpc-pricing__link strong {
+  color: var(--c-ink);
+  font-weight: 600;
 }
-.wpc .eos-btn:hover .wpc-btn-arrow,
-.wpc .eos-btn:focus-visible .wpc-btn-arrow {
-  transform: translateX(3px);
-}
-
-/* Hero CTAs: one purple theme — solid violet primary, lavender glass secondary — with smooth hovers. */
-.wpc-hero__actions .eos-btn {
-  transition:
-    background var(--eos-fast) var(--eos-ease),
-    border-color var(--eos-fast) var(--eos-ease),
-    color var(--eos-fast) var(--eos-ease),
-    box-shadow var(--eos-fast) var(--eos-ease);
-}
-.wpc-hero__actions .eos-btn--primary {
-  background: #7c3aed;
-  border-color: #8b5cf6;
-  color: #ffffff;
-  box-shadow: 0 6px 18px -8px rgba(124, 58, 237, 0.7);
-}
-.wpc-hero__actions .eos-btn--primary:hover {
-  background: #6d28d9;
-  border-color: #a78bfa;
-  box-shadow: 0 8px 22px -8px rgba(124, 58, 237, 0.85);
-}
-.wpc-hero__actions .eos-btn--secondary {
-  background: rgba(167, 139, 250, 0.14);
-  border-color: rgba(216, 180, 254, 0.7);
-  color: #f3e8ff;
-}
-.wpc-hero__actions .eos-btn--secondary:hover {
-  background: rgba(167, 139, 250, 0.28);
-  border-color: #d8b4fe;
-  color: #ffffff;
-}
-.wpc-hero__actions .eos-btn:focus-visible {
-  outline: 2px solid #d8b4fe;
-  outline-offset: 2px;
+.wpc-pricing__link:hover {
+  color: var(--c-accent-strong);
 }
 
-/* ---- focus-visible states ---- */
+
+/* ---- styled dropdown (components/Listbox.tsx) ---- */
+
+.wpc-lb {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+  text-align: left;
+}
+.wpc-lb__label {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-lb__button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 50px;
+  padding: 0 0.9rem 0 1rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline), 0 1px 2px rgba(42, 37, 78, 0.04);
+  color: var(--c-ink);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+.wpc-lb__button:hover {
+  box-shadow: inset 0 0 0 1px var(--c-ink-2), 0 1px 2px rgba(42, 37, 78, 0.04);
+}
+.wpc-lb.is-open .wpc-lb__button {
+  box-shadow: inset 0 0 0 2px var(--c-accent-strong);
+}
+.wpc-lb__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wpc-lb__hint {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.wpc-lb__chevron {
+  flex: none;
+  color: var(--c-muted);
+  transition: transform 0.25s var(--ease);
+}
+.wpc-lb.is-open .wpc-lb__chevron {
+  transform: rotate(180deg);
+}
+.wpc-lb__list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 16rem;
+  max-height: min(22rem, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline), 0 24px 48px -20px rgba(42, 37, 78, 0.35);
+  outline: none;
+  transform-origin: top center;
+  animation: wpc-pop 0.18s var(--ease) both;
+  scrollbar-width: thin;
+}
+@keyframes wpc-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wpc-lb__option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 42px;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--r-sm);
+  color: var(--c-ink);
+  font-size: 0.96875rem;
+  cursor: pointer;
+}
+.wpc-lb__option.is-active {
+  background: var(--c-canvas);
+}
+.wpc-lb__option[aria-selected="true"] {
+  font-weight: 600;
+}
+.wpc-lb__option-label {
+  flex: 1;
+  min-width: 0;
+}
+.wpc-lb__option-hint {
+  flex: none;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.wpc-lb__tick {
+  flex: none;
+  color: var(--c-accent-strong);
+}
+.wpc-fs__select {
+  max-width: 26rem;
+}
+
+/* ---- hero background: a dot field that lights up around the pointer ---- */
+
+.wpc-hx__bg {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: min(100%, 760px);
+  pointer-events: none;
+}
+.wpc-hx__dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at center, rgba(42, 37, 78, 0.16) 1.1px, transparent 1.6px);
+  background-size: 22px 22px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 30%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 30%, #000 30%, transparent 78%);
+}
+/* The lit copy: orange dots, only inside a soft circle that follows the pointer (--gx / --gy). */
+.wpc-hx__dots--lit {
+  background-image: radial-gradient(circle at center, var(--c-accent) 1.4px, transparent 2px);
+  -webkit-mask-image: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 30%), #000 0%, transparent 70%);
+  mask-image: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 30%), #000 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.45s var(--ease);
+}
+.wpc-hx.is-lit .wpc-hx__dots--lit {
+  opacity: 1;
+}
+/* Touch and pen: no pointer to follow, so a slow light drifts across the field instead. */
+@media (hover: none) {
+  .wpc-hx__dots--lit {
+    opacity: 0.8;
+    animation: wpc-drift-light 9s ease-in-out infinite alternate;
+  }
+}
+@keyframes wpc-drift-light {
+  from { --gx: 20%; --gy: 20%; }
+  to { --gx: 80%; --gy: 45%; }
+}
+@property --gx {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+@property --gy {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 30%;
+}
+
+/* ---- mobile menu: a full-height sheet under the header ---- */
+
+.wpc-mobile-nav {
+  position: fixed;
+  z-index: 19;
+  inset: var(--header-h) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem var(--m) calc(1.5rem + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--c-canvas);
+  box-shadow: inset 0 1px 0 var(--c-hairline);
+  animation: wpc-sheet 0.3s var(--ease) both;
+}
+@keyframes wpc-sheet {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wpc-mobile-nav:focus {
+  outline: none;
+}
+.wpc-mobile-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-mobile-nav__list li {
+  box-shadow: inset 0 -1px 0 var(--c-hairline);
+  animation: wpc-rise 0.4s var(--ease) both;
+}
+.wpc-mobile-nav__list li:nth-child(2) { animation-delay: 40ms; }
+.wpc-mobile-nav__list li:nth-child(3) { animation-delay: 80ms; }
+.wpc-mobile-nav__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+.wpc-mobile-nav__link svg {
+  color: var(--c-muted);
+  transition: transform 0.25s var(--ease), color 0.2s var(--ease);
+}
+.wpc-mobile-nav__link:hover svg,
+.wpc-mobile-nav__link:focus-visible svg {
+  transform: translateX(4px);
+  color: var(--c-accent-strong);
+}
+.wpc-mobile-nav__link.is-active {
+  color: var(--c-accent-strong);
+}
+.wpc-mobile-nav__actions {
+  display: grid;
+  gap: 0.6rem;
+}
+.wpc-mobile-nav__actions .eos-btn {
+  width: 100%;
+  height: 50px;
+}
+.wpc-mobile-nav__actions .eos-btn--secondary {
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline); /* taste-skill-ignore: outline on a secondary button */
+}
+.wpc-mobile-nav__note {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  text-align: center;
+}
+
+/* ---- features: the small-screen jump dropdown ---- */
+
+.wpc-fx-jump {
+  display: none;
+}
+
+
+/* ---- features hero background: the catalogue as a wall of tiles (components/ModuleWall.tsx) ---- */
+
+.wpc-fx-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+/* The copy and photo take the pointer; the gaps between them let it reach the wall. */
+.wpc-fx-hero__inner {
+  position: relative;
+  pointer-events: none;
+}
+.wpc-fx-hero__inner > * {
+  pointer-events: auto;
+}
+.wpc-mw {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 1), var(--cell));
+  grid-auto-rows: var(--cell);
+  /* Calm behind the copy, full strength on the right where the photo sits. */
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.3) 42%, #000 68%),
+    linear-gradient(180deg, #000 70%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.3) 42%, #000 68%),
+    linear-gradient(180deg, #000 70%, transparent 100%);
+  mask-composite: intersect;
+}
+.wpc-mw__cell {
+  --lift: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 5px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(42, 37, 78, calc(0.07 + var(--lift) * 0.25));
+  color: var(--c-muted);
+  transform: translateY(calc(var(--lift) * -7px)) scale(calc(1 + var(--lift) * 0.1));
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease), opacity 0.35s var(--ease),
+    background-color 0.35s var(--ease);
+}
+.wpc-mw__tile {
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline),
+    0 calc(2px + var(--lift) * 14px) calc(4px + var(--lift) * 22px) -6px rgba(42, 37, 78, calc(0.08 + var(--lift) * 0.2));
+  color: var(--c-ink-2);
+}
+.wpc-mw__tile.is-implemented {
+  background: var(--c-accent);
+  color: #fff;
+}
+.wpc-mw__tile.is-partial {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+.wpc-mw__tile.is-scaffold,
+.wpc-mw__tile.is-planned {
+  background: transparent;
+  box-shadow: none;
+  outline: 1.5px dashed rgba(42, 37, 78, 0.28);
+  outline-offset: -1.5px;
+  color: var(--c-muted);
+}
+/* The module's name, above the tile under the pointer. */
+.wpc-mw__tip {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: grid;
+  gap: 0.1rem;
+  width: max-content;
+  max-width: 14rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--r-sm);
+  background: var(--c-inverse);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  pointer-events: none;
+}
+.wpc-mw__tip em {
+  color: var(--c-accent-mark);
+  font-size: 0.75rem;
+  font-style: normal;
+}
+.wpc-mw__tile:hover {
+  z-index: 3;
+}
+.wpc-mw__tile:hover .wpc-mw__tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Pointing at a count picks out its tiles. */
+.wpc-mw.is-code .wpc-mw__cell:not(.has-code),
+.wpc-mw.is-modules .wpc-mw__cell:not(.wpc-mw__tile) {
+  opacity: 0.25;
+}
+.wpc-mw.is-code .has-code,
+.wpc-mw.is-modules .wpc-mw__tile {
+  --lift: 0.6;
+}
+.wpc-fx-stat--wall {
+  cursor: default;
+}
+.wpc-fx-stat--wall dt {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--c-hairline);
+  text-underline-offset: 0.3em;
+  transition: color 0.2s var(--ease);
+}
+.wpc-fx-stat--wall:hover dt {
+  color: var(--c-accent-strong);
+}
+/* Touch: nothing to follow, so a slow wave crosses the wall corner to corner. */
+@media (hover: none) {
+  .wpc-mw__cell {
+    animation: wpc-mw-wave 7s var(--ease) infinite;
+    animation-delay: calc(var(--d, 0) * 110ms);
+  }
+}
+@keyframes wpc-mw-wave {
+  0%, 16%, 100% { transform: none; }
+  8% { transform: translateY(-5px) scale(1.08); }
+}
+@media (max-width: 1100px) {
+  /* One column: the copy runs full width, so keep the wall quiet above the photo. */
+  .wpc-mw {
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.07) 12%, rgba(0, 0, 0, 0.07) 52%, #000 62%, #000 85%, transparent 100%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.07) 12%, rgba(0, 0, 0, 0.07) 52%, #000 62%, #000 85%, transparent 100%);
+  }
+}
+
+
+/* ---- pricing hero background: the free trial as a dial around the photo (components/TrialDial.tsx) ---- */
+
+.wpc-pricing {
+  overflow-x: clip;
+}
+/* A square that holds the whole dial; the photo is its round face. */
+.wpc-pricing__dialwrap {
+  position: relative;
+  isolation: isolate;
+  justify-self: center;
+  width: min(100%, 500px);
+  aspect-ratio: 1;
+  margin-block: -4% 0.5rem; /* top: the outer ring of fine marks needs no extra air; bottom: room for the day label */
+}
+.wpc-pricing__dialwrap .wpc-pricing__photo {
+  position: absolute;
+  top: 15.2%;
+  left: 15.2%;
+  width: 69.6%;
+  height: 69.6%;
+  aspect-ratio: auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.wpc-dial {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.wpc-dial__glow {
+  fill: var(--c-accent-soft);
+  opacity: 0.7;
+  filter: blur(36px);
+}
+.wpc-dial__face {
+  fill: none;
+  stroke: var(--c-hairline);
+  stroke-width: 1;
+}
+.wpc-dial__minutes {
+  stroke: rgba(42, 37, 78, 0.22);
+  stroke-width: 1.2;
+  transform-origin: 0 0;
+  animation: wpc-dial-turn 140s linear infinite;
+}
+@keyframes wpc-dial-turn {
+  to { transform: rotate(360deg); }
+}
+.wpc-dial__tick {
+  stroke: rgba(42, 37, 78, 0.2);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke 0.2s var(--ease), stroke-width 0.2s var(--ease);
+}
+.wpc-dial__tick.is-used {
+  stroke: var(--c-accent);
+}
+.wpc-dial__tick.is-now {
+  stroke: var(--c-accent-strong);
+  stroke-width: 5;
+}
+.wpc-dial__track {
+  fill: none;
+  stroke: rgba(42, 37, 78, 0.08);
+  stroke-width: 4;
+}
+/* The trial arc starts at twelve o'clock and draws itself in on arrival. */
+.wpc-dial__arc {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-origin: 0 0;
+  transition: stroke-dashoffset 0.35s var(--ease);
+  animation: wpc-dial-fill 2.4s var(--ease) 0.5s both;
+}
+.wpc-dial.is-scrubbing .wpc-dial__arc {
+  animation: none;
+}
+@keyframes wpc-dial-fill {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+.wpc-dial__label rect {
+  fill: var(--c-inverse);
+}
+.wpc-dial__label text {
+  fill: #ffffff;
+  font-size: 27px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+/* Touch: no pointer to scrub with, so the trial fills and empties slowly. */
+@media (hover: none) {
+  .wpc-dial__arc {
+    animation: wpc-dial-fill 5s var(--ease) 0.5s infinite alternate both;
+  }
+}
+
+
+/* ---- pricing hero: ledger-paper band behind the whole first section ---- */
+
+.wpc-pricing__head {
+  position: relative;
+  isolation: isolate;
+  padding-bottom: clamp(1rem, 0.5rem + 2vw, 2.5rem);
+}
+/* Full-bleed: from the top of the page to just under the section, edge to edge. */
+.wpc-pricing__head::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  top: calc(-1 * clamp(2.5rem, 1.5rem + 3vw, 4.5rem));
+  bottom: -1rem;
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  background:
+    radial-gradient(38rem 28rem at 78% 42%, rgba(253, 228, 211, 0.85), transparent 70%),
+    radial-gradient(30rem 20rem at 8% 88%, rgba(253, 186, 140, 0.22), transparent 70%),
+    repeating-linear-gradient(180deg, transparent 0 31px, rgba(42, 37, 78, 0.055) 31px 32px);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+}
+/* The ledger's margin: a double orange rule down the left of the content. */
+.wpc-pricing__head::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * clamp(2.5rem, 1.5rem + 3vw, 4.5rem));
+  bottom: 0;
+  left: clamp(-2.25rem, -2vw, -0.6rem);
+  width: 5px;
+  border-inline: 1px solid rgba(242, 96, 12, 0.35);
+  -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ---- pricing hero: the trial journey (components/TrialJourney.tsx) ---- */
+
+.wpc-tj__label {
+  margin: 2rem 0 0.6rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  animation: wpc-rise 0.6s var(--ease) 0.4s both;
+}
+.wpc-tj {
+  max-width: 34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wpc-tj__step {
+  position: relative;
+  padding-left: 2.75rem;
+  animation: wpc-rise 0.6s var(--ease) both;
+}
+.wpc-tj__step:nth-child(1) { animation-delay: 0.45s; }
+.wpc-tj__step:nth-child(2) { animation-delay: 0.5s; }
+.wpc-tj__step:nth-child(3) { animation-delay: 0.55s; }
+.wpc-tj__step:nth-child(4) { animation-delay: 0.6s; }
+.wpc-tj__step:nth-child(5) { animation-delay: 0.65s; }
+/* The rail between numbers; the open step's segment fills while the journey plays by itself. */
+.wpc-tj__step:not(:last-child)::before,
+.wpc-tj__step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 2.4rem;
+  bottom: -0.15rem;
+  left: 0.95rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--c-hairline);
+}
+.wpc-tj__step:not(:last-child)::after {
+  background: var(--c-accent);
+  transform-origin: top;
+  transform: scaleY(0);
+}
+.wpc-tj__step.is-done::after {
+  transform: scaleY(1);
+}
+.wpc-tj.is-auto .wpc-tj__step.is-active::after {
+  animation: wpc-tj-fill var(--step-ms, 5s) linear both;
+}
+@keyframes wpc-tj-fill {
+  to { transform: scaleY(1); }
+}
+.wpc-tj__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 48px;
+  margin-left: -2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-ink-2);
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+.wpc-tj__head:hover {
+  color: var(--c-ink);
+}
+.wpc-tj__num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline);
+  color: var(--c-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.25s var(--ease), color 0.25s var(--ease), box-shadow 0.25s var(--ease),
+    transform 0.25s var(--ease);
+}
+.wpc-tj__head:hover .wpc-tj__num {
+  box-shadow: inset 0 0 0 1px var(--c-ink-2);
+}
+.wpc-tj__step.is-done .wpc-tj__num {
+  background: var(--c-accent-soft);
+  box-shadow: none;
+  color: var(--c-accent-strong);
+}
+.wpc-tj__step.is-active .wpc-tj__head {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-tj__step.is-active .wpc-tj__num {
+  background: var(--c-ink);
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+  color: #ffffff;
+  transform: scale(1.06);
+}
+/* Open/close by animating the row height (0fr -> 1fr); closed steps are hidden from assistive tech. */
+.wpc-tj__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows 0.4s var(--ease), visibility 0s linear 0.4s;
+}
+.wpc-tj__body > p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--c-ink-2);
+  line-height: 1.55;
+}
+.wpc-tj__step.is-active .wpc-tj__body {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 0.4s var(--ease), visibility 0s;
+}
+.wpc-tj__step.is-active .wpc-tj__body > p {
+  padding-bottom: 0.9rem;
+}
+.wpc-pricing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  animation: wpc-rise 0.6s var(--ease) 0.7s both;
+}
+
+
+/* ---- features: product-area colours, as in the admin sidebar ---- */
+#wpc-cat-student-lifecycle,
+.wpc-fx-index__link[data-area="student-lifecycle"] { --area: #3b82f6; --area-t: #eff6ff; --area-at: #1d4ed8; }
+#wpc-cat-academics,
+.wpc-fx-index__link[data-area="academics"] { --area: #7c3aed; --area-t: #f5f3ff; --area-at: #6d28d9; }
+#wpc-cat-practice,
+.wpc-fx-index__link[data-area="practice"] { --area: #4338ca; --area-t: #eef2ff; --area-at: #4338ca; }
+#wpc-cat-campus-life,
+.wpc-fx-index__link[data-area="campus-life"] { --area: #e45a8a; --area-t: #fff1f5; --area-at: #be185d; }
+#wpc-cat-facilities,
+.wpc-fx-index__link[data-area="facilities"] { --area: #d97706; --area-t: #fffbeb; --area-at: #b45309; }
+#wpc-cat-finance-operations,
+.wpc-fx-index__link[data-area="finance-operations"] { --area: #0f9f8a; --area-t: #f0fdfa; --area-at: #0f766e; }
+#wpc-cat-governance,
+.wpc-fx-index__link[data-area="governance"] { --area: #c026d3; --area-t: #fdf4ff; --area-at: #a21caf; }
+#wpc-cat-support,
+.wpc-fx-index__link[data-area="support"] { --area: #64748b; --area-t: #f1f5f9; --area-at: #334155; }
+#wpc-cat-sports,
+.wpc-fx-index__link[data-area="sports"] { --area: #059669; --area-t: #ecfdf5; --area-at: #047857; }
+#wpc-cat-platform,
+.wpc-fx-index__link[data-area="platform"] { --area: #4338ca; --area-t: #eef2ff; --area-at: #4338ca; }
+/* The area's panel carries a top rule in its colour; rows take its tint on hover. */
+.wpc-fx-cat .wpc-fx-grid {
+  box-shadow: 0 0 0 1px var(--c-hairline), inset 0 3px 0 var(--area, transparent);
+}
+.wpc-fx-cat .wpc-fx-card:hover {
+  background: var(--area-t, #fbf9f6);
+}
+.wpc-fx-cat .wpc-fx-card:hover .wpc-fx-card__title {
+  color: var(--area-at, var(--c-ink));
+}
+/* Index: hover takes the area's tint; the active row keeps it with the admin's 3px indicator. */
+.wpc-fx-index__link[data-area]:hover {
+  background: var(--area-t);
+  color: var(--area-at);
+}
+.wpc-fx-index__link[data-area].is-active {
+  background: var(--area-t);
+  box-shadow: inset 3px 0 0 var(--area);
+  color: var(--area-at);
+}
+.wpc-fx-index__link[data-area].is-active .wpc-fx-index__count {
+  color: var(--area-at);
+}
+
+/* ---- focus ---- */
 
 .wpc a:focus-visible,
-.wpc-nav__link:focus-visible,
-.wpc-nav-toggle:focus-visible,
-.wpc-mobile-nav__link:focus-visible,
-.wpc-footer__link:focus-visible,
-.wpc-footer__logo:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--eos-radius-sm);
+.wpc button:focus-visible,
+.wpc summary:focus-visible,
+.wpc select:focus-visible,
+.wpc .eos-btn:focus-visible {
+  outline: 2px solid var(--c-accent-strong);
+  outline-offset: 3px;
+}
+.wpc-tr a:focus-visible,
+.wpc-footer a:focus-visible,
+.is-featured .wpc-plan-card__cta:focus-visible {
+  outline-color: #ffffff;
 }
 
 /* ---- responsive ---- */
 
-@media (max-width: 960px) {
-  .wpc-hero {
-    padding-block: var(--eos-space-8);
+@media (max-width: 1024px) {
+  .wpc-ch__head,
+  .wpc-ch__table,
+  .wpc-tr__title,
+  .wpc-tr__list,
+  .wpc-st__title,
+  .wpc-st__steps,
+  .wpc-st__cta,
+  .wpc-faq__title,
+  .wpc-faq__list {
+    grid-column: 1 / -1;
   }
-  /* Tablet: roughly two showcase cards at a time. */
-  .wpc-showcase__card {
-    flex-basis: calc((100% - var(--eos-space-4)) / 2);
+  .wpc-ch__table {
+    margin-top: 1.5rem;
+  }
+  .wpc-tr__list {
+    margin-top: 1rem;
+  }
+  .wpc-st__title {
+    position: static;
+    margin-bottom: 0.75rem;
+  }
+  .wpc-pricing__head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-pricing__aside {
+    max-width: 560px;
+  }
+  .wpc-pricing__dialwrap {
+    width: min(100%, 380px);
   }
 }
 
-@media (max-width: 720px) {
-  .wpc-container {
-    padding-inline: var(--eos-space-4);
+@media (max-width: 1100px) {
+  .wpc-fx-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-top: 0;
   }
-  /* Mobile: one showcase card at a time, with a sliver of the next peeking at the edge. */
-  .wpc-showcase__card {
-    flex-basis: 86%;
+  .wpc-fx {
+    --fx-sticky-top: calc(var(--header-h) + 4.5rem);
   }
-  .wpc-hero {
-    padding-block: var(--eos-space-8) var(--eos-space-4);
+  .wpc-fx-index {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 15;
+    margin-inline: calc(var(--m) * -1);
+    padding: 0.6rem var(--m);
+    background: var(--c-canvas);
+    box-shadow: inset 0 -1px 0 var(--c-hairline);
   }
-  .wpc-hero__subtitle {
-    font-size: var(--eos-text-md);
+  .wpc-fx-index__label,
+  .wpc-fx-index__list {
+    display: none;
   }
-  .wpc-hero__ticker {
-    padding-bottom: var(--eos-space-6);
+  .wpc-fx-jump {
+    display: block;
   }
-  .wpc-ticker__track {
-    gap: var(--eos-space-2);
+  .wpc-fx-jump .wpc-lb__button {
+    min-height: 46px;
+  }
+  .wpc-fx-jump .wpc-lb__list {
+    max-height: min(26rem, 65vh);
+  }
+  .wpc-fx-filter {
+    padding-top: 1.75rem;
+  }
+}
+
+@media (max-width: 860px) {
+  .wpc-header__bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wpc-nav,
+  .wpc-header__signin {
+    display: none;
+  }
+  .wpc-nav-toggle {
+    display: inline-flex;
+  }
+  .wpc-ws__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__nav {
+    display: none;
+  }
+  .wpc-ws__main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .wpc-in__col,
+  .wpc-in__media {
+    grid-column: 1 / -1;
+  }
+  .wpc-in__media {
+    position: relative;
+    top: auto;
+    margin-top: 1.5rem;
+  }
+  .wpc-in__media::before {
+    aspect-ratio: 3 / 2;
+  }
+  .wpc-fx-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-fx-hero__photo {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 2rem;
+  }
+  .wpc-fx-pillar__title,
+  .wpc-fx-pillar__summary,
+  .wpc-fx-pillar__photo,
+  .wpc-fx-pillar__list,
+  .wpc-fx-pillar__more {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+  .wpc-footer__brand {
+    grid-column: 1 / -1;
+    margin-bottom: 1rem;
+  }
+  .wpc-footer__col {
+    grid-column: span 4;
+  }
+}
+
+@media (max-width: 600px) {
+  .wpc-hx__title {
+    max-width: none;
+  }
+  .wpc-hx .wpc-fs__chips {
+    border-radius: var(--r-md);
+  }
+  .wpc-hx .wpc-fs__select {
+    min-width: 0;
+    width: 100%;
+  }
+  .wpc-hx__stage {
+    margin-top: 2rem;
+  }
+  .wpc-ws__role {
+    display: none;
+  }
+  .wpc-ws__main {
+    padding: 1rem;
+  }
+  .wpc-ws__side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__photo {
+    display: none;
+  }
+  .wpc-ch__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+  .wpc-ch__arrow {
+    display: none;
+  }
+  .wpc-tr__list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .wpc-st__cta {
+    padding: 1.5rem;
+  }
+  .wpc-fx-card__head,
+  .wpc-fx-cat__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .wpc-fx-card {
+    padding: 1rem 1.1rem;
+  }
+  .wpc-plan-card {
+    padding: 1.6rem 1.25rem 1.25rem;
+  }
+  .wpc-footer__mark {
+    font-size: 15vw;
+  }
+  .wpc-footer__col {
+    grid-column: span 6;
+  }
+  .wpc-footer__legal {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 400px) {
+  .wpc-header__bar {
+    gap: 0.5rem;
+  }
+  .wpc-brand .eos-wordmark {
+    font-size: 15px !important; /* Wordmark sets its size inline (a prop); small phones need it smaller. */
+  }
+  .wpc-header__cta-long {
+    display: none;
+  }
+  .wpc-header__cta-short {
+    display: inline;
+  }
+  .wpc-header__actions .eos-btn {
+    padding-inline: 0.85rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .wpc-layer,
-  .wpc-sway--a,
-  .wpc-sway--b,
-  .wpc-w__i,
-  .wpc-ah.is-in .wpc-w__i,
-  .wpc-rot__word--first,
-  .wpc-rot__word--in,
-  .wpc-rot__word--out {
+  .wpc-page,
+  .wpc-rv.is-in,
+  .wpc-rvg.is-in > *,
+  .wpc-hx__copy > *,
+  .wpc-hx__picker,
+  .wpc-ws,
+  .wpc-roll__text,
+  .wpc-roll::after,
+  .wpc-ch__row,
+  .wpc-mobile-nav,
+  .wpc-mobile-nav__list li,
+  .wpc-lb__list,
+  .wpc-hx__dots--lit,
+  .wpc-mw__cell,
+  .wpc-dial__minutes,
+  .wpc-dial__arc,
+  .wpc-tj__label,
+  .wpc-tj__step,
+  .wpc-tj__step::after,
+  .wpc-pricing__actions,
+  .wpc-fx-legend__list,
+  .wpc-fx-hero__photo,
+  .wpc-pricing__word > span,
+  .wpc-pricing__lead,
+  .wpc-pricing__trial,
+  .wpc-pricing__photo,
+  .wpc-plan-card,
+  .wpc-faq__item p {
     animation: none;
+  }
+  .wpc-rv.is-waiting,
+  .wpc-rvg.is-waiting > * {
     opacity: 1;
     transform: none;
-    filter: none;
   }
-  .wpc-wave__line {
-    animation: none;
-    stroke-dashoffset: 0;
+  .wpc *,
+  .wpc *::before,
+  .wpc *::after {
+    transition-duration: 0.01ms !important;
   }
-  .wpc-nav__letter-face {
-    transition: none;
-  }
-  .wpc-mobile-nav {
-    animation: none;
-  }
-  /* The ticker stops auto-scrolling and becomes a manually scrollable row instead — nothing stays
-     hidden, it just no longer moves on its own. The aria-hidden duplicate half is no longer needed. */
-  .wpc-ticker {
-    overflow-x: auto;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-  .wpc-ticker__track {
-    animation: none;
-  }
-  .wpc-ticker__track > .wpc-dup {
-    display: none;
-  }
-  .wpc-ticker__track {
-    padding-inline: var(--eos-space-4);
-  }
-  .wpc-showcase__card:hover,
-  .wpc-showcase__card:focus-within,
-  .wpc-showcase__card:hover .wpc-showcase__tile {
+  .wpc .eos-btn:active,
+  .wpc-fs__chip:active,
+  .wpc-footer__link:active,
+  .wpc-footer__social-link:hover,
+  .wpc-footer__link:hover .wpc-footer__icon,
+  .wpc-footer__social-link:active,
+  .is-featured .wpc-plan-card__cta:active,
+  .wpc-plan-card:hover {
     transform: none;
+    translate: none;
   }
 }
+
+/* ==== PREVIEW: navy as the primary colour in more places (colours only) ====
+ * Delete this whole block to return to the approved look. Every value is an existing token:
+ * --c-inverse / --c-inverse-2 / --c-inverse-muted are the admin sidebar's navy, raised navy and
+ * muted text on dark; --c-ink is the same navy as ink. The orange primary button is unchanged.
+ */
+
+/* 1-2. Closing calls to action (home "From sign-up to signed in", Features "Start with a free trial"). */
+.wpc-st__cta,
+.wpc-fx-cta__inner {
+  background: var(--c-inverse);
+  box-shadow: none;
+  color: #ffffff;
+}
+.wpc-st__cta-text,
+.wpc-fx-cta__title {
+  color: #ffffff;
+}
+.wpc-st__fine,
+.wpc-fx-cta__text {
+  color: var(--c-inverse-muted);
+}
+.wpc-st__cta .wpc-link {
+  color: #ffffff;
+  text-decoration-color: var(--c-inverse-muted);
+}
+.wpc-st__cta .wpc-link:hover {
+  color: var(--c-accent-mark);
+}
+.wpc-fx-cta__inner .eos-btn--ghost {
+  color: #ffffff;
+}
+.wpc-fx-cta__inner .eos-btn--ghost:hover {
+  background: var(--c-inverse-2);
+}
+.wpc-st__cta a:focus-visible,
+.wpc-st__cta .eos-btn:focus-visible,
+.wpc-fx-cta__inner .eos-btn:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* 3. FAQ: the open question takes the admin sidebar's active-row indicator. */
+.wpc-faq__item[open] {
+  box-shadow: 0 0 0 1px var(--c-hairline), inset 3px 0 0 var(--c-ink);
+}
+/* The open question's header paints over the item, so it carries the bar too (no gap on hover), and
+   only its top corners round so its hover tint meets the answer below cleanly. */
+.wpc-faq__item[open] summary {
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  box-shadow: inset 3px 0 0 var(--c-ink);
+}
+
+/* 4. Text links: a light-navy underline instead of the warm hairline. */
+.wpc-link,
+.wpc-fx-hero__link,
+.wpc-pricing__compare {
+  text-decoration-color: var(--c-inverse-muted);
+}
+/* ==== end PREVIEW ==== */
+
+/* ==== Motion: slow, measured entrances, one per kind of section ====
+ * Borrowed from the reference systems (design-md-library): one measured ease-out for everything,
+ * longer durations than interface feedback, short travel, and no bounce or blur. Every move is
+ * transform and opacity only, and plays once as the block scrolls in (components/Reveal.tsx keeps
+ * content visible until script confirms it starts below the fold). All of it sits behind
+ * `prefers-reduced-motion: no-preference`, so a reduced-motion visitor gets the static page.
+ */
+.wpc {
+  --m-slow: 1.15s;
+  --m-mid: 0.9s;
+  --m-step: 95ms;
+  --ease-soft: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+@keyframes wpc-m-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-rise-sm {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-left {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-right {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-lift {
+  from { opacity: 0; transform: translateY(36px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wpc-m-settle {
+  from { transform: scale(1.07); }
+  to { transform: none; }
+}
+@keyframes wpc-m-draw {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Default for any reveal: a slower, longer rise; groups cascade (capped so long lists don't drag). */
+  .wpc-rv.is-in {
+    animation: wpc-m-rise var(--m-slow) var(--ease) var(--rv-delay, 0ms) both;
+  }
+  .wpc-rvg.is-in > * {
+    animation: wpc-m-rise var(--m-mid) var(--ease) calc(min(var(--i, 0), 8) * var(--m-step)) both;
+  }
+
+  /* Home: the field's words. The copy arrives from the left; each term row follows it across. */
+  .wpc-ch__head.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-ch__rows.wpc-rvg.is-in > * {
+    animation: wpc-m-left 0.8s var(--ease) calc(min(var(--i, 0), 8) * 80ms + 120ms) both;
+  }
+
+  /* Home: what's inside. Rows lift a short way, like a list settling. */
+  .wpc-in__rows.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm var(--m-mid) var(--ease) calc(var(--i, 0) * var(--m-step)) both;
+  }
+
+  /* Home: the navy trust band. The title fades in quietly; each point rises and its orange rule draws. */
+  .wpc-tr__title.wpc-rv.is-in {
+    animation: wpc-m-fade 1.4s var(--ease-soft) both;
+  }
+  .wpc-tr__list.wpc-rvg.is-in > * {
+    animation: wpc-m-rise 1s var(--ease) calc(var(--i, 0) * 140ms + 150ms) both;
+  }
+  .wpc-tr__list.wpc-rvg.is-in .wpc-tr__point::before {
+    transform-origin: left center;
+    animation: wpc-m-draw 0.9s var(--ease) calc(var(--i, 0) * 140ms + 450ms) both;
+  }
+
+  /* Home: getting started. The closing panel lifts in a beat after the title. */
+  .wpc-st__cta.wpc-rv.is-in {
+    animation: wpc-m-lift var(--m-slow) var(--ease) 120ms both;
+  }
+
+  /* Features: each product area. The heading slides in; the panel fades up, then its rows cascade. */
+  .wpc-fx-cat__head.wpc-rv.is-in {
+    animation: wpc-m-left 1s var(--ease) both;
+  }
+  .wpc-fx-grid.wpc-rvg.is-waiting {
+    opacity: 0;
+  }
+  .wpc-fx-grid.wpc-rvg.is-in {
+    animation: wpc-m-fade 0.8s var(--ease-soft) both;
+  }
+  .wpc-fx-grid.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm 0.8s var(--ease) calc(min(var(--i, 0), 8) * 70ms + 150ms) both;
+  }
+
+  /* Features: the four pillars. Cards lift in turn; each photo settles from a slight zoom. */
+  .wpc-fx-sum__grid.wpc-rvg.is-in > * {
+    animation: wpc-m-lift var(--m-slow) var(--ease) calc(var(--i, 0) * 130ms) both;
+  }
+  .wpc-fx-sum__grid.wpc-rvg.is-in .wpc-fx-pillar__photo {
+    animation: wpc-m-settle 1.8s var(--ease-soft) calc(var(--i, 0) * 130ms) both;
+  }
+
+  /* Features: the closing panel. Copy from the left, actions from the right, meeting in the middle. */
+  .wpc-fx-cta__copy.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-fx-cta__actions.wpc-rv.is-in {
+    animation-name: wpc-m-right;
+  }
+
+  /* Billing & Plans: plan cards lift in one after another once the plans load. */
+  .wpc-plan-card {
+    animation: wpc-m-lift var(--m-slow) var(--ease) calc(0.35s + var(--i, 0) * 0.14s) both;
+  }
+  /* FAQ: the title from the left, then the questions settle in order; the close fades last. */
+  .wpc-faq__title.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-faq__list.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm 0.8s var(--ease) calc(var(--i, 0) * 90ms + 120ms) both;
+  }
+  .wpc-pricing__foot.wpc-rv.is-in {
+    animation: wpc-m-fade 1.2s var(--ease-soft) both;
+  }
+
+  /* Interaction states ease a touch more slowly too, so hovers feel of a piece with the entrances. */
+  .wpc-fx-card,
+  .wpc-faq__item summary,
+  .wpc-in__row {
+    transition-duration: 0.35s;
+  }
+  .wpc-plan-card {
+    transition-duration: 0.4s;
+  }
+}
+/* Plan prices: odometer digits (components/RollingNumber.tsx). Each column is exactly one line tall
+   and top-aligned, so the price keeps its size and its baseline with "/month". Fast start, long
+   gentle landing; the right-hand digits turn more and land last. */
+.wpc-odo__col {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: top;
+}
+.wpc-odo__strip {
+  display: block;
+  transform: translateY(0);
+}
+.wpc-odo__strip > span {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+.wpc-odo.is-go .wpc-odo__strip {
+  transform: translateY(calc(var(--odo-to, 0) * -1em));
+  transition: transform var(--odo-dur, 1.2s) cubic-bezier(0.12, 0.8, 0.12, 1);
+}
+/* ==== end Motion ==== */

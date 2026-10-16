@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button, ButtonLink, EduMark, Icons, Wordmark } from "@eos/ui-kit";
 import { APP_URL, NAV, type NavItem, type PublicRoute } from "../content";
 import { stagger } from "./Reveal";
@@ -11,14 +11,13 @@ import { stagger } from "./Reveal";
  * letter a touch later than the one before (pure CSS transitions, no animation library; reduced motion
  * collapses it to an instant colour change via the media query below).
  *
- * Layout follows a "resizable" navbar: logo left, links centred, actions right. At the top of the page
- * it is a full-width frosted bar; once the page scrolls past SCROLL_COMPACT it shrinks into a
- * floating, rounded pill (CSS transitions on the `is-scrolled` class). A soft purple pill slides
- * behind whichever link the pointer is over.
+ * Layout: logo left, links centred, actions right, on a plain bar in the page's paper colour. Once the
+ * page scrolls past SCROLL_COMPACT the bar steps one tone darker and slightly shorter (no glass, no
+ * shadow, no floating pill). A flat tone slides behind whichever link the pointer is over.
  *
- * Below MENU_BREAKPOINT the link list and "Sign in" move into a slide-down panel behind a menu button,
- * so the site stays fully navigable on a phone instead of just hiding the nav; "Get started" — the one
- * primary action per screen — stays visible at every width.
+ * Below MENU_BREAKPOINT the links move into a full-height menu sheet behind a menu button: large links,
+ * "Start free trial" and "Sign in" as buttons, Escape to close, focus moved into it and the page held
+ * still behind it. "Start free trial", the one primary action, stays in the bar at every width.
  */
 
 /**
@@ -27,8 +26,8 @@ import { stagger } from "./Reveal";
  */
 const SCROLL_COMPACT = 80;
 const SCROLL_EXPAND = 24;
-/** Matches the navbar's `max-width: 820px` rule in public.css, where the links move into the menu. */
-const MENU_BREAKPOINT = 820;
+/** Matches the navbar's `max-width: 860px` rule in public.css, where the links move into the menu. */
+const MENU_BREAKPOINT = 860;
 
 export function SiteHeader({
   route,
@@ -38,6 +37,8 @@ export function SiteHeader({
   onNavigate: (route: PublicRoute) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const sheetRef = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [hoverPill, setHoverPill] = useState<{ left: number; width: number } | null>(null);
 
@@ -69,8 +70,23 @@ export function SiteHeader({
     const onResize = () => {
       if (window.innerWidth > MENU_BREAKPOINT) setMenuOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        toggleRef.current?.focus();
+      }
+    };
+    // The sheet covers the page: hold the page still and move focus into the menu.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    sheetRef.current?.focus();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
 
   const go = (next: PublicRoute) => (e: { preventDefault: () => void }) => {
@@ -112,10 +128,12 @@ export function SiteHeader({
           <ButtonLink variant="ghost" href={APP_URL} className="wpc-header__signin">
             Sign in
           </ButtonLink>
-          <Button variant="primary" onClick={() => onNavigate("signup")}>
-            Get started
+          <Button variant="primary" onClick={() => onNavigate("signup")} className="wpc-header__cta">
+            <span className="wpc-header__cta-long">Start free trial</span>
+            <span className="wpc-header__cta-short">Free trial</span>
           </Button>
           <button
+            ref={toggleRef}
             type="button"
             className="wpc-nav-toggle"
             aria-expanded={menuOpen}
@@ -129,21 +147,42 @@ export function SiteHeader({
       </div>
 
       {menuOpen && (
-        <nav id="wpc-mobile-nav" className="wpc-mobile-nav" aria-label="Primary">
-          {NAV.map((item) => (
-            <a
-              key={item.route}
-              href={item.href}
-              onClick={go(item.route)}
-              className={item.route === route ? "wpc-mobile-nav__link is-active" : "wpc-mobile-nav__link"}
-              aria-current={item.route === route ? "page" : undefined}
-            >
-              {item.label}
-            </a>
-          ))}
-          <a className="wpc-mobile-nav__link" href={APP_URL}>
-            Sign in
-          </a>
+        <nav id="wpc-mobile-nav" ref={sheetRef} className="wpc-mobile-nav" aria-label="Primary" tabIndex={-1}>
+          <ul className="wpc-mobile-nav__list">
+            {NAV.map((item) => (
+              <li key={item.route}>
+                <a
+                  href={item.href}
+                  onClick={go(item.route)}
+                  className={item.route === route ? "wpc-mobile-nav__link is-active" : "wpc-mobile-nav__link"}
+                  aria-current={item.route === route ? "page" : undefined}
+                >
+                  {item.label}
+                  <Icons.ArrowRight size={20} aria-hidden />
+                </a>
+              </li>
+            ))}
+            <li>
+              <a
+                href="#/signup"
+                onClick={go("signup")}
+                className={route === "signup" ? "wpc-mobile-nav__link is-active" : "wpc-mobile-nav__link"}
+                aria-current={route === "signup" ? "page" : undefined}
+              >
+                Plans &amp; pricing
+                <Icons.ArrowRight size={20} aria-hidden />
+              </a>
+            </li>
+          </ul>
+          <div className="wpc-mobile-nav__actions">
+            <Button variant="primary" onClick={() => onNavigate("signup")}>
+              Start free trial
+            </Button>
+            <ButtonLink variant="secondary" href={APP_URL}>
+              Sign in
+            </ButtonLink>
+          </div>
+          <p className="wpc-mobile-nav__note">Every organisation starts on a free 30-day trial.</p>
         </nav>
       )}
     </header>

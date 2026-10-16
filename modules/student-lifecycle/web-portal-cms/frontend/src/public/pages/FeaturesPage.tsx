@@ -1,18 +1,28 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Icons, prefersReducedMotion } from "@eos/ui-kit";
 import {
   STATUS_HINT,
   STATUS_LABEL,
   STATUS_TONE,
-  type IconName,
   type ImplStatus,
   type PublicRoute,
 } from "../content";
 import { FEATURE_CATEGORIES, type FeatureCategory, type FeatureModule } from "../features-data";
 import { Reveal, RevealGroup, stagger } from "../components/Reveal";
+import { Listbox } from "../components/Listbox";
+import { ModuleWall, type WallModule } from "../components/ModuleWall";
 
 const STATUS_ORDER: ImplStatus[] = ["implemented", "partial", "specified", "scaffold", "planned"];
 type StatusFilter = ImplStatus | "all";
+
+/** Project photographs (from the product's own image set), bundled by Vite. */
+const PHOTO = {
+  library: new URL("../assets/library.jpg", import.meta.url).href,
+  lecture: new URL("../assets/lecture.jpg", import.meta.url).href,
+  field: new URL("../assets/field-training.jpg", import.meta.url).href,
+  campus: new URL("../assets/campus-walk.jpg", import.meta.url).href,
+  students: new URL("../assets/students.jpg", import.meta.url).href,
+};
 
 const ALL_MODULES = FEATURE_CATEGORIES.flatMap((cat) => cat.modules);
 const STATUS_COUNT = STATUS_ORDER.reduce(
@@ -20,6 +30,10 @@ const STATUS_COUNT = STATUS_ORDER.reduce(
   {} as Record<ImplStatus, number>,
 );
 const WITH_CODE = STATUS_COUNT.implemented + STATUS_COUNT.partial;
+/** Every module as one tile of the hero's wall, drawn with its product area's icon. */
+const WALL_MODULES: WallModule[] = FEATURE_CATEGORIES.flatMap((cat) =>
+  cat.modules.map((m) => ({ name: m.name, icon: cat.icon, status: m.status })),
+);
 
 /**
  * The "At a glance" summary: the ten product areas grouped into four pillars. Every area id appears in
@@ -27,7 +41,8 @@ const WITH_CODE = STATUS_COUNT.implemented + STATUS_COUNT.partial;
  */
 interface Pillar {
   id: string;
-  icon: IconName;
+  /** A photograph of that part of campus life, with its alt text. */
+  photo: { src: string; alt: string };
   title: string;
   summary: string;
   categoryIds: string[];
@@ -36,28 +51,28 @@ interface Pillar {
 const PILLARS: Pillar[] = [
   {
     id: "learning",
-    icon: "GraduationCap",
+    photo: { src: PHOTO.lecture, alt: "A lecturer presenting to students in a lecture hall" },
     title: "Students & Learning",
     summary: "From first enquiry to enrolment, then teaching, assessment and attendance.",
     categoryIds: ["student-lifecycle", "academics"],
   },
   {
     id: "practice",
-    icon: "Palette",
+    photo: { src: PHOTO.field, alt: "Students and a teacher examining plants during field training" },
     title: "Practice & Campus Life",
     summary: "Field practice and portfolios, residential life and specialized suites.",
     categoryIds: ["practice", "campus-life", "sports"],
   },
   {
     id: "operations",
-    icon: "Wallet",
+    photo: { src: PHOTO.campus, alt: "Students walking along a tree-lined campus path" },
     title: "Operations & Resources",
     summary: "Spaces, assets, money, people and the services that keep campus running.",
     categoryIds: ["facilities", "finance-operations", "support"],
   },
   {
     id: "governance",
-    icon: "ShieldCheck",
+    photo: { src: PHOTO.library, alt: "A student working in a sunlit university library" },
     title: "Governance & Platform",
     summary: "Compliance and grievance processes, and the shared core every deployment runs.",
     categoryIds: ["governance", "platform"],
@@ -72,14 +87,18 @@ const PILLAR_PREVIEW = 5;
  * concise description, representative roles and its implementation status — using the five labels from
  * features.md so nothing Specified/Scaffold/Planned is presented as live.
  *
- * Layout: a navy hero with counts taken from the catalogue itself; then a sticky product-area index
- * (a sidebar on wide screens, a scrolling chip bar below 1100px) that highlights the area in view and
- * scrolls to an area on click (scrolling, not changing the route hash); a status filter; and the module
- * cards. Cards lift on hover with a spotlight that follows the pointer. Everything is reduced-motion safe.
+ * Layout (taste-skill house style: no ornaments, type and tone do the work): a large serif title with
+ * three counts taken from the catalogue itself; a sticky product-area index (a sidebar on wide screens,
+ * a wrapping row below 1100px) that highlights the area in view and scrolls to it on click (scrolling,
+ * not changing the route hash); a status filter; and each area's modules as rows set on a tone step.
+ * The four-pillar summary is a typographic list; the close is the one full green field. Reduced-motion
+ * safe.
  */
 export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) => void }) {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [activeId, setActiveId] = useState(FEATURE_CATEGORIES[0]?.id ?? "");
+  // Pointing at a count picks out its tiles on the wall behind the hero.
+  const [wallFocus, setWallFocus] = useState<"code" | "modules" | null>(null);
 
   const visible = useMemo(
     () =>
@@ -127,12 +146,8 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
     <div className="wpc-page wpc-fx">
       {/* Hero */}
       <header className="wpc-fx-hero">
-        <div className="wpc-fx-hero__aura" aria-hidden>
-          <span className="wpc-fx-hero__orb wpc-fx-hero__orb--a" />
-          <span className="wpc-fx-hero__orb wpc-fx-hero__orb--b" />
-        </div>
+        <ModuleWall modules={WALL_MODULES} highlight={wallFocus} />
         <div className="wpc-container wpc-fx-hero__inner">
-          <p className="wpc-fx-hero__eyebrow">Platform</p>
           <h1 className="wpc-fx-hero__title">Everything in Education OS</h1>
           <p className="wpc-fx-hero__subtitle">
             Modules, platform capabilities and specialized solutions — grouped by what they do, with an honest
@@ -143,20 +158,33 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
               <dt>Product areas</dt>
               <dd>{FEATURE_CATEGORIES.length}</dd>
             </div>
-            <div className="wpc-fx-stat">
+            <div
+              className="wpc-fx-stat wpc-fx-stat--wall"
+              onMouseEnter={() => setWallFocus("modules")}
+              onMouseLeave={() => setWallFocus(null)}
+            >
               <dt>Modules</dt>
               <dd>{ALL_MODULES.length}</dd>
             </div>
-            <div className="wpc-fx-stat">
+            <div
+              className="wpc-fx-stat wpc-fx-stat--wall"
+              onMouseEnter={() => setWallFocus("code")}
+              onMouseLeave={() => setWallFocus(null)}
+            >
               <dt>With working code</dt>
               <dd>{WITH_CODE}</dd>
             </div>
           </dl>
+          <img
+            className="wpc-fx-hero__photo"
+            src={PHOTO.students}
+            alt="Four students sitting together on campus steps, sharing a laptop and books"
+            width={1068}
+            height={768}
+          />
           <div className="wpc-fx-hero__actions">
             <Button variant="primary" onClick={() => onNavigate("signup")}>
-              <span className="wpc-btn-inner">
-                Get started <Icons.ArrowRight size={16} className="wpc-btn-arrow" />
-              </span>
+              Start free trial
             </Button>
             <button
               type="button"
@@ -172,6 +200,20 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
       {/* Catalogue */}
       <div className="wpc-container wpc-fx-body">
         <aside className="wpc-fx-index" aria-label="Product areas">
+          {/* Small screens: one sticky dropdown that follows the area in view and jumps on choice. */}
+          <div className="wpc-fx-jump">
+            <Listbox
+              label="Jump to a product area"
+              hideLabel
+              value={activeId}
+              options={visible.map((cat) => ({
+                value: cat.id,
+                label: cat.title,
+                hint: `${cat.modules.length} ${cat.modules.length === 1 ? "module" : "modules"}`,
+              }))}
+              onChange={jumpTo}
+            />
+          </div>
           <p className="wpc-fx-index__label">Product areas</p>
           <ul className="wpc-fx-index__list">
             {visible.map((cat) => (
@@ -179,10 +221,10 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
                 <button
                   type="button"
                   className={cat.id === activeId ? "wpc-fx-index__link is-active" : "wpc-fx-index__link"}
+                  data-area={cat.id}
                   aria-current={cat.id === activeId ? "true" : undefined}
                   onClick={() => jumpTo(cat.id)}
                 >
-                  <IconFor name={cat.icon} size={15} />
                   <span className="wpc-fx-index__name">{cat.title}</span>
                   <span className="wpc-fx-index__count">{cat.modules.length}</span>
                 </button>
@@ -239,7 +281,6 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
       <section className="wpc-fx-sum" aria-labelledby="wpc-fx-sum-h">
         <div className="wpc-container wpc-fx-sum__inner">
           <Reveal className="wpc-fx-sum__head">
-            <p className="wpc-fx-sum__eyebrow">At a glance</p>
             <h2 id="wpc-fx-sum-h" className="wpc-fx-sum__title">
               The whole platform, in four pillars
             </h2>
@@ -267,9 +308,7 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
           </Reveal>
           <Reveal className="wpc-fx-cta__actions" delay={120}>
             <Button variant="primary" onClick={() => onNavigate("signup")}>
-              <span className="wpc-btn-inner">
-                Get started <Icons.ArrowRight size={16} className="wpc-btn-arrow" />
-              </span>
+              Start free trial
             </Button>
             <Button variant="ghost" onClick={() => onNavigate("home")}>
               Back to home
@@ -313,20 +352,8 @@ function FilterChip({
   );
 }
 
-/** One product area: a header, then its module cards. */
+/** One product area: a header, then its modules as rows. */
 function CategorySection({ category }: { category: FeatureCategory }) {
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  // One delegated handler drives every card's pointer spotlight (CSS reads --mx / --my).
-  const onPointerMove = (e: { target: EventTarget; clientX: number; clientY: number; pointerType: string }) => {
-    if (e.pointerType !== "mouse") return;
-    const card = (e.target as Element).closest<HTMLElement>(".wpc-fx-card");
-    if (!card || !gridRef.current?.contains(card)) return;
-    const box = card.getBoundingClientRect();
-    card.style.setProperty("--mx", `${e.clientX - box.left}px`);
-    card.style.setProperty("--my", `${e.clientY - box.top}px`);
-  };
-
   return (
     <section
       className="wpc-fx-cat"
@@ -335,9 +362,6 @@ function CategorySection({ category }: { category: FeatureCategory }) {
       aria-labelledby={`wpc-cat-${category.id}-h`}
     >
       <Reveal className="wpc-fx-cat__head">
-        <span className="wpc-fx-cat__icon" aria-hidden>
-          <IconFor name={category.icon} size={22} />
-        </span>
         <div className="wpc-fx-cat__heading">
           <h2 id={`wpc-cat-${category.id}-h`} className="wpc-fx-cat__title">
             {category.title}
@@ -348,25 +372,22 @@ function CategorySection({ category }: { category: FeatureCategory }) {
           {category.modules.length} {category.modules.length === 1 ? "module" : "modules"}
         </span>
       </Reveal>
-      <div ref={gridRef} onPointerMove={onPointerMove}>
-        <RevealGroup className="wpc-fx-grid">
-          {category.modules.map((mod, i) => (
-            <ModuleCard key={mod.name} module={mod} icon={category.icon} index={i} />
-          ))}
-        </RevealGroup>
-      </div>
+      <RevealGroup className="wpc-fx-grid">
+        {category.modules.map((mod, i) => (
+          <ModuleCard key={mod.name} module={mod} index={i} />
+        ))}
+      </RevealGroup>
     </section>
   );
 }
 
-function ModuleCard({ module: mod, icon, index }: { module: FeatureModule; icon: IconName; index: number }) {
+function ModuleCard({ module: mod, index }: { module: FeatureModule; index: number }) {
   return (
     <article className="wpc-fx-card" data-status={mod.status} style={stagger(index)}>
-      <span className="wpc-fx-card__glyph" aria-hidden>
-        <IconFor name={icon} size={18} />
-      </span>
-      <Badge tone={STATUS_TONE[mod.status]}>{STATUS_LABEL[mod.status]}</Badge>
-      <h3 className="wpc-fx-card__title">{mod.name}</h3>
+      <div className="wpc-fx-card__head">
+        <h3 className="wpc-fx-card__title">{mod.name}</h3>
+        <Badge tone={STATUS_TONE[mod.status]}>{STATUS_LABEL[mod.status]}</Badge>
+      </div>
       <p className="wpc-fx-card__text">{mod.description}</p>
       {mod.roles.length > 0 && (
         <ul className="wpc-fx-card__roles" aria-label="Typical roles">
@@ -379,7 +400,7 @@ function ModuleCard({ module: mod, icon, index }: { module: FeatureModule; icon:
   );
 }
 
-/** One pillar of the summary: icon, title, framing line, a few modules, and a link into the catalogue. */
+/** One pillar of the summary: title, framing line, a few modules, and a link into the catalogue. */
 function PillarCard({ pillar, index, onViewAll }: { pillar: Pillar; index: number; onViewAll: (id: string) => void }) {
   const categories = pillar.categoryIds
     .map((id) => FEATURE_CATEGORIES.find((cat) => cat.id === id))
@@ -390,19 +411,14 @@ function PillarCard({ pillar, index, onViewAll }: { pillar: Pillar; index: numbe
 
   return (
     <article className="wpc-fx-pillar" data-pillar={pillar.id} style={stagger(index)} aria-labelledby={`wpc-pillar-${pillar.id}`}>
-      <span className="wpc-fx-pillar__icon" aria-hidden>
-        <IconFor name={pillar.icon} size={22} />
-      </span>
       <h3 id={`wpc-pillar-${pillar.id}`} className="wpc-fx-pillar__title">
         {pillar.title}
       </h3>
       <p className="wpc-fx-pillar__summary">{pillar.summary}</p>
+      <img className="wpc-fx-pillar__photo" src={pillar.photo.src} alt={pillar.photo.alt} loading="lazy" />
       <ul className="wpc-fx-pillar__list">
         {preview.map((mod) => (
           <li key={mod.name} className="wpc-fx-pillar__item">
-            <span className="wpc-fx-pillar__tick" data-status={mod.status} aria-hidden>
-              <Icons.Check size={11} />
-            </span>
             <span className="wpc-fx-pillar__body">
               <span className="wpc-fx-pillar__name">
                 {mod.name}
@@ -415,15 +431,9 @@ function PillarCard({ pillar, index, onViewAll }: { pillar: Pillar; index: numbe
       </ul>
       {first && (
         <button type="button" className="wpc-fx-pillar__more" onClick={() => onViewAll(first.id)}>
-          View all {modules.length} modules <Icons.ArrowRight size={15} className="wpc-btn-arrow" aria-hidden />
+          View all {modules.length} modules <Icons.ArrowRight size={16} className="wpc-link__arrow" aria-hidden />
         </button>
       )}
     </article>
   );
-}
-
-/** Renders a named ui-kit icon. */
-function IconFor({ name, size = 20 }: { name: IconName; size?: number }) {
-  const Cmp = Icons[name];
-  return <Cmp size={size} aria-hidden />;
 }

@@ -1,5 +1,4 @@
 import type { BadgeTone, PageTheme } from "@eos/ui-kit";
-import { FEATURE_CATEGORIES } from "./features-data";
 
 /**
  * Static content and shared types for the public website.
@@ -13,32 +12,29 @@ import { FEATURE_CATEGORIES } from "./features-data";
 /** The three public routes, carried in the URL hash: `#/`, `#/features`, `#/signup`. */
 export type PublicRoute = "home" | "features" | "signup";
 
-/** Where "Sign in" hands off to — the role-dashboard app (apps/frontend index.html). */
-export const APP_URL = "/";
+/** Where "Sign in" hands off to — the role-dashboard app, served at /app (apps/frontend/src/main.tsx). */
+export const APP_URL = "/app";
 
 /**
  * The app's own organisation sign-up (apps/frontend/src/auth/SignUp.tsx): the main app opens it when
  * it loads at `#signup` with nobody signed in. It creates the organisation and administrator account
  * and verifies the email; the public site only shows the plans and hands off to it.
  */
-export const ORG_SIGNUP_URL = "/#signup";
+export const ORG_SIGNUP_URL = "/app#signup";
 
 /**
- * The public site's primary colour: the exact dark navy-violet the admin console's sidebar uses for
- * its background (`packages/ui-kit` tokens `--eos-sidebar` / `--eos-sidebar-gradient` /
- * `--eos-sidebar-border` — the same values `apps/frontend/src/admin/admin.source.css`'s
- * `.eos-sidebar-bg` applies), reused as the marketing site's accent instead of the ui-kit `BRAND_THEME`
- * indigo, so visitors see the same primary colour the product actually uses once they sign in. Tint
- * and ring are mixed from that exact token (never a guessed hex) the same way every wave layer below
- * derives its colour from one source.
+ * The public site's palette: warm cream canvas, the admin sidebar's navy (#2a254e) as ink, and one
+ * chromatic accent taken from the logo's own "OS" orange for primary actions and highlights. The accent
+ * token here is the deeper orange (#c2410c) so text, badges and white-on-orange buttons pass AA; the
+ * bright logo orange is used only for marks and highlights in public.css.
  */
 export const PUBLIC_THEME: PageTheme = {
-  accent: "#2a254e",
-  tint: "color-mix(in srgb, #2a254e 7%, white)",
-  ring: "color-mix(in srgb, #2a254e 18%, white)",
-  gradient: "linear-gradient(180deg, #241f46 0%, #2b264f 50%, #251f49 100%)",
-  series: ["#2a254e", "#059669", "#db2777"],
-  bar: "linear-gradient(90deg, #241f46, #3a3466)",
+  accent: "#c2410c",
+  tint: "#fde4d3",
+  ring: "#f6c3a1",
+  gradient: "#c2410c",
+  series: ["#c2410c", "#2a254e", "#1f9d5c"],
+  bar: "#c2410c",
 };
 
 export const BRAND = {
@@ -77,29 +73,58 @@ export interface FooterColumn {
 }
 
 /**
- * Placeholder destination for footer links whose pages don't exist yet. Grep for FOOTER_TODO_HREF to
- * find them; replace it with the real URL (or a `route`) when the page ships. Links using it are kept
- * out of the rendered footer until then, so visitors never land on a dead link.
+ * Placeholder destination for footer links whose real URL is not decided yet (company pages, help,
+ * legal, contact, social profiles). They render as links so the footer is complete, but clicking one
+ * does nothing. Grep for FOOTER_TODO_HREF and replace each with its real URL before launch.
  */
-export const FOOTER_TODO_HREF = "#TODO";
+export const FOOTER_TODO_HREF = "#";
 
+/** Footer link columns, the minimum set a SaaS footer carries: product, company, contact. */
 export const FOOTER: FooterColumn[] = [
   {
     heading: "Product",
     links: [
-      { label: "Features", route: "features", icon: "LayoutGrid" },
-      { label: "Get started", route: "signup", icon: "UserPlus" },
+      { label: "Features", route: "features" },
+      { label: "Plans & pricing", route: "signup" },
+      { label: "Start free trial", route: "signup" },
+      { label: "Sign in", href: APP_URL },
     ],
   },
   {
-    heading: "Platform",
+    heading: "Company",
     links: [
-      { label: "Sign in", href: APP_URL, icon: "KeyRound" },
-      // Future Platform links — set the real URL, then they appear automatically:
-      // { label: "Help centre", href: FOOTER_TODO_HREF, icon: "LifeBuoy" },
-      // { label: "Contact", href: FOOTER_TODO_HREF, icon: "Mail" },
+      { label: "About us", href: FOOTER_TODO_HREF },
+      { label: "Careers", href: FOOTER_TODO_HREF },
+      { label: "News", href: FOOTER_TODO_HREF },
+      { label: "Partners", href: FOOTER_TODO_HREF },
     ],
   },
+  {
+    heading: "Contact",
+    links: [
+      { label: "Contact sales", href: FOOTER_TODO_HREF, icon: "Mail" },
+      { label: "Email support", href: FOOTER_TODO_HREF, icon: "LifeBuoy" },
+      { label: "Call us", href: FOOTER_TODO_HREF, icon: "Phone" },
+      { label: "Find our office", href: FOOTER_TODO_HREF, icon: "MapPin" },
+    ],
+  },
+];
+
+/** Legal links on the footer's bottom line. */
+export const FOOTER_LEGAL: FooterLink[] = [
+  { label: "Privacy policy", href: FOOTER_TODO_HREF },
+  { label: "Terms of service", href: FOOTER_TODO_HREF },
+  { label: "Cookie policy", href: FOOTER_TODO_HREF },
+  { label: "Accessibility", href: FOOTER_TODO_HREF },
+];
+
+/** Social profiles shown as marks in the footer (components/SocialIcons.tsx draws them). */
+export const FOOTER_SOCIAL: { network: "linkedin" | "x" | "instagram" | "youtube" | "facebook"; label: string; href: string }[] = [
+  { network: "linkedin", label: "LinkedIn", href: FOOTER_TODO_HREF },
+  { network: "x", label: "X (Twitter)", href: FOOTER_TODO_HREF },
+  { network: "instagram", label: "Instagram", href: FOOTER_TODO_HREF },
+  { network: "youtube", label: "YouTube", href: FOOTER_TODO_HREF },
+  { network: "facebook", label: "Facebook", href: FOOTER_TODO_HREF },
 ];
 
 /**
@@ -154,6 +179,8 @@ export type IconName =
   | "UserPlus"
   | "LayoutGrid"
   | "Mail"
+  | "Phone"
+  | "MapPin"
   | "Clock"
   | "KeyRound"
   | "Users"
@@ -167,94 +194,16 @@ export interface IconItem {
   text: string;
 }
 
-export interface TickerItem {
-  icon: IconName;
-  label: string;
-}
-
 // ---- Home page content (sourced from docs/features.md; honest about what is live) ----
 
 export const HOME_HERO = {
-  eyebrow: "Education OS",
-  title: "Run your whole institution on one platform.",
+  /** The stacked name on the first screen: two lines, two inks. */
+  name: ["Education", "OS"],
+  statement: "Run your whole institution on one platform.",
   subtitle:
     "Education OS unifies admissions, academics, examinations, finance, campus life, governance and " +
     "support — configured for the way your field teaches, trains and manages its students.",
-  /** Short, factual trust points (features.md §A). */
-  trust: ["Multi-tenant SaaS", "Free 30-day trial", "15 academy types"],
 } as const;
-
-export const HOME_BENEFITS: IconItem[] = [
-  {
-    icon: "Layers",
-    title: "Configured for your field",
-    text: "Fifteen academy types from one platform — your suites, roles and vocabulary, not a generic ERP.",
-  },
-  {
-    icon: "GraduationCap",
-    title: "One record, every stage",
-    text: "A connected student lifecycle from application to alumni, linked by events — not spreadsheets.",
-  },
-  {
-    icon: "LayoutDashboard",
-    title: "Role-based dashboards",
-    text: "Every person sees the widgets for their job, driven by configuration rather than custom builds.",
-  },
-  {
-    icon: "ShieldCheck",
-    title: "Secure by design",
-    text: "Per-organisation isolation with row-level security, audit trails and governed activation.",
-  },
-];
-
-/** The main product categories — one line each. Detail lives on the Features page. */
-export const HOME_CATEGORIES: IconItem[] = [
-  { icon: "GraduationCap", title: "Student Lifecycle", text: "Public site & sign-up, admissions, student records, enrolment." },
-  { icon: "BookOpen", title: "Teaching & Learning", text: "Programmes, curriculum, LMS, examinations, timetable & attendance." },
-  { icon: "Palette", title: "Practice & Experiential", text: "Portfolios, projects, selection, productions, field training, skills." },
-  { icon: "Building2", title: "Campus Life", text: "Hostel, library, transport, placements and alumni." },
-  { icon: "CalendarCheck2", title: "Facilities & Resources", text: "Booking, inventory & equipment, assets and maintenance." },
-  { icon: "Wallet", title: "Finance & Operations", text: "Fees & payments, budgets & grants, procurement, HR & payroll, e-office." },
-  { icon: "Scale", title: "Governance & Compliance", text: "Grievance, RTI, IQAC/accreditation and statutory reports." },
-  { icon: "LifeBuoy", title: "Support", text: "Helpdesk, incidents, SLAs, knowledge base and vendor contracts." },
-  { icon: "Trophy", title: "Specialized suites", text: "Field-specific solutions — sports first, with more fields by design." },
-];
-
-/**
- * Capability pills for the homepage's scrolling ticker — real product capabilities named in the module
- * catalogue (docs/features.md), used to give a sense of the platform's breadth. The ticker makes no
- * implementation-status claim; the Features page is where availability is shown.
- */
-export const HOME_TICKER: TickerItem[] = [
-  { icon: "UserPlus", label: "Admissions" },
-  { icon: "Users", label: "Student Records" },
-  { icon: "BookOpen", label: "Academic Management" },
-  { icon: "CalendarCheck2", label: "Attendance" },
-  { icon: "ClipboardList", label: "Assessments & Results" },
-  { icon: "CalendarRange", label: "Timetable Management" },
-  { icon: "Wallet", label: "Fee Management" },
-  { icon: "LayoutDashboard", label: "Role-Based Dashboards" },
-  { icon: "Building2", label: "Campus Operations" },
-  { icon: "Scale", label: "Governance & Approvals" },
-  { icon: "GraduationCap", label: "Student Lifecycle" },
-  { icon: "TrendingUp", label: "Analytics & Reports" },
-];
-
-export interface ShowcaseItem extends IconItem {
-  /** A one-line framing for the suite — each suite's own `summary` in the Features-page catalogue. */
-  headline: string;
-}
-
-/**
- * Suite-level cards for the homepage's product showcase. Built from HOME_CATEGORIES (icon, title, short
- * module list) plus, for the longer headline, each suite's `summary` from features-data.ts — both lists
- * are kept in the same nine-suite order as docs/features.md, so this reuses existing, already-approved
- * copy rather than inventing new marketing text.
- */
-export const HOME_SHOWCASE: ShowcaseItem[] = HOME_CATEGORIES.map((item, i) => ({
-  ...item,
-  headline: FEATURE_CATEGORIES[i]?.summary ?? item.text,
-}));
 
 export const HOME_ADAPT = {
   eyebrow: "One platform, many fields",
@@ -294,4 +243,212 @@ export const HOME_ONBOARDING: IconItem[] = [
   { icon: "KeyRound", title: "Sign in", text: "Once approved, sign in and land on your organisation's dashboard." },
 ];
 
+/**
+ * The four onboarding stages written as clauses for the home page's stepped sequence (the order is in
+ * the words, not in numbers). The detail sentence under each is HOME_ONBOARDING's own text.
+ */
+export const HOME_ONBOARDING_LINES = [
+  "First, register your institution.",
+  "Then confirm your email.",
+  "We review and approve it.",
+  "Then you sign in.",
+] as const;
+
 export const HOME_ONBOARDING_NOTE = "Every organisation starts on a free 30-day trial.";
+
+/**
+ * Each academy type's own words for the shared field patterns, copied from the institution profiles in
+ * platform/identity/config/profiles/*.yaml (their `title` and `vocabulary` keys). `generic` is the
+ * pattern's platform-wide name; `word` is what that field calls it. Keep in sync with the profiles.
+ */
+export interface FieldTerm {
+  generic: string;
+  word: string;
+}
+
+export interface FieldVocabulary {
+  id: string;
+  /** Short name for the picker. */
+  label: string;
+  /** The profile's title. */
+  title: string;
+  terms: FieldTerm[];
+}
+
+export const FIELD_VOCAB: FieldVocabulary[] = [
+  {
+    id: "music-academy",
+    label: "Music",
+    title: "Music Academy / Conservatory",
+    terms: [
+      { generic: "Selection", word: "Audition" },
+      { generic: "Production", word: "Recital / concert" },
+      { generic: "Portfolio item", word: "Repertoire piece" },
+      { generic: "Resource", word: "Practice room" },
+      { generic: "Inventory item", word: "Instrument" },
+      { generic: "Skill assessment", word: "Grade exam" },
+    ],
+  },
+  {
+    id: "sports-college",
+    label: "Sports",
+    title: "Sports University / Sports College",
+    terms: [
+      { generic: "Event", word: "Tournament" },
+      { generic: "Resource", word: "Facility" },
+      { generic: "Inventory item", word: "Equipment" },
+    ],
+  },
+  {
+    id: "arts-academy",
+    label: "Arts",
+    title: "Arts Academy / Fine Arts College",
+    terms: [
+      { generic: "Production", word: "Exhibition" },
+      { generic: "Portfolio item", word: "Artwork" },
+      { generic: "Selection", word: "Critique / jury" },
+      { generic: "Project", word: "Artwork project" },
+      { generic: "Resource", word: "Studio" },
+      { generic: "Inventory item", word: "Material" },
+    ],
+  },
+  {
+    id: "design-fashion-institute",
+    label: "Design & fashion",
+    title: "Design / Fashion Institute",
+    terms: [
+      { generic: "Production", word: "Show" },
+      { generic: "Portfolio item", word: "Collection" },
+      { generic: "Selection", word: "Critique" },
+      { generic: "Project", word: "Collection / industry project" },
+      { generic: "Resource", word: "Studio" },
+      { generic: "Placement", word: "Internship" },
+    ],
+  },
+  {
+    id: "dance-academy",
+    label: "Dance",
+    title: "Dance / Performing Arts Academy",
+    terms: [
+      { generic: "Production", word: "Performance" },
+      { generic: "Selection", word: "Audition" },
+      { generic: "Resource", word: "Practice studio" },
+      { generic: "Inventory item", word: "Costume / prop" },
+      { generic: "Skill assessment", word: "Technique assessment" },
+    ],
+  },
+  {
+    id: "theatre-academy",
+    label: "Theatre",
+    title: "Theatre / Drama Academy",
+    terms: [
+      { generic: "Selection", word: "Casting call" },
+      { generic: "Production", word: "Production" },
+      { generic: "Project", word: "Script" },
+      { generic: "Resource", word: "Rehearsal space / venue" },
+      { generic: "Inventory item", word: "Costume / prop" },
+    ],
+  },
+  {
+    id: "film-media-institute",
+    label: "Film & media",
+    title: "Film / Media / Animation Institute",
+    terms: [
+      { generic: "Portfolio item", word: "Showreel" },
+      { generic: "Production", word: "Screening / festival" },
+      { generic: "Project", word: "Film project" },
+      { generic: "Resource", word: "Edit suite / studio" },
+      { generic: "Inventory item", word: "Equipment" },
+    ],
+  },
+  {
+    id: "medical-college",
+    label: "Medical",
+    title: "Medical / Health Sciences College",
+    terms: [
+      { generic: "Placement", word: "Clinical rotation" },
+      { generic: "Skill assessment", word: "Skills assessment" },
+      { generic: "Resource", word: "Lab / skills room" },
+      { generic: "Project", word: "Research project" },
+    ],
+  },
+  {
+    id: "law-college",
+    label: "Law",
+    title: "Law College / Law University",
+    terms: [
+      { generic: "Selection", word: "Moot court selection" },
+      { generic: "Production", word: "Competition / debate" },
+      { generic: "Placement", word: "Legal internship / clinic" },
+      { generic: "Project", word: "Case research" },
+    ],
+  },
+  {
+    id: "engineering-college",
+    label: "Engineering",
+    title: "Engineering / Technology College",
+    terms: [
+      { generic: "Project", word: "Capstone / project" },
+      { generic: "Resource", word: "Laboratory" },
+      { generic: "Production", word: "Hackathon / tech event" },
+      { generic: "Placement", word: "Industrial training" },
+      { generic: "Inventory item", word: "Lab equipment" },
+    ],
+  },
+  {
+    id: "management-institute",
+    label: "Management",
+    title: "Management / Business School",
+    terms: [
+      { generic: "Project", word: "Live project" },
+      { generic: "Production", word: "Case competition / industry event" },
+      { generic: "Placement", word: "Internship" },
+      { generic: "Selection", word: "Competition selection" },
+    ],
+  },
+  {
+    id: "agriculture-college",
+    label: "Agriculture",
+    title: "Agriculture / Veterinary / Field Sciences",
+    terms: [
+      { generic: "Placement", word: "Farm / practical rotation" },
+      { generic: "Project", word: "Research trial" },
+      { generic: "Resource", word: "Farm plot / lab" },
+      { generic: "Production", word: "Extension activity" },
+    ],
+  },
+  {
+    id: "hospitality-institute",
+    label: "Hospitality",
+    title: "Hospitality / Hotel Management",
+    terms: [
+      { generic: "Placement", word: "Industry internship" },
+      { generic: "Resource", word: "Training kitchen / lab" },
+      { generic: "Production", word: "Banquet / event" },
+      { generic: "Skill assessment", word: "Practical assessment" },
+    ],
+  },
+  {
+    id: "teacher-education-college",
+    label: "Teacher education",
+    title: "Teacher Education / B.Ed.",
+    terms: [
+      { generic: "Placement", word: "School internship" },
+      { generic: "Project", word: "Lesson plan" },
+      { generic: "Portfolio item", word: "Teaching portfolio" },
+      { generic: "Skill assessment", word: "Practicum assessment" },
+    ],
+  },
+  {
+    id: "research-university",
+    label: "Research",
+    title: "Research / Doctoral University",
+    terms: [
+      { generic: "Project", word: "Research project" },
+      { generic: "Portfolio item", word: "Publication" },
+      { generic: "Production", word: "Conference" },
+      { generic: "Selection", word: "Supervisor allocation / viva" },
+      { generic: "Project milestone", word: "Thesis milestone" },
+    ],
+  },
+];

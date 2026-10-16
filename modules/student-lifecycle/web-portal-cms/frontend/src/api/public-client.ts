@@ -42,6 +42,9 @@ async function request<T>(path: string, init: RequestInit & { json?: unknown } =
     const detail = (data as { detail?: string } | undefined)?.detail ?? res.statusText;
     throw new PublicApiError(res.status, detail);
   }
+  // A 200 that isn't JSON means /api/ didn't reach the API (e.g. the static host's SPA fallback
+  // answered with index.html). Treat it as unreachable instead of handing callers `undefined`.
+  if (data === undefined) throw new PublicApiError(res.status, "The service returned no data.");
   return data as T;
 }
 
