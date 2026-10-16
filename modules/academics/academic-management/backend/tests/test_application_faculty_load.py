@@ -100,14 +100,106 @@ def test_names_are_resolved_only_for_listed_rows():
     assert asked == ["f1"]
 
 
+# --- statuses: only what getFacultyLoad declares
+
+
+def test_the_use_case_only_answers_with_statuses_the_contract_declares():
+    declared = {int(code) for code in CONTRACT["paths"]["/faculty-load"]["get"]["responses"]}
+    raised = set()
+    for kwargs in ({"actor": Actor("u2", "org1")}, {"period": None}):
+        with pytest.raises(AcademicManagementError) as err:
+            report(**kwargs)
+        raised.add(err.value.status)
+    assert raised == {403, 404}
+    assert raised | {200} <= declared
+
+
 @pytest.mark.parametrize(
-    ("kwargs", "code"),
+    "kwargs",
     [
-        ({"max_weekly_contact_hours": -1}, "below_minimum"),
-        ({"entries": [LoadEntry("f1", "o1", "lecturer", Decimal(1), "active")]}, "invalid_choice"),
+        {"max_weekly_contact_hours": -1},
+        {"max_weekly_contact_hours": "18"},
+        {"max_weekly_contact_hours": float("nan")},
+        {"entries": [LoadEntry("f1", "o1", "lecturer", Decimal(1), "active")]},
+        {"entries": [LoadEntry("f1", "o1", "primary", Decimal(-2), "active")]},
+        {"entries": [LoadEntry("f1", "o1", "primary", Decimal(2), "paused")]},
     ],
 )
-def test_invalid_inputs_are_400(kwargs, code):
-    with pytest.raises(AcademicManagementError) as err:
+def test_invalid_stored_data_or_settings_are_server_faults_not_400(kwargs):
+    # Rows and the maximum come from storage and settings, not the request; the contract declares no 400 here.
+    with pytest.raises(ValueError, match="invalid faculty-load data"):
         report(**kwargs)
-    assert (err.value.status, err.value.code) == (400, code)
+
+
+# --- edge cases
+
+
+def test_a_term_without_counted_load_gives_an_empty_report():
+    body = report(entries=[LoadEntry("f1", "o1", "teaching_assistant", Decimal(4), "active")])
+    assert (body["items"], body["faculty_count"], body["over_load_count"]) == ([], 0, 0)
+    assert body["academic_period_id"] == "p1"
+
+
+def test_over_load_only_with_nobody_over_load_lists_nobody_but_keeps_the_count():
+    body = report(over_load_only=True, max_weekly_contact_hours=40)
+    assert (body["items"], body["faculty_count"], body["over_load_count"]) == ([], 2, 0)
+
+
+@pytest.mark.parametrize(("maximum", "echoed"), [(18, 18), (Decimal("18.0"), 18), (17.5, 17.5), (Decimal("0"), 0)])
+def test_the_report_echoes_the_maximum_it_compared_against(maximum, echoed):
+    body = report(max_weekly_contact_hours=maximum)
+    assert body["max_weekly_contact_hours"] == echoed
+    assert type(body["max_weekly_contact_hours"]) is type(echoed)
+
+
+def test_exactly_at_the_maximum_is_not_over_load():
+    body = report(entries=[LoadEntry("f1", "o1", "primary", Decimal(18), "active")])
+    assert (body["items"][0]["over_load"], body["over_load_count"]) == (False, 0)
+
+
+def test_a_name_lookup_that_fails_is_not_hidden():
+    with pytest.raises(KeyError):
+        report(faculty_name={}.__getitem__)
+
+
+@pytest.mark.parametrize("name", [None, 42])
+def test_a_name_that_is_not_a_string_is_a_server_fault(name):
+    with pytest.raises(ValueError, match="no display name"):
+        report(faculty_name=lambda _fid: name)
+
+
+# --- contract drift: value types, not only field names
+
+JSON_TYPES = {
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+    "array": (list,),
+    "object": (dict,),
+    "null": (type(None),),
+}
+
+
+def assert_matches(value, schema):
+    if "$ref" in schema:
+        schema = SCHEMAS[schema["$ref"].rsplit("/", 1)[1]]
+    types = schema.get("type")
+    allowed = types if isinstance(types, list) else [types]
+    ok = any(isinstance(value, JSON_TYPES[t]) for t in allowed)
+    if isinstance(value, bool) and "boolean" not in allowed:
+        ok = False  # bool is an int in Python, never a JSON integer or number
+    assert ok, (value, schema)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert_matches(item, schema["properties"][key])
+    if isinstance(value, list):
+        for item in value:
+            assert_matches(item, schema["items"])
+    if "minimum" in schema:
+        assert value >= schema["minimum"]
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"department_id": "d1"}, {"over_load_only": True}, {"entries": []}])
+def test_every_value_has_the_type_the_contract_declares(kwargs):
+    assert_matches(report(**kwargs), SCHEMAS["FacultyLoadReport"])

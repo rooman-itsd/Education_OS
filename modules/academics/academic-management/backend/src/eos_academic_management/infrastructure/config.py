@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from ..domain.errors import DomainRuleError
 from ..domain.values import require_number
 
 MAX_WEEKLY_CONTACT_HOURS_KEY = "ACADEMIC_MANAGEMENT_MAX_WEEKLY_CONTACT_HOURS"
@@ -19,14 +20,17 @@ class ModuleSettings:
 
 
 def _number(key: str, default: Decimal) -> Decimal:
+    """A finite number of at least 0. A bad value is a deployment error (ValueError), never a domain error that
+    an API layer could report to a caller as their own invalid request."""
     raw = os.environ.get(key)
     if raw is None or raw.strip() == "":
         return default
     try:
-        value = Decimal(raw.strip())
+        return require_number(Decimal(raw.strip()), key, minimum=0)
     except InvalidOperation:
         raise ValueError(f"{key} must be a number, got {raw!r}") from None
-    return require_number(value, key, minimum=0)
+    except DomainRuleError as err:
+        raise ValueError(f"{key}: {err.message}, got {raw!r}") from err
 
 
 def load_settings() -> ModuleSettings:
