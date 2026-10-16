@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from eos_core.db import get_db
-from eos_identity.api.deps import Principal, require, require_organisation
+from eos_identity.api.deps import Principal, require
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -48,11 +48,14 @@ class AdminSet(BaseModel):
 
 @router.get("/plans")
 def plans(db: Session = Depends(get_db)):
+    """Public: the published price list, shown on the sign-up page before anyone has an account."""
     return service.list_plans(db)
 
 
 @router.get("/subscription")
-def subscription(p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def subscription(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
     sub = service.get_subscription(db, p.organisation_id)
     if not sub:
         raise HTTPException(404, "no subscription")

@@ -1,11 +1,16 @@
 # Permission catalogue for identity. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Authentication routes (login, "who am I") take any active user and need no key.
+# Every organisation user also holds the implicit role `member`, declared in
+# platform/tenancy/contracts/permissions.yaml, which carries what a member needs to open the shell.
 module: identity
-permissions: []
-#  - key: identity:record:read
-#    description: ...
-#  - key: identity:record:write
-#    description: ...
-roles: []
-#  - name: identity-admin
-#    grants: [identity:record:read, identity:record:write]
+permissions:
+  - key: identity:user:read
+    description: List the users of own organisation.
+  - key: identity:user:manage
+    description: Create, disable and assign roles to users of own organisation. Platform roles cannot be granted.
+roles:
+  - name: org-admin
+    description: Organisation administrator, created at registration. Scoped to one organisation.
+    grants: [identity:user:read, identity:user:manage]
