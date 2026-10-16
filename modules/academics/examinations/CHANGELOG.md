@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Examination Staff dashboard widgets (frontend): examinations.schedule, examinations.hall-tickets-issued, examinations.results-pending.
 - PRD: attendance for eligibility comes from timetable-attendance's bulk read (owner decision C7,
   PR #183); the attendance-event consumption row is removed. Where the minimum lives stays open (Q5).
 - PRD (`docs/prd.md`) and contracts for exam cycles, assessment and grading schemes, papers,

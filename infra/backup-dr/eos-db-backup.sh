@@ -23,7 +23,8 @@ DB_NAME=eos
 
 log() {
   echo "$*"
-  if command -v logger >/dev/null; then logger -t eos-db-backup "$*"; fi
+  # Under systemd the line above already reaches the journal; send it once more only for a manual run.
+  if [ -z "${INVOCATION_ID:-}" ] && command -v logger >/dev/null; then logger -t eos-db-backup "$*"; fi
 }
 fail() {
   log "FAILED: $*"
