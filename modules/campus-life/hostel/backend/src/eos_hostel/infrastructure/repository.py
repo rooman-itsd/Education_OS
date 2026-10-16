@@ -74,12 +74,13 @@ def room_by_number(db: Session, hostel_id: str, number: str) -> Room | None:
 
 
 def holding_allocations(db: Session, room_ids: list[str], on: date | None = None) -> list[Allocation]:
-    """Allocations that hold a bed in these rooms (confirmed or occupied), optionally only those covering `on`."""
+    """Allocations that hold a bed in these rooms (confirmed or occupied), optionally only those covering `on`.
+    An occupied allocation holds its bed until check-out, whatever its planned to_date says."""
     if not room_ids:
         return []
     q = _scoped(db, Allocation).where(Allocation.room_id.in_(room_ids), Allocation.status.in_(BED_HOLDING))
     if on is not None:
-        q = q.where(or_(Allocation.to_date.is_(None), Allocation.to_date >= on))
+        q = q.where(or_(Allocation.status == "occupied", Allocation.to_date.is_(None), Allocation.to_date >= on))
     return list(db.scalars(q))
 
 
@@ -158,11 +159,15 @@ def leave_query(
     status: str | None = None,
     hostel_id: str | None = None,
     overdue: bool | None = None,
+    statuses: tuple[str, ...] | None = None,
 ) -> Select:
-    """overdue=True: approved or out leave whose end has passed without a return; overdue=False: everything else."""
+    """overdue=True: approved or out leave whose end has passed without a return; overdue=False: everything else.
+    `statuses` limits the result to those statuses (the security desk sees only gate-pass statuses)."""
     q = _scoped(db, LeaveRequest)
     if status:
         q = q.where(LeaveRequest.status == status)
+    if statuses:
+        q = q.where(LeaveRequest.status.in_(statuses))
     if hostel_id:
         q = q.where(LeaveRequest.hostel_id == hostel_id)
     is_overdue = and_(LeaveRequest.status.in_(LEAVE_AWAY), LeaveRequest.to_at < now)

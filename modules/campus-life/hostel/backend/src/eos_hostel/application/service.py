@@ -439,6 +439,11 @@ def request_room(db: Session, actor: Actor, data: dict) -> dict:
     return allocation_dict(db, a)
 
 
+def _held_period(a: Allocation) -> Period:
+    """The dates an allocation holds its bed: an occupied one holds it until check-out, not until its planned to_date."""
+    return Period(a.from_date, None if a.status == "occupied" else a.to_date)
+
+
 def _assign_bed(db: Session, a: Allocation, room_id: str, bed: str, start: date | None, end: date | None) -> Room:
     """Check the bed is allocatable for the period, then put the allocation on it. Locks the room first."""
     room = repo.room_for_update(db, room_id)
@@ -453,10 +458,10 @@ def _assign_bed(db: Session, a: Allocation, room_id: str, bed: str, start: date 
     except RuleViolationError as v:
         raise _rule(v) from v
     for other in repo.holding_allocations(db, [room.id]):
-        if other.id != a.id and other.bed == bed and period.overlaps(Period(other.from_date, other.to_date)):
+        if other.id != a.id and other.bed == bed and period.overlaps(_held_period(other)):
             raise _conflict("bed_taken", f"bed {bed} is taken for these dates")
     for other in repo.person_holding(db, a.person_id, exclude_id=a.id):
-        if period.overlaps(Period(other.from_date, other.to_date)):
+        if period.overlaps(_held_period(other)):
             raise _conflict("person_allocated", "the person already has a bed for these dates")
     a.hostel_id, a.room_id, a.bed = room.hostel_id, room.id, bed
     a.from_date, a.to_date = period.start, period.end
@@ -484,6 +489,13 @@ def _confirmed(db: Session, actor: Actor, a: Allocation, room: Room) -> None:
 
 
 def allocate_direct(db: Session, actor: Actor, data: dict) -> dict:
+    year = data["academic_year"]
+    existing = repo.open_for_year(db, data["person_id"], year)
+    if existing is not None and existing.status == "requested":
+        # the person's own request must be confirmed (or cancelled), not shadowed by a second row
+        raise _conflict(
+            "already_requested", f"the person has an open room request for {year}; confirm or cancel it first"
+        )
     a = Allocation(
         organisation_id=actor.organisation_id,
         person_id=data["person_id"],
@@ -592,7 +604,7 @@ def _current_or_upcoming(db: Session, person_id: str) -> Allocation | None:
     holding = [
         a
         for a in repo.person_allocations(db, person_id)
-        if a.status in rules.BED_HOLDING and (a.to_date is None or a.to_date >= today())
+        if a.status in rules.BED_HOLDING and (a.status == "occupied" or a.to_date is None or a.to_date >= today())
     ]
     holding.sort(key=lambda a: (a.status != "occupied", a.from_date or date.min))
     return holding[0] if holding else None
@@ -701,10 +713,27 @@ def my_leave(db: Session, actor: Actor) -> list[dict]:
     return [leave_dict(lv) for lv in repo.person_leave(db, actor.user_id)]
 
 
+GATE_VISIBLE = rules.LEAVE_AWAY + ("returned",)
+
+
 def list_leave(
-    db: Session, status: str | None, hostel_id: str | None, overdue: bool | None, cursor: str | None, limit: int
+    db: Session,
+    actor: Actor,
+    status: str | None,
+    hostel_id: str | None,
+    overdue: bool | None,
+    cursor: str | None,
+    limit: int,
 ) -> dict:
-    q = repo.leave_query(db, clock(), status, hostel_id, overdue)
+    """Approvers see every leave request. The security desk (gate:record only) sees gate passes: approved, out,
+    returned. Pending and refused requests carry the resident's reason and contacts and stay with the approvers."""
+    statuses: tuple[str, ...] | None = None
+    if not actor.can(LEAVE_APPROVE):
+        if status is not None and status not in GATE_VISIBLE:
+            raise HostelError(403, "forbidden", f"listing {status} leave requests requires {LEAVE_APPROVE}")
+        statuses = (status,) if status else GATE_VISIBLE
+        status = None
+    q = repo.leave_query(db, clock(), status, hostel_id, overdue, statuses=statuses)
     rows, nxt = repo.page(db, q, cursor, limit)
     return _page([leave_dict(lv) for lv in rows], nxt)
 

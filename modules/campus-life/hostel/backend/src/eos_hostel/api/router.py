@@ -173,10 +173,10 @@ def list_leave(
     overdue: bool | None = None,
     cursor: str | None = None,
     limit: int = LIMIT,
-    _: Actor = Depends(require(svc.LEAVE_APPROVE, svc.GATE_RECORD)),
+    a: Actor = Depends(require(svc.LEAVE_APPROVE, svc.GATE_RECORD)),
     db: Session = Depends(get_db),
 ):
-    return svc.list_leave(db, status, hostel_id, overdue, cursor, limit)
+    return _run(svc.list_leave, db, a, status, hostel_id, overdue, cursor, limit)
 
 
 @router.post("/leave-requests/{leave_id}/decision")

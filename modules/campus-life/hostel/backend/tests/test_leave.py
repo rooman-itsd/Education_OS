@@ -115,3 +115,16 @@ def test_overdue_leave_is_flagged_once_and_listed(campus, monkeypatch):
     assert [x["id"] for x in listed] == [lv["id"]]
     assert lv["id"] not in [x["id"] for x in c.get("/leave-requests?overdue=false", c.warden).json()["items"]]
     assert c.post(f"/leave-requests/{lv['id']}/return", None, c.warden).json()["status"] == "returned"
+
+
+def test_the_security_desk_sees_only_gate_passes(campus):
+    """hostel:gate:record lists approved, out and returned leave; pending requests stay with the approvers."""
+    c = campus
+    _, me, _ = c.resident()
+    lv = c.post("/me/leave-requests", leave(), me).json()
+    assert c.get("/leave-requests", c.security).json()["items"] == []
+    assert c.get("/leave-requests?status=requested", c.security).status_code == 403
+    assert [x["id"] for x in c.get("/leave-requests?status=requested", c.warden).json()["items"]] == [lv["id"]]
+    c.post(f"/leave-requests/{lv['id']}/decision", {"decision": "approved"}, c.warden)
+    assert [x["id"] for x in c.get("/leave-requests", c.security).json()["items"]] == [lv["id"]]
+    assert [x["id"] for x in c.get("/leave-requests?status=approved", c.security).json()["items"]] == [lv["id"]]
