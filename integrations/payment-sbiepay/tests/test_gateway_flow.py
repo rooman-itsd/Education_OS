@@ -315,3 +315,38 @@ def test_a_request_delivers_only_its_own_payments_notifications(client, org, rec
     second = start(client, org.admin)
     browser_pays(client, second)
     assert {json.loads(q.content)["reference"] for q in receiver.requests} == {second["reference"]}
+
+
+def test_the_redirect_page_cannot_reopen_a_payment_finished_during_the_redirect(client, org, monkeypatch):
+    """A second tab or refresh of the redirect page while the callback lands must not set the payment back to
+    pending; otherwise verify or the sweep would apply (and publish) the success a second time."""
+    from eos_core.tenant import organisation_scope
+    from eos_payment_sbiepay.infrastructure import gateway as gw
+
+    s = start(client, org.admin)
+    original = gw.MockGateway.redirect_form
+
+    def finish_payment_then_build_form(self, order, callback_url):
+        db = SessionLocal()
+        try:
+            with platform_scope():
+                p = db.scalar(select(Payment).where(Payment.reference == order.reference))
+                db.commit()
+            with organisation_scope(org.id):
+                service._apply(db, p, VerifyResult("succeeded", gateway_transaction_id="T1", payment_mode="card"))
+                db.commit()
+        finally:
+            db.close()
+        return original(self, order, callback_url)
+
+    monkeypatch.setattr(gw.MockGateway, "redirect_form", finish_payment_then_build_form)
+    r = client.get(s["payment_url"])
+    assert r.status_code == 410, r.text
+    db = SessionLocal()
+    try:
+        with platform_scope():
+            assert db.scalar(select(Payment.status).where(Payment.reference == s["reference"])) == "succeeded"
+            db.commit()
+    finally:
+        db.close()
+    assert len(_events("payment-sbiepay.payment.succeeded", org.id, s["reference"])) == 1

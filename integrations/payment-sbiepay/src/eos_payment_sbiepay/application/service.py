@@ -394,8 +394,11 @@ def redirect_page(db: Session, reference: str) -> str:
     except GatewayUnavailableError as e:
         raise PaymentError(str(e), 503) from e
     with organisation_scope(p.organisation_id):
-        p.status = "pending"
-        db.add(p)
+        # Compare-and-set, like every other status change: a callback that finished the payment while the
+        # form was being built must not be overwritten with "pending", or the payment could be applied twice.
+        if not _transition(db, p, OPEN_STATUSES, status="pending"):
+            db.commit()
+            raise PaymentError("payment session expired or already finished", 410)
         db.commit()
     inputs = "".join(
         f'<input type="hidden" name="{escape(k)}" value="{escape(v)}">' for k, v in sorted(form.fields.items())
