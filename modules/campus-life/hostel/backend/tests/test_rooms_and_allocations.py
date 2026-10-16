@@ -173,17 +173,17 @@ def test_my_allocation_is_empty_without_one(campus):
 def test_an_occupied_bed_stays_held_after_its_planned_end_date(campus, monkeypatch):
     """A resident who has not checked out keeps the bed even when the allocation's to_date has passed."""
     c = campus
-    _, me, alloc = c.resident("1")
+    _, me, alloc = c.resident("2")
     assert alloc["status"] == "occupied" and alloc["to"] is not None
     monkeypatch.setattr(service, "clock", lambda: datetime(2027, 6, 2, 8, 0, tzinfo=UTC))  # after `to`
-    assert "1" not in c.get(f"/hostels/{c.hostel['id']}/rooms", c.warden).json()[0]["free_beds"]
+    assert "2" not in c.get(f"/hostels/{c.hostel['id']}/rooms", c.warden).json()[0]["free_beds"]
     assert c.get(f"/hostels/{c.hostel['id']}", c.viewer).json()["beds_occupied"] == 1
     assert c.get("/me/allocation", me).json()["hostel"]["id"] == c.hostel["id"]
     other_id, _ = c.org.user("hostel-resident")
     body = {
         "person_id": other_id,
         "room_id": c.room["id"],
-        "bed": "1",
+        "bed": "2",
         "academic_year": "2027-28",
         "from": "2027-06-02",
         "to": "2028-05-31",
@@ -191,8 +191,8 @@ def test_an_occupied_bed_stays_held_after_its_planned_end_date(campus, monkeypat
     r = c.post("/allocations", body, c.warden)
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "bed_taken"
-    r = c.client.patch(f"{BASE}/rooms/{c.room['id']}", json={"capacity": 1}, headers=c.admin)
-    assert r.status_code in (409, 422)
+    r = c.client.patch(f"{BASE}/rooms/{c.room['id']}", json={"capacity": 1}, headers=c.admin)  # bed 2 would vanish
+    assert r.status_code != 200 and r.json()["detail"]["code"] == "capacity_below_occupancy"
 
 
 def test_direct_allocation_refuses_a_person_with_an_open_request(campus):
