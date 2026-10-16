@@ -26,7 +26,7 @@ export function TrialJourney({
 }: {
   steps: JourneyStep[];
   label: string;
-  onDial: (dial: JourneyStep["dial"] | null) => void;
+  onDial: (dial: NonNullable<JourneyStep["dial"]> | null) => void;
 }) {
   const [active, setActive] = useState(0);
   const [auto, setAuto] = useState(() => !prefersReducedMotion());
