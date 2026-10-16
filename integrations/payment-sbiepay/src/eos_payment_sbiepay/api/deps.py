@@ -32,6 +32,8 @@ def current_principal(authorization: str | None = Header(default=None), db: Sess
         claims = decode_token(authorization.split(" ", 1)[1])
     except jwt.PyJWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e
+    if not claims.get("sub"):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid token: no subject")
     if not claims.get("org"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "this endpoint needs an organisation user")
     roles = list(claims.get("roles") or [])

@@ -92,10 +92,12 @@ class MockGateway:
     settlements: dict[tuple[str, date], list[SettlementRow]] = {}
     refunds: list[tuple[str, str, Decimal]] = []
     fail_refunds: bool = False
+    defer_refunds: bool = False  # answer `requested`, as a gateway that settles refunds later would
 
     @classmethod
     def reset(cls) -> None:
-        cls.transactions, cls.settlements, cls.refunds, cls.fail_refunds = {}, {}, [], False
+        cls.transactions, cls.settlements, cls.refunds = {}, {}, []
+        cls.fail_refunds = cls.defer_refunds = False
 
     def redirect_form(self, order: PaymentOrder, callback_url: str) -> RedirectForm:
         return RedirectForm(
@@ -131,7 +133,8 @@ class MockGateway:
         if self.fail_refunds:
             return RefundResult("failed", failure_reason="refused by mock gateway")
         self.refunds.append((order.reference, refund_id, amount))
-        return RefundResult("succeeded", gateway_refund_id=f"MOCKREF{len(self.refunds):06d}")
+        status = "requested" if self.defer_refunds else "succeeded"
+        return RefundResult(status, gateway_refund_id=f"MOCKREF{len(self.refunds):06d}")
 
     def settlement(self, merchant_id: str, settlement_date: date) -> list[SettlementRow]:
         return list(self.settlements.get((merchant_id, settlement_date), []))
