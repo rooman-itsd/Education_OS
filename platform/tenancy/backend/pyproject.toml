@@ -3,7 +3,7 @@ name = "eos-tenancy"
 version = "0.1.0"
 description = "Education OS platform service: organisations, registration, academy type, entitlements."
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "eos-core", "eos-identity", "eos-billing"]
+dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "alembic>=1.13", "eos-core", "eos-identity", "eos-billing"]
 
 [build-system]
 requires = ["setuptools>=68"]
