@@ -9,7 +9,9 @@ events:
     description: notification tells the approver.
     payload: { organisation_id: uuid, indent_id: uuid, number: string, requested_by: uuid, department_id: uuid, estimated_cost: string }
   - name: procurement.indent.approved
-    description: An indent was approved against a budget or grant line; budget-grants may reserve estimated_cost on line_id.
+    description: >-
+      An indent was approved after GET /availability on line_id passed. Nothing is reserved: budget-grants records
+      the commitment only when the purchase order is issued (procurement.purchase-order.issued). Informational.
     payload: { organisation_id: uuid, indent_id: uuid, number: string, requested_by: uuid, line_id: uuid, estimated_cost: string, purchase_method: string }
   - name: procurement.indent.rejected
     description: An indent was rejected with a note. notification tells the requester.

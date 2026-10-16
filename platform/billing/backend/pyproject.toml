@@ -3,7 +3,7 @@ name = "eos-billing"
 version = "0.1.0"
 description = "Education OS platform service: plans, trials, subscriptions, upgrades, invoices."
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "eos-core", "eos-identity"]
+dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "alembic>=1.13", "eos-core", "eos-identity"]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from eos_core.db import Base, TenantMixin, TimestampMixin, new_id, utcnow
@@ -18,6 +18,9 @@ def money(value: Decimal | None) -> str | None:
 
 
 def iso(value: datetime | date | None) -> str | None:
+    """ISO 8601. Datetimes are UTC; SQLite returns them without a zone, so one is added before formatting."""
+    if isinstance(value, datetime) and value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
     return value.isoformat() if value else None
 
 
@@ -163,3 +166,8 @@ class Notification(Base, TenantMixin, TimestampMixin):
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+# Used by the Alembic chain (db/migrations) to touch only this adapter's tables.
+PREFIX = "payment_sbiepay_"
+TABLES = [m.__table__ for m in (MerchantAccount, Payment, Refund, ReconciliationRun, Notification)]

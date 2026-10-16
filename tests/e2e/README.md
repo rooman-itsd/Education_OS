@@ -8,6 +8,7 @@ touches a dev server you have running, and stops them afterwards.
 |---|---|
 | Register an organisation, verify the email, sign-in refused until a super admin approves, sign in, land on the Organisation Admin dashboard | [onboarding/register-approve-signin.spec.ts](onboarding/register-approve-signin.spec.ts) |
 | Smoke: the API answers through `/api/` and the site leaves preview mode (also runs against staging) | [smoke/site-is-live.spec.ts](smoke/site-is-live.spec.ts) |
+| Examination Staff signs in to their dashboard; the examination widgets render and say when data is not available. Data journeys wait for the examinations backend (`fixme`) | [dashboards/examination-staff.spec.ts](dashboards/examination-staff.spec.ts) |
 
 The approval step calls the API until the super admin approval queue exists in `apps/frontend`.
 
