@@ -593,7 +593,7 @@ function RotatingWord({ words, interval = 3000 }: { words: string[]; interval?: 
 
 /** A heading whose words rise in, one after another, the first time it scrolls into view. */
 /**
- * "One platform, many fields": a full-bleed band whose background eases from white to pale lavender
+ * "One platform, many fields": a full-bleed band whose background eases from white to pale navy
  * as it enters the viewport, over a fine-line grid, with the content centred inside. `useInView`
  * reports in-view at once under reduced motion (and the CSS drops the transition), so the band simply
  * shows its final colour.

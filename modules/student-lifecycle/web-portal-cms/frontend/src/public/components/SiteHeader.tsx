@@ -13,7 +13,7 @@ import { stagger } from "./Reveal";
  *
  * Layout follows a "resizable" navbar: logo left, links centred, actions right. At the top of the page
  * it is a full-width frosted bar; once the page scrolls past SCROLL_COMPACT it shrinks into a
- * floating, rounded pill (CSS transitions on the `is-scrolled` class). A soft purple pill slides
+ * floating, rounded pill (CSS transitions on the `is-scrolled` class). A soft navy-tint pill slides
  * behind whichever link the pointer is over.
  *
  * Below MENU_BREAKPOINT the link list and "Sign in" move into a slide-down panel behind a menu button,

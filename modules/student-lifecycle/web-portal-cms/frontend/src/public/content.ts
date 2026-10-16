@@ -24,21 +24,18 @@ export const APP_URL = "/";
 export const ORG_SIGNUP_URL = "/#signup";
 
 /**
- * The public site's primary colour: the exact dark navy-violet the admin console's sidebar uses for
- * its background (`packages/ui-kit` tokens `--eos-sidebar` / `--eos-sidebar-gradient` /
- * `--eos-sidebar-border` — the same values `apps/frontend/src/admin/admin.source.css`'s
- * `.eos-sidebar-bg` applies), reused as the marketing site's accent instead of the ui-kit `BRAND_THEME`
- * indigo, so visitors see the same primary colour the product actually uses once they sign in. Tint
- * and ring are mixed from that exact token (never a guessed hex) the same way every wave layer below
- * derives its colour from one source.
+ * The public site's brand colours, from the Rooman logo (full palette and roles: the `.wpc` tokens at
+ * the top of public.css). Primary is Rooman navy, the wordmark's navy moved off indigo to a true deep
+ * blue so it stays distinct from the admin console's sidebar navy; series and bar add the logo's
+ * "Empower" green and "Integrate" saffron. Solid colours only: no gradients.
  */
 export const PUBLIC_THEME: PageTheme = {
-  accent: "#2a254e",
-  tint: "color-mix(in srgb, #2a254e 7%, white)",
-  ring: "color-mix(in srgb, #2a254e 18%, white)",
-  gradient: "linear-gradient(180deg, #241f46 0%, #2b264f 50%, #251f49 100%)",
-  series: ["#2a254e", "#059669", "#db2777"],
-  bar: "linear-gradient(90deg, #241f46, #3a3466)",
+  accent: "#1b3a7a",
+  tint: "#e3e9f4",
+  ring: "#d5ddec",
+  gradient: "#0d1e44",
+  series: ["#1b3a7a", "#2e7d32", "#f2941f"],
+  bar: "#1b3a7a",
 };
 
 export const BRAND = {
@@ -128,9 +125,9 @@ export const STATUS_HINT: Record<ImplStatus, string> = {
 /** Maps a status to a ui-kit Badge tone. */
 export const STATUS_TONE: Record<ImplStatus, BadgeTone> = {
   implemented: "success",
-  partial: "info",
+  partial: "warning",
   specified: "accent",
-  scaffold: "warning",
+  scaffold: "neutral",
   planned: "neutral",
 };
 

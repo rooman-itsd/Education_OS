@@ -123,13 +123,121 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
     window.setTimeout(() => requestAnimationFrame(() => jumpTo(id)), 0);
   };
 
+  // Hero background: a crisp saffron dot matrix that lights up and grows under the pointer.
+  // Canvas-based and brand-warm on purpose, so it reads differently from the cool radial
+  // spotlight the onboarding band uses. Mouse-only and reduced-motion safe.
+  const heroRef = useRef<HTMLElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const hero = heroRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!hero || !canvas || !ctx) return;
+
+    const reduce = prefersReducedMotion();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const GAP = 34; // px between dots
+    const R = 130; // px reach of the pointer
+    let w = 0;
+    let h = 0;
+    let pts: { x: number; y: number }[] = [];
+    let cx = -9999;
+    let cy = -9999;
+    let raf = 0;
+    let animating = false;
+
+    const build = () => {
+      const rect = hero.getBoundingClientRect();
+      w = rect.width;
+      h = rect.height;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pts = [];
+      for (let y = GAP / 2; y < h; y += GAP) {
+        for (let x = GAP / 2; x < w; x += GAP) pts.push({ x, y });
+      }
+    };
+
+    const draw = (withCursor: boolean) => {
+      ctx.clearRect(0, 0, w, h);
+      for (const p of pts) {
+        let t = 0;
+        if (withCursor) {
+          const d = Math.hypot(p.x - cx, p.y - cy);
+          if (d < R) t = 1 - d / R;
+        }
+        const r = 1 + t * 2.4; // dots grow near the pointer
+        const a = 0.06 + t * 0.6; // and brighten
+        const rr = Math.round(255 + (242 - 255) * t); // white -> saffron #f2941f
+        const gg = Math.round(255 + (148 - 255) * t);
+        const bb = Math.round(255 + (31 - 255) * t);
+        ctx.fillStyle = `rgba(${rr}, ${gg}, ${bb}, ${a})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+
+    const loop = () => {
+      draw(true);
+      raf = requestAnimationFrame(loop);
+    };
+    const start = () => {
+      if (!animating) {
+        animating = true;
+        raf = requestAnimationFrame(loop);
+      }
+    };
+    const stop = () => {
+      animating = false;
+      cancelAnimationFrame(raf);
+      draw(false);
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") return;
+      const rect = canvas.getBoundingClientRect();
+      cx = e.clientX - rect.left;
+      cy = e.clientY - rect.top;
+      start();
+    };
+    const onLeave = () => {
+      cx = -9999;
+      cy = -9999;
+      stop();
+    };
+
+    build();
+    draw(false);
+    if (!reduce) {
+      hero.addEventListener("pointermove", onMove, { passive: true });
+      hero.addEventListener("pointerleave", onLeave);
+    }
+    const ro = new ResizeObserver(() => {
+      build();
+      draw(animating);
+    });
+    ro.observe(hero);
+
+    return () => {
+      hero.removeEventListener("pointermove", onMove);
+      hero.removeEventListener("pointerleave", onLeave);
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
   return (
     <div className="wpc-page wpc-fx">
       {/* Hero */}
-      <header className="wpc-fx-hero">
+      <header ref={heroRef} className="wpc-fx-hero">
         <div className="wpc-fx-hero__aura" aria-hidden>
           <span className="wpc-fx-hero__orb wpc-fx-hero__orb--a" />
           <span className="wpc-fx-hero__orb wpc-fx-hero__orb--b" />
+          <canvas ref={canvasRef} className="wpc-fx-hero__canvas" />
         </div>
         <div className="wpc-container wpc-fx-hero__inner">
           <p className="wpc-fx-hero__eyebrow">Platform</p>
@@ -220,7 +328,7 @@ export function FeaturesPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
               <summary>How to read the status labels</summary>
               <ul className="wpc-fx-legend__list">
                 {STATUS_ORDER.map((status) => (
-                  <li key={status}>
+                  <li key={status} data-status={status}>
                     <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
                     <span>{STATUS_HINT[status]}</span>
                   </li>
@@ -315,18 +423,6 @@ function FilterChip({
 
 /** One product area: a header, then its module cards. */
 function CategorySection({ category }: { category: FeatureCategory }) {
-  const gridRef = useRef<HTMLDivElement>(null);
-
-  // One delegated handler drives every card's pointer spotlight (CSS reads --mx / --my).
-  const onPointerMove = (e: { target: EventTarget; clientX: number; clientY: number; pointerType: string }) => {
-    if (e.pointerType !== "mouse") return;
-    const card = (e.target as Element).closest<HTMLElement>(".wpc-fx-card");
-    if (!card || !gridRef.current?.contains(card)) return;
-    const box = card.getBoundingClientRect();
-    card.style.setProperty("--mx", `${e.clientX - box.left}px`);
-    card.style.setProperty("--my", `${e.clientY - box.top}px`);
-  };
-
   return (
     <section
       className="wpc-fx-cat"
@@ -348,13 +444,11 @@ function CategorySection({ category }: { category: FeatureCategory }) {
           {category.modules.length} {category.modules.length === 1 ? "module" : "modules"}
         </span>
       </Reveal>
-      <div ref={gridRef} onPointerMove={onPointerMove}>
-        <RevealGroup className="wpc-fx-grid">
-          {category.modules.map((mod, i) => (
-            <ModuleCard key={mod.name} module={mod} icon={category.icon} index={i} />
-          ))}
-        </RevealGroup>
-      </div>
+      <RevealGroup className="wpc-fx-grid">
+        {category.modules.map((mod, i) => (
+          <ModuleCard key={mod.name} module={mod} icon={category.icon} index={i} />
+        ))}
+      </RevealGroup>
     </section>
   );
 }

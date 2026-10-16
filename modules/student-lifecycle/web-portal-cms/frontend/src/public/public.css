@@ -20,12 +20,62 @@
   line-height: 1.55;
 
   /*
-   * Brand palette: lighter variations of the one primary colour, --accent (set by PUBLIC_THEME to the
-   * admin sidebar's #2a254e). That colour is dark and low in chroma, so simply mixing it into white
-   * washes out to grey; where the browser supports relative colours (below) each step keeps the
-   * sidebar's own hue and chroma and only raises the lightness, which reads as lavender. These
-   * fallbacks mix in OKLCH, which holds the hue better than sRGB. No other hue is introduced.
+   * Brand palette, taken from the Rooman logo (shield and wordmark):
+   *  - Primary, Rooman navy: the wordmark's navy moved off indigo to a true deep blue, so it reads
+   *    apart from the admin console's sidebar navy. Actions, links, selection, dark bands.
+   *  - Secondary, saffron: the logo's "Integrate" orange. Highlights, the primary action on dark
+   *    grounds, progress. Text uses the deeper -700 step, which passes AA on white.
+   *  - Tertiary, leaf: the logo's "Empower" green. Live, implemented and success states only.
+   *  - Signal red: the shield's red, kept for errors and one field accent; never decoration.
+   * Neutrals stay the kit's cool slate, which sits naturally with the navy.
    */
+  --c-navy-950: #08142e;
+  --c-navy-900: #0d1e44;
+  --c-navy-800: #142c5f;
+  --c-navy-700: #1b3a7a;
+  --c-navy-600: #24499a;
+  --c-navy-300: #9db0d6;
+  --c-navy-200: #c5d1e8;
+  --c-navy-line: #d5ddec;
+  --c-navy-100: #e3e9f4;
+  --c-navy-50: #f2f5fa;
+  --c-saffron-300: #f9b960;
+  --c-saffron-500: #f2941f;
+  --c-saffron-600: #db7a0b;
+  --c-saffron-700: #a85a00;
+  --c-saffron-100: #fdefd9;
+  --c-leaf-500: #43a047;
+  --c-leaf-700: #2e7d32;
+  --c-leaf-100: #e5f2e6;
+  --c-red-700: #b42318;
+  --c-red-100: #fdecea;
+  --c-on-dark: #ffffff;
+  --c-on-dark-2: #d5ddec;
+
+  /* The kit's own accent, primary, hero and chart colours are indigo/coral; remap them to the brand. */
+  --eos-primary: var(--c-navy-700);
+  --eos-primary-hover: var(--c-navy-800);
+  --eos-primary-tint: var(--c-navy-100);
+  --eos-accent: var(--c-navy-700);
+  --eos-accent-hover: var(--c-navy-800);
+  --eos-accent-tint: var(--c-navy-100);
+  --eos-accent-ring: var(--c-navy-line);
+  --eos-accent-bar: var(--c-navy-700);
+  --eos-hero-gradient: var(--c-navy-900);
+  --eos-shadow-hero: 0 12px 32px -18px rgba(13, 30, 68, 0.45);
+  --eos-success: var(--c-leaf-700);
+  --eos-success-tint: var(--c-leaf-100);
+  --eos-warning: var(--c-saffron-700);
+  --eos-warning-tint: var(--c-saffron-100);
+  --eos-danger: var(--c-red-700);
+  --eos-danger-tint: var(--c-red-100);
+  --eos-info: var(--c-navy-600);
+  --eos-info-tint: var(--c-navy-100);
+  --eos-chart-1: var(--c-navy-700);
+  --eos-chart-2: var(--c-leaf-700);
+  --eos-chart-3: var(--c-saffron-500);
+
+  /* Pale steps of --accent (Rooman navy) for soft grounds; OKLCH keeps the navy hue as they lighten. */
   --wave-1: color-mix(in oklch, var(--accent) 6%, white);
   --wave-2: color-mix(in oklch, var(--accent) 10%, white);
   --wave-3: color-mix(in oklch, var(--accent) 14%, white);
@@ -38,14 +88,15 @@
 }
 @supports (color: oklch(from red l c h)) {
   .wpc {
-    --wave-1: oklch(from var(--accent) 0.975 calc(c * 0.45) h);
-    --wave-2: oklch(from var(--accent) 0.958 calc(c * 0.6) h);
-    --wave-3: oklch(from var(--accent) 0.94 calc(c * 0.75) h);
-    --wave-4: oklch(from var(--accent) 0.92 calc(c * 0.9) h);
-    --wave-5: oklch(from var(--accent) 0.9 c h);
-    --wave-6: oklch(from var(--accent) 0.875 c h);
-    --wave-7: oklch(from var(--accent) 0.85 c h);
-    --wave-8: oklch(from var(--accent) 0.82 c h);
+    /* Chroma falls as lightness rises, so the pale steps read as a navy-grey tint, not sky blue. */
+    --wave-1: oklch(from var(--accent) 0.975 calc(c * 0.12) h);
+    --wave-2: oklch(from var(--accent) 0.958 calc(c * 0.16) h);
+    --wave-3: oklch(from var(--accent) 0.94 calc(c * 0.2) h);
+    --wave-4: oklch(from var(--accent) 0.92 calc(c * 0.24) h);
+    --wave-5: oklch(from var(--accent) 0.9 calc(c * 0.28) h);
+    --wave-6: oklch(from var(--accent) 0.875 calc(c * 0.32) h);
+    --wave-7: oklch(from var(--accent) 0.85 calc(c * 0.36) h);
+    --wave-8: oklch(from var(--accent) 0.82 calc(c * 0.4) h);
     --brand-hi: oklch(from var(--accent) 0.52 calc(c * 1.6) h);
   }
 }
@@ -119,14 +170,14 @@
  * - The header band itself ignores the pointer, so the transparent strip beside the floating pill
  *   never blocks clicks on the page beneath it.
  *
- * The navbar scopes the hero's violet palette onto the accent tokens, so every accent inside it
- * (letter swap, active link, hover pill, toggle, mobile panel, focus rings) is the same purple.
+ * The navbar scopes Rooman navy onto the accent tokens, so every accent inside it (letter swap,
+ * active link, hover pill, toggle, mobile panel, focus rings) is the same navy.
  * Below 820px the links and "Sign in" move into the slide-down panel (see the end of this block).
  */
 .wpc-header {
-  --accent: #7c3aed;
-  --accent-tint: #f3e8ff;
-  --accent-ring: #ddd6fe;
+  --accent: var(--c-navy-700);
+  --accent-tint: var(--c-navy-100);
+  --accent-ring: var(--c-navy-line);
   --nav-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --nav-dur: 0.5s;
   --nav-compact-h: 52px;
@@ -157,7 +208,7 @@
   background: color-mix(in srgb, var(--eos-surface) 80%, transparent);
   backdrop-filter: saturate(1.1) blur(20px);
   -webkit-backdrop-filter: saturate(1.1) blur(20px);
-  box-shadow: 0 0 0 0 rgba(76, 29, 149, 0);
+  box-shadow: 0 0 0 0 rgba(13, 30, 68, 0);
   transform: translateY(0);
   transition:
     max-width var(--nav-dur) var(--nav-ease),
@@ -180,7 +231,7 @@
   background: color-mix(in srgb, var(--eos-surface) 86%, transparent);
   backdrop-filter: saturate(1.2) blur(14px);
   -webkit-backdrop-filter: saturate(1.2) blur(14px);
-  box-shadow: 0 12px 32px -14px rgba(76, 29, 149, 0.3);
+  box-shadow: 0 12px 32px -14px rgba(13, 30, 68, 0.3);
   transform: translateY(6px);
 }
 
@@ -205,7 +256,7 @@
   gap: var(--eos-space-1);
   padding: 4px;
 }
-/* The soft purple pill that slides behind whichever link the pointer is over. */
+/* The soft navy-tint pill that slides behind whichever link the pointer is over. */
 .wpc-nav__pill {
   position: absolute;
   top: 4px;
@@ -302,7 +353,7 @@
   gap: var(--eos-space-2);
   white-space: nowrap;
 }
-/* Actions in the navbar's purple: violet "Get started", lavender-tinted "Sign in", smooth hovers. */
+/* Actions in Rooman navy: solid navy "Get started", navy-tinted "Sign in", smooth hovers. */
 .wpc-header__actions .eos-btn {
   border-radius: var(--eos-radius-pill);
   transition:
@@ -313,14 +364,14 @@
     transform var(--eos-fast) var(--eos-ease);
 }
 .wpc-header__actions .eos-btn--primary {
-  background: #7c3aed;
-  border-color: #8b5cf6;
+  background: var(--c-navy-700);
+  border-color: var(--c-navy-700);
   color: #ffffff;
-  box-shadow: 0 6px 16px -8px rgba(124, 58, 237, 0.65);
+  box-shadow: 0 6px 16px -8px rgba(27, 58, 122, 0.65);
 }
 .wpc-header__actions .eos-btn--primary:hover {
-  background: #6d28d9;
-  box-shadow: 0 8px 20px -8px rgba(124, 58, 237, 0.8);
+  background: var(--c-navy-800);
+  box-shadow: 0 8px 20px -8px rgba(27, 58, 122, 0.8);
   transform: translateY(-1px);
 }
 .wpc-header__actions .eos-btn--ghost {
@@ -328,7 +379,7 @@
 }
 .wpc-header__actions .eos-btn--ghost:hover {
   background: var(--accent-tint);
-  color: #6d28d9;
+  color: var(--c-navy-800);
 }
 .wpc-header__actions .eos-btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -509,7 +560,7 @@
   }
 }
 
-/* ---- hero: very light, centred, with a subtle animated lavender background ---- */
+/* ---- hero: very light, centred, with a subtle animated navy-tint background ---- */
 
 .wpc-herowrap {
   position: relative;
@@ -527,16 +578,16 @@
   justify-content: center;
   min-height: calc(100vh - var(--eos-topbar-height) - 1px);
   min-height: calc(100svh - var(--eos-topbar-height) - 1px);
-  /* White base; the lavender comes from the wave background. */
+  /* White base; the pale navy comes from the wave background. */
   background: var(--eos-surface);
 }
 
 /*
- * Decorative hero background: twelve translucent lavender wave layers (inline SVG paths, no image, no
+ * Decorative hero background: twelve translucent pale-navy wave layers (inline SVG paths, no image, no
  * dots) — three ribbons sweeping from the left, three rising from the right, six staggered bands across
  * the bottom — each a different curve and a touch deeper than the one before, so they read as uneven,
  * overlapping silk. The top stays clean white. Colours are the page's accent token (--accent — the
- * admin sidebar's navy-violet, see PUBLIC_THEME in content.ts) mixed into white. Motion: on load every
+ * Rooman navy, see PUBLIC_THEME in content.ts) mixed into white. Motion: on load every
  * layer rises and fades in slowly, one after another (outer <g>); afterwards each sways very gently
  * (inner <path>, transform only); the white highlight lines draw themselves in. Everything freezes in
  * its final state under reduced motion.
@@ -661,6 +712,8 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The footage is graded violet; turn it to Rooman navy and calm it so the copy and saffron lead. */
+  filter: hue-rotate(-38deg) saturate(0.7);
   animation: wpc-video-in 1.2s var(--eos-ease) both;
 }
 .wpc-herovideo::after {
@@ -719,10 +772,10 @@
   gap: var(--eos-space-2);
   padding: var(--eos-space-2) var(--eos-space-4);
   border-radius: var(--eos-radius-pill);
-  /* Subtle white/lavender badge with deep-violet text, legible over the hero video. */
-  background: rgba(245, 240, 255, 0.9);
-  border: 1px solid rgba(216, 180, 254, 0.7);
-  color: #4c1d95;
+  /* White badge with navy text and a saffron hairline, legible over the hero video. */
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--c-saffron-300);
+  color: var(--c-navy-800);
   letter-spacing: 0.04em;
 }
 .wpc-hero__title {
@@ -738,18 +791,15 @@
   letter-spacing: -0.028em;
   color: #ffffff;
 }
-/* "on" in the second headline line shares the rotating phrase's purple gradient. */
+/* "on" in the second headline line shares the rotating phrase's saffron. */
 .wpc-hero__title .wpc-title__line + .wpc-title__line .wpc-w__i {
-  background: linear-gradient(100deg, #f3e8ff, #d8b4fe 50%, #f3e8ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--c-saffron-300);
 }
 .wpc-hero__subtitle {
   margin: var(--eos-space-4) auto 0;
   max-width: 58ch;
   font-size: var(--eos-text-lg);
-  color: #e5e0f0;
+  color: var(--c-on-dark-2);
 }
 .wpc-hero__actions {
   margin-top: var(--eos-space-6);
@@ -788,7 +838,7 @@
 
 .wpc-rot {
   /* A soft dark halo lifts the light phrase off the video. On the wrapper, because the words animate `filter`. */
-  filter: drop-shadow(0 2px 10px rgba(30, 10, 60, 0.45));
+  filter: drop-shadow(0 2px 10px rgba(8, 20, 46, 0.5));
   display: inline-grid;
   justify-items: start;
   vertical-align: top;
@@ -805,12 +855,8 @@
 .wpc-rot__word {
   grid-area: 1 / 1;
   white-space: nowrap;
-  /* Bright lavender gradient with a slow shimmer; the ends match so the shimmer loops without a seam. */
-  background: linear-gradient(100deg, #f3e8ff, #d8b4fe 50%, #f3e8ff);
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* Solid light saffron (the logo's orange, lifted for contrast on the dark video). */
+  color: var(--c-saffron-300);
   animation-fill-mode: both;
 }
 /* The first phrase rises in as part of the headline's own reveal, just above it. */
@@ -1080,11 +1126,11 @@
   display: inline-flex;
   align-items: center;
   gap: var(--eos-space-2);
-  color: #ede9fe;
+  color: var(--c-on-dark-2);
   font-size: var(--eos-text-sm);
 }
 .wpc-trust__item svg {
-  color: #d8b4fe;
+  color: var(--c-saffron-300);
 }
 
 /* ---- a quiet, factual note under a section ---- */
@@ -1420,28 +1466,28 @@
 
 /* ---- "One platform, many fields" band ---- */
 /*
- * A centred, content-only band. Its background eases from white to pale lavender as it enters the
+ * A centred, content-only band. Its background eases from white to pale navy as it enters the
  * viewport (FieldsSection adds `.is-in`), over a fine-line grid that fades out towards the edges, with
- * one soft violet glow at the top as the only accent. The top and bottom edges fade back to white so
- * the band blends into the sections around it. The section scopes the navbar's violet onto the accent
- * tokens so the badge, pills and grid share one purple. The content itself fades up via Reveal and
+ * one faint navy tint at the top as the only accent. The top and bottom edges fade back to white so
+ * the band blends into the sections around it. The section scopes Rooman navy onto the accent
+ * tokens so the badge, pills and grid share one colour. The content itself fades up via Reveal and
  * RevealGroup; under reduced motion everything shows in its final state with no transition.
  */
 .wpc-fieldsec {
-  --accent: #7c3aed;
-  --accent-tint: #f3e8ff;
-  --accent-ring: #ddd6fe;
-  --fieldsec-lavender: #f6f2ff;
-  --fieldsec-line: rgba(124, 58, 237, 0.07);
+  --accent: var(--c-navy-700);
+  --accent-tint: var(--c-navy-100);
+  --accent-ring: var(--c-navy-line);
+  --fieldsec-tint: var(--c-navy-50);
+  --fieldsec-line: rgba(27, 58, 122, 0.07);
   position: relative;
   isolation: isolate;
   overflow: hidden;
   background-color: #ffffff;
-  background-image: radial-gradient(ellipse 46% 38% at 50% 0%, rgba(167, 139, 250, 0.16), transparent 72%);
+  background-image: radial-gradient(ellipse 46% 38% at 50% 0%, rgba(27, 58, 122, 0.16), transparent 72%);
   transition: background-color 1.4s var(--eos-ease);
 }
 .wpc-fieldsec.is-in {
-  background-color: var(--fieldsec-lavender);
+  background-color: var(--fieldsec-tint);
 }
 /* Fine-line grid: 1px lines every 44px, masked to a soft ellipse so it never reaches the edges. */
 .wpc-fieldsec::before {
@@ -1481,7 +1527,7 @@
   align-items: center;
   max-width: 760px;
 }
-/* Badge: a quiet white/lavender pill with deep-violet text, centred above the heading. */
+/* Badge: a quiet white pill with navy text, centred above the heading. */
 .wpc-fieldsec__badge {
   display: inline-flex;
   align-items: center;
@@ -1490,8 +1536,8 @@
   border-radius: var(--eos-radius-pill);
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--accent-ring);
-  box-shadow: 0 4px 14px -10px rgba(124, 58, 237, 0.5);
-  color: #5b21b6;
+  box-shadow: 0 4px 14px -10px rgba(27, 58, 122, 0.5);
+  color: var(--c-navy-800);
   letter-spacing: 0.1em;
 }
 .wpc-fieldsec .wpc-section__title {
@@ -1523,10 +1569,10 @@
 .wpc-fieldsec .wpc-field:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--accent-ring));
   background: var(--accent-tint);
-  color: #6d28d9;
-  box-shadow: 0 8px 20px -12px rgba(124, 58, 237, 0.45);
+  color: var(--c-navy-800);
+  box-shadow: 0 8px 20px -12px rgba(27, 58, 122, 0.45);
 }
-/* Supporting note: centred under a short violet hairline, quieter than the lead. */
+/* Supporting note: centred under a short navy hairline, quieter than the lead. */
 .wpc-fieldsec .wpc-note {
   margin: var(--eos-space-8) auto 0;
   max-width: 60ch;
@@ -1539,7 +1585,7 @@
   height: 2px;
   margin: 0 auto var(--eos-space-4);
   border-radius: 1px;
-  background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.45), transparent);
+  background: linear-gradient(90deg, transparent, rgba(27, 58, 122, 0.45), transparent);
 }
 
 @media (max-width: 720px) {
@@ -1613,7 +1659,7 @@
 
 /* ---- "Getting started" band (homepage) ---- */
 /*
- * A deep band in the brand navy (#2a254e, the admin sidebar colour and the site's --accent). Its
+ * A deep band in Rooman navy (var(--c-navy-900), a deeper step of the site's --accent). Its
  * background is alive but quiet: three soft navy-blue light pools drift slowly behind the content
  * (`.wpc-onboard__aura`), and a gentle spotlight follows the mouse (OnboardSection writes --spot-x/y
  * and toggles `.is-lit`). The four steps run left to right as frosted-glass cards with animated arrow
@@ -1622,12 +1668,12 @@
  * motion stops the drift, the arrows and the spotlight, and drops the hover transitions.
  */
 .wpc-onboard {
-  --ob-navy: #2a254e;
-  --ob-navy-deep: #1d1940;
+  --ob-navy: var(--c-navy-900);
+  --ob-navy-deep: var(--c-navy-950);
   --ob-text: #ffffff;
-  --ob-muted: #c9cfe6;
-  --ob-faint: #b3bce3;
-  --ob-glow: #9fb0f0;
+  --ob-muted: var(--c-navy-200);
+  --ob-faint: var(--c-navy-300);
+  --ob-glow: var(--c-saffron-500);
   --ob-line: rgba(255, 255, 255, 0.12);
   --accent: var(--ob-muted);
   position: relative;
@@ -1635,8 +1681,7 @@
   overflow: hidden;
   color: var(--ob-text);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 30%),
-    linear-gradient(160deg, var(--ob-navy-deep) 0%, var(--ob-navy) 48%, #241f46 100%);
+    var(--ob-navy);
 }
 /* Pointer spotlight: invisible until the mouse is over the band, then it fades in and follows it. */
 .wpc-onboard::before {
@@ -1646,7 +1691,7 @@
   z-index: -1;
   background: radial-gradient(
     460px circle at var(--spot-x, 50%) var(--spot-y, 50%),
-    rgba(159, 176, 240, 0.14),
+    rgba(157, 176, 214, 0.14),
     transparent 65%
   );
   opacity: 0;
@@ -1662,7 +1707,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201, 207, 230, 0.35), transparent);
+  background: linear-gradient(90deg, transparent, rgba(197, 209, 232, 0.35), transparent);
   pointer-events: none;
 }
 
@@ -1686,7 +1731,7 @@
   height: 520px;
   top: -180px;
   left: -120px;
-  background: radial-gradient(circle, #3f4a9a 0%, transparent 70%);
+  background: radial-gradient(circle, var(--c-navy-700) 0%, transparent 70%);
   animation: wpc-orb-a 22s ease-in-out infinite alternate;
 }
 .wpc-onboard__orb--b {
@@ -1694,7 +1739,7 @@
   height: 460px;
   bottom: -200px;
   right: 8%;
-  background: radial-gradient(circle, #34508f 0%, transparent 70%);
+  background: radial-gradient(circle, var(--c-navy-700) 0%, transparent 70%);
   animation: wpc-orb-b 26s ease-in-out infinite alternate;
 }
 .wpc-onboard__orb--c {
@@ -1702,7 +1747,7 @@
   height: 360px;
   top: 30%;
   left: 45%;
-  background: radial-gradient(circle, #4a3f86 0%, transparent 70%);
+  background: radial-gradient(circle, var(--c-navy-700) 0%, transparent 70%);
   opacity: 0.4;
   animation: wpc-orb-c 30s ease-in-out infinite alternate;
 }
@@ -1755,7 +1800,7 @@
 }
 /* "signed in" — the last two words — in a pale navy-blue gradient. */
 .wpc-onboard__title .wpc-w:nth-last-of-type(-n + 2) .wpc-w__i {
-  background: linear-gradient(90deg, #e3e7ff, var(--ob-glow));
+  background: var(--c-saffron-500);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1796,7 +1841,7 @@
 .wpc-onboard .wpc-step:hover {
   translate: 0 -4px;
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(201, 207, 230, 0.35);
+  border-color: rgba(197, 209, 232, 0.35);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 24px 44px -26px rgba(0, 0, 0, 0.7);
 }
 /* Arrow connector centred in the gap after every card but the last; it nudges forward on a slow loop,
@@ -1896,7 +1941,7 @@
     translate 0.25s var(--eos-ease);
 }
 .wpc-onboard__actions .eos-btn--primary:hover {
-  background: #e9ecfb;
+  background: var(--c-navy-100);
   box-shadow: 0 16px 30px -14px rgba(0, 0, 0, 0.75);
   translate: 0 -1px;
 }
@@ -2030,13 +2075,13 @@
  * A navy hero with catalogue counts; a sticky product-area index (sidebar on wide screens, a scrolling
  * chip bar below 1100px) that highlights the area in view; a status filter; and module cards that lift
  * on hover with an accent line sweeping across the top and a soft spotlight following the pointer
- * (FeaturesPage sets --mx / --my per card). Uses the site's navy (#2a254e, the public --accent) and the
+ * (FeaturesPage sets --mx / --my per card). Uses the site's navy (var(--c-navy-900), the public --accent) and the
  * kit's neutral tokens; status colours match the ui-kit Badge tones. Reduced motion drops the motion.
  */
 .wpc-fx {
-  --fx-navy: #2a254e;
-  --fx-navy-deep: #1d1940;
-  --fx-soft: #f4f3f9;
+  --fx-navy: var(--c-navy-900);
+  --fx-navy-deep: var(--c-navy-950);
+  --fx-soft: var(--c-navy-50);
   --fx-sticky-top: calc(var(--eos-topbar-height) + var(--eos-space-6));
 }
 
@@ -2046,7 +2091,7 @@
   isolation: isolate;
   overflow: hidden;
   color: #ffffff;
-  background: linear-gradient(160deg, var(--fx-navy-deep) 0%, var(--fx-navy) 55%, #241f46 100%);
+  background: var(--fx-navy);
 }
 .wpc-fx-hero__aura {
   position: absolute;
@@ -2066,7 +2111,7 @@
   height: 480px;
   top: -200px;
   left: -100px;
-  background: radial-gradient(circle, #3f4a9a 0%, transparent 70%);
+  background: radial-gradient(circle, var(--c-navy-700) 0%, transparent 70%);
   animation: wpc-orb-a 24s ease-in-out infinite alternate;
 }
 .wpc-fx-hero__orb--b {
@@ -2074,8 +2119,17 @@
   height: 420px;
   bottom: -220px;
   right: 6%;
-  background: radial-gradient(circle, #34508f 0%, transparent 70%);
+  background: radial-gradient(circle, var(--c-navy-700) 0%, transparent 70%);
   animation: wpc-orb-b 28s ease-in-out infinite alternate;
+}
+/* interactive: a crisp saffron dot matrix drawn on canvas, reacting to the pointer */
+.wpc-fx-hero__canvas {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 .wpc-fx-hero__inner {
   display: flex;
@@ -2091,7 +2145,7 @@
   border-radius: var(--eos-radius-pill);
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.06);
-  color: #c9cfe6;
+  color: var(--c-navy-200);
   font-size: var(--eos-text-xs);
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -2108,7 +2162,7 @@
 .wpc-fx-hero__subtitle {
   margin: var(--eos-space-4) 0 0;
   max-width: 60ch;
-  color: #c9cfe6;
+  color: var(--c-navy-200);
   font-size: var(--eos-text-lg);
   line-height: 1.6;
 }
@@ -2135,7 +2189,7 @@
   border-left: 1px solid rgba(255, 255, 255, 0.12);
 }
 .wpc-fx-stat dt {
-  color: #b3bce3;
+  color: var(--c-navy-300);
   font-size: var(--eos-text-sm);
 }
 .wpc-fx-stat dd {
@@ -2167,7 +2221,7 @@
 }
 .wpc-fx-hero__actions .eos-btn--primary:hover,
 .wpc-fx-cta__actions .eos-btn--primary:hover {
-  background: #e9ecfb;
+  background: var(--c-navy-100);
   translate: 0 -1px;
 }
 .wpc-fx-hero__link {
@@ -2184,7 +2238,7 @@
   transition: color 0.2s var(--eos-ease);
 }
 .wpc-fx-hero__link:hover {
-  color: #c9cfe6;
+  color: var(--c-navy-200);
 }
 .wpc-fx-hero__link svg {
   transition: transform 0.25s var(--eos-ease);
@@ -2332,10 +2386,10 @@
     border-color 0.2s var(--eos-ease),
     color 0.2s var(--eos-ease);
 }
-.wpc-fx-chip[data-status="implemented"] { --chip-dot: #059669; }
-.wpc-fx-chip[data-status="partial"] { --chip-dot: #0284c7; }
-.wpc-fx-chip[data-status="specified"] { --chip-dot: #4f46e5; }
-.wpc-fx-chip[data-status="scaffold"] { --chip-dot: #d97706; }
+.wpc-fx-chip[data-status="implemented"] { --chip-dot: var(--c-leaf-700); }
+.wpc-fx-chip[data-status="partial"] { --chip-dot: var(--c-saffron-600); }
+.wpc-fx-chip[data-status="specified"] { --chip-dot: var(--c-navy-700); }
+.wpc-fx-chip[data-status="scaffold"] { --chip-dot: #64748b; }
 .wpc-fx-chip[data-status="planned"] { --chip-dot: #94a3b8; }
 .wpc-fx-chip:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--fx-navy) 35%, var(--eos-border));
@@ -2447,9 +2501,9 @@
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: linear-gradient(150deg, #3a3466, var(--fx-navy));
+  background: var(--c-navy-800);
   color: #ffffff;
-  box-shadow: 0 10px 22px -14px rgba(42, 37, 78, 0.8);
+  box-shadow: 0 10px 22px -14px rgba(13, 30, 68, 0.8);
 }
 .wpc-fx-cat__heading {
   flex: 1;
@@ -2498,11 +2552,27 @@
   background: var(--eos-surface);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-.wpc-fx-card[data-status="implemented"] { --card-accent: #059669; }
-.wpc-fx-card[data-status="partial"] { --card-accent: #0284c7; }
-.wpc-fx-card[data-status="specified"] { --card-accent: #4f46e5; }
-.wpc-fx-card[data-status="scaffold"] { --card-accent: #d97706; }
+.wpc-fx-card[data-status="implemented"] { --card-accent: var(--c-leaf-700); }
+.wpc-fx-card[data-status="partial"] { --card-accent: var(--c-saffron-600); }
+.wpc-fx-card[data-status="specified"] { --card-accent: var(--c-navy-700); }
+.wpc-fx-card[data-status="scaffold"] { --card-accent: #64748b; }
 .wpc-fx-card[data-status="planned"] { --card-accent: #94a3b8; }
+
+/* Status badge colours (cards + legend), drawn from the secondary palette so each status is
+   distinct — scaffold and planned no longer collapse to one grey. Overrides the ui-kit badge
+   tone locally without changing @eos/ui-kit. */
+.wpc-fx [data-status="implemented"] { --st: var(--c-leaf-700); }
+.wpc-fx [data-status="partial"] { --st: var(--c-saffron-600); }
+.wpc-fx [data-status="specified"] { --st: var(--c-navy-700); }
+.wpc-fx [data-status="scaffold"] { --st: #475569; }
+.wpc-fx [data-status="planned"] { --st: #64748b; }
+.wpc-fx [data-status] .eos-badge {
+  background: color-mix(in srgb, var(--st) 12%, #ffffff);
+  color: var(--st);
+  border: 1px solid color-mix(in srgb, var(--st) 24%, transparent);
+  font-weight: 600;
+}
+
 /* Accent line that sweeps across the top on hover, in the card's status colour. */
 .wpc-fx-card::before {
   content: "";
@@ -2513,17 +2583,6 @@
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.45s var(--eos-ease);
-}
-/* Spotlight that follows the pointer (position from --mx / --my). */
-.wpc-fx-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 0%), rgba(42, 37, 78, 0.07), transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s var(--eos-ease);
-  pointer-events: none;
 }
 /* Reveal (opacity/transform, staggered) plus hover on `translate`, which the reveal never touches —
    so the hover never inherits the stagger delay. */
@@ -2537,14 +2596,11 @@
 }
 .wpc-fx-card:hover {
   translate: 0 -4px;
-  border-color: color-mix(in srgb, var(--fx-navy) 22%, var(--eos-border));
-  box-shadow: 0 20px 40px -26px rgba(42, 37, 78, 0.45);
+  border-color: color-mix(in srgb, var(--card-accent) 45%, var(--eos-border));
+  box-shadow: 0 18px 38px -24px color-mix(in srgb, var(--card-accent) 40%, rgba(15, 23, 42, 0.5));
 }
 .wpc-fx-card:hover::before {
   transform: scaleX(1);
-}
-.wpc-fx-card:hover::after {
-  opacity: 1;
 }
 .wpc-fx-card__glyph {
   position: absolute;
@@ -2556,17 +2612,20 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: var(--fx-soft);
-  color: var(--fx-navy);
+  background: color-mix(in srgb, var(--card-accent) 10%, var(--fx-soft));
+  border: 1px solid color-mix(in srgb, var(--card-accent) 16%, transparent);
+  color: var(--card-accent);
   transition:
     background-color 0.3s var(--eos-ease),
+    border-color 0.3s var(--eos-ease),
     color 0.3s var(--eos-ease),
     transform 0.3s var(--eos-ease);
 }
 .wpc-fx-card:hover .wpc-fx-card__glyph {
-  background: var(--fx-navy);
+  background: var(--card-accent);
+  border-color: transparent;
   color: #ffffff;
-  transform: rotate(-8deg) scale(1.05);
+  transform: scale(1.08);
 }
 .wpc-fx-card__title {
   margin: var(--eos-space-1) 0 0;
@@ -2610,7 +2669,7 @@
  */
 .wpc-fx-sum {
   border-top: 1px solid var(--eos-border);
-  background: linear-gradient(180deg, #faf9fd 0%, var(--eos-surface) 100%);
+  background: linear-gradient(180deg, var(--c-navy-50) 0%, var(--eos-surface) 100%);
 }
 .wpc-fx-sum__inner {
   padding-block: calc(var(--eos-space-10) * 1.4);
@@ -2657,8 +2716,8 @@
 }
 
 .wpc-fx-pillar {
-  --p-accent: #4338ca;
-  --p-tint: #eef0fd;
+  --p-accent: var(--c-navy-700);
+  --p-tint: var(--c-navy-100);
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -2671,16 +2730,16 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .wpc-fx-pillar[data-pillar="practice"] {
-  --p-accent: #be185d;
-  --p-tint: #fdf0f6;
+  --p-accent: var(--c-red-700);
+  --p-tint: var(--c-red-100);
 }
 .wpc-fx-pillar[data-pillar="operations"] {
-  --p-accent: #0f766e;
-  --p-tint: #ebf7f5;
+  --p-accent: var(--c-leaf-700);
+  --p-tint: var(--c-leaf-100);
 }
 .wpc-fx-pillar[data-pillar="governance"] {
-  --p-accent: #b45309;
-  --p-tint: #fdf5e8;
+  --p-accent: var(--c-saffron-700);
+  --p-tint: var(--c-saffron-100);
 }
 /* Accent wash that fades in from the top on hover. */
 .wpc-fx-pillar::before {
@@ -2878,7 +2937,7 @@
 .wpc-fx-cta {
   margin-top: 0;
   color: #ffffff;
-  background: linear-gradient(120deg, var(--fx-navy-deep), var(--fx-navy) 60%, #34306a);
+  background: var(--fx-navy);
 }
 .wpc-fx-cta__inner {
   display: flex;
@@ -2897,7 +2956,7 @@
 .wpc-fx-cta__text {
   margin: var(--eos-space-2) 0 0;
   max-width: 52ch;
-  color: #c9cfe6;
+  color: var(--c-navy-200);
 }
 .wpc-fx-cta__actions {
   display: flex;
@@ -3034,7 +3093,6 @@
   }
   .wpc-fx-grid.is-in > .wpc-fx-card,
   .wpc-fx-card::before,
-  .wpc-fx-card::after,
   .wpc-fx-card__glyph,
   .wpc-fx-index__link,
   .wpc-fx-index__link::before,
@@ -3057,14 +3115,14 @@
 /*
  * Heading that cuts in word by word from above, plan cards in a soft tinted tray, and the selectable
  * plan (the free trial) as a featured dark-navy card. Cards fade/blur in one after another; prices
- * count up (SignUpPage's useCountUp). The site's navy (#2a254e, the public --accent) with the kit's
+ * count up (SignUpPage's useCountUp). The site's navy (var(--c-navy-900), the public --accent) with the kit's
  * neutral tokens. Reduced motion shows everything in its final state.
  */
 .wpc-pricing {
-  --pr-navy: #2a254e;
-  --pr-navy-deep: #1d1940;
-  --pr-soft: #f4f3f9;
-  --pr-line: #e4e2ee;
+  --pr-navy: var(--c-navy-900);
+  --pr-navy-deep: var(--c-navy-950);
+  --pr-soft: var(--c-navy-50);
+  --pr-line: var(--c-navy-line);
 }
 .wpc-pricing__inner {
   padding-block: calc(var(--eos-space-10) * 1.4) var(--eos-space-10);
@@ -3139,7 +3197,7 @@
   border-radius: var(--eos-radius-pill);
   border: 1px solid var(--pr-line);
   background: var(--eos-surface);
-  box-shadow: 0 6px 18px -12px rgba(42, 37, 78, 0.45);
+  box-shadow: 0 6px 18px -12px rgba(13, 30, 68, 0.45);
   color: var(--pr-navy);
   font-size: var(--eos-text-sm);
   font-weight: 600;
@@ -3156,7 +3214,7 @@
   padding: var(--eos-space-3);
   border: 1px solid var(--pr-line);
   border-radius: 22px;
-  background: linear-gradient(180deg, var(--pr-soft), #e9e7f2);
+  background: var(--pr-soft);
 }
 .wpc-plan-card {
   display: flex;
@@ -3173,7 +3231,7 @@
 }
 .wpc-plan-card:not(.is-featured):hover {
   background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 16px 34px -24px rgba(42, 37, 78, 0.45);
+  box-shadow: 0 16px 34px -24px rgba(13, 30, 68, 0.45);
   translate: 0 -3px;
 }
 .wpc-plan-card.is-featured {
@@ -3181,10 +3239,10 @@
   z-index: 1;
   scale: 1.04;
   color: #ffffff;
-  background: linear-gradient(170deg, #3a3466 0%, var(--pr-navy) 45%, var(--pr-navy-deep) 100%);
+  background: var(--pr-navy);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 30px 60px -30px rgba(29, 25, 64, 0.8);
+    0 30px 60px -30px rgba(8, 20, 46, 0.8);
 }
 .wpc-plan-card.is-featured:hover {
   translate: 0 -3px;
@@ -3208,7 +3266,7 @@
   gap: 6px;
   padding: 4px 12px;
   border-radius: var(--eos-radius-pill);
-  background: #e6e4f0;
+  background: var(--c-navy-100);
   color: var(--eos-text-3);
   font-size: var(--eos-text-xs);
   font-weight: 600;
@@ -3222,8 +3280,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
+  background: var(--c-leaf-500);
+  box-shadow: 0 0 0 3px rgba(67, 160, 71, 0.25);
 }
 .wpc-plan-card__price {
   display: flex;
@@ -3245,7 +3303,7 @@
 }
 .is-featured .wpc-plan-card__per,
 .is-featured .wpc-plan-card__desc {
-  color: #c9cfe6;
+  color: var(--c-navy-200);
 }
 .wpc-plan-card__name {
   margin: var(--eos-space-4) 0 var(--eos-space-1);
@@ -3278,12 +3336,12 @@
   color: var(--pr-navy);
 }
 .is-featured .wpc-plan-card__features svg {
-  color: #b3bce3;
+  color: var(--c-navy-300);
 }
 .wpc-plan-card__includes {
   margin-top: var(--eos-space-5);
   padding-top: var(--eos-space-4);
-  border-top: 1px solid rgba(42, 37, 78, 0.12);
+  border-top: 1px solid rgba(13, 30, 68, 0.12);
 }
 .is-featured .wpc-plan-card__includes {
   border-top-color: rgba(255, 255, 255, 0.14);
@@ -3309,7 +3367,7 @@
   font-weight: 500;
 }
 .is-featured .wpc-plan-card__includes li {
-  color: #e3e7ff;
+  color: var(--c-navy-100);
 }
 .wpc-plan-card__check {
   display: inline-grid;
@@ -3329,7 +3387,7 @@
 }
 .wpc-plan-card__note {
   margin: var(--eos-space-4) 0 0;
-  color: #b3bce3;
+  color: var(--c-navy-300);
   font-size: var(--eos-text-xs);
   line-height: 1.5;
 }
@@ -3355,7 +3413,7 @@
     translate 0.25s var(--eos-ease);
 }
 .is-featured .wpc-plan-card__cta:hover {
-  background: #e9ecfb;
+  background: var(--c-navy-100);
   text-decoration: none;
   translate: 0 -1px;
 }
@@ -3368,7 +3426,7 @@
   outline-offset: 3px;
 }
 .wpc-plan-card__cta.is-locked {
-  border: 1px dashed #cfcbe0;
+  border: 1px dashed var(--c-navy-300);
   color: var(--eos-muted);
   font-size: var(--eos-text-sm);
   cursor: not-allowed;
@@ -3449,7 +3507,7 @@
   transform: translateX(3px);
 }
 
-/* Hero CTAs: one purple theme — solid violet primary, lavender glass secondary — with smooth hovers. */
+/* Hero CTAs on the dark video: saffron primary with navy text, a quiet white-outline secondary. */
 .wpc-hero__actions .eos-btn {
   transition:
     background var(--eos-fast) var(--eos-ease),
@@ -3458,28 +3516,28 @@
     box-shadow var(--eos-fast) var(--eos-ease);
 }
 .wpc-hero__actions .eos-btn--primary {
-  background: #7c3aed;
-  border-color: #8b5cf6;
-  color: #ffffff;
-  box-shadow: 0 6px 18px -8px rgba(124, 58, 237, 0.7);
+  background: var(--c-saffron-500);
+  border-color: var(--c-saffron-500);
+  color: var(--c-navy-950);
+  box-shadow: 0 6px 18px -10px rgba(8, 20, 46, 0.6);
 }
 .wpc-hero__actions .eos-btn--primary:hover {
-  background: #6d28d9;
-  border-color: #a78bfa;
-  box-shadow: 0 8px 22px -8px rgba(124, 58, 237, 0.85);
+  background: var(--c-saffron-300);
+  border-color: var(--c-saffron-300);
+  box-shadow: 0 8px 22px -10px rgba(8, 20, 46, 0.7);
 }
 .wpc-hero__actions .eos-btn--secondary {
-  background: rgba(167, 139, 250, 0.14);
-  border-color: rgba(216, 180, 254, 0.7);
-  color: #f3e8ff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: var(--c-on-dark);
 }
 .wpc-hero__actions .eos-btn--secondary:hover {
-  background: rgba(167, 139, 250, 0.28);
-  border-color: #d8b4fe;
+  background: rgba(255, 255, 255, 0.16);
+  border-color: #ffffff;
   color: #ffffff;
 }
 .wpc-hero__actions .eos-btn:focus-visible {
-  outline: 2px solid #d8b4fe;
+  outline: 2px solid var(--c-saffron-300);
   outline-offset: 2px;
 }
 
