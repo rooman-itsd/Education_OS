@@ -29,7 +29,7 @@ Each story lists the API that serves it and the test that proves it (`backend/te
 | M1 | As staff I set up categories, stores and items in our own words, tracked per piece or by quantity. | `POST /categories`, `/locations`, `/items` | `test_stock_ledger_and_low_stock_events` |
 | M2 | As staff I register tagged pieces, and cannot reuse a tag. | `POST /items/{id}/units` | `test_unit_status_changes_and_tracking_lock` |
 | M3 | As staff I receive, issue, transfer, adjust and write off stock; every change is in the ledger and stock never goes negative. | `POST /movements`, `GET /movements`, `GET /stock` | `test_stock_ledger_and_low_stock_events` |
-| M4 | As staff I see what is low against its reorder level, and procurement is told once per crossing. | `GET /low-stock` (widget `low-stock`), event `stock.low` | `test_stock_ledger_and_low_stock_events` |
+| M4 | As staff I see what is low against its reorder level, and procurement is told once per crossing. | `GET /low-stock` (widget `low-stock`), event `stock.ran-low` | `test_stock_ledger_and_low_stock_events` |
 | M5 | As staff I hand out the exact pieces or quantities, take them back (partly, too) and record damage. | `POST /loans/{id}/hand-out`, `/return` | `test_full_loan_cycle_of_a_unit`, `test_quantity_loan_hand_out_partial_return_and_lost` |
 | M6 | As staff I record lost items, and the loan closes with a loss. | `POST /loans/{id}/mark-lost` | `test_quantity_loan_hand_out_partial_return_and_lost` |
 | M7 | As staff I see overdue loans with days late, and counts on my dashboard. | `GET /loans?scope=managed&status=overdue` (widget `overdue-loans`), `GET /summary` | `test_sweeps_mark_overdue_and_expire_pickups` |

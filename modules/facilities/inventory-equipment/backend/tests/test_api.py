@@ -117,7 +117,7 @@ def test_stock_ledger_and_low_stock_events(client, org):
         f"{BASE}/movements", json=move | {"kind": "receipt", "quantity": 10, "to_location_id": loc["id"]}, headers=mgr
     )
     names = event_names(org.id)
-    assert names.count("inventory-equipment.stock.low") == 1
+    assert names.count("inventory-equipment.stock.ran-low") == 1
     assert "inventory-equipment.stock.replenished" in names
     assert {
         "inventory-equipment.stock.received",
@@ -366,3 +366,122 @@ def test_catalogue_search(client, org):
     available = client.get(f"{BASE}/items", params={"available": "true", "category_id": cat["id"]}, headers=borrower)
     assert [x["id"] for x in available.json()["items"]] == [a["id"]]
     assert datetime.fromisoformat(a["created_at"]).tzinfo == UTC
+
+
+def test_hand_out_with_another_unit_frees_the_reserved_one(client, org):
+    _, mgr = org.user(MANAGER)
+    approver_id, approver = org.user(APPROVER)
+    _, borrower = org.user(BORROWER)
+    cat, loc = setup_store(client, mgr, category_rules={"requires_approval": True}, approvers=[approver_id])
+    item = individual_item(client, mgr, cat, loc, tags=("R-1", "R-2"))
+    pinned, other = client.get(f"{BASE}/items/{item['id']}/units", headers=mgr).json()
+    loan = client.post(
+        f"{BASE}/loans",
+        json={"lines": [{"item_id": item["id"], "unit_id": pinned["id"]}], "due_at": due(2)},
+        headers=borrower,
+    ).json()
+    assert client.post(f"{BASE}/loans/{loan['id']}/approve", headers=approver).status_code == 200
+    assert client.get(f"{BASE}/units/{pinned['id']}", headers=mgr).json()["status"] == "reserved"
+    out = client.post(
+        f"{BASE}/loans/{loan['id']}/hand-out",
+        json={"lines": [{"line_id": loan["lines"][0]["id"], "unit_id": other["id"]}]},
+        headers=mgr,
+    )
+    assert out.status_code == 200, out.text
+    assert out.json()["lines"][0]["unit_id"] == other["id"]
+    assert client.get(f"{BASE}/units/{other['id']}", headers=mgr).json()["status"] == "on_loan"
+    assert client.get(f"{BASE}/units/{pinned['id']}", headers=mgr).json()["status"] == "available"
+    assert client.get(f"{BASE}/items/{item['id']}", headers=mgr).json()["available"] == 1
+
+
+def test_return_location_must_be_an_active_location_of_the_organisation(client, org, other_org):
+    _, mgr = org.user(MANAGER)
+    _, other_mgr = other_org.user(MANAGER)
+    cat, loc = setup_store(client, mgr)
+    foreign = client.post(f"{BASE}/locations", json={"name": "Their store"}, headers=other_mgr).json()
+    item = quantity_item(client, mgr, cat, loc, on_hand=5)
+
+    def lend_one() -> dict:
+        loan = client.post(
+            f"{BASE}/loans", json={"lines": [{"item_id": item["id"], "quantity": 1}], "due_at": due(2)}, headers=mgr
+        ).json()
+        r = client.post(
+            f"{BASE}/loans/{loan['id']}/hand-out",
+            json={"lines": [{"line_id": loan["lines"][0]["id"], "from_location_id": loc["id"]}]},
+            headers=mgr,
+        )
+        assert r.status_code == 200, r.text
+        return loan
+
+    for bad in (foreign["id"], "does-not-exist"):
+        loan = lend_one()
+        r = client.post(
+            f"{BASE}/loans/{loan['id']}/return",
+            json={"lines": [{"line_id": loan["lines"][0]["id"], "condition_in": "good", "to_location_id": bad}]},
+            headers=mgr,
+        )
+        assert r.status_code == 404, r.text
+        assert r.json()["detail"]["code"] == "not_found"
+    stock = client.get(f"{BASE}/stock", params={"item_id": item["id"]}, headers=mgr).json()
+    assert [(s["location_id"], s["on_hand"]) for s in stock] == [(loc["id"], 3)]
+    inactive = client.post(f"{BASE}/locations", json={"name": "Closed", "active": False}, headers=mgr).json()
+    loan = lend_one()
+    r = client.post(
+        f"{BASE}/loans/{loan['id']}/return",
+        json={"lines": [{"line_id": loan["lines"][0]["id"], "condition_in": "good", "to_location_id": inactive["id"]}]},
+        headers=mgr,
+    )
+    assert (r.status_code, r.json()["detail"]["code"]) == (422, "location_inactive")
+
+
+def test_low_stock_event_uses_the_contract_name(client, org):
+    _, mgr = org.user(MANAGER)
+    cat, loc = setup_store(client, mgr)
+    item = quantity_item(client, mgr, cat, loc, on_hand=2, reorder_level=1)
+    r = client.post(
+        f"{BASE}/movements",
+        json={"kind": "issue", "item_id": item["id"], "quantity": 1, "from_location_id": loc["id"]},
+        headers=mgr,
+    )
+    assert r.status_code == 201, r.text
+    names = event_names(org.id)
+    assert "inventory-equipment.stock.ran-low" in names
+    assert not [n for n in names if n.endswith("stock.low")]
+
+
+def test_unit_detail_shows_only_loans_the_viewer_may_see(client, org):
+    _, mgr = org.user(MANAGER)
+    approver_id, approver = org.user(APPROVER)
+    _, borrower = org.user(BORROWER)
+    _, other = org.user(BORROWER)
+    cat, loc = setup_store(client, mgr, approvers=[approver_id])
+    item = individual_item(client, mgr, cat, loc, tags=("L-1",))
+    unit = client.get(f"{BASE}/items/{item['id']}/units", headers=mgr).json()[0]
+    line = {"item_id": item["id"], "unit_id": unit["id"]}
+    theirs = client.post(f"{BASE}/loans", json={"lines": [line], "due_at": due(1), "purpose": "private"}, headers=other)
+    assert theirs.status_code == 201, theirs.text
+    client.post(f"{BASE}/loans/{theirs.json()['id']}/cancel", headers=other)
+    mine = client.post(f"{BASE}/loans", json={"lines": [line], "due_at": due(1)}, headers=borrower).json()
+    assert client.get(f"{BASE}/loans/{theirs.json()['id']}", headers=borrower).status_code == 404
+
+    def seen_by(headers) -> list[str]:
+        return [x["id"] for x in client.get(f"{BASE}/units/{unit['id']}", headers=headers).json()["recent_loans"]]
+
+    assert seen_by(borrower) == [mine["id"]]
+    assert seen_by(mgr) == [theirs.json()["id"], mine["id"]]  # oldest first, every loan
+    assert seen_by(approver) == [theirs.json()["id"], mine["id"]]  # approver of the category sees both
+
+
+def test_individual_items_refuse_receipt_and_adjustment_movements(client, org):
+    _, mgr = org.user(MANAGER)
+    cat, loc = setup_store(client, mgr)
+    item = individual_item(client, mgr, cat, loc, tags=("C-1",), consumable=True)
+    unit = client.get(f"{BASE}/items/{item['id']}/units", headers=mgr).json()[0]
+    move = {"item_id": item["id"], "quantity": 1, "unit_ids": [unit["id"]], "reason": "stocktake"}
+    for kind in ("receipt", "adjustment"):
+        r = client.post(f"{BASE}/movements", json=move | {"kind": kind, "to_location_id": loc["id"]}, headers=mgr)
+        assert (r.status_code, r.json()["detail"]["code"]) == (422, "wrong_tracking"), r.text
+        assert client.get(f"{BASE}/units/{unit['id']}", headers=mgr).json()["status"] == "available"
+    issued = client.post(f"{BASE}/movements", json=move | {"kind": "issue"}, headers=mgr)
+    assert issued.status_code == 201, issued.text
+    assert client.get(f"{BASE}/units/{unit['id']}", headers=mgr).json()["status"] == "retired"

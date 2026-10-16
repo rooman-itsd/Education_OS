@@ -140,7 +140,7 @@ def figures(db: Session, item: Item) -> dict:
 
 
 def _refresh_low_stock(db: Session, actor: Actor | None, item: Item) -> None:
-    """Publish stock.low once when available crosses the reorder level, stock.replenished when it recovers."""
+    """Publish stock.ran-low once when available crosses the reorder level, stock.replenished when it recovers."""
     db.flush()
     available = figures(db, item)["available"]
     change = low_stock_transition(available, item.reorder_level, item.low_since is not None)
@@ -149,7 +149,7 @@ def _refresh_low_stock(db: Session, actor: Actor | None, item: Item) -> None:
         _publish(
             db,
             actor,
-            "stock.low",
+            "stock.ran-low",
             item.organisation_id,
             {
                 "item_id": item.id,
@@ -574,10 +574,14 @@ def register_unit(db: Session, actor: Actor, item_id: str, data: dict) -> dict:
 
 def get_unit(db: Session, actor: Actor, unit_id: str) -> dict:
     unit = _get(db, Unit, unit_id, "unit")
-    loans = [repo.get(db, Loan, line.loan_id) for line in repo.by_field(db, LoanLine, "unit_id", unit.id)]
+    approver_items = _approver_item_ids(db, actor)
+    loan_ids = {line.loan_id for line in repo.by_field(db, LoanLine, "unit_id", unit.id)}
+    loans = [loan for loan in (repo.get(db, Loan, loan_id) for loan_id in loan_ids) if loan is not None]
+    loans.sort(key=lambda x: (as_utc(x.created_at), x.id))
+    visible = [loan for loan in loans if _visible_loan(db, actor, loan, approver_items)]
     moves = [m for m in repo.movements(db) if unit.id in (m.unit_ids or [])]
     return unit_dict(unit) | {
-        "recent_loans": [loan_dict(db, actor, loan) for loan in loans[-5:] if loan],
+        "recent_loans": [loan_dict(db, actor, loan) for loan in visible[-5:]],
         "recent_movements": [movement_dict(m) for m in moves[:10]],
     }
 
@@ -766,7 +770,7 @@ def _move_quantity(db: Session, actor: Actor, item: Item, data: dict) -> Movemen
 def _move_units(db: Session, actor: Actor, item: Item, data: dict) -> Movement:
     kind = data["kind"]
     unit_ids = data.get("unit_ids") or []
-    if kind in ("receipt", "adjustment", "issue") and not item.consumable:
+    if kind in ("receipt", "adjustment") or (kind == "issue" and not item.consumable):
         raise InventoryError(
             422, "wrong_tracking", "register units with POST /items/{id}/units; individual items are lent, not issued"
         )
@@ -1121,6 +1125,10 @@ def hand_out(db: Session, actor: Actor, loan_id: str, data: dict) -> dict:
                 raise InventoryError(422, "unit_required", "pick a unit of this item for every individual line")
             if not (unit.status == "available" or (unit.status == "reserved" and unit.id == line.unit_id)):
                 raise InventoryError(409, "unit_not_available", f"unit {unit.tag} is {unit.status}", item_id=item.id)
+            if line.unit_id and line.unit_id != unit.id:
+                pinned = repo.get(db, Unit, line.unit_id)  # staff picked another unit; free the one reserved
+                if pinned and pinned.status == "reserved":
+                    pinned.status = "available"
             line.unit_id, line.from_location_id = unit.id, unit.location_id
             line.condition_out = pick.get("condition_out") or unit.condition
             unit.status, unit.current_loan_id = "on_loan", loan.id
@@ -1171,6 +1179,8 @@ def return_lines(db: Session, actor: Actor, loan_id: str, data: dict) -> dict:
             raise InventoryError(422, "damage_note_required", "describe the damage")
         item = repo.get_for_update(db, Item, line.item_id)
         touched[item.id] = item
+        if back.get("to_location_id"):
+            _active_location(db, back["to_location_id"])
         dst = back.get("to_location_id") or line.from_location_id
         if item.tracking == "individual":
             unit = _get(db, Unit, line.unit_id, "unit")
