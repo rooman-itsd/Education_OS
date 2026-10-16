@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Domain rules for terms, programmes, curricula, courses, offerings, faculty assignments and faculty load.
 - Contract 0.2.0, `GET /faculty-load` (owner decisions on PR #168): `faculty_name` required; the report carries
   `academic_period_code`, `academic_period_name`, `faculty_count` and `over_load_count`; items are ordered over-load
   first, then by contact hours; 404 `active_term_not_found` when no term is given or active; teaching-assistant
