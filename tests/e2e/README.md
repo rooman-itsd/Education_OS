@@ -7,6 +7,7 @@ touches a dev server you have running, and stops them afterwards.
 | Journey | Spec |
 |---|---|
 | Register an organisation, verify the email, sign-in refused until a super admin approves, sign in, land on the Organisation Admin dashboard | [onboarding/register-approve-signin.spec.ts](onboarding/register-approve-signin.spec.ts) |
+| Examination Staff signs in to their dashboard; the examination widgets render and say when data is not available. Data journeys wait for the examinations backend (`fixme`) | [dashboards/examination-staff.spec.ts](dashboards/examination-staff.spec.ts) |
 
 The approval step calls the API until the super admin approval queue exists in `apps/frontend`.
 

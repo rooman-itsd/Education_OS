@@ -15,6 +15,9 @@ permissions:
   - key: platform:organisations:impersonate
     description: Super admin. Start an audited session as an organisation user.
 roles:
+  - name: member
+    description: Implicit. Every active organisation user holds it beside their assigned roles; it is never assigned or removed by hand.
+    grants: [tenancy:organisation:read]
   - name: org-admin
     description: Organisation administrator, created at registration. Scoped to one organisation.
     grants: [tenancy:organisation:read, tenancy:organisation:manage]

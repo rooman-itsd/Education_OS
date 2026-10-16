@@ -1,6 +1,6 @@
 # academic-management: product requirements
 
-**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contracts in review (issue #63)
+**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contracts merged (#168, contract 0.2.0 in progress); implementation in progress (issue #100). User stories: [user-stories.md](user-stories.md)
 
 ## 1. Purpose
 
@@ -94,13 +94,19 @@ itself lives in `practice/field-training`.
 - FR-11 A department-admin assigns a faculty member (identity user id) to an offering, optionally to one section, with role `primary | co_instructor | teaching_assistant` and contact hours per week.
 - FR-12 Each offering in `open` or later state has exactly one `primary` faculty.
 - FR-13 Faculty load for a term = the sum of assigned contact hours. It is compared to the organisation's configured maximum (`ACADEMIC_MANAGEMENT_MAX_WEEKLY_CONTACT_HOURS`). Assignments over the maximum are allowed, but flagged.
+  Owner decisions on [PR #168](https://github.com/rooman-itsd/Education_OS/pull/168#issuecomment-6186246300) (v1):
+  - only active `primary` and `co_instructor` assignments count; `teaching_assistant` hours do not;
+  - a faculty member with no counted assignment is not listed;
+  - the report lists over-load first, then contact hours descending, and carries `faculty_count` and `over_load_count`, which do not change with `over_load_only`;
+  - the report names its term (`academic_period_code`, `academic_period_name`) and each faculty member (`faculty_name`, resolved server-side);
+  - with no term given and no active term, `GET /faculty-load` answers 404 `active_term_not_found`.
 
 ### 5.6 Roster
 - FR-14 The roster for an offering lists the students enrolled in it, by section. It is a read model built from enrolment events (section 8). academic-management never writes enrolment itself.
 - FR-15 A faculty member may read the rosters of offerings they are assigned to. Department-admins may read every roster in their department.
 
 ### 5.7 Audit
-- FR-16 Every create, update, state change and assignment is written to `platform/audit` through `packages/sdk`.
+- FR-16 Every create, update, state change and assignment is written to `platform/audit` through `packages/sdk`. How the module integrates with audit until the SDK supports it is pending (issue #100, question to Himanshu).
 
 ## 6. Dashboard widgets served
 
@@ -109,12 +115,13 @@ Each widget's endpoint is in `contracts/openapi.yaml` before any widget is built
 | Widget id | Dashboard (builder) | Endpoint | Permission |
 |---|---|---|---|
 | `academic-management.course-roster` | Faculty (Shivani) | `GET /me/offerings`, then `GET /offerings/{course_offering_id}/roster` | `academic-management:roster:read` |
-| `academic-management.faculty-load` | Department Admin (Himanshu) | `GET /faculty-load?academic_period_id=&department_id=` | `academic-management:faculty-load:read` |
+| `academic-management.faculty-load` | Department Admin (Himanshu; who builds the widget is pending: issue #2 against issue #100) | `GET /faculty-load?academic_period_id=&department_id=` | `academic-management:faculty-load:read` |
 
 ## 7. Data model (summary)
 
-Own schema `academic_management`. Every table has `organisation_id` and an RLS policy on
-`app.organisation_id`. Full detail follows in `data-model.md` with the first migration.
+Every table has `organisation_id` and an RLS policy on `app.organisation_id`. Whether the tables live in an
+own schema `academic_management` (module standard) or use module-prefixed table names (facility-booking
+precedent) is pending with Faizan (issue #100); no migration is written before that decision. Full detail follows in `data-model.md` with the first migration.
 
 | Table | Key columns |
 |---|---|
@@ -126,9 +133,11 @@ Own schema `academic_management`. Every table has `organisation_id` and an RLS p
 | `offering` | id, organisation_id, course_id, academic_period_id, status, programme_ids |
 | `section` | id, organisation_id, course_offering_id, code, capacity, status |
 | `faculty_assignment` | id, organisation_id, course_offering_id, section_id, faculty_id, role, contact_hours, status |
-| `roster_entry` (read model) | id, organisation_id, course_offering_id, section_id, student_id, enrolled_at, status |
+| `roster_entry` (read model) | id, organisation_id, course_offering_id, section_id, person_id, enrolled_at, status |
 
-`department_id`, `faculty_id` and `student_id` are external IDs (identity, student-information).
+`department_id`, `faculty_id` and `person_id` are external IDs (identity, student-information). `person_id` is the
+learner identifier (confirmed on issue #100). The staff identifier on assignments (`faculty_id`) is pending with
+Faizan (decision A, PR #168).
 
 ## 8. Events
 
@@ -152,21 +161,24 @@ The full list with payloads is in `contracts/events.yaml`. Every event carries `
 ### 8.2 Consumed (proposed: not yet in `module.yaml`)
 
 Enrolment is owned and published by `enrolment-registration`. The roster read model (FR-14)
-needs these. The names and payloads are a proposal to Praveen; they go into `module.yaml` only
-once he confirms them in his `events.yaml`.
+needs these. Confirmed with Praveen on [issue #100](https://github.com/rooman-itsd/Education_OS/issues/100#issuecomment-6186232689):
+`person_id` identifies the learner, `course_offering_id` and `section_id` align the two modules,
+academic-management defines sections and enrolment-registration allocates students to them, and
+integration is through APIs and events only. The event names and payloads below are still a proposal;
+they go into `module.yaml` only once Praveen publishes them in his `events.yaml`.
 
 | Proposed event | Needed fields |
 |---|---|
-| `enrolment-registration.course-registration.confirmed` | organisation_id, registration_id, student_id, student_name, roll_number, course_offering_id, section_id, academic_period_id, confirmed_at |
-| `enrolment-registration.course-registration.withdrawn` | organisation_id, registration_id, student_id, course_offering_id, section_id, withdrawn_at |
-| `enrolment-registration.section-allocation.changed` | organisation_id, registration_id, student_id, course_offering_id, from_section_id, to_section_id |
+| `enrolment-registration.course-registration.confirmed` | organisation_id, registration_id, person_id, student_name, roll_number, course_offering_id, section_id, academic_period_id, confirmed_at |
+| `enrolment-registration.course-registration.withdrawn` | organisation_id, registration_id, person_id, course_offering_id, section_id, withdrawn_at |
+| `enrolment-registration.section-allocation.changed` | organisation_id, registration_id, person_id, course_offering_id, from_section_id, to_section_id |
 
 ### 8.3 Confirmations needed before locking
 
 | Who | What to confirm |
 |---|---|
-| Praveen (enrolment-registration, student-information) | Enrolment event names and payloads in 8.2; that sections are defined here and his module allocates students to them; whether he consumes `programme.*` and `curriculum.published` |
-| Himanshu (Department Admin dashboard) | `GET /faculty-load` shape for `academic-management.faculty-load` |
+| Praveen (enrolment-registration, student-information) | Approach confirmed on issue #100 (see 8.2). Still open: the event names, payloads and timeline of his enrolment contract; whether he consumes `programme.*` and `curriculum.published` |
+| Himanshu (Department Admin dashboard) | Reviewed on PR #168; the agreed changes are in contract 0.2.0 (FR-13). Still open: the `department-admin` grant (waits for the role decision) and who builds the widget |
 | Tejaswini (Student dashboard) | Whether any Student widget needs academic-management data directly (none in the current layout) |
 | Akshata (Examination Staff dashboard) | Answered on PR #168: examinations needs course code, title, credits, department and term, which the proposed `offering.created` payload carries; assessment schemes are owned by `academics/examinations`, not here. The event itself remains proposed (8.1) |
 | Faizan (architecture) | Contract review; that academic terms are owned here and not in `packages/contracts` |
@@ -186,7 +198,7 @@ Default module roles map to profile roles as in section 3.
 
 ## 11. Open questions
 
-1. Sections: defined here (proposed), or by enrolment-registration as part of "section allocation"? This PRD assumes they are defined here and allocated there.
+1. Sections: **decided (confirmed with Praveen on issue #100):** sections are defined here; enrolment-registration allocates students to them.
 2. Electives: does enrolment-registration need an "elective group" concept from the curriculum? If so, add `elective_group` to `curriculum_item`.
 3. Cross-listed courses (one offering, several programmes): **decided (owner decision C21, [owner decision record](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6099000605)):** `programme_ids` on the offering stays the representation; no other cross-listing model.
 
@@ -195,3 +207,18 @@ Default module roles map to profile roles as in section 3.
 - Contracts reviewed by Faizan; events confirmed by the owners in 8.3.
 - Every widget in section 6 has its endpoint in `contracts/openapi.yaml`.
 - Every permission used in section 6 is in `contracts/permissions.yaml`.
+
+## 13. Decisions pending (issue #100)
+
+Work that depends on these waits; nothing below is assumed in code or contracts.
+
+| Decision | Who | Blocks |
+|---|---|---|
+| Canonical staff identifier; whether assignment fields and events rename `faculty_id` to `instructor_id` (decision A) | Faizan | Assignment table, assignment API and `faculty-assignment.*` payloads |
+| Platform role ids or module role names, and the grant mapping | Faizan | `permissions.yaml` roles; which profile roles see each widget |
+| Trusted source of a HoD's department | Faizan | Department scoping; the `department_id` default on `GET /faculty-load`; `roster:read-all` for departments |
+| Own schema or module-prefixed tables | Faizan | Models, migrations, RLS policies, repository, cross-tenant leak test |
+| Outbox `version` column (event-bus contract) | Faizan | Publishing events with the contract envelope |
+| Audit integration before the SDK supports it | Himanshu | FR-16 |
+| Enrolment contract (event names, payloads, timeline) | Praveen | Roster read model (FR-14, FR-15), section deletion with enrolled students (FR-10) |
+| Who builds `academic-management.faculty-load` (issue #2 against issue #100) | Faizan, Himanshu | The faculty-load widget |
