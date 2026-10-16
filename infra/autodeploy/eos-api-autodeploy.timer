@@ -1,0 +1,10 @@
+[Unit]
+Description=Education OS API: check main for a new commit every two minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
