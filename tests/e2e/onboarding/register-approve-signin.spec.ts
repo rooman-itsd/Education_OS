@@ -73,8 +73,10 @@ test("register, approve, sign in, dashboard", async ({ page, request }) => {
   });
 
   await test.step("land on the organisation admin dashboard", async () => {
-    await expect(page.getByRole("heading", { level: 1, name: "Organisation Admin" })).toBeVisible();
-    await expect(page.getByLabel("Organisation and plan")).toContainText(org.name);
+    // The page greets the admin by first name; the subtitle names the organisation and the role's dashboard.
+    await expect(page.getByRole("heading", { level: 1, name: /^Good (morning|afternoon|evening), E2E$/ })).toBeVisible();
+    await expect(page.getByText(`${org.name} · Organisation Admin dashboard`)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Organisation Admin dashboard" })).toBeVisible();
     await expect(page.getByText("Preview mode")).toHaveCount(0);
   });
 });
