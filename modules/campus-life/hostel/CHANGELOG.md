@@ -19,3 +19,4 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Migration `hostel_0001`: nine tables, each with `organisation_id` and the row-level-security policy.
 - Tests: domain rules, every user-story area, the gate pass, real `student` tokens, the cross-tenant leak test,
   and the migration against the models.
+- Widget `hostel.notices` for the Student dashboard, built on `@eos/ui-kit`, with tests.
