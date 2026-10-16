@@ -21,7 +21,7 @@ paths:
       responses:
         "201": { description: Payment session, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentSession" } } } }
         "409": { description: An open payment already exists for this source_module and source_reference. Its session is returned. }
-        "422": { description: "Invalid amount, currency or purpose." }
+        "422": { description: "Invalid amount, currency or purpose, or a purpose started by the wrong module (fee: fees-accounts; subscription: billing)." }
         "503": { description: No active merchant account for this purpose. }
       callbacks:
         paymentNotification:
@@ -80,6 +80,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RefundRequest" } } } }
       responses:
         "202": { description: Refund requested, content: { application/json: { schema: { $ref: "#/components/schemas/Refund" } } } }
+        "403": { description: "Subscription payments went to the platform account; an organisation cannot refund them" }
         "409": { description: Payment is not in status succeeded or partially_refunded }
         "422": { description: Amount exceeds the refundable balance }
   /callbacks/sbiepay:
@@ -147,7 +148,7 @@ components:
       required: [purpose, source_module, source_reference, amount, currency, return_url]
       properties:
         purpose: { $ref: "#/components/schemas/Purpose" }
-        source_module: { type: string, description: "Calling module, e.g. billing or fees-accounts" }
+        source_module: { type: string, description: "Calling module: fees-accounts for purpose=fee, billing for purpose=subscription" }
         source_reference: { type: string, description: "Caller's own id, e.g. billing invoice id or fees-accounts invoice id. Echoed in every event." }
         amount: { type: string, pattern: "^[0-9]+(\\.[0-9]{1,2})?$", description: "Decimal string in rupees, e.g. 1500.00" }
         currency: { type: string, enum: [INR] }

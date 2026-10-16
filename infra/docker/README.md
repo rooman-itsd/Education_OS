@@ -69,7 +69,7 @@ sites. `nginx.public-vhost.conf` is the vhost for the reverse-proxy container; i
 the static vhost on port 8080. After DNS resolves, inside the container:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/faizanrooman/Education_OS/main/infra/docker/nginx.public-vhost.conf \
+curl -fsSL https://raw.githubusercontent.com/rooman-itsd/Education_OS/main/infra/docker/nginx.public-vhost.conf \
   -o /etc/nginx/sites-available/educationos.futureacad.ae
 ln -sfn /etc/nginx/sites-available/educationos.futureacad.ae /etc/nginx/sites-enabled/
 nginx -t && nginx -s reload
@@ -104,8 +104,33 @@ published outside Docker's network; only the API's port 8000 is. Both services r
 
 Every deploy: `git pull && docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build`.
 
-Then in the nginx container, set `<api-host>` in the public vhost's `/api/` location to that host's IP
-and reload. The web shell detects the API on load and switches from preview mode to real sign-up and sign-in.
+Then wire the proxy. In the nginx container (CT 101), with the Docker host's LAN IP in place of
+`192.168.1.122`. The first line finds the vhost that still carries the placeholder:
+
+```
+V=$(grep -rl '<api-host>' /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ | head -1); echo "$V"
+sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' "$V"
+grep -n proxy_pass "$V"
+nginx -t && nginx -s reload
+curl -s https://educationos.futureacad.ae/api/v1/health
+```
+
+If the first line prints nothing, the live vhost has no `/api/` location yet: copy the
+`location /api/` block from `nginx.public-vhost.conf` into the server block for
+`educationos.futureacad.ae` and run the rest.
+
+Health must return `{"status":"ok","database":"postgres",...}`. If it returns HTML, the vhost still
+has the placeholder or the `/api/` location is missing. The web shell detects the API on load and
+switches from preview mode to real sign-up and sign-in (hard refresh with Ctrl+Shift+R once).
+
+Schema changes ship as Alembic chains, one per service, under `platform/<service>/db`. The API still
+runs `init_db()` at startup as a safety net, so a deploy today needs no extra step; once a chain has a
+second revision, run it before `up -d`:
+
+```
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm api \
+  sh -c 'for s in identity tenancy billing; do (cd platform/$s/db && alembic upgrade head); done'
+```
 
 **Settings applied only once.** Editing `.env.api` and running `up -d` changes most settings
 (`EOS_DEV_MODE`, `EOS_JWT_SECRET`, which signs everyone out). Two do not:
