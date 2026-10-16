@@ -6,6 +6,8 @@ from eos_core.db import utcnow
 from eos_payment_sbiepay.infrastructure.gateway import MockGateway, SettlementRow
 from sbiepay_support import PREFIX, browser_pays, outbox, start
 
+FEE = {"purpose": "fee", "source_module": "fees-accounts"}
+
 
 def _paid(client, org, **overrides) -> str:
     s = start(client, org.admin, **overrides)
@@ -13,8 +15,14 @@ def _paid(client, org, **overrides) -> str:
     return s["reference"]
 
 
+def _fee_paid(client, org) -> str:
+    """Refunds are for fee payments: the organisation's own merchant account received the money."""
+    client.put(f"{PREFIX}/merchant-account", json={"merchant_id": "FEE-R", "mode": "sandbox"}, headers=org.admin)
+    return _paid(client, org, **FEE)
+
+
 def test_partial_then_full_refund(client, org, receiver):
-    ref = _paid(client, org)
+    ref = _fee_paid(client, org)
     r = client.post(
         f"{PREFIX}/payments/{ref}/refunds", json={"amount": "500.00", "reason": "overcharged"}, headers=org.staff
     )
@@ -40,7 +48,8 @@ def test_partial_then_full_refund(client, org, receiver):
 
 
 def test_refund_only_after_success(client, org):
-    s = start(client, org.admin)
+    client.put(f"{PREFIX}/merchant-account", json={"merchant_id": "FEE-R", "mode": "sandbox"}, headers=org.admin)
+    s = start(client, org.admin, **FEE)
     r = client.post(
         f"{PREFIX}/payments/{s['reference']}/refunds", json={"amount": "1", "reason": "x"}, headers=org.staff
     )
@@ -48,7 +57,7 @@ def test_refund_only_after_success(client, org):
 
 
 def test_refused_refund_changes_nothing(client, org):
-    ref = _paid(client, org)
+    ref = _fee_paid(client, org)
     MockGateway.fail_refunds = True
     r = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "100", "reason": "x"}, headers=org.staff)
     assert r.status_code == 202 and r.json()["status"] == "failed"
@@ -57,14 +66,14 @@ def test_refused_refund_changes_nothing(client, org):
 
 
 def test_refund_permission(client, org):
-    ref = _paid(client, org)
+    ref = _fee_paid(client, org)
     r = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "1", "reason": "x"}, headers=org.admin)
     assert r.status_code == 403
 
 
 def test_reconciliation_finds_every_kind_of_mismatch(client, org):
     client.put(f"{PREFIX}/merchant-account", json={"merchant_id": "FEE-M", "mode": "sandbox"}, headers=org.admin)
-    fee = {"purpose": "fee", "source_module": "fees-accounts"}
+    fee = FEE
     matched = _paid(client, org, **fee)
     wrong_amount = _paid(client, org, **fee)
     missing = _paid(client, org, **fee)
@@ -141,3 +150,71 @@ def test_encryption_key_is_not_stored_until_it_can_be_encrypted(client, org):
     )
     assert r.status_code == 501
     assert "secret" not in r.text
+
+
+def test_subscription_payments_are_not_refunded_by_the_organisation(client, org):
+    """A plan upgrade was paid into the platform's account; an organisation's finance staff cannot refund it."""
+    ref = _paid(client, org)  # purpose=subscription, source billing
+    r = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "1", "reason": "x"}, headers=org.staff)
+    assert r.status_code == 403
+    assert client.get(f"{PREFIX}/payments/{ref}", headers=org.staff).json()["refunded_amount"] == "0.00"
+
+
+def test_refunds_the_gateway_has_not_settled_count_against_the_balance(client, org):
+    ref = _fee_paid(client, org)
+    MockGateway.defer_refunds = True
+    first = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "1000", "reason": "x"}, headers=org.staff)
+    assert first.status_code == 202 and first.json()["status"] == "requested"
+    second = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "600", "reason": "x"}, headers=org.staff)
+    assert second.status_code == 422  # only 500.00 is left while 1000.00 is in flight
+    third = client.post(f"{PREFIX}/payments/{ref}/refunds", json={"amount": "500", "reason": "x"}, headers=org.staff)
+    assert third.status_code == 202
+    assert outbox("payment-sbiepay.payment.refunded", org.id) == []  # nothing has succeeded yet
+
+
+def test_refund_reads_the_payment_for_update():
+    """Two refunds of one payment run one after the other on Postgres: the row is locked until commit."""
+    from eos_core.db import SessionLocal
+    from eos_core.tenant import organisation_scope
+    from eos_payment_sbiepay.application import service
+    from sqlalchemy import event
+
+    statements = []
+    db = SessionLocal()
+
+    @event.listens_for(db.get_bind(), "before_cursor_execute")
+    def capture(conn, cursor, statement, *args):
+        statements.append(statement)
+
+    try:
+        with organisation_scope("no-such-org"):
+            try:
+                service.refund(db, reference="EOSNONE", user_id="u", amount="1", reason="x")
+            except service.PaymentError as e:
+                assert e.status == 404
+    finally:
+        event.remove(db.get_bind(), "before_cursor_execute", capture)
+        db.close()
+    payment_reads = [s for s in statements if "FROM payment_sbiepay_payment" in s]
+    assert payment_reads
+    dialect = SessionLocal().get_bind().dialect.name
+    if dialect == "postgresql":
+        assert "FOR UPDATE" in payment_reads[0]
+
+
+def test_scheduler_can_run_reconciliation_outside_a_request(client, org):
+    """run_reconciliation sets its own organisation scope instead of relying on the request's session."""
+    from eos_core.db import SessionLocal
+    from eos_payment_sbiepay.application import service
+
+    client.put(f"{PREFIX}/merchant-account", json={"merchant_id": "FEE-S", "mode": "sandbox"}, headers=org.admin)
+    ref = _paid(client, org, **FEE)
+    MockGateway.settlements[("FEE-S", utcnow().date())] = [SettlementRow(ref, "G9", Decimal("1500.00"))]
+    db = SessionLocal()
+    try:
+        run = service.run_reconciliation(
+            db, organisation_id=org.id, user_id="scheduler", settlement_date=utcnow().date(), report_document_id=None
+        )
+    finally:
+        db.close()
+    assert run["status"] == "completed" and run["matched"] == 1 and run["mismatches"] == []
