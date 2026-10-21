@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (contracts proposed)
+**Status:** in-progress (backend built and tested; widget and host registration to come)
 
 Ticketing for all user roles with categories and routing.
 
@@ -26,6 +26,64 @@ grievances and RTI requests (grievance, rti).
 
 ## Dependencies
 See `module.yaml`. This module must not import code from any other module under `modules/`.
+
+## Backend
+Package `eos_helpdesk` in `backend/src/`:
+
+| Layer | Files | What |
+|---|---|---|
+| domain | `domain/tickets.py`, `windows.py`, `stats.py`, `errors.py` | Ticket statuses and the moves between them, the reopen window and auto-close rule, the open-by-priority counts. Pure Python. |
+| application | `application/service.py`, `jobs.py`, `access.py`, `errors.py`, `stats.py` | The use case behind every contract operation; permission keys and checks; errors with their HTTP status; the daily auto-close job. Every state change writes an audit entry and publishes its event from `contracts/events.yaml` to the `eos_core` outbox in the same transaction. |
+| infrastructure | `infrastructure/models.py`, `repository.py`, `config.py` | The tables of the PRD data model, queries scoped to the caller's organisation, `HELPDESK_*` settings. |
+| api | `api/router.py`, `schemas.py`, `deps.py` | All 25 operations of `contracts/openapi.yaml`, each with the permission the contract names. Error bodies are `{code, message[, field]}` in FastAPI's `detail`. |
+
+Tables are prefixed `helpdesk_` and created by the module's own Alembic chain in `db/` (version table
+`helpdesk_alembic_version`). Every table carries `organisation_id`; on Postgres each gets the `eos_core.rls`
+row-level-security policy.
+
+**Decisions by the architecture lead (Faizan) for #113:**
+- **Shared schema with prefixed tables**, as the merged modules do, instead of a dedicated `helpdesk` Postgres
+  schema (ADR-0002, ARCHITECTURE.md "Data", module-standard rule 2). `eos_core` (`rls.tenant_tables`, `init_db`)
+  and the SQLite tests and local runs work with unqualified table names only.
+- **Temporary audit table.** `helpdesk_audit_entry` holds one row per state change until the audit SDK and
+  `platform/audit` exist (ARCHITECTURE.md "Every state change writes to `platform/audit`"). Known limitation: these
+  rows are not in the platform audit trail. When the SDK ships, `_audit` in `application/service.py` calls it
+  instead, and the table's rows are migrated or retired.
+
+Who may act follows the contract as written: `helpdesk:ticket:work` for replies, notes, start, hold, resolve and
+links on a ticket in the caller's queues (or any queue with `helpdesk:ticket:read-all`); the assignee rule applies
+where the contract states one (PATCH priority, self pick-up through `/assign`). Details the contract leaves open are
+noted in `application/service.py` where they are decided.
+
+### Needs from the host repo
+- `packages/core` (`eos_core`); for tests, `packages/testing` (`eos_testing`).
+- Mount `eos_helpdesk.api.router:router` under `/api/v1/helpdesk` in `apps/backend` (owned by the apps owner).
+- Users need the module roles (`helpdesk-requester`, `-agent`, `-lead`, `-admin`, `-viewer`) in their token roles, or
+  an identity mapping from profile roles to them.
+- A daily call of `application.jobs.run_auto_close`, until `platform/scheduler` delivers `scheduler.job.due`.
+
+Not built yet: the Support Staff widget `helpdesk.open-by-priority` (it reads `GET /stats/open-by-priority`, served
+above) and the registration in `apps/backend` and `apps/frontend`.
+
+## Run the checks
+```
+cd modules/support/helpdesk/backend
+PYTHONPATH=src:../../../../packages/core/src:../../../../packages/testing/src python -m pytest -q tests
+#   Python 3.12; dependencies plus the test extras (pytest, pyyaml, httpx, eos-testing, psycopg[binary])
+cd modules/support/helpdesk/db && alembic upgrade head                   # own tables only; EOS_DATABASE_URL
+ruff check --config tools/config/ruff.toml modules/support/helpdesk     # from the repo root
+ruff format --config tools/config/ruff.toml --check modules/support/helpdesk
+```
+`PYTHONPATH` is needed until the module can be installed (`pyproject.toml` still lists `eos-sdk`, which has no
+package yet). Tests use a throwaway SQLite file, never a real database.
+
+Row-level security on a real PostgreSQL: `tests/test_rls_postgres.py` runs only when `HELPDESK_TEST_POSTGRES_URL` is set
+to a superuser URL of a **throwaway** server (for example `postgres:16-alpine`, as CI and `infra/docker` use). It
+creates its own database and a temporary role that is neither a superuser nor allowed to bypass RLS, checks the
+forced `tenant_isolation` policy on all 7 tables, checks on 3 of them (`helpdesk_queue`,
+`helpdesk_ticket_number_sequence`, `helpdesk_audit_entry`) that each organisation sees and writes only its own rows,
+then drops both.
+`HELPDESK_TEST_POSTGRES_URL` is a test setting, not module configuration, so it is not in `config/env.example`.
 
 ## Layout
 | Path | Purpose |
