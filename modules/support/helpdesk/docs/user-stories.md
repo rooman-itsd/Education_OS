@@ -352,6 +352,11 @@ depends on which option is chosen.
 Questions 1 to 10 are where the PRD and the contract do not settle a rule the code needs. Questions 11 to 13
 are already open in the PRD or wait on platform services.
 
+Each answered question says where its answer comes from. **Decided** is a decision of the architecture lead
+(Faizan), recorded in the module README in PR #237. **Implemented, pending review** is only what the backend in
+PR #237 does today (`backend/src/eos_helpdesk/application/service.py`). It is not an approved product decision:
+the question stays open until the review of #237 confirms or changes the behaviour.
+
 1. **Assignee or any agent.** The contract requires only `helpdesk:ticket:work` for `POST /tickets/{id}/comments`,
    `/status` and `/resolve`. The PRD says the assignee replies, adds internal notes and resolves (main flows 4
    and 6; `events.yaml` also describes `resolved` as "The assignee resolved the ticket"), says "the agent" starts
@@ -359,31 +364,62 @@ are already open in the PRD or wait on platform services.
    the caller be the ticket's assignee for these actions, and may a lead act on a ticket assigned to someone
    else? Changing priority is settled: the contract and the PRD both limit `helpdesk:ticket:work` to tickets
    assigned to the caller.
+   *Implemented, pending review:* the contract as written. Any caller with `helpdesk:ticket:work` may reply, add
+   notes, start, hold and resolve a ticket they can see (one in their queues, or in any queue with
+   `helpdesk:ticket:read-all`); being the assignee is not checked. So an agent may act on a colleague's ticket in
+   the same queue, and a lead on any ticket.
 2. **Assign at creation.** When an agent raises a ticket with `assign_to_me`, is `helpdesk.ticket.assigned`
    published after `helpdesk.ticket.created`? `created` carries no assignee, so sla-management cannot know it
    otherwise. sla-management PRD open question 6 says this is to be settled in the helpdesk contract, in a
    separate PR. The order in which the two events reach consumers is not guaranteed yet either (sla-management
    PRD open question on out-of-order events).
+   *Implemented, pending review:* yes. `helpdesk.ticket.assigned` is published right after `created`, in the
+   same transaction. The order in which consumers receive them is still not guaranteed, and the contract text
+   is unchanged.
 3. **Assign at creation outside the queue.** A ticket raised with `assign_to_me` goes to its category's default
    queue. For `POST /tickets/{id}/assign` the contract says "The assignee must be a member of the target queue",
    but it gives no such rule for `assign_to_me`. What happens when the agent raising the ticket is not a member
    of that queue?
+   *Implemented, pending review:* no membership check. The ticket is assigned to the agent who raised it, even
+   when they are not a member of the queue.
 4. **Inactive default queue.** What happens when a ticket is raised in an active category whose default queue is
    inactive? The contract only names an inactive category (422).
+   *Implemented, pending review:* not checked. The ticket is raised into the inactive queue.
 5. **Deactivating a queue that is a category's default.** The contract only blocks a queue with open tickets.
+   *Implemented, pending review:* allowed. Only open tickets block deactivation (409); categories keep it as
+   their default queue, so new tickets still go there (question 4).
 6. **Removing an agent from a queue** while tickets in that queue are assigned to them.
+   *Implemented, pending review:* no rule. Changing a queue's members does not touch its tickets, so the removed
+   agent's tickets stay assigned to them.
 7. **Ticket number width.** Only the example `HD-000123` is given: six digits, zero padded, and what after
    999999?
+   *Implemented, pending review:* the prefix (`HELPDESK_TICKET_NUMBER_PREFIX`), a hyphen and the
+   per-organisation number padded to six digits. After 999999 the number simply grows to seven digits
+   (`HD-1000000`); the code sets no width limit.
 8. **An invalid duplicate.** `duplicate_of` must be "another open ticket", but the contract names an error only
    for `duplicate_of` being the ticket itself. Which answer for a closed, cancelled or unknown ticket?
+   *Implemented, pending review:* 409 `invalid_duplicate` for an unknown ticket (including one of another
+   organisation) and for one that is not open (`resolved`, `closed` or `cancelled`).
 9. **Assigning a resolved ticket.** The PRD says a ticket can be assigned "in any open status"; the contract
    refuses `/assign` only for `closed` and `cancelled`. Is a `resolved` ticket assignable?
+   *Implemented, pending review:* yes, following the contract. Only `closed` and `cancelled` tickets are refused
+   (409).
 10. **Ticket time and count fields.** The `Ticket` schema lists `first_responded_at`, `resolved_at`, `closed_at`
     and `reopen_count`, and the events carry `responded_at`, `resolved_at`, `closed_at` and `reopen_count`.
     Neither the PRD nor the contract says when the ticket's own fields are set or changed, or whether they take
     the same values as the events.
+    *Implemented, pending review:* when a change publishes one of these events, the ticket field is set in the
+    same change from the same value. `first_responded_at` is set once, at the first public reply through
+    `POST /tickets/{id}/comments` or a note sent with `/status`; internal notes and the resolution note do not
+    count. `resolved_at` is set on each resolve and cleared on reopen, so after a reopen it is empty while the
+    earlier `resolved` event keeps its time. `closed_at` is set when the requester confirms or the auto-close job
+    closes the ticket. `reopen_count` goes up by one on each reopen.
 11. **Audit path.** `packages/sdk` has no audit client yet and the audit write path is still open
     (`platform/audit/docs/prd.md`, open question 3). To decide with Faizan.
+    *Decided* (Faizan; recorded in the module README in PR #237): until the audit SDK and `platform/audit` exist,
+    each state change writes one row to the module's own `helpdesk_audit_entry` table. Known limitation: these
+    rows are not in the platform audit trail. When the SDK ships, `_audit` in `application/service.py` calls it
+    instead.
 12. **Auto-close trigger** (PRD open question 6). The scheduler contract now says a schedule publishes
     `scheduler.job.due` for the owning module to consume, but the scheduler is not built yet. To agree with
     Himanshu.
