@@ -420,8 +420,16 @@ def raise_my_ticket(db: Session, actor: Actor, body: dict) -> dict:
 def raise_ticket(db: Session, actor: Actor, body: dict) -> dict:
     """POST /tickets: on behalf of a requester. With assign_to_me the ticket is assigned to the caller and
     helpdesk.ticket.assigned is published after created ("A ticket was assigned to an agent"), so subscribers learn
-    the assignee. The contract gives assign_to_me no queue-membership rule, so none is applied."""
+    the assignee. As on /assign, "The assignee must be a member of the target queue": a caller outside the
+    category's default queue is refused with 409 assignee_not_in_queue, so no ticket is assigned to someone who
+    cannot open it."""
     require(actor, TICKET_WORK)
+    if body.get("assign_to_me"):
+        category = _active_category(db, body["category_id"])
+        queue = repo.get(db, Queue, category.default_queue_id)
+        if queue is None or actor.user_id not in (queue.member_ids or []):
+            message = "you are not a member of the ticket's queue"
+            raise _conflict("assignee_not_in_queue", message, field="assign_to_me")
     ticket = _raise(
         db, actor, body, requester_id=body["requester_id"], channel=body["channel"], priority=body.get("priority")
     )
@@ -636,12 +644,14 @@ def _move(db: Session, actor: Actor | None, ticket: Ticket, to: str, hold_reason
 
 
 def add_comment(db: Session, actor: Actor, ticket_id: str, body: dict) -> dict:
-    """POST /tickets/{id}/comments: a public reply or an internal note; 409 when closed or cancelled."""
+    """POST /tickets/{id}/comments: a public reply or an internal note; 409 when closed or cancelled. A public
+    reply by the ticket's own requester (an agent who raised it for themselves) is not "the first public reply by
+    an agent" (events.yaml, helpdesk.ticket.responded): it neither stops the response clock nor starts work."""
     require(actor, TICKET_WORK)
     ticket = _visible_ticket(db, actor, ticket_id)
     _domain(rules.ensure_can_comment, ticket.status)
     comment = _add_comment(db, actor, ticket, body["visibility"], body["body"], body.get("attachment_document_ids"))
-    if body["visibility"] == PUBLIC:
+    if body["visibility"] == PUBLIC and actor.user_id != ticket.requester_id:
         _agent_public_reply(db, actor, ticket)
     _commit(db)
     return comment_dict(comment)

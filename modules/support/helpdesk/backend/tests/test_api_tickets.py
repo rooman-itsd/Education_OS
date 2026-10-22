@@ -48,6 +48,26 @@ def test_assign_to_me_assigns_and_publishes_assigned_after_created(desk):
     assert (assigned["assignee_id"], assigned["previous_assignee_id"]) == (desk.agent_id, None)
 
 
+def test_assign_to_me_needs_membership_of_the_tickets_queue(desk):
+    body = {
+        "category_id": desk.category["id"],
+        "title": "Phone call",
+        "description": "Called the desk",
+        "requester_id": desk.requester_id,
+        "channel": "phone",
+        "assign_to_me": True,
+    }
+    r = desk.post("/tickets", body, desk.outsider)  # holds helpdesk:ticket:work, is in no queue
+    assert r.status_code == 409, r.text
+    assert (r.json()["detail"]["code"], r.json()["detail"]["field"]) == ("assignee_not_in_queue", "assign_to_me")
+    assert ev(desk, "created") == [] and ev(desk, "assigned") == []
+    assert desk.ok(desk.get("/me/tickets", desk.requester))["items"] == []
+    t = desk.ok(desk.post("/tickets", body, desk.agent))  # a member of the category's default queue
+    assert t["assignee_id"] == desk.agent_id
+    assert desk.ok(desk.get(f"/tickets/{t['id']}", desk.agent))["assignee_id"] == desk.agent_id
+    assert desk.ok(desk.post("/tickets", {**body, "assign_to_me": False}, desk.outsider))["assignee_id"] is None
+
+
 def test_ticket_numbers_follow_the_organisation_sequence(desk):
     numbers = [desk.raise_ticket(f"Issue {i}")["number"] for i in range(3)]
     assert numbers == ["HD-000001", "HD-000002", "HD-000003"]
@@ -185,6 +205,19 @@ def test_an_internal_note_is_not_a_response(desk):
     again = desk.ok(desk.get(f"/tickets/{t['id']}", desk.agent))
     assert (again["status"], again["first_responded_at"]) == ("new", None)
     assert ev(desk, "responded") == []
+
+
+def test_a_requesters_own_reply_through_the_agent_route_is_not_the_first_response(desk):
+    t = desk.raise_ticket(headers=desk.agent)  # the agent raised it for themselves
+    desk.ok(desk.post(f"/tickets/{t['id']}/comments", {"visibility": "public", "body": "Still broken"}, desk.agent))
+    again = desk.ok(desk.get(f"/tickets/{t['id']}", desk.agent))
+    assert (again["status"], again["first_responded_at"]) == ("new", None)
+    assert again["comments"][0]["author_is_requester"] is True
+    assert ev(desk, "responded") == [] and ev(desk, "status-changed") == []
+    desk.ok(desk.post(f"/tickets/{t['id']}/comments", {"visibility": "public", "body": "On it"}, desk.agent2))
+    [responded] = ev(desk, "responded")
+    assert responded["responded_by"] == desk.agent2_id
+    assert desk.ok(desk.get(f"/tickets/{t['id']}", desk.agent))["status"] == "in_progress"
 
 
 def test_a_hold_note_is_a_public_reply_and_the_first_response(desk):

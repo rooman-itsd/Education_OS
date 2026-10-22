@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contract 0.1.1: `POST /tickets` answers 409 when `assign_to_me` is sent by a caller who is not a member of the
+  category's default queue (the same `assignee_not_in_queue` as `/assign`), so a ticket is never assigned to an agent
+  who cannot open it. A public reply by the ticket's own requester through `POST /tickets/{id}/comments` is no longer
+  counted as the first agent response (`helpdesk.ticket.responded`, `first_responded_at`).
 - Module scaffolded.
 - Contracts proposed: support queues and categories, tickets raised by requesters or by agents on their
   behalf, assignment, public replies and internal notes, hold, resolve, cancel and links; self-service
