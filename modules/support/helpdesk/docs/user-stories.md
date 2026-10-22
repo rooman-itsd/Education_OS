@@ -353,9 +353,10 @@ Questions 1 to 10 are where the PRD and the contract do not settle a rule the co
 are already open in the PRD or wait on platform services.
 
 Each answered question says where its answer comes from. **Decided** is a decision of the architecture lead
-(Faizan), recorded in the module README in PR #237. **Implemented, pending review** is only what the backend in
-PR #237 does today (`backend/src/eos_helpdesk/application/service.py`). It is not an approved product decision:
-the question stays open until the review of #237 confirms or changes the behaviour.
+(Faizan), recorded in the module README in PR #237 or made by him in PR #237 (commit `4ef138d`, contract 0.1.1).
+**Implemented, pending review** is only what the backend in PR #237 does today
+(`backend/src/eos_helpdesk/application/service.py`). It is not an approved product decision: the question stays
+open until the review of #237 confirms or changes the behaviour.
 
 1. **Assignee or any agent.** The contract requires only `helpdesk:ticket:work` for `POST /tickets/{id}/comments`,
    `/status` and `/resolve`. The PRD says the assignee replies, adds internal notes and resolves (main flows 4
@@ -380,8 +381,9 @@ the question stays open until the review of #237 confirms or changes the behavio
    queue. For `POST /tickets/{id}/assign` the contract says "The assignee must be a member of the target queue",
    but it gives no such rule for `assign_to_me`. What happens when the agent raising the ticket is not a member
    of that queue?
-   *Implemented, pending review:* no membership check. The ticket is assigned to the agent who raised it, even
-   when they are not a member of the queue.
+   *Decided* (Faizan, commit `4ef138d` in PR #237, contract 0.1.1): refused. `POST /tickets` with `assign_to_me`
+   answers 409 `assignee_not_in_queue` (field `assign_to_me`) when the caller is not a member of the category's
+   default queue, the same refusal `/assign` gives, so no ticket is assigned to someone who cannot open it.
 4. **Inactive default queue.** What happens when a ticket is raised in an active category whose default queue is
    inactive? The contract only names an inactive category (422).
    *Implemented, pending review:* not checked. The ticket is raised into the inactive queue.
@@ -410,10 +412,11 @@ the question stays open until the review of #237 confirms or changes the behavio
     the same values as the events.
     *Implemented, pending review:* when a change publishes one of these events, the ticket field is set in the
     same change from the same value. `first_responded_at` is set once, at the first public reply through
-    `POST /tickets/{id}/comments` or a note sent with `/status`; internal notes and the resolution note do not
-    count. `resolved_at` is set on each resolve and cleared on reopen, so after a reopen it is empty while the
-    earlier `resolved` event keeps its time. `closed_at` is set when the requester confirms or the auto-close job
-    closes the ticket. `reopen_count` goes up by one on each reopen.
+    `POST /tickets/{id}/comments` by someone other than the ticket's requester (Faizan, commit `4ef138d`), or a
+    note sent with `/status`; internal notes and the resolution note do not count. `resolved_at` is set on each
+    resolve and cleared on reopen, so after a reopen it is empty while the earlier `resolved` event keeps its time.
+    `closed_at` is set when the requester confirms or the auto-close job closes the ticket. `reopen_count` goes up
+    by one on each reopen.
 11. **Audit path.** `packages/sdk` has no audit client yet and the audit write path is still open
     (`platform/audit/docs/prd.md`, open question 3). To decide with Faizan.
     *Decided* (Faizan; recorded in the module README in PR #237): until the audit SDK and `platform/audit` exist,
