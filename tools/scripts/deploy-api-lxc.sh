@@ -112,6 +112,11 @@ in_ct "cd $APP && $COMPOSE run --rm --no-deps -T -v $APP/infra/docker/stamp-chai
 echo "==> installing the API auto-deploy timer"
 in_ct "bash $APP/infra/autodeploy/install-api.sh"
 
+# ---------- 5b. nightly database backup ----------
+# Idempotent; takes the first backup straight away (infra/backup-dr/README.md).
+echo "==> installing the nightly database backup"
+in_ct "bash $APP/infra/backup-dr/install.sh"
+
 # ---------- 6. proxy ----------
 echo "==> pointing /api/ on the nginx container $PROXY_CTID at $CT_IP"
 scp -q "$ROOT/infra/docker/wire-api-proxy.sh" "$PVE:/tmp/wire-api-proxy.sh"
