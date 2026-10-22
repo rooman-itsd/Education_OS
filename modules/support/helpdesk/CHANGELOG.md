@@ -34,3 +34,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   (`application/jobs.py`). A ticket raised with `assign_to_me` also publishes `helpdesk.ticket.assigned`.
 - API, lifecycle, permission and job tests, the cross-tenant leak test (`eos_testing`), and a test that the routes
   match the contract's operations. `pyproject.toml` test extras: httpx and eos-testing.
+- The Support Staff widget `helpdesk.open-by-priority` (`frontend/src/widgets/OpenByPriorityWidget.tsx`), its API
+  client and Vitest tests; the frontend `test` script, Vitest globals and `vitest.config.ts`.
+- The widget says "Helpdesk data is not available yet." when the API answers 404, 502 or 503 or cannot be reached,
+  instead of asking the user to check their connection, as the examinations widgets do; 401 and 403 offer no retry.
