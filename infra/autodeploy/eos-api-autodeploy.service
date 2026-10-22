@@ -1,0 +1,8 @@
+[Unit]
+Description=Education OS API: pull main, migrate, rebuild and restart
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/eos-api-autodeploy
