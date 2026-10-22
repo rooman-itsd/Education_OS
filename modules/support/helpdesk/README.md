@@ -74,8 +74,9 @@ cd modules/support/helpdesk/db && alembic upgrade head                   # own t
 ruff check --config tools/config/ruff.toml modules/support/helpdesk     # from the repo root
 ruff format --config tools/config/ruff.toml --check modules/support/helpdesk
 ```
-`PYTHONPATH` is needed until the module can be installed (`pyproject.toml` still lists `eos-sdk`, which has no
-package yet). Tests use a throwaway SQLite file, never a real database.
+Instead of `PYTHONPATH`, the module can be installed with its test extras, from the repo root:
+`pip install ./packages/core ./packages/testing "./modules/support/helpdesk/backend[test]"`. It does not depend on
+`packages/sdk`, which has no package yet. Tests use a throwaway SQLite file, never a real database.
 
 Row-level security on a real PostgreSQL: `tests/test_rls_postgres.py` runs only when `HELPDESK_TEST_POSTGRES_URL` is set
 to a superuser URL of a **throwaway** server (for example `postgres:16-alpine`, as CI and `infra/docker` use). It
