@@ -5,6 +5,12 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 ## [Unreleased]
 - Contract 0.2.1: every permission-checked operation in `contracts/openapi.yaml` now declares the shared
   `403` (`components.responses.Forbidden`, body `ErrorResponse`); 32 operations had left it out.
+- Faculty load rule: teaching-assistant assignments do not count; rows ordered over-load first; summary counts.
+- Application layer: permission check, contract error mapping and the faculty-load report use case;
+  `ACADEMIC_MANAGEMENT_MAX_WEEKLY_CONTACT_HOURS` read from the environment.
+- Faculty-load report: invalid stored rows, settings or faculty names are server faults, not a 400 the contract
+  does not declare for `GET /faculty-load`; a bad `ACADEMIC_MANAGEMENT_MAX_WEEKLY_CONTACT_HOURS` is a configuration
+  error. Tests check the report's value types and error bodies against `contracts/openapi.yaml`.
 - Domain rules for terms, programmes, curricula, courses, offerings, faculty assignments and faculty load.
 - Contract 0.2.0, `GET /faculty-load` (owner decisions on PR #168): `faculty_name` required; the report carries
   `academic_period_code`, `academic_period_name`, `faculty_count` and `over_load_count`; items are ordered over-load
