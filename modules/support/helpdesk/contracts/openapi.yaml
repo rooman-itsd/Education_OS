@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helpdesk API
-  version: 0.1.0
+  version: 0.1.1
   description: "Ticketing for all user roles with categories and routing. See docs/prd.md."
 servers:
   - url: /api/v1/helpdesk
@@ -56,9 +56,11 @@ paths:
         - { $ref: "#/components/parameters/Limit" }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TicketPage" } } } } }
     post:
-      summary: Raise a ticket on behalf of a requester (phone, walk-in, email). Publishes helpdesk.ticket.created. Permission helpdesk:ticket:work.
+      summary: >-
+        Raise a ticket on behalf of a requester (phone, walk-in, email). Publishes helpdesk.ticket.created. With assign_to_me the
+        caller must be a member of the category's default queue, as for /assign. Permission helpdesk:ticket:work.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AgentTicketInput" } } } }
-      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "422": { description: "Category inactive or too many attachments" } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Ticket" } } } }, "409": { description: "assign_to_me by a caller who is not a member of the ticket's queue" }, "422": { description: "Category inactive or too many attachments" } }
   /tickets/{id}:
     get:
       summary: One ticket with all replies and internal notes, and its links. Permission helpdesk:ticket:read for a ticket in the caller's queues.
