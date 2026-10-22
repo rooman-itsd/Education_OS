@@ -362,6 +362,34 @@ def test_p5_column_lengths_are_enforced_unlike_sqlite(app_engine):
             _insert(conn, ORG_A, source_event_id="x" * 37)  # String(36)
 
 
+def test_p5_an_oversized_provider_message_id_is_refused_by_the_column(app_engine):
+    """The exact failure the service-layer provider-id guard exists for. The SENT update runs AFTER the
+    provider accepted the message, so a value the column cannot hold leaves the row in `sending` and recovery
+    sends it a second time. SQLite stores 201 characters happily, so this is only real here. It is written as
+    an UPDATE, not an INSERT, because the update is where it happened."""
+    with app_engine.begin() as conn:
+        _as_org(conn, ORG_A)
+        message_id = _insert(conn, ORG_A, status="sending")
+    with app_engine.begin() as conn:
+        _as_org(conn, ORG_A)
+        with pytest.raises(DBAPIError):
+            conn.execute(
+                text("UPDATE notification_message SET provider_message_id = :p WHERE id = :i"),
+                {"p": "p" * 201, "i": message_id},  # String(200)
+            )
+    # and exactly 200 is accepted, so the guard's boundary is the column's and not a guess
+    with app_engine.begin() as conn:
+        _as_org(conn, ORG_A)
+        conn.execute(
+            text("UPDATE notification_message SET provider_message_id = :p WHERE id = :i"),
+            {"p": "p" * 200, "i": message_id},
+        )
+        stored = conn.execute(
+            text("SELECT provider_message_id FROM notification_message WHERE id = :i"), {"i": message_id}
+        ).scalar()
+    assert stored == "p" * 200
+
+
 # --- P6: transaction semantics ------------------------------------------------------------------------------
 
 

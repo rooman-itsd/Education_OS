@@ -41,10 +41,17 @@ paths:
               schema: { $ref: "#/components/schemas/Message" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422":
-          description: Unknown template, missing variable, or no address for the channel
+          description: >-
+            Either this module's refusal - unknown template, no template for the channel and locale,
+            variables not an object or over 30 entries, a non-scalar or over-long variable, a missing
+            variable, no address for the channel, or a rendered subject longer than 300 characters - or the
+            framework's request-validation response when the body does not match NewMessage.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Error"
+                  - $ref: "#/components/schemas/ValidationError"
 
     get:
       summary: List messages
@@ -89,6 +96,14 @@ paths:
                     items: { $ref: "#/components/schemas/Message" }
                   total: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: >-
+            A query parameter does not match its declared type or bounds - a status or channel outside its
+            enum, an unparseable sent_from or sent_to, or a limit or offset out of range. This is the
+            framework's response, raised before the handler runs, so it never has the Error shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
 
   /messages/{message_id}:
     get:
@@ -161,6 +176,13 @@ paths:
                     items: { $ref: "#/components/schemas/Template" }
                   total: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: >-
+            The channel query parameter is outside its enum. This is the framework's response, raised
+            before the handler runs, so it never has the Error shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
 
     post:
       summary: Create or override a template for this organisation
@@ -177,6 +199,29 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Template" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: >-
+            Either this module's refusal or the framework's request-validation response when the body does
+            not match NewTemplate (an unknown channel, a key over 120 characters, a locale over 10, or a
+            missing body).
+
+            This module refuses, in this order: the key is not an existing platform template; that template
+            is not overridable; the channel is one the template does not support; the locale is malformed;
+            the category differs from the template's own; the request's `variables` LIST names something the
+            template does not declare; a subject was given for a non-email channel; the subject contains CR
+            or LF (a second line would be a mail header); the body is empty or the body or subject exceeds
+            its length limit; a PLACEHOLDER in the subject or body is malformed (an unclosed or invalid
+            `$...`); or a placeholder in the subject or body names a variable the template does not declare.
+
+            The last two are checked against the subject and body text itself and are not the same as the
+            `variables` list check above: a request may send a valid `variables` list and still be refused
+            for a placeholder inside the body, or send no `variables` at all and be refused for one.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Error"
+                  - $ref: "#/components/schemas/ValidationError"
 
   /templates/{key}/preview:
     post:
@@ -214,10 +259,16 @@ paths:
                   body: { type: string }
         "403": { $ref: "#/components/responses/Forbidden" }
         "422":
-          description: Missing variable
+          description: >-
+            Either this module's refusal - unknown template, a channel the template does not support, a
+            missing variable, or a variable it does not declare - or the framework's request-validation
+            response when the body does not match the declared shape.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Error"
+                  - $ref: "#/components/schemas/ValidationError"
 
   /preferences/{user_id}:
     get:
@@ -235,6 +286,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Preferences" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No such user in this organisation. A 404 rather than a 403, because whether a user
+            id exists in another organisation is itself information
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: >-
+            user_id is not a valid uuid. Note the order: the id is parsed before the permission comparison,
+            so a malformed id from a caller who also lacks notification:preference:manage is answered 422
+            rather than 403. This operation takes no request body and no query parameters, so the
+            framework's validation response cannot arise here - only this module's own refusal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
     put:
       summary: Replace a recipient's channel preferences
@@ -259,6 +325,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Preferences" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No such user in this organisation. A 404 rather than a 403, because whether a user
+            id exists in another organisation is itself information
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: >-
+            user_id is not a valid uuid. Note the order: the id is parsed before the permission comparison,
+            so a malformed id from a caller who also lacks notification:preference:manage is answered 422
+            rather than 403.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Error"
+                  - $ref: "#/components/schemas/ValidationError"
 
   /inbox:
     get:
@@ -286,6 +369,13 @@ paths:
                     items: { $ref: "#/components/schemas/Message" }
                   unread: { type: integer }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422":
+          description: >-
+            unread_only is not a boolean, or limit is out of range. This is the framework's response,
+            raised before the handler runs, so it never has the Error shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationError" }
 
   /inbox/{message_id}/read:
     post:
@@ -466,9 +556,40 @@ components:
 
     Error:
       type: object
+      description: >-
+        An application-level refusal raised by this module: `detail` is one sentence. Every 4xx this
+        module raises itself has this shape.
       required: [detail]
       properties:
         detail: { type: string }
+
+    ValidationIssue:
+      type: object
+      description: One problem the framework found while validating the request.
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          description: >-
+            Where the problem is, from the outside in - for example ["body", "channel"] or
+            ["query", "limit"]. Integers appear for positions inside an array.
+          items:
+            type: [string, integer]
+        msg: { type: string }
+        type: { type: string }
+
+    ValidationError:
+      type: object
+      description: >-
+        The framework's own request-validation response, returned before this module's handler runs when
+        the request body, query or path does not match the declared schema. `detail` is a LIST here, not a
+        string, which is why it cannot share a schema with Error. No handler rewrites it: normalising it
+        would change behaviour for every platform module, which is out of scope here.
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationIssue" }
 
   responses:
     Forbidden:

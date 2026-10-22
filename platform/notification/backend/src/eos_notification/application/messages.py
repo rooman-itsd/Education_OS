@@ -41,7 +41,14 @@ from ..domain.models import (
 )
 from ..infrastructure.config import NotificationConfig
 from ..infrastructure.templates import DEFAULTS, DefaultTemplate, get_default, render
-from ..infrastructure.transport import ERROR_CODES, OutboundMessage, SendResult, Transport, get_transport
+from ..infrastructure.transport import (
+    ERROR_CODES,
+    MAX_PROVIDER_MESSAGE_ID,
+    OutboundMessage,
+    SendResult,
+    Transport,
+    get_transport,
+)
 from . import preferences, recipients, templates
 from .common import aware, canonical_uuid, organisation_of, utc_now
 
@@ -489,6 +496,7 @@ def _call_provider(msg: Message, secrets: dict, transport: Transport, config: No
 def _record(db: Session, msg: Message, default, result: SendResult, attempt: int, now: datetime, config) -> None:
     org = msg.organisation_id
     if result.accepted:
+        provider_id = _provider_id(result.provider_message_id)
         won = _transition(
             db,
             msg.id,
@@ -496,7 +504,7 @@ def _record(db: Session, msg: Message, default, result: SendResult, attempt: int
             from_statuses=(SENDING,),
             to=SENT,
             attempts=attempt,
-            provider_message_id=(result.provider_message_id or None),
+            provider_message_id=provider_id,
             sent_at=utc_now(),
             last_error=None,
             lease_expires_at=None,
@@ -511,15 +519,20 @@ def _record(db: Session, msg: Message, default, result: SendResult, attempt: int
                     "template": msg.template_key,
                     "channel": msg.channel,
                     "recipient_id": msg.recipient_id,
-                    "provider_message_id": result.provider_message_id,
+                    "provider_message_id": provider_id,
                 },
             )
         return
     code = result.reason if result.reason in ERROR_CODES else ("transport_error" if result.retryable else "rejected")
     can_retry = result.retryable and attempt < config.max_attempts and not default.secret_bearing
     if can_retry:
+        # The exponent is bounded the way recovery_delay() bounds its own: max_attempts has no ceiling, so a
+        # high attempt number would otherwise build a pointless big integer that min() immediately discards,
+        # and a non-positive attempt would make 2 ** negative a float. retry_backoff_s cannot be negative
+        # (NotificationConfig._bound), so the delay cannot be either.
+        exponent = min(max(attempt - 1, 0), 30)
         delay = min(
-            _retry_after(result.retry_after_s) or config.retry_backoff_s * (2 ** (attempt - 1)),
+            _retry_after(result.retry_after_s) or config.retry_backoff_s * (2**exponent),
             config.recovery_max_delay_s,
         )
         _transition(
@@ -535,6 +548,18 @@ def _record(db: Session, msg: Message, default, result: SendResult, attempt: int
         )
         return
     _fail(db, msg, (SENDING,), code, attempt)
+
+
+def _provider_id(value) -> str | None:
+    """The persistence boundary for a provider's receipt id: a non-empty string that fits
+    Message.provider_message_id (String(200)), else nothing. AdapterTransport applies the same rule, but it is
+    not the only Transport and this is the code that writes both the column and the event payload, so the
+    invariant has to hold here whichever transport answered. Mirrors _retry_after, which guards its value at
+    both layers for the same reason. The send itself still succeeded: an unusable reference is dropped, never
+    turned into a failure, because failing here is what makes recovery send the message twice."""
+    if not isinstance(value, str) or not value:
+        return None
+    return value if len(value) <= MAX_PROVIDER_MESSAGE_ID else None
 
 
 def _retry_after(value) -> int | None:

@@ -64,7 +64,9 @@ Two more ship alongside: `tenancy.organisation.verified` and `billing.trial.expi
 
 All four are covered end to end by `tests/test_required_templates.py`: each sends, renders every supplied
 value, refuses a missing variable by name, drops undeclared variables, refuses an oversized or non-scalar
-value, and cannot have a newline injected into its subject. **Nothing yet calls three of the four** — see the
+value, and cannot have a newline injected into its subject through a variable. A subject override containing
+CR or LF is refused when the template is saved, and a rendered subject is folded to one line whether the break
+came from a value or from the override's own text. **Nothing yet calls three of the four** — see the
 limitations below.
 
 ## What this release provides
@@ -167,7 +169,8 @@ Recovery failures (a bug or a database error while recovering a message, not a p
 is kept in `last_recovery_error`; its text never is, because it can carry addresses or SQL parameters.
 
 - Each recorded failure defers the message: a queued message by `next_attempt_at`, a sending one by its lease. The
-  delay doubles from `NOTIFICATION_RETRY_BACKOFF_S` and is capped at `NOTIFICATION_RECOVERY_MAX_DELAY_S`.
+  delay doubles from `NOTIFICATION_RETRY_BACKOFF_S` and is capped at `NOTIFICATION_RECOVERY_MAX_DELAY_S`,
+  whose own bounds are in [Retry-delay bounds](#retry-delay-bounds).
 - At `NOTIFICATION_RECOVERY_MAX_FAILURES` the message becomes `failed`. Its delivery `last_error` is kept (or set
   to `recovery_exhausted` if it had none), and `notification.message.failed` is published with
   `last_error: "recovery_exhausted"`. The status change and the outbox row are added in one session and committed
@@ -250,6 +253,48 @@ fields are mapped one by one and the message object is never serialised whole.
 See [config/env.example](config/env.example). `NOTIFICATION_TRANSPORT=memory` is refused unless
 `EOS_DEV_MODE` is true, and `EOS_DEV_MODE` defaults to true when unset, so production must set it to
 false explicitly.
+
+### Retry-delay bounds
+
+`NOTIFICATION_RECOVERY_MAX_DELAY_S` has a valid range of **1 to 86,400 seconds (24 hours)**, default 3,600.
+
+| Configured | Effective | What an operator sees |
+|---|---|---|
+| unset, or unparseable | 3,600 | nothing; the default applies |
+| 1 – 86,400 | as given | nothing |
+| above 86,400 | **86,400** | the value is reduced, and the first out-of-range value for this setting is logged once |
+| 0 or negative | **1** | same |
+
+`NOTIFICATION_SENDING_LEASE_S` (default 120) carries its own `1..86,400` range, for a different reason: it is
+added to the clock when a message is claimed and subtracted from it when recovery sweeps, with no cap in
+between, so an unbounded value raises mid-claim rather than merely scheduling a silly retry. Its ceiling is a
+separate constant (`MAX_SENDING_LEASE_S`) that happens to hold the same number, because a lease is not a retry
+delay and the recovery policy should not decide it.
+
+**The lease's lower bound is the part that matters, and this module cannot enforce it.** A lease must outlast
+the whole provider call, or a send still in flight loses its claim and recovery dispatches it a second time.
+`MESSAGING_PROVIDERS_SMTP_TIMEOUT_S` (default 10) is a **socket** timeout applied to each blocking operation,
+and one SMTP send performs roughly ten of them — connect, EHLO, STARTTLS, EHLO, AUTH, MAIL FROM, RCPT TO,
+DATA, body, QUIT — so the worst case is about **ten times** the timeout, roughly 100s against a 120s lease.
+That margin is thin, and raising the provider timeout breaks the relationship silently: the two settings live
+in different modules, notification must not import the adapter (the port is resolved by entry point), and
+nothing correlates them. **Raise the lease whenever you raise the provider timeout.** Today the consequence is
+latent rather than live, because nothing triggers `recover_stuck` in this release (**#82**) and the default
+transport is `memory`.
+
+The 24-hour figure is an **operational ceiling on one configured delay**, not a promise that every message is
+delivered within a day: `NOTIFICATION_MAX_ATTEMPTS` still bounds the attempts, and a message that exhausts
+them becomes `failed`. The ceiling is enforced because this value is also the only bound on a provider's own
+`retry_after` hint. Left unbounded, a hostile hint would push `next_attempt_at` past the end of the calendar,
+and that overflow is raised *after* the message has been claimed — stranding it in `sending` until recovery
+finds it. `NOTIFICATION_RETRY_BACKOFF_S` is likewise never negative; zero is allowed and means "retry on the
+next sweep".
+
+The bounds are enforced on the configuration object itself, not only when it is read from the environment, so
+a caller that constructs a `NotificationConfig` directly — the scheduler in **#82**, the relay in **#83** —
+gets the same guarantees. Out-of-range **integers** are clamped; a bool, string or float for an integer
+setting is a caller bug rather than operator error, and raises a field-specific `TypeError` instead of being
+coerced. `True` in particular is never accepted as `1`.
 
 ## Database and deployment order
 

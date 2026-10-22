@@ -109,9 +109,18 @@ MAX_PROVIDER_MESSAGE_ID = 200  # Message.provider_message_id is String(200)
 
 
 def _provider_message_id(value) -> str | None:
-    """Only a string, cut to the column: an over-long id would fail the SENT update after the provider already
-    accepted the message, and recovery would then send it again."""
-    return value[:MAX_PROVIDER_MESSAGE_ID] if isinstance(value, str) and value else None
+    """A provider's receipt id, only if it is a non-empty string that fits the column. An id the column cannot
+    hold would fail the SENT update after the provider had already accepted the message, and recovery would
+    then send it a second time.
+
+    Dropped rather than cut. The field exists to trace a message AT the provider (contracts/openapi.yaml) and
+    is returned to API clients and published on notification.message.sent, so a truncated id is a wrong
+    reference that looks like a right one: it would never match a receipt, and nothing downstream could tell
+    it had been altered. Real provider ids are far shorter than 200 characters, so a longer one is a malformed
+    response, not a long valid id."""
+    if not isinstance(value, str) or not value:
+        return None
+    return value if len(value) <= MAX_PROVIDER_MESSAGE_ID else None
 
 
 def _retry_after_s(value, max_delay_s: int) -> int | None:
