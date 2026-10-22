@@ -1,4 +1,10 @@
-"""FastAPI dependencies shared by every router: who is calling, for which organisation, with which permissions."""
+"""FastAPI dependencies shared by every router: who is calling, for which organisation, with which permissions.
+
+Every protected route names a key from a contracts/permissions.yaml catalogue through `require(...)`.
+`current_principal` alone is authentication (any active user); it is the right guard only for
+"who am I" style routes. apps/backend has a test that lists every platform route and checks it is
+guarded this way or on its explicit public list.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +18,8 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..application.service import get_user
+
+MEMBER_ROLE = "member"
 
 
 @dataclass
@@ -38,24 +46,33 @@ def current_principal(authorization: str | None = Header(default=None), db: Sess
     if user is None or user.status != "active":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user disabled")
     roles = list(claims.get("roles") or [])
+    # Every organisation user also holds the implicit `member` role (see platform/tenancy/contracts/permissions.yaml):
+    # the grants every member needs to open the shell, such as reading their own organisation and entitlement.
+    effective = roles + [MEMBER_ROLE] if claims.get("org") else roles
     p = Principal(
         user_id=user.id,
         organisation_id=claims.get("org"),
         roles=roles,
         super_admin=bool(claims.get("sa")),
         impersonated_by=claims.get("imp"),
-        permissions=permissions_for(roles, bool(claims.get("sa"))),
+        permissions=permissions_for(effective, bool(claims.get("sa"))),
     )
     db.info["organisation_id"] = p.organisation_id  # the request-scoped session carries the tenant
     return p
 
 
-def require(permission: str):
+def require(permission: str, *, organisation: bool = False):
+    """Guard a route with a catalogue key. `organisation=True` also insists the caller belongs to an
+    organisation, for routes that read or change "own organisation" data."""
+
     def dep(p: Principal = Depends(current_principal)) -> Principal:
         if not p.can(permission):
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"requires {permission}")
+        if organisation and not p.organisation_id:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "this endpoint needs an organisation user")
         return p
 
+    dep.permission = permission  # type: ignore[attr-defined]  # read by the route-coverage test
     return dep
 
 

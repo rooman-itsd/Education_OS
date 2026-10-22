@@ -2,12 +2,26 @@
 
 **Domain:** academics
 **Kind:** feature
-**Status:** planned
+**Status:** in progress (issue #100): domain rules and the faculty-load use case are built; persistence, API, events and widgets wait for the decisions in [docs/prd.md](docs/prd.md) section 13.
 
 Programmes, curriculum, courses, credits, faculty-course assignment.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+The academic catalogue of an organisation: terms, programmes and versioned curricula, the course catalogue,
+course offerings and their sections, faculty assignments and faculty load, and a read-only course roster built
+from enrolment events.
+
+Not here: student enrolment and allocation to sections (`student-lifecycle/enrolment-registration`), student
+records (`student-lifecycle/student-information`), departments, users and roles (`platform/identity`),
+timetables and attendance, coursework, and exams. See [docs/prd.md](docs/prd.md) section 2 and the stories in
+[docs/user-stories.md](docs/user-stories.md).
+
+## Tests
+```
+cd modules/academics/academic-management/backend
+PYTHONPATH=src python -m pytest -q
+```
+`PYTHONPATH=src` is needed until the package is installed (`pip install -e backend`).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

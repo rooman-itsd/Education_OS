@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: academic-management API
-  version: 0.1.0
+  version: 0.2.1
   description: |
     Programmes, curriculum, courses, credits, faculty-course assignment.
     Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
@@ -46,6 +46,8 @@ paths:
                       $ref: "#/components/schemas/Term"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [terms]
       summary: Create a term
@@ -66,6 +68,8 @@ paths:
                 $ref: "#/components/schemas/Term"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -84,6 +88,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Term"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -106,6 +112,8 @@ paths:
                 $ref: "#/components/schemas/Term"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -127,6 +135,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Term"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -170,6 +180,8 @@ paths:
                       $ref: "#/components/schemas/Programme"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [programmes]
       summary: Create a programme
@@ -190,6 +202,8 @@ paths:
                 $ref: "#/components/schemas/Programme"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -208,6 +222,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Programme"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -230,6 +246,8 @@ paths:
                 $ref: "#/components/schemas/Programme"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -248,6 +266,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Programme"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -280,6 +300,8 @@ paths:
                       $ref: "#/components/schemas/Curriculum"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -303,6 +325,8 @@ paths:
                 $ref: "#/components/schemas/Curriculum"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -321,6 +345,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Curriculum"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     put:
@@ -343,6 +369,8 @@ paths:
                 $ref: "#/components/schemas/Curriculum"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -368,6 +396,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Curriculum"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -418,6 +448,8 @@ paths:
                       $ref: "#/components/schemas/Course"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [courses]
       summary: Create a course
@@ -438,6 +470,8 @@ paths:
                 $ref: "#/components/schemas/Course"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -456,6 +490,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Course"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -478,6 +514,8 @@ paths:
                 $ref: "#/components/schemas/Course"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -496,6 +534,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Course"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -553,6 +593,8 @@ paths:
                       $ref: "#/components/schemas/Offering"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [offerings]
       summary: Offer a course in a term
@@ -574,6 +616,8 @@ paths:
                 $ref: "#/components/schemas/Offering"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -592,6 +636,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Offering"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     patch:
@@ -614,6 +660,8 @@ paths:
                 $ref: "#/components/schemas/Offering"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -648,6 +696,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Offering"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -676,6 +726,8 @@ paths:
                       $ref: "#/components/schemas/Section"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -698,6 +750,8 @@ paths:
                 $ref: "#/components/schemas/Section"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -726,6 +780,8 @@ paths:
                 $ref: "#/components/schemas/Section"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -761,6 +817,8 @@ paths:
                       $ref: "#/components/schemas/FacultyAssignment"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     post:
@@ -784,6 +842,8 @@ paths:
                 $ref: "#/components/schemas/FacultyAssignment"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -804,6 +864,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FacultyAssignment"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -886,6 +948,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/MyOffering"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /faculty-load:
     get:
@@ -894,6 +958,11 @@ paths:
       description: |
         Sum of active assignment contact hours per faculty member in a term, against the configured maximum.
         Used by widget academic-management.faculty-load (Department Admin dashboard).
+
+        Owner decisions on PR #168 (v1): only `primary` and `co_instructor` assignments count; `teaching_assistant`
+        hours are excluded. A faculty member with no counted assignment is not listed. Items are ordered over-load
+        first, then by `contact_hours` descending. `faculty_count` and `over_load_count` describe every listed
+        faculty member and do not change with `over_load_only`.
       operationId: getFacultyLoad
       x-permission: academic-management:faculty-load:read
       parameters:
@@ -923,6 +992,14 @@ paths:
                 $ref: "#/components/schemas/FacultyLoadReport"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: |
+            `academic_period_id` was not given and no term is active (code `active_term_not_found`), or the
+            given term does not exist in the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   parameters:
@@ -1516,11 +1593,12 @@ components:
     # --- roster and widgets
     RosterEntry:
       type: object
-      required: [student_id, section_id, enrolled_at]
+      required: [person_id, section_id, enrolled_at]
       properties:
-        student_id:
+        person_id:
           type: string
           format: uuid
+          description: The learner's id in student-lifecycle/student-information (confirmed on issue #100)
         student_name:
           type: string
           description: Cached from the enrolment event
@@ -1565,29 +1643,47 @@ components:
           type: integer
     FacultyLoadReport:
       type: object
-      required: [academic_period_id, max_weekly_contact_hours, items]
+      required:
+        [academic_period_id, academic_period_code, academic_period_name, max_weekly_contact_hours, faculty_count, over_load_count, items]
       properties:
         academic_period_id:
           type: string
           format: uuid
+        academic_period_code:
+          type: string
+          description: The term's `code`
+          examples: ["2026-ODD"]
+        academic_period_name:
+          type: string
+          description: The term's `name`
         department_id:
           type: [string, "null"]
           format: uuid
         max_weekly_contact_hours:
           type: number
+        faculty_count:
+          type: integer
+          minimum: 0
+          description: Faculty members with counted load; the same with or without `over_load_only`
+        over_load_count:
+          type: integer
+          minimum: 0
+          description: Faculty members over the maximum; the same with or without `over_load_only`
         items:
           type: array
+          description: Over-load first, then by `contact_hours` descending
           items:
             $ref: "#/components/schemas/FacultyLoad"
     FacultyLoad:
       type: object
-      required: [faculty_id, offerings_count, contact_hours, over_load]
+      required: [faculty_id, faculty_name, offerings_count, contact_hours, over_load]
       properties:
         faculty_id:
           type: string
           format: uuid
         faculty_name:
           type: string
+          description: Display name resolved server-side from platform/identity
         offerings_count:
           type: integer
         contact_hours:
