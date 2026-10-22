@@ -21,7 +21,8 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-# Proposed, pending confirmation by enrolment-registration (docs/prd.md section 8.2):
+# Agreed with enrolment-registration on issue #100 and handled by application/roster.py; listed here once
+# enrolment-registration publishes them in its events.yaml (docs/prd.md section 13):
 #   enrolment-registration.course-registration.confirmed
 #   enrolment-registration.course-registration.withdrawn
 #   enrolment-registration.section-allocation.changed

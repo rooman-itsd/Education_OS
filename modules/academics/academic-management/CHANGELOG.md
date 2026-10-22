@@ -3,6 +3,17 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Persistence: tables `academic_management_*` on TenantMixin with the shared RLS policy, own Alembic chain
+  (`am_0001`), organisation-scoped repository; migration and cross-tenant leak tests.
+- API: every operation of `contracts/openapi.yaml`, guarded by its permission key; events of
+  `contracts/events.yaml` published through `eos_core.events.publish` in the same transaction.
+- Roster read model from enrolment-registration's agreed events, upserted by `registration_id`, applied once per
+  envelope id; withdrawals kept as withdrawn; closed or full sections and offerings that are not open take no
+  new registrations.
+- Contracts: permission role blocks are the platform role ids; event payloads no longer repeat `organisation_id`,
+  each event declares `version: 1`, and the curriculum payload's `version` is now `curriculum_version`.
+- Frontend: `academic-management.course-roster` widget with tests; the module is enabled in `apps/frontend`.
+- Docs: data model; PRD and user stories record what is built and the shared work still outstanding.
 - Contract 0.2.1: every permission-checked operation in `contracts/openapi.yaml` now declares the shared
   `403` (`components.responses.Forbidden`, body `ErrorResponse`); 32 operations had left it out.
 - Faculty load rule: teaching-assistant assignments do not count; rows ordered over-load first; summary counts.

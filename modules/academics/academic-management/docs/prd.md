@@ -1,6 +1,6 @@
 # academic-management: product requirements
 
-**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contracts merged (#168, contract 0.2.0 in progress); implementation in progress (issue #100). User stories: [user-stories.md](user-stories.md)
+**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contract 0.2.1 merged; backend, roster read model and course-roster widget implemented, with the shared dependencies of section 13 outstanding (issue #100). User stories: [user-stories.md](user-stories.md)
 
 ## 1. Purpose
 
@@ -119,21 +119,23 @@ Each widget's endpoint is in `contracts/openapi.yaml` before any widget is built
 
 ## 7. Data model (summary)
 
-Every table has `organisation_id` and an RLS policy on `app.organisation_id`. Whether the tables live in an
-own schema `academic_management` (module standard) or use module-prefixed table names (facility-booking
-precedent) is pending with Faizan (issue #100); no migration is written before that decision. Full detail follows in `data-model.md` with the first migration.
+Every table has `organisation_id` (eos_core `TenantMixin`) and the shared row-level-security policy on
+`app.organisation_id` (eos_core `rls.POLICY`). Tables are prefixed `academic_management_` in the default schema, as
+in every module with a backend, and the module keeps its own Alembic chain (`db/`, version table
+`academic_management_alembic_version`). Full detail: [data-model.md](data-model.md).
 
-| Table | Key columns |
+| Table (`academic_management_` +) | Key columns |
 |---|---|
 | `term` | id, organisation_id, code, name, starts_on, ends_on, status |
-| `programme` | id, organisation_id, code, name, level, department_id, duration_terms, credits_required, status |
+| `programme` | id, organisation_id, code, name, level, department_id, duration_terms, credits_required, published_curriculum_id, status |
 | `curriculum` | id, organisation_id, programme_id, version, status, published_at |
 | `curriculum_item` | id, organisation_id, curriculum_id, course_id, programme_term, category, credits |
-| `course` | id, organisation_id, code, title, credits, lecture_hours, practical_hours, course_type, department_id, status |
+| `course` | id, organisation_id, code, title, description, credits, lecture_hours, practical_hours, course_type, department_id, status |
 | `offering` | id, organisation_id, course_id, academic_period_id, status, programme_ids |
 | `section` | id, organisation_id, course_offering_id, code, capacity, status |
-| `faculty_assignment` | id, organisation_id, course_offering_id, section_id, faculty_id, role, contact_hours, status |
-| `roster_entry` (read model) | id, organisation_id, course_offering_id, section_id, person_id, enrolled_at, status |
+| `faculty_assignment` | id, organisation_id, course_offering_id, section_id, faculty_id, role, contact_hours, status, ended_at |
+| `roster_entry` (read model) | id, organisation_id, registration_id, person_id, course_offering_id, section_id, student_name, roll_number, status, enrolled_at, withdrawn_at |
+| `processed_event` | id, organisation_id, event_id, name, processed_at |
 
 `department_id`, `faculty_id` and `person_id` are external IDs (identity, student-information). `person_id` is the
 learner identifier (confirmed on issue #100). The staff identifier on assignments (`faculty_id`) is pending with
@@ -141,7 +143,9 @@ Faizan (decision A, PR #168).
 
 ## 8. Events
 
-The full list with payloads is in `contracts/events.yaml`. Every event carries `organisation_id`.
+The full list with payloads is in `contracts/events.yaml`. `organisation_id`, the actor, the time and the payload
+`version` travel on the shared envelope (`platform/event-bus/contracts/events.yaml`), never in a payload. Every event
+declares payload version 1; the curriculum's own number is `curriculum_version`.
 
 ### 8.1 Published (proposed: consumers to confirm)
 
@@ -208,17 +212,29 @@ Default module roles map to profile roles as in section 3.
 - Every widget in section 6 has its endpoint in `contracts/openapi.yaml`.
 - Every permission used in section 6 is in `contracts/permissions.yaml`.
 
-## 13. Decisions pending (issue #100)
+## 13. Decisions (issue #100)
 
-Work that depends on these waits; nothing below is assumed in code or contracts.
+### Decided for this module (module owner, 22 Oct 2026) and applied in code
 
-| Decision | Who | Blocks |
+| Decision | Applied in |
+|---|---|
+| Tables prefixed `academic_management_`, no separate schema; own Alembic chain; shared RLS policy | `infrastructure/models.py`, `db/migrations/` |
+| The faculty member is the platform/identity user id, `faculty_id` | Assignment table, API and `faculty-assignment.*` payloads |
+| The learner is the student-information Person id, `person_id` | Roster read model and `RosterEntry` |
+| Permission role blocks are the platform role ids `org-admin`, `department-admin`, `faculty`, `student`, `examination-staff`, with the previous grants | `contracts/permissions.yaml` |
+| Payloads do not repeat `organisation_id`; each event declares `version: 1`; `curriculum_version` | `contracts/events.yaml` |
+| Roster built from `course-registration.confirmed`, `course-registration.withdrawn`, `section-allocation.changed`, upserted by `registration_id` (agreed with Praveen) | `application/roster.py` |
+| `academic-management.faculty-load` is built by the Department Admin dashboard owner (Himanshu); this module serves its endpoint | `frontend/src/widgets/index.ts` |
+
+### Still waiting on shared work
+
+| Dependency | Who | Effect until then |
 |---|---|---|
-| Canonical staff identifier; whether assignment fields and events rename `faculty_id` to `instructor_id` (decision A) | Faizan | Assignment table, assignment API and `faculty-assignment.*` payloads |
-| Platform role ids or module role names, and the grant mapping | Faizan | `permissions.yaml` roles; which profile roles see each widget |
-| Trusted source of a HoD's department | Faizan | Department scoping; the `department_id` default on `GET /faculty-load`; `roster:read-all` for departments |
-| Own schema or module-prefixed tables | Faizan | Models, migrations, RLS policies, repository, cross-tenant leak test |
-| Outbox `version` column (event-bus contract) | Faizan | Publishing events with the contract envelope |
-| Audit integration before the SDK supports it | Himanshu | FR-16 |
-| Enrolment contract (event names, payloads, timeline) | Praveen | Roster read model (FR-14, FR-15), section deletion with enrolled students (FR-10) |
-| Who builds `academic-management.faculty-load` (issue #2 against issue #100) | Faizan, Himanshu | The faculty-load widget |
+| Outbox `version` column in `packages/core` | Faizan | Events are published without the envelope version |
+| Audit SDK (`packages/sdk`) | Himanshu | The outbox row of each change is the only record; FR-16 is not met |
+| Shared error-response format (ADR and handler) | Faizan, Srujan | Errors keep the repository's `{"detail": {code, message}}` shape |
+| Trusted department claim for a HoD | Faizan | No department-level authorisation; `department_id` filters only |
+| Identity lookup of faculty names | Faizan | `GET /faculty-load` answers 503 `faculty_directory_unavailable` when names are needed |
+| Generic backend module loader in `apps/backend` | Srujan | The router is not mounted by the host app |
+| Enrolment-registration's published `events.yaml` and the event relay | Praveen, Himanshu | The roster consumer is tested against the agreed payloads but not subscribed |
+| Whether payload fields may share a key with the envelope's `name` (e.g. a term's `name`) | Himanshu (event-bus) | Left as the contract has them |
