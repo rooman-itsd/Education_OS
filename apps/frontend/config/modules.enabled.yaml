@@ -4,5 +4,6 @@
 #   modules:
 #     - academics/lms
 #     - finance-operations/fees-accounts
-modules: []
+modules:
+  - campus-life/hostel
 platform: []
