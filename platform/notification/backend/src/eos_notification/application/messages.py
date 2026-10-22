@@ -23,7 +23,7 @@ from eos_core import events
 from eos_core.db import SessionLocal, scoped
 from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..domain.errors import NotificationError
@@ -56,7 +56,7 @@ class StorageError(Exception):
     """Parameter-free stand-in for a database error whose own text would include row values."""
 
 
-def _describe(error: IntegrityError) -> str:
+def _describe(error: IntegrityError | DataError) -> str:
     orig = getattr(error, "orig", None)
     constraint = getattr(getattr(orig, "diag", None), "constraint_name", None)  # psycopg; SQLite has none
     return f"{type(orig).__name__ if orig else type(error).__name__} on constraint {constraint or 'unknown'}"
@@ -241,6 +241,10 @@ def accept_message(
     text, locale_used = templates.resolve_text(db, org, template, channel, locale, config)
     # render once now (with the real secrets, in memory) so a broken template is a 422 here, not a failure later
     subject = render(text.subject, {**values, **secrets}, single_line=True)
+    if subject is not None and len(subject) > templates.MAX_SUBJECT:
+        # The column is String(300); SQLite would store it, PostgreSQL would raise mid-insert. Applies to the
+        # platform wording and an organisation override alike, since both are rendered here.
+        raise NotificationError(422, "the rendered subject is too long")
     body = render(text.body, {**values, **secrets})
 
     if before_insert is not None:
@@ -267,7 +271,8 @@ def accept_message(
         with db.begin_nested():
             db.add(row)
             db.flush()
-    except IntegrityError as e:
+    except (IntegrityError, DataError) as e:
+        # DataError (a value the database refuses, e.g. too long) carries the SQL parameters in its text too.
         existing = _find_duplicate(db, org, client_token, source_event_id, template, channel, who.key)
         if existing is None:
             # The driver's text includes the SQL parameters (address, subject, variables). Keep only what is
@@ -513,7 +518,10 @@ def _record(db: Session, msg: Message, default, result: SendResult, attempt: int
     code = result.reason if result.reason in ERROR_CODES else ("transport_error" if result.retryable else "rejected")
     can_retry = result.retryable and attempt < config.max_attempts and not default.secret_bearing
     if can_retry:
-        delay = result.retry_after_s or config.retry_backoff_s * (2 ** (attempt - 1))
+        delay = min(
+            _retry_after(result.retry_after_s) or config.retry_backoff_s * (2 ** (attempt - 1)),
+            config.recovery_max_delay_s,
+        )
         _transition(
             db,
             msg.id,
@@ -527,6 +535,14 @@ def _record(db: Session, msg: Message, default, result: SendResult, attempt: int
         )
         return
     _fail(db, msg, (SENDING,), code, attempt)
+
+
+def _retry_after(value) -> int | None:
+    """A provider's retry hint, only if it is a positive integer. Anything else means "use the backoff": a
+    negative or absurd value must not schedule a retry in the past or overflow the timestamp."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
 
 
 def _is_suppressed(db: Session, msg: Message, config: NotificationConfig) -> bool:

@@ -105,6 +105,21 @@ class MemoryTransport:
 
 
 ADAPTER_GROUP = "eos.outbound_messaging"
+MAX_PROVIDER_MESSAGE_ID = 200  # Message.provider_message_id is String(200)
+
+
+def _provider_message_id(value) -> str | None:
+    """Only a string, cut to the column: an over-long id would fail the SENT update after the provider already
+    accepted the message, and recovery would then send it again."""
+    return value[:MAX_PROVIDER_MESSAGE_ID] if isinstance(value, str) and value else None
+
+
+def _retry_after_s(value, max_delay_s: int) -> int | None:
+    """A positive integer clamped to the recovery cap; anything else is None, so notification uses its own
+    backoff instead of a retry in the past or a timestamp that overflows."""
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return min(value, max_delay_s)
 
 
 def _supports_reply_to(provider) -> bool:
@@ -123,9 +138,10 @@ class AdapterTransport:
     adapter may serve several channels, and because a channel with no provider must fail that message rather
     than the whole transport."""
 
-    def __init__(self, factory, name: str = "") -> None:
+    def __init__(self, factory, name: str = "", max_retry_delay_s: int = 3600) -> None:
         self._factory = factory
         self._name = name
+        self._max_retry_delay_s = max_retry_delay_s
 
     def send(self, message: OutboundMessage) -> SendResult:
         try:
@@ -165,10 +181,12 @@ class AdapterTransport:
             reason = "transport_error"
         return SendResult(
             accepted=accepted,
-            provider_message_id=getattr(result, "provider_message_id", None) if accepted else None,
+            provider_message_id=_provider_message_id(getattr(result, "provider_message_id", None))
+            if accepted
+            else None,
             reason=None if accepted else (reason or "transport_error"),
             retryable=bool(getattr(result, "retryable", False)),
-            retry_after_s=getattr(result, "retry_after_s", None),
+            retry_after_s=_retry_after_s(getattr(result, "retry_after_s", None), self._max_retry_delay_s),
         )
 
 
@@ -200,7 +218,7 @@ def _load_adapter(config: NotificationConfig) -> Transport:
         raise NotificationError(503, f"messaging adapter '{name}' could not be loaded") from e
     if not callable(factory):
         raise NotificationError(503, f"messaging adapter '{name}' does not expose a callable")
-    return AdapterTransport(factory, name)
+    return AdapterTransport(factory, name, max_retry_delay_s=config.recovery_max_delay_s)
 
 
 def get_transport(config: NotificationConfig | None = None) -> Transport:

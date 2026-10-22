@@ -155,6 +155,8 @@ def upsert_template(
         raise NotificationError(422, "an override cannot declare variables the template does not have")
     if channel != "email" and subject:
         raise NotificationError(422, "subject is for email only")
+    if subject and ("\r" in subject or "\n" in subject):
+        raise NotificationError(422, "subject must be a single line")  # a second line would be a mail header
     if not body or len(body) > MAX_BODY or (subject and len(subject) > MAX_SUBJECT):
         raise NotificationError(422, "body or subject length is not valid")
     check_syntax(subject, allowed, "subject")

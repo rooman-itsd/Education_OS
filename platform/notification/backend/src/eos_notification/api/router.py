@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from ..application import messages, preferences, templates
+from ..application.common import canonical_uuid
 from ..domain.errors import NotificationError
 from . import schemas
 from .schemas import Channel, NewMessageIn, NewTemplateIn, PreferencesIn, PreviewIn, PublicStatus
@@ -134,17 +135,21 @@ def preview_template(
         return templates.preview(db, key=key, variables=body.variables, channel=body.channel, locale=body.locale)
 
 
-def _own_or_manage(user_id: str, p: Principal) -> None:
-    """A person may always read and change their own preferences; anyone else needs preference:manage."""
-    if user_id != p.user_id and not p.can("notification:preference:manage"):
+def _own_or_manage(user_id: str, p: Principal) -> str:
+    """A person may always read and change their own preferences; anyone else needs preference:manage. The id is
+    compared in canonical form, so an upper-case or braced spelling of one's own id is still one's own."""
+    with _http_errors():
+        uid = canonical_uuid(user_id, "user_id") or ""
+    if uid != p.user_id and not p.can("notification:preference:manage"):
         raise HTTPException(403, "requires notification:preference:manage")
+    return uid
 
 
 @router.get("/preferences/{user_id}")
 def get_preferences(user_id: str, p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
-    _own_or_manage(user_id, p)
+    uid = _own_or_manage(user_id, p)
     with _http_errors():
-        return preferences.get_preferences(db, user_id)
+        return preferences.get_preferences(db, uid)
 
 
 @router.put("/preferences/{user_id}")
@@ -154,11 +159,11 @@ def set_preferences(
     p: Principal = Depends(require_organisation),
     db: Session = Depends(get_db),
 ):
-    _own_or_manage(user_id, p)
+    uid = _own_or_manage(user_id, p)
     with _http_errors():
         return preferences.set_preferences(
             db,
-            user_id,
+            uid,
             channels=body.channels,
             locale=body.locale,
             quiet_hours=body.quiet_hours.model_dump() if body.quiet_hours else None,

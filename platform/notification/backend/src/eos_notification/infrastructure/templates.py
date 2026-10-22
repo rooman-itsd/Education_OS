@@ -66,9 +66,11 @@ def render(text: str | None, values: dict[str, str], *, single_line: bool = Fals
     if single_line:
         values = {k: re.sub(r"[\r\n]+", " ", v) for k, v in values.items()}
     try:
-        return Template(text).substitute(values)
+        out = Template(text).substitute(values)
     except (KeyError, ValueError) as e:
         raise NotificationError(422, "template could not be rendered") from e
+    # The template text itself may carry a newline (an override); a subject is one header line, never two.
+    return re.sub(r"[\r\n]+", " ", out) if single_line else out
 
 
 def _t(key, category, channels, variables, texts, **kw) -> DefaultTemplate:
