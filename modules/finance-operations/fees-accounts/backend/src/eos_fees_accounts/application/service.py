@@ -626,6 +626,9 @@ def bulk_invoices(db: Session, actor: Actor, body: dict) -> dict:
                 skipped += 1
             else:
                 errors.append({"person_id": person_id, "message": e.message})
+        except IntegrityError:
+            db.rollback()  # a concurrent request raised the same instalment first
+            skipped += 1
     job = _get(db, BulkJob, job.id, "bulk job")
     job.created, job.skipped, job.errors, job.status = created, skipped, errors, "completed"
     db.commit()
@@ -668,7 +671,7 @@ def list_invoices(db: Session, filters: dict, cursor: str | None, limit: int) ->
 def get_invoice(db: Session, actor: Actor, invoice_id: str) -> dict:
     inv = _get(db, Invoice, invoice_id, "invoice")
     if not actor.can(perm.INVOICE_READ) and inv.person_id != actor.user_id:
-        raise forbidden(f"requires {perm.INVOICE_READ}")
+        raise not_found("invoice")
     return invoice_dict(db, inv)
 
 
@@ -683,7 +686,9 @@ def _cancel(db: Session, inv: Invoice, reason: str, actor_id: str | None) -> Non
     if inv.status == "cancelled":
         raise conflict("already_cancelled", "the invoice is already cancelled")
     live = db.scalar(
-        _q(db, Payment).where(Payment.invoice_id == inv.id, Payment.status != "void").with_only_columns(func.count())
+        _q(db, Payment)
+        .where(Payment.invoice_id == inv.id, Payment.status.in_(("completed", "partially_refunded")))
+        .with_only_columns(func.count())
     )
     if live:
         raise conflict("has_payments", "the invoice has payments; refund or void them first")
@@ -869,14 +874,14 @@ def list_payments(db: Session, filters: dict, cursor: str | None, limit: int) ->
 def get_payment(db: Session, actor: Actor, payment_id: str) -> dict:
     p = _get(db, Payment, payment_id, "payment")
     if not actor.can(perm.INVOICE_READ) and p.person_id != actor.user_id:
-        raise forbidden(f"requires {perm.INVOICE_READ}")
+        raise not_found("payment")
     return payment_dict(p)
 
 
 def get_receipt(db: Session, actor: Actor, receipt_id: str) -> dict:
     r = _get(db, Receipt, receipt_id, "receipt")
     if not actor.can(perm.INVOICE_READ) and r.person_id != actor.user_id:
-        raise forbidden(f"requires {perm.INVOICE_READ}")
+        raise not_found("receipt")
     return receipt_dict(r)
 
 
@@ -912,8 +917,9 @@ def void_payment(db: Session, actor: Actor, payment_id: str, reason: str) -> dic
 
 def refund_payment(db: Session, actor: Actor, payment_id: str, body: dict) -> dict:
     """Refund all or part of a payment, never above what is left. Online payments with mode `original` go back
-    through the adapter; everything else is recorded as paid out. The invoice is left as it is: a refund returns
-    money, it does not make the fee due again."""
+    through the adapter; everything else is recorded as paid out. Money given back is no longer paid, so the
+    invoice's paid total drops and its balance comes back unless a concession or cancellation covers it (an
+    overpayment refunded brings the balance back to zero)."""
     p = _get(db, Payment, payment_id, "payment", lock=True)
     if p.status not in ("completed", "partially_refunded"):
         raise conflict("not_refundable", f"the payment is {p.status}")
@@ -977,6 +983,9 @@ def complete_refund(db: Session, r: Refund, actor_id: str | None) -> None:
     r.status, r.completed_at = "completed", clock()
     p.refunded_amount = Decimal(p.refunded_amount) + Decimal(r.amount)
     p.status = "refunded" if p.refunded_amount >= Decimal(p.amount) else "partially_refunded"
+    inv = _get(db, Invoice, r.invoice_id, "invoice", lock=True)
+    inv.paid_total = Decimal(inv.paid_total) - Decimal(r.amount)
+    _refresh(db, inv, actor_id)
     _publish(
         db,
         "refund.issued",
@@ -1010,6 +1019,8 @@ def request_concession(db: Session, actor: Actor, body: dict) -> dict:
         raise conflict("not_open", f"the invoice is {inv.status}")
     amount = _rule(parse_money, body["amount"]) if body.get("amount") is not None else None
     percent = Decimal(str(body["percent"])) if body.get("percent") is not None else None
+    if percent is not None and percent != percent.quantize(Decimal("0.01")):
+        raise invalid("invalid_concession", "percent has at most two decimal places", "percent")
     _rule(rules.concession_amount, Decimal(inv.total), amount, percent)
     c = Concession(
         organisation_id=actor.organisation_id,
@@ -1044,7 +1055,9 @@ def decide_concession(db: Session, actor: Actor, concession_id: str, decision: s
     if inv.status not in rules.OPEN_INVOICE_STATUSES:
         raise conflict("not_open", f"the invoice is {inv.status}")
     worth = rules.concession_amount(Decimal(inv.total), c.amount, c.percent)
-    approved = min(worth, balance_of(inv))  # never more than is still due
+    # The full worth is kept even when it exceeds what is still due: a later void restores the balance against the
+    # whole concession, and a credit left over is visible for a refund.
+    approved = worth
     c.status, c.approved_amount = "approved", approved
     inv.concession_total = Decimal(inv.concession_total) + approved
     _publish(
@@ -1229,8 +1242,15 @@ def list_targets(db: Session, academic_year: str | None) -> list[dict]:
 
 def put_targets(db: Session, actor: Actor, academic_year: str, targets: list[dict]) -> list[dict]:
     months = set(_rule(rules.academic_year_months, academic_year, load_settings().academic_year_start_month))
+    heads = {h.id for h in db.scalars(_q(db, FeeHead))}
+    seen: set[tuple[str, str | None]] = set()
     rows = []
     for i, t in enumerate(targets):
+        if t.get("fee_head_id") and t["fee_head_id"] not in heads:
+            raise invalid("unknown_fee_head", "fee_head_id is not a fee head of your organisation", f"targets[{i}]")
+        if (t["period"], t.get("fee_head_id")) in seen:
+            raise invalid("duplicate_target", f"{t['period']} is given twice for the same head", f"targets[{i}]")
+        seen.add((t["period"], t.get("fee_head_id")))
         if t["period"] not in months:
             raise invalid(
                 "period_outside_year", f"{t['period']} is not a month of {academic_year}", f"targets[{i}].period"

@@ -27,5 +27,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - the collections, outstanding and collection-vs-target reports;
   - the daily late-fee and overdue job.
 - Alembic chain `fees_accounts_0001`: 12 tables, each with `organisation_id` and the `tenant_isolation` policy on Postgres.
-- Tests: 62, including the cross-tenant leak test, the migration test and contract drift checks.
+- Tests: 72, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.
 - `config/env.example` lists every key with its default; `module.yaml` status is `in-progress`.

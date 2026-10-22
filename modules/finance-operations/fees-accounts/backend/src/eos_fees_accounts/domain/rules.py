@@ -79,10 +79,16 @@ def check_instalments(instalments: list[Instalment]) -> None:
 
 
 def split_item(amount: Decimal, percents: list[Decimal]) -> list[Decimal]:
-    """Share one structure item across instalments. Every share is rounded to the paisa and the last instalment
-    takes the remainder, so the shares always add up to the item exactly."""
-    shares = [(amount * p / 100).quantize(CENT, ROUND_HALF_UP) for p in percents[:-1]]
-    return [*shares, amount - sum(shares, ZERO)]
+    """Share one structure item across instalments by cumulative rounding: share k is the rounded running total
+    after k instalments minus the one before. Shares are never negative, a 0% instalment gets nothing, and they
+    always add up to the item exactly."""
+    shares, running, before = [], Decimal(0), ZERO
+    for p in percents:
+        running += p
+        upto = amount if running >= 100 else (amount * running / 100).quantize(CENT, ROUND_HALF_UP)
+        shares.append(upto - before)
+        before = upto
+    return shares
 
 
 def instalment_lines(

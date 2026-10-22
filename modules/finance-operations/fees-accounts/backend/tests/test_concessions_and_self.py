@@ -28,7 +28,7 @@ def test_concession_needs_someone_else_to_approve(client, org):
     assert again.status_code == 409
 
 
-def test_concession_is_capped_at_the_balance_and_can_settle_the_invoice(client, org):
+def test_concession_keeps_its_full_worth_and_can_settle_the_invoice(client, org):
     inv = adhoc(client, org, "1000.00")
     pay_cash(client, org, inv["id"], "900.00")
     cid = client.post(
@@ -37,7 +37,7 @@ def test_concession_is_capped_at_the_balance_and_can_settle_the_invoice(client, 
         headers=org.staff,
     ).json()["id"]
     r = client.post(f"{BASE}/concessions/{cid}/decision", json={"decision": "approved"}, headers=org.manager)
-    assert r.json()["approved_amount"] == "100.00"
+    assert r.json()["approved_amount"] == "500.00"  # the credit above what was due stays visible for a refund
     assert client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()["status"] == "paid"
 
 

@@ -96,7 +96,7 @@ def test_list_filters_and_pages(client, org):
 def test_the_person_may_read_their_own_invoice(client, org):
     inv = adhoc(client, org)
     assert client.get(f"{BASE}/invoices/{inv['id']}", headers=org.student).status_code == 200
-    assert client.get(f"{BASE}/invoices/{inv['id']}", headers=org.classmate).status_code == 403
+    assert client.get(f"{BASE}/invoices/{inv['id']}", headers=org.classmate).status_code == 404  # not revealed
     assert client.get(f"{BASE}/invoices/nope", headers=org.staff).status_code == 404
 
 

@@ -89,8 +89,13 @@ def test_offline_refunds_never_above_what_was_paid(client, org):
         "300.00",
         "700.00",
     ]
-    # a refund returns money; it does not make the fee due again
-    assert client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()["status"] == "paid"
+    # money given back is no longer paid: the fee is due again until it is cancelled or waived
+    after = client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()
+    assert after["status"] == "issued" and after["paid_total"] == "0.00" and after["balance"] == "1000.00"
+    assert (
+        client.post(f"{BASE}/invoices/{inv['id']}/cancel", json={"reason": "withdrawn"}, headers=org.staff).status_code
+        == 200
+    )
     assert client.post(f"{BASE}/payments/{p['id']}/void", json={"reason": "x"}, headers=org.staff).status_code == 409
 
 

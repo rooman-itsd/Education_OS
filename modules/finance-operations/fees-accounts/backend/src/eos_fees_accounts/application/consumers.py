@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from eos_core.tenant import organisation_scope
+from eos_core.tenant import is_bypass, organisation_scope
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -58,7 +59,7 @@ def _invoice_all_instalments(db: Session, org: str, structure: FeeStructure, per
             inv = service.invoice_from_structure(db, org, structure, position, person_id, None, source)
             numbers.append(inv.number)
         except FeesError as e:
-            if e.code != "already_invoiced":
+            if e.code not in ("already_invoiced", "no_lines"):
                 raise
     return numbers
 
@@ -84,11 +85,11 @@ def on_payment_succeeded(db: Session, org: str, p: dict) -> dict:
     if p.get("source_module") != service.MODULE:
         return _ignored("not a fees-accounts payment")
     reference = p["reference"]
-    if db.scalar(_q(db, Payment).where(Payment.gateway_reference == reference)):
-        return _ignored("payment already applied")
     inv = db.scalar(_q(db, Invoice).where(Invoice.id == p["source_reference"]).with_for_update())
     if inv is None:
         return _ignored("invoice not found")
+    if db.scalar(_q(db, Payment).where(Payment.gateway_reference == reference)):
+        return _ignored("payment already applied")
     amount = parse_money(p["amount"])
     completed = p.get("completed_at")
     paid_on = date.fromisoformat(completed[:10]) if completed else service.today()
@@ -108,11 +109,13 @@ def on_payment_failed(db: Session, org: str, p: dict) -> dict:
 def on_payment_refunded(db: Session, org: str, p: dict) -> dict:
     if p.get("source_module") != service.MODULE:
         return _ignored("not a fees-accounts payment")
-    refund = db.scalar(_q(db, Refund).where(Refund.gateway_refund_id == p.get("refund_id")))
+    if not p.get("refund_id"):
+        return _ignored("the event carries no refund_id")
+    refund = db.scalar(_q(db, Refund).where(Refund.gateway_refund_id == p["refund_id"]).with_for_update())
     if refund is None:
         return _ignored("refund not started from fees-accounts")
-    if refund.status == "completed":
-        return _ignored("refund already completed")
+    if refund.status != "requested":
+        return _ignored(f"refund already {refund.status}")
     service.complete_refund(db, refund, None)
     db.commit()
     return _done("completed", refund_id=refund.id)
@@ -142,6 +145,8 @@ def on_application_accepted(db: Session, org: str, p: dict) -> dict:
 
 
 def on_allocation_confirmed(db: Session, org: str, p: dict) -> dict:
+    if not p.get("room_type"):
+        return _ignored("the allocation carries no room_type")
     source = {"module": "hostel", "reference": p["allocation_id"]}
     if _live_from_source(db, "hostel", p["allocation_id"]):
         return _ignored("already invoiced")
@@ -162,6 +167,8 @@ def on_allocation_cancelled(db: Session, org: str, p: dict) -> dict:
 def on_pass_issued(db: Session, org: str, p: dict) -> dict:
     if p.get("rider_type") == "staff" and not service.get_settings(db)["invoice_staff_transport"]:
         return _ignored("staff passes are not invoiced (setting invoice_staff_transport)")
+    if not p.get("route_id"):
+        return _ignored("the pass carries no route_id")
     source = {"module": "transport", "reference": p["pass_id"]}
     if _live_from_source(db, "transport", p["pass_id"]):
         return _ignored("already invoiced")
@@ -229,9 +236,18 @@ def handle(db: Session, name: str, payload: dict) -> dict:
     org = payload.get("organisation_id")
     if not org:
         return _ignored("the event carries no organisation_id")
+    if is_bypass():
+        # organisation_scope does not lift platform_scope's bypass, so scoped queries would see every organisation.
+        raise RuntimeError("consumers.handle must not run inside platform_scope")
+    db.rollback()  # a fresh transaction, so Postgres row-level security is set for this event's organisation
     with organisation_scope(org):
         try:
             return handler(db, org, payload)
         except (FeesError, rules.RuleError) as e:
             db.rollback()
             return _ignored(getattr(e, "message", str(e)))
+        except IntegrityError:
+            db.rollback()  # a concurrent delivery of the same event got there first
+            return _ignored("already applied by a concurrent delivery")
+        finally:
+            db.rollback()  # nothing left open: the next event starts in its own scope
