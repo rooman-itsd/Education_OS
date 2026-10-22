@@ -95,7 +95,8 @@ The super admin values are read only the first time, when `.env.api` is created 
 JWT secret are generated then). The last line of the script fetches
 `https://educationos.futureacad.ae/api/v1/health` through the public proxy; `{"status":"ok","database":"postgres",...}`
 means the site has left preview mode (hard refresh with Ctrl+Shift+R once). From then on every push to
-`main` reaches the container within two minutes (`../autodeploy/README.md`, section "API").
+`main` reaches the container within two minutes (`../autodeploy/README.md`, section "API"), and the
+database is backed up nightly with the first backup taken during the run (`../backup-dr/README.md`).
 
 To move the API to another container later, run the same script with the new `CTID` and `CT_IP`; it
 repoints the proxy. Stop the old one with `pct stop <old id>` once the health check answers from the new one.
@@ -114,13 +115,14 @@ docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.e
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps
 curl -s http://127.0.0.1:8000/api/v1/health
 bash infra/autodeploy/install-api.sh
+bash infra/backup-dr/install.sh
 ```
 
-then in the nginx container, with the API container's LAN IP in place of `192.168.1.122`:
+then in the nginx container, with the API container's LAN IP in place of `<api-host-ip>`:
 
 ```
 V=$(grep -rl '<api-host>' /etc/nginx/sites-enabled/ /etc/nginx/sites-available/ | head -1); echo "$V"
-sed -i 's|http://<api-host>:8000/api/|http://192.168.1.122:8000/api/|' "$V"
+sed -i 's|http://<api-host>:8000/api/|http://<api-host-ip>:8000/api/|' "$V"
 nginx -t && nginx -s reload
 curl -s https://educationos.futureacad.ae/api/v1/health
 ```
