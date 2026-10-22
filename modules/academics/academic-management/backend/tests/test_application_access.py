@@ -35,4 +35,4 @@ def test_a_caller_without_the_key_is_forbidden(permissions):
 
 def test_roles_alone_grant_nothing():
     # Role-to-key mapping is pending (issue #100); only resolved keys count.
-    assert not Actor("u1", "org1", roles=["academic-management-admin"]).can(FACULTY_LOAD_READ)
+    assert not Actor("u1", "org1", roles=["org-admin"]).can(FACULTY_LOAD_READ)

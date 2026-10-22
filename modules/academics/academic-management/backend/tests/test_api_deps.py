@@ -1,6 +1,6 @@
 """Tests of the API access layer: who is calling (401, 403) and the permission guard (403), on a test-only route.
-Permission keys are resolved by eos_core.permissions_for from contracts/permissions.yaml; tokens carry the
-module's own role names, as facility-booking's tests do. No role mapping is assumed."""
+Permission keys are resolved by eos_core.permissions_for from contracts/permissions.yaml, whose role blocks are
+platform role ids; tokens carry those ids, as a signed-in user's token does."""
 
 import jwt
 import pytest
@@ -17,9 +17,9 @@ from eos_core.security import create_token  # noqa: E402
 from fastapi import Depends, FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-HEAD = "academic-management-department-head"
-FACULTY = "academic-management-faculty"
-VIEWER = "academic-management-viewer"
+HEAD = "department-admin"
+FACULTY = "faculty"
+VIEWER = "student"
 
 
 def probe_app() -> FastAPI:
@@ -114,7 +114,7 @@ def test_unknown_or_no_roles_grant_nothing(client, roles):
 # --- allowed: keys resolved from contracts/permissions.yaml
 
 
-def test_a_module_role_token_resolves_its_keys_and_the_session_carries_the_organisation(client):
+def test_a_platform_role_token_resolves_its_keys_and_the_session_carries_the_organisation(client):
     response = client.get("/load", headers=bearer(token(HEAD, organisation_id="org-7")))
     assert response.status_code == 200
     body = response.json()
