@@ -51,9 +51,11 @@ def _time(value: object, fallback: object) -> datetime:
 
 
 def _admit(db: Session, offering_id: str, section_id: str, registration_id: str) -> str | None:
-    """None when a registration may join the section, else the rejection outcome."""
+    """None when a registration may join the section, else the rejection outcome. The section row is locked first
+    (SELECT ... FOR UPDATE), so two registrations into one section are checked one after the other on PostgreSQL;
+    handle_event also re-counts after writing, before committing."""
+    section = repo.section_for_update(db, section_id)
     offering = repo.get(db, OfferingRow, offering_id)
-    section = repo.get(db, SectionRow, section_id)
     if offering is None or section is None or section.course_offering_id != offering_id:
         return REJECTED_UNKNOWN_SECTION
     if offering.status != OPEN:
@@ -90,28 +92,40 @@ def handle_event(db: Session, envelope: dict) -> str:
         return DUPLICATE
     payload = envelope.get("payload") or {}
     occurred_at = envelope.get("occurred_at")
-    outcome = {
+    outcome, admitted_to = {
         CONFIRMED: _confirmed,
         WITHDRAWN: _withdrawn,
         SECTION_CHANGED: _section_changed,
     }[name](db, organisation_id, payload, occurred_at)
+    if admitted_to is not None and _over_capacity(db, admitted_to):
+        # A concurrent registration took the last seat between the check and this write: undo this one.
+        db.rollback()
+        db.info["organisation_id"] = organisation_id
+        outcome = REJECTED_SECTION_FULL
     db.add(ProcessedEventRow(organisation_id=organisation_id, event_id=event_id, name=name, processed_at=utcnow()))
     db.commit()
     return outcome
 
 
-def _confirmed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> str:
+def _over_capacity(db: Session, section_id: str) -> bool:
+    """Re-count the section inside the same transaction, after this event's write is flushed."""
+    db.flush()
+    section = repo.get(db, SectionRow, section_id)
+    return section is not None and repo.enrolled_in_section(db, section_id) > section.capacity
+
+
+def _confirmed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     if entry is not None and entry.status == repo.WITHDRAWN:
-        return STALE  # the withdrawal of this registration was already applied
+        return STALE, None  # the withdrawal of this registration was already applied
     if entry is not None:
         entry.person_id = p["person_id"]
         entry.student_name = p.get("student_name", entry.student_name)
         entry.roll_number = p.get("roll_number", entry.roll_number)
-        return APPLIED  # an enrolled row (from a section change that arrived first) keeps its current section
+        return APPLIED, None  # an enrolled row (from a section change that arrived first) keeps its section
     rejected = _admit(db, p["course_offering_id"], p["section_id"], p["registration_id"])
     if rejected:
-        return rejected
+        return rejected, None
     db.add(
         RosterEntryRow(
             organisation_id=organisation_id,
@@ -125,16 +139,16 @@ def _confirmed(db: Session, organisation_id: str, p: dict, occurred_at: object) 
             enrolled_at=_time(p.get("confirmed_at"), occurred_at),
         )
     )
-    return APPLIED
+    return APPLIED, p["section_id"]
 
 
-def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) -> str:
+def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     withdrawn_at = _time(p.get("withdrawn_at"), occurred_at)
     if entry is None:
         # The withdrawal arrived before its confirmation: keep it, so the late confirmation is recognised as stale.
         if repo.get(db, SectionRow, p["section_id"]) is None:
-            return REJECTED_UNKNOWN_SECTION
+            return REJECTED_UNKNOWN_SECTION, None
         db.add(
             RosterEntryRow(
                 organisation_id=organisation_id,
@@ -147,22 +161,22 @@ def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) 
                 withdrawn_at=withdrawn_at,
             )
         )
-        return APPLIED
+        return APPLIED, None
     if entry.status == repo.WITHDRAWN:
-        return APPLIED  # already withdrawn: the same state again
+        return APPLIED, None  # already withdrawn: the same state again
     entry.status, entry.withdrawn_at = repo.WITHDRAWN, withdrawn_at
-    return APPLIED
+    return APPLIED, None
 
 
-def _section_changed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> str:
+def _section_changed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     if entry is not None and entry.status == repo.WITHDRAWN:
-        return STALE
+        return STALE, None
     if entry is not None and entry.section_id != p["from_section_id"]:
-        return STALE  # the registration is no longer in the section this change starts from
+        return STALE, None  # the registration is no longer in the section this change starts from
     rejected = _admit(db, p["course_offering_id"], p["to_section_id"], p["registration_id"])
     if rejected:
-        return rejected
+        return rejected, None
     if entry is None:
         # The change arrived before its confirmation: record the registration in its new section; the confirmation
         # then only fills in the remaining fields.
@@ -177,6 +191,6 @@ def _section_changed(db: Session, organisation_id: str, p: dict, occurred_at: ob
                 enrolled_at=_time(None, occurred_at),
             )
         )
-        return APPLIED
+        return APPLIED, p["to_section_id"]
     entry.section_id = p["to_section_id"]
-    return APPLIED
+    return APPLIED, p["to_section_id"]

@@ -1,11 +1,18 @@
 """GET /faculty-load end to end (FR-13): the report is computed from stored assignments, filtered (never authorised)
 by department_id, and refuses honestly when no faculty directory is available."""
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 pytest.importorskip("eos_core", reason="needs eos_core on PYTHONPATH (see test_api_deps.py)")
 
 from conftest import BASE, assign, make_course, make_offering, make_term, ok  # noqa: E402
+
+CONTRACT = yaml.safe_load(
+    (Path(__file__).resolve().parents[2] / "contracts" / "openapi.yaml").read_text(encoding="utf-8")
+)
 from eos_core.db import new_id  # noqa: E402
 
 HOD = "department-admin"
@@ -94,5 +101,14 @@ def test_without_a_faculty_directory_names_are_refused_not_guessed(client, staff
     try:
         r = client.get(f"{BASE}/faculty-load", headers=staffed["h"])
         assert (r.status_code, r.json()["detail"]["code"]) == (503, "faculty_directory_unavailable")
+        declared = CONTRACT["paths"]["/faculty-load"]["get"]["responses"]
+        assert declared["503"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorResponse"
+        }
     finally:
         app.dependency_overrides[faculty_directory] = override
+
+
+def test_every_status_the_route_returns_is_declared_in_the_contract():
+    declared = set(CONTRACT["paths"]["/faculty-load"]["get"]["responses"])
+    assert {"200", "403", "404", "503"} <= declared  # 422 for a malformed id is FastAPI's (shared error format)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: academic-management API
-  version: 0.2.1
+  version: 0.2.2
   description: |
     Programmes, curriculum, courses, credits, faculty-course assignment.
     Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
@@ -996,6 +996,15 @@ paths:
           description: |
             `academic_period_id` was not given and no term is active (code `active_term_not_found`), or the
             given term does not exist in the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: |
+            Faculty display names cannot be resolved (code `faculty_directory_unavailable`). `faculty_name` is
+            required and is resolved from platform/identity; until an identity lookup is available to modules, the
+            report is refused rather than showing ids as names. A report with no listed faculty is still returned.
           content:
             application/json:
               schema:

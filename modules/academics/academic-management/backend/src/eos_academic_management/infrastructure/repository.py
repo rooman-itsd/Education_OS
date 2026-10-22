@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from eos_core.db import scoped
 from sqlalchemy import Select, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import (
@@ -107,3 +108,47 @@ def programme(db: Session, programme_id: str) -> ProgrammeRow | None:
 
 def offering(db: Session, offering_id: str) -> OfferingRow | None:
     return get(db, OfferingRow, offering_id)
+
+
+def section_for_update(db: Session, section_id: str) -> SectionRow | None:
+    """Lock the section row so registrations into one section run one after the other (capacity check, PRD FR-10).
+    On SQLite FOR UPDATE is a no-op; there writers are serialised by the database lock instead."""
+    return db.scalars(section_lock_query(db, section_id)).first()
+
+
+def section_lock_query(db: Session, section_id: str) -> Select:
+    return q(db, SectionRow).where(SectionRow.id == section_id).with_for_update()
+
+
+def enrolled_in_section(db: Session, section_id: str) -> int:
+    query = scoped(db, select(func.count()), RosterEntryRow).where(
+        RosterEntryRow.section_id == section_id, RosterEntryRow.status == ENROLLED
+    )
+    return db.scalar(query) or 0
+
+
+# Unique constraints that protect a code (contract Conflict, "duplicate code"), by name and by their columns.
+CODE_CONSTRAINTS = {
+    "uq_academic_management_term_code": ("academic_management_term", ("organisation_id", "code")),
+    "uq_academic_management_programme_code": ("academic_management_programme", ("organisation_id", "code")),
+    "uq_academic_management_course_code": ("academic_management_course", ("organisation_id", "code")),
+    "uq_academic_management_section_code": (
+        "academic_management_section",
+        ("organisation_id", "course_offering_id", "code"),
+    ),
+}
+
+
+def is_code_conflict(err: IntegrityError) -> bool:
+    """True only when `err` is a violation of one of the code constraints above. PostgreSQL names the constraint
+    (psycopg `diag.constraint_name`); SQLite names its columns ("UNIQUE constraint failed: t.a, t.b"). Any other
+    integrity error (another constraint, a foreign key, a NOT NULL) is not a duplicate code."""
+    orig = err.orig
+    name = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if name:
+        return name in CODE_CONSTRAINTS
+    message = str(orig)
+    return any(
+        message == "UNIQUE constraint failed: " + ", ".join(f"{table}.{column}" for column in columns)
+        for table, columns in CODE_CONSTRAINTS.values()
+    )

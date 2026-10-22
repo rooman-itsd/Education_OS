@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from eos_core import events
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import assignments as asg
@@ -81,6 +82,23 @@ def _publish(db: Session, actor: Actor | None, entity_event: str, payload: dict)
         payload,
         actor=actor.user_id if actor else None,
     )
+
+
+def _insert_coded(db: Session, row) -> None:
+    """Insert a row whose `code` is unique (term, programme, course, section). The pre-check with ensure_unique_code
+    gives the usual answer; this covers the race where a concurrent request inserts the same code in between: the
+    database's unique constraint refuses it, and that refusal, and only that one, becomes the same 409. Any other
+    integrity error is re-raised unchanged."""
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError as err:
+        db.rollback()
+        if repo.is_code_conflict(err):
+            raise AcademicManagementError(
+                409, "duplicate_code", f"code {row.code!r} is already in use", field="code"
+            ) from err
+        raise
 
 
 def _changed(row, changes: dict) -> list[str]:
@@ -305,8 +323,7 @@ def create_term(db: Session, a: Actor, body: dict) -> dict:
         ends_on=dates.ends_on,
         status=trm.UPCOMING,
     )
-    db.add(row)
-    db.flush()
+    _insert_coded(db, row)
     _publish(
         db,
         a,
@@ -389,8 +406,7 @@ def create_programme(db: Session, a: Actor, body: dict) -> dict:
         credits_required=shape.credits_required,
         status=prg.ACTIVE,
     )
-    db.add(row)
-    db.flush()
+    _insert_coded(db, row)
     _publish(
         db,
         a,
@@ -597,8 +613,7 @@ def create_course(db: Session, a: Actor, body: dict) -> dict:
         department_id=body["department_id"],
         status=crs.ACTIVE,
     )
-    db.add(row)
-    db.flush()
+    _insert_coded(db, row)
     _publish(
         db,
         a,
@@ -736,8 +751,7 @@ def _add_section(db: Session, a: Actor, offering: OfferingRow, code: str, capaci
         capacity=capacity,
         status=off.SECTION_OPEN,
     )
-    db.add(section)
-    db.flush()
+    _insert_coded(db, section)
     _publish(
         db,
         a,

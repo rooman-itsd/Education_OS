@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contract 0.2.2: `GET /faculty-load` declares its 503 `faculty_directory_unavailable` (ErrorResponse), returned
+  while no identity lookup of faculty names is available to modules.
+- Concurrent creates of one code: the database's code constraint answers 409 `duplicate_code`, like the pre-check;
+  other integrity errors are not turned into conflicts.
+- Section capacity under concurrent registrations: the roster consumer locks the section row (SELECT ... FOR UPDATE)
+  before counting and re-counts after writing in the same transaction, so a section never exceeds its capacity.
 - Persistence: tables `academic_management_*` on TenantMixin with the shared RLS policy, own Alembic chain
   (`am_0001`), organisation-scoped repository; migration and cross-tenant leak tests.
 - API: every operation of `contracts/openapi.yaml`, guarded by its permission key; events of
