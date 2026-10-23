@@ -1,0 +1,3382 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap");
+
+/*
+ * Education OS public website (web-portal-cms). Every class is prefixed `wpc-`.
+ *
+ * Design iteration informed by editorial SaaS references (warm canvas, product-led page rhythm,
+ * interface fragments as imagery), translated into Education OS's own system:
+ * - Colour: warm cream canvas, white surfaces, the admin sidebar's navy (#2a254e) as ink (type,
+ *   navigation, dark sections), and the logo's own "OS" orange for primary actions and highlights.
+ *   On the Features page each product area carries its admin sidebar colour.
+ * - Type: one sans (Geist), weight 500 for display with tracking that tightens as size grows.
+ * - Surfaces: white panels with a warm hairline and 12-16px corners; only floating interface pieces
+ *   carry a shadow. A navy band is the one deep moment; the footer closes every page in the same navy.
+ * - Motion: the field relabel is the focal moment; elsewhere motion explains state and gives feedback.
+ * The logo (EduMark + Wordmark from @eos/ui-kit) is untouched.
+ */
+
+.wpc {
+  /* Colour */
+  --c-canvas: #f5f1ec;
+  --c-surface: #ffffff;
+  --c-surface-2: #ebe6df;
+  --c-surface-3: #ded8ce;
+  --c-hairline: #ddd6cc;
+  /* Admin sidebar navy (.eos-sidebar-bg) for ink: headings, navigation, strong text, dark buttons. */
+  --c-ink: #2a254e;
+  --c-ink-2: #334155;
+  --c-muted: #475569;
+  --c-accent: #f2600c;
+  --c-accent-strong: #c2410c;
+  --c-accent-soft: #fde4d3;
+  --c-accent-mark: #fdba8c;
+  /* Dark sections use the sidebar itself: its navy, its border, and its muted text on dark. */
+  --c-inverse: #2a254e;
+  --c-inverse-2: #3a3466;
+  --c-inverse-line: #3a3466;
+  --c-inverse-muted: #c9cfe6;
+  --accent: var(--c-accent-strong);
+
+  /* Type */
+  --font: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-small: 0.875rem;
+  --fs-body: 1.0625rem;
+  --fs-lead: 1.25rem;
+  --fs-h3: 1.5rem;
+  --fs-h2: clamp(2rem, 1.35rem + 2.2vw, 3rem);
+  --fs-h1: clamp(2.5rem, 1.6rem + 3.2vw, 4.25rem);
+
+  /* Space, shape, depth, motion */
+  --m: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+  --sp-section: clamp(4rem, 3rem + 3.5vw, 6rem);
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --sh-float: 0 1px 2px rgba(42, 37, 78, 0.06), 0 18px 40px -18px rgba(42, 37, 78, 0.28);
+  --sh-hover: 0 1px 2px rgba(42, 37, 78, 0.05), 0 10px 24px -12px rgba(42, 37, 78, 0.18);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --header-h: 64px;
+
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  caret-color: var(--c-accent-strong);
+  accent-color: var(--c-accent-strong);
+}
+:root:has(.wpc) {
+  scrollbar-color: #c9c1b6 #f5f1ec;
+}
+.wpc a {
+  color: inherit;
+}
+.wpc ::selection {
+  background: var(--c-accent-mark);
+  color: var(--c-ink);
+}
+.wpc h1,
+.wpc h2,
+.wpc h3 {
+  font-weight: 500;
+  text-wrap: balance;
+}
+
+.wpc-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: var(--m);
+}
+.wpc-main {
+  flex: 1 0 auto;
+}
+.wpc-page {
+  animation: wpc-fade 0.35s var(--ease) both;
+}
+
+/* ---- buttons and links ---- */
+
+.wpc .eos-btn {
+  height: 46px;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 0.96875rem;
+  font-weight: 500;
+  box-shadow: none; /* taste-skill-ignore: removes the kit's button shadow */
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
+    transform 0.12s var(--ease);
+}
+.wpc .eos-btn:active {
+  transform: scale(0.98);
+}
+.wpc .eos-btn--primary {
+  background: var(--c-accent-strong);
+  color: #ffffff;
+}
+.wpc .eos-btn--primary:hover {
+  background: #9a3412;
+}
+.wpc .eos-btn--ghost,
+.wpc .eos-btn--secondary {
+  background: transparent;
+  color: var(--c-ink);
+}
+.wpc .eos-btn--ghost:hover,
+.wpc .eos-btn--secondary:hover {
+  background: var(--c-surface-2);
+}
+
+.wpc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  color: var(--c-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+  transition:
+    color 0.2s var(--ease),
+    text-decoration-color 0.2s var(--ease);
+}
+.wpc-link:hover {
+  color: var(--c-accent-strong);
+  text-decoration-color: currentColor;
+}
+.wpc-link__arrow,
+.wpc-btn-arrow {
+  transition: transform 0.25s var(--ease);
+}
+.wpc-link:hover .wpc-link__arrow,
+.wpc-link:focus-visible .wpc-link__arrow {
+  transform: translateX(3px);
+}
+
+/* ---- reveal (components/Reveal.tsx): visible by default, hidden only while waiting below the fold ---- */
+
+.wpc-rv.is-waiting {
+  opacity: 0;
+  transform: translateY(20px);
+}
+.wpc-rv.is-in {
+  animation: wpc-rise 0.7s var(--ease) var(--rv-delay, 0ms) both;
+}
+.wpc-rvg.is-waiting > * {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.wpc-rvg.is-in > * {
+  animation: wpc-rise 0.6s var(--ease) calc(var(--i, 0) * 70ms) both;
+}
+
+@keyframes wpc-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wpc-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- header ---- */
+
+.wpc-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: var(--header-h);
+  background: var(--c-canvas);
+  box-shadow: inset 0 -1px 0 transparent;
+  transition:
+    background-color 0.25s var(--ease),
+    box-shadow 0.25s var(--ease);
+}
+.wpc-header.is-scrolled {
+  background: var(--c-canvas);
+  box-shadow: inset 0 -1px 0 var(--c-hairline);
+}
+.wpc-header__bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  height: 100%;
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: var(--m);
+}
+.wpc-brand {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.wpc-nav {
+  position: relative;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.wpc-nav__pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 0;
+  border-radius: var(--r-sm);
+  background: var(--c-surface-2);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.35s var(--ease),
+    width 0.35s var(--ease),
+    opacity 0.2s var(--ease);
+}
+.wpc-nav__pill.is-visible {
+  opacity: 1;
+}
+.wpc-nav__link {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  color: var(--c-muted);
+  font-size: 0.96875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+.wpc-nav__link:hover,
+.wpc-nav__link.is-active {
+  color: var(--c-ink);
+}
+.wpc-nav__link.is-active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+.wpc-nav__swap {
+  display: inline-flex;
+}
+.wpc-nav__letter {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  height: 1.25em;
+  line-height: 1.25em;
+  vertical-align: top;
+}
+.wpc-nav__letter-face {
+  display: block;
+  transition: transform 0.6s var(--ease);
+  transition-delay: calc(var(--i, 0) * 30ms);
+}
+.wpc-nav__letter-face--alt {
+  position: absolute;
+  inset: 0;
+  color: var(--c-accent-strong);
+  transform: translateY(100%);
+}
+.wpc-nav__link:hover .wpc-nav__letter-face--base,
+.wpc-nav__link:focus-visible .wpc-nav__letter-face--base {
+  transform: translateY(-100%);
+}
+.wpc-nav__link:hover .wpc-nav__letter-face--alt,
+.wpc-nav__link:focus-visible .wpc-nav__letter-face--alt {
+  transform: translateY(0);
+}
+.wpc-header__actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.wpc-header__actions .eos-btn {
+  height: 40px;
+  padding-inline: 1rem;
+}
+.wpc-header__cta-short {
+  display: none;
+}
+
+.wpc-nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease);
+}
+.wpc-nav-toggle:hover,
+.wpc-nav-toggle[aria-expanded="true"] {
+  background: var(--c-surface-2);
+}
+.wpc-burger__line {
+  transform-box: fill-box;
+  transform-origin: left center;
+  transition: transform 0.25s ease-out;
+}
+.wpc-burger__line--2 { transition-delay: 50ms; }
+.wpc-burger__line--3 { transition-delay: 100ms; }
+.wpc-nav-toggle:hover .wpc-burger__line--1 { transform: translateX(3px) scaleX(0.85); }
+.wpc-nav-toggle:hover .wpc-burger__line--2 { transform: translateX(5px) scaleX(0.7); }
+.wpc-nav-toggle:hover .wpc-burger__line--3 { transform: translateX(7px) scaleX(0.55); }
+
+
+/* ---- shared: field control ---- */
+
+.wpc-fs {
+  margin-top: 1.75rem;
+}
+.wpc-fs__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.wpc-fs__chip {
+  min-height: 40px;
+  padding: 0 0.95rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 0.96875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    transform 0.12s var(--ease);
+}
+.wpc-fs__chip:hover {
+  background: var(--c-surface-3);
+}
+.wpc-fs__chip:active {
+  transform: scale(0.97);
+}
+.wpc-fs__chip[aria-pressed="true"] {
+  background: var(--c-ink);
+  color: #ffffff;
+}
+
+/* ---- home: hero ---- */
+/*
+ * Centred hero (pattern borrowed from product-led references: a centred headline over a full-width,
+ * real workspace mock-up with a deep shadow), in Education OS's own palette. The copy and the field
+ * chips sit in the centre; below, the organisation admin's workspace spans the content width and sits
+ * on a tone band that anchors it to the page. Where the browser supports scroll-driven animation the
+ * window tilts up into place as the page scrolls; elsewhere it simply rises in once.
+ */
+.wpc-hx {
+  position: relative;
+  isolation: isolate;
+  padding-block: clamp(3rem, 2rem + 3vw, 5rem) 0;
+  overflow-x: clip;
+}
+.wpc-hx__inner {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.wpc-hx__copy {
+  max-width: 56rem;
+}
+.wpc-hx__copy > * {
+  animation: wpc-rise 0.7s var(--ease) both;
+}
+.wpc-hx__copy > :nth-child(2) { animation-delay: 70ms; }
+.wpc-hx__copy > :nth-child(3) { animation-delay: 140ms; }
+.wpc-hx__copy > :nth-child(n + 4) { animation-delay: 210ms; }
+.wpc-hx__title {
+  margin: 0 auto;
+  max-width: 23ch;
+  font-size: clamp(2.5rem, 1.3rem + 4vw, 4.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+.wpc-hx__sub {
+  margin: 1.25rem auto 0;
+  max-width: 58ch;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+}
+.wpc-hx__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+.wpc-hx__fine {
+  margin: 0.6rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+/* Field chips and the full select, centred under the copy. */
+.wpc-hx__picker {
+  position: relative;
+  z-index: 3;
+  margin-top: 2.25rem;
+  animation: wpc-rise 0.7s var(--ease) 0.28s both;
+}
+.wpc-hx .wpc-fs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-top: 0;
+}
+.wpc-hx .wpc-fs__chips {
+  justify-content: center;
+  margin-bottom: 0;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+}
+.wpc-hx .wpc-fs__chip {
+  background: transparent;
+}
+.wpc-hx .wpc-fs__chip:hover {
+  background: var(--c-surface-3);
+}
+.wpc-hx .wpc-fs__chip[aria-pressed="true"] {
+  background: var(--c-surface);
+  box-shadow: 0 1px 2px rgba(42, 37, 78, 0.08), 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
+}
+.wpc-hx .wpc-fs__select {
+  min-width: 17rem;
+  text-align: left;
+}
+
+/* The window, on a tone band that runs to the page edges. */
+.wpc-hx__stage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin-top: 2.75rem;
+  padding-bottom: var(--sp-section);
+  perspective: 1800px;
+}
+.wpc-hx__stage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 32%;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  margin-left: -50vw;
+  background: var(--c-surface-2);
+}
+.wpc-hx__caption {
+  margin: 1.25rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+.wpc-ws {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow:
+    0 0 0 1px var(--c-hairline),
+    0 2px 4px rgba(42, 37, 78, 0.04),
+    0 40px 80px -36px rgba(42, 37, 78, 0.38);
+  text-align: left;
+  transform-origin: 50% 0;
+  animation: wpc-float-in 0.9s var(--ease) 0.35s both;
+}
+@supports (animation-timeline: view()) {
+  .wpc-ws {
+    animation: wpc-tilt linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 45%;
+  }
+}
+@keyframes wpc-tilt {
+  from {
+    transform: rotateX(16deg) scale(0.94);
+    opacity: 0.6;
+  }
+  to {
+    transform: rotateX(0) scale(1);
+    opacity: 1;
+  }
+}
+.wpc-ws__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.75rem 1.1rem;
+  background: #faf8f5;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.wpc-ws__org {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wpc-ws__role {
+  flex: none;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink-2);
+  font-weight: 500;
+}
+.wpc-ws__body {
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+}
+.wpc-ws__nav {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0.75rem;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  background: #faf8f5;
+  box-shadow: inset -1px 0 0 var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 0.9375rem;
+}
+.wpc-ws__nav li {
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wpc-ws__nav li.is-current {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-surface-2);
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-ws__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  padding: 1.4rem;
+}
+.wpc-ws__panel {
+  min-width: 0;
+}
+.wpc-ws__heading {
+  margin: 0 0 0.35rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-ws__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-ws__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+}
+.wpc-ws__name {
+  display: grid;
+  min-width: 0;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.wpc-ws__generic {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 400;
+}
+.wpc-ws__switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 21px;
+  border-radius: 11px;
+  background: var(--c-accent);
+}
+.wpc-ws__switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.wpc-ws__side {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+}
+.wpc-ws__photo {
+  position: relative;
+  margin: 0;
+}
+.wpc-ws__photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--r-md);
+}
+.wpc-ws__photo figcaption {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--c-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+/* The live status card, set inside the window. */
+.wpc-sc {
+  padding: 1rem 1.1rem 1.1rem;
+  border-radius: var(--r-md);
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-sc__label {
+  margin: 0;
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+}
+.wpc-sc__state {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.3rem 0 0.8rem;
+  font-weight: 500;
+}
+.wpc-sc__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-accent);
+  transition: background-color 0.3s var(--ease);
+}
+.wpc-sc__dot.is-live {
+  background: #4ade80;
+}
+.wpc-sc__track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.wpc-sc__track li {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--c-inverse-line);
+  transition: background-color 0.35s var(--ease);
+}
+.wpc-sc__track li.is-done {
+  background: var(--c-accent);
+}
+
+/* The focal move: a changed word rolls into place under a short orange marker. */
+.wpc-roll {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.wpc-roll__text {
+  display: inline-block;
+  animation: wpc-roll-in 0.55s var(--ease) both;
+}
+.wpc-roll::after {
+  content: "";
+  position: absolute;
+  left: -0.1em;
+  right: -0.1em;
+  bottom: 0.06em;
+  z-index: -1;
+  height: 0.45em;
+  border-radius: 2px;
+  background: var(--c-accent-mark);
+  transform-origin: left;
+  animation: wpc-mark 1.3s var(--ease) both;
+}
+.wpc-sc .wpc-roll::after {
+  background: var(--c-accent);
+}
+
+/* ---- home: the field's own words (a white panel) ---- */
+
+.wpc-ch {
+  padding-block: 0 var(--sp-section);
+}
+.wpc-ch__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+  width: calc(100% - 2 * var(--m));
+  max-width: calc(1280px - 2 * var(--m));
+  padding: clamp(1.5rem, 1rem + 2.5vw, 3.5rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-ch__head {
+  grid-column: 1 / span 5;
+}
+.wpc-ch__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-ch__lead {
+  margin: 1.1rem 0 0;
+  max-width: 50ch;
+  color: var(--c-ink-2);
+}
+.wpc-ch__table {
+  grid-column: 7 / span 6;
+}
+.wpc-ch__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-ch__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) auto minmax(0, 1.4fr);
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.95rem 0;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
+  animation: wpc-row-in 0.5s var(--ease) calc(var(--i, 0) * 55ms) both;
+}
+.wpc-ch__row:first-child {
+  padding-top: 0.25rem;
+}
+.wpc-ch__generic {
+  color: var(--c-muted);
+}
+.wpc-ch__arrow {
+  color: var(--c-accent);
+}
+.wpc-ch__word {
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-ch__caption {
+  margin: 1.1rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.wpc-ch__caption strong {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-ch__note {
+  margin: 1.5rem 0 0;
+  padding: 1rem 1.15rem;
+  border-radius: var(--r-sm);
+  background: var(--c-canvas);
+  color: var(--c-ink-2);
+}
+
+/* ---- home: everything an institution runs ---- */
+
+.wpc-in {
+  padding-block: 0 var(--sp-section);
+}
+.wpc-in__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-in__col {
+  grid-column: 1 / span 6;
+}
+.wpc-in__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-in__lead {
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+}
+.wpc-in__group {
+  margin-top: 2rem;
+}
+.wpc-in__group-label {
+  margin: 0 0 0.35rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  transition: color 0.25s var(--ease);
+}
+.wpc-in__group.is-active .wpc-in__group-label {
+  color: var(--c-accent-strong);
+}
+.wpc-in__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-in__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.5rem;
+  margin-inline: -0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  transition:
+    background-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.wpc-in__row:hover,
+.wpc-in__row:focus-visible {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-in__name {
+  font-weight: 600;
+}
+.wpc-in__summary {
+  display: block;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  line-height: 1.5;
+}
+.wpc-in__summary em {
+  color: var(--c-accent-strong);
+  font-style: normal;
+  font-weight: 500;
+}
+.wpc-in__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: none;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.wpc-in__arrow {
+  transition: transform 0.25s var(--ease);
+}
+.wpc-in__row:hover .wpc-in__arrow,
+.wpc-in__row:focus-visible .wpc-in__arrow {
+  transform: translateX(3px);
+  color: var(--c-accent-strong);
+}
+.wpc-in__media {
+  grid-column: 8 / span 5;
+  position: sticky;
+  top: calc(var(--header-h) + 1.5rem);
+  margin: 0;
+}
+.wpc-in__media::before {
+  content: "";
+  display: block;
+  aspect-ratio: 4 / 5;
+}
+.wpc-in__media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: calc(100% - 2rem);
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  opacity: 0;
+  transform: scale(1.03);
+  transition:
+    opacity 0.5s var(--ease),
+    transform 0.9s var(--ease);
+}
+.wpc-in__media img.is-active {
+  opacity: 1;
+  transform: scale(1);
+}
+.wpc-in__media figcaption {
+  margin-top: 0.5rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+/* ---- home: trust (the one black band) ---- */
+
+.wpc-tr {
+  padding-block: var(--sp-section);
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-tr__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-tr__title {
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-tr__list {
+  grid-column: 7 / span 6;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.25rem 2.5rem;
+}
+.wpc-tr__point {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.wpc-tr__point::before {
+  content: "";
+  display: block;
+  width: 1.5rem;
+  height: 3px;
+  margin-bottom: 0.9rem;
+  border-radius: 2px;
+  background: var(--c-accent);
+}
+.wpc-tr__text {
+  margin: 0.4rem 0 0;
+  color: var(--c-inverse-muted);
+}
+
+/* ---- home: from sign-up to signed in ---- */
+
+.wpc-st {
+  padding-block: var(--sp-section);
+}
+.wpc-st__inner {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+.wpc-st__title {
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-st__steps {
+  grid-column: 7 / span 6;
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 2.5rem;
+  display: grid;
+  gap: 2.25rem;
+}
+.wpc-st__steps::before,
+.wpc-st__steps::after {
+  content: "";
+  position: absolute;
+  left: 0.5rem;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--c-surface-3);
+}
+.wpc-st__steps::after {
+  background: var(--c-accent);
+  transform: scaleY(var(--progress, 0));
+  transform-origin: top;
+  transition: transform 0.7s var(--ease);
+}
+.wpc-st__step {
+  position: relative;
+}
+.wpc-st__step::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: -2.5rem;
+  top: 0.4em;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: var(--c-canvas);
+  box-shadow: inset 0 0 0 2px var(--c-surface-3);
+  transition:
+    background-color 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
+}
+.wpc-st__step.is-reached::before {
+  background: var(--c-accent);
+  box-shadow: inset 0 0 0 2px var(--c-accent), 0 0 0 5px var(--c-canvas);
+}
+.wpc-st__line {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  transition: color 0.4s var(--ease);
+}
+.wpc-st__step.is-reached .wpc-st__line {
+  color: var(--c-ink);
+}
+.wpc-st__text {
+  margin: 0.35rem 0 0;
+  max-width: 48ch;
+  color: var(--c-muted);
+}
+.wpc-st__cta {
+  grid-column: 7 / span 6;
+  margin-top: 1.25rem;
+  padding: 2rem 2.25rem;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-st__cta-text {
+  margin: 0;
+  max-width: 36ch;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.wpc-st__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.wpc-st__fine {
+  margin: 0.6rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+
+@keyframes wpc-wipe {
+  from { clip-path: inset(0 0 0 100% round 16px); }
+  to { clip-path: inset(0 0 0 0 round 16px); }
+}
+@keyframes wpc-settle {
+  from { opacity: 0; transform: scale(1.05); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes wpc-float-in {
+  from { opacity: 0; transform: translateY(24px); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+@keyframes wpc-roll-in {
+  from { opacity: 0; transform: translateY(0.55em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes wpc-mark {
+  0% { transform: scaleX(0); opacity: 0.9; }
+  35% { transform: scaleX(1); opacity: 0.9; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+@keyframes wpc-row-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ---- footer: near-black close ---- */
+
+.wpc-footer {
+  display: grid;
+  grid-template-rows: auto auto;
+  flex-shrink: 0;
+  background: var(--c-inverse);
+  color: #ffffff;
+}
+.wpc-footer__top {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  padding-top: 4rem;
+}
+.wpc-footer__brand {
+  grid-column: 1 / span 6;
+}
+.wpc-footer__col {
+  grid-column: span 2;
+}
+.wpc-footer__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+.wpc-footer__tagline {
+  margin: 1rem 0 0;
+  max-width: 30ch;
+  color: var(--c-inverse-muted);
+}
+.wpc-footer__heading {
+  margin: 0 0 0.5rem;
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-footer__links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-footer__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  margin-inline: -0.6rem;
+  padding-inline: 0.6rem;
+  border-radius: var(--r-sm);
+  color: #ffffff;
+  text-decoration: none;
+  transition:
+    background-color 0.12s var(--ease),
+    transform 0.12s var(--ease);
+}
+.wpc-footer__icon {
+  color: var(--c-inverse-muted);
+  transition: color 0.2s var(--ease), transform 0.25s var(--ease);
+}
+/* Hover: an orange underline draws in from the left and the icon warms to orange. */
+.wpc-footer__link span {
+  background: linear-gradient(var(--c-accent), var(--c-accent)) left bottom / 0 1.5px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size 0.3s var(--ease), color 0.2s var(--ease);
+}
+.wpc-footer__link:hover span {
+  background-size: 100% 1.5px;
+}
+.wpc-footer__link:hover .wpc-footer__icon {
+  color: var(--c-accent);
+  transform: translateX(2px);
+}
+.wpc-footer__legal-link {
+  background: linear-gradient(currentColor, currentColor) left calc(100% - 12px) / 0 1px no-repeat;
+}
+.wpc-footer__legal-link:hover {
+  background-size: 100% 1px;
+}
+/* Feedback only while pressed. */
+.wpc-footer__link:active {
+  background: var(--c-inverse-2);
+  transform: scale(0.97);
+}
+.wpc-footer__bottom {
+  padding-top: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  padding-bottom: 1.5rem;
+}
+.wpc-footer__mark {
+  margin: 0;
+  color: #3a3466;
+  font-size: min(13.5vw, 11.5rem);
+  font-weight: 600;
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  user-select: none;
+}
+.wpc-footer__legal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  margin: 1.5rem 0 0;
+  padding-top: 1.25rem;
+  box-shadow: inset 0 1px 0 var(--c-inverse-line);
+  color: var(--c-inverse-muted);
+  font-size: var(--fs-small);
+}
+.wpc-footer__legal p {
+  margin: 0;
+}
+.wpc-footer__legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wpc-footer__legal-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--c-inverse-muted);
+  text-decoration: none;
+  transition: color 0.15s var(--ease), background-size 0.3s var(--ease);
+}
+.wpc-footer__legal-link:hover {
+  color: #ffffff;
+}
+/* Social marks: round, quiet until pointed at. */
+.wpc-footer__social {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.wpc-footer__social-link {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--c-inverse-2);
+  color: #e2e6f5;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.wpc-footer__social-link:hover {
+  background: var(--c-accent);
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+.wpc-footer__social-link:active {
+  transform: scale(0.94);
+}
+
+/* ---- branded loader ---- */
+
+.wpc-loader {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding-block: 4rem;
+  color: var(--c-muted);
+}
+.wpc-loader--screen {
+  min-height: 60vh;
+  align-content: center;
+}
+.wpc-loader__mark {
+  position: relative;
+  display: inline-flex;
+}
+.wpc-loader__ping {
+  position: absolute;
+  inset: -8px;
+  border-radius: 14px;
+  background: var(--c-accent);
+  opacity: 0.2;
+}
+.wpc-loader__label {
+  font-size: var(--fs-small);
+}
+
+/* ---- status tags (ui-kit Badge) ---- */
+
+.wpc .eos-badge {
+  border-radius: 6px;
+  font-family: var(--font);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.wpc .eos-badge--success { background: #dcf1e4; color: #136c3a; }
+.wpc .eos-badge--info { background: #e2ecf6; color: #1d4f7f; }
+.wpc .eos-badge--accent { background: var(--c-accent-soft); color: #9a3412; }
+.wpc .eos-badge--warning { background: #fbefd2; color: #7c5300; }
+.wpc .eos-badge--neutral { background: var(--c-surface-2); color: var(--c-ink-2); }
+
+/* ---- features page ---- */
+
+.wpc-fx {
+  --fx-sticky-top: calc(var(--header-h) + 1.5rem);
+}
+.wpc-fx-hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  column-gap: clamp(2rem, 1rem + 4vw, 4.5rem);
+  align-items: center;
+  padding-block: clamp(2.5rem, 1.5rem + 3vw, 4.5rem) clamp(2.5rem, 2rem + 2vw, 3.5rem);
+}
+.wpc-fx-hero__inner > * {
+  grid-column: 1;
+}
+.wpc-fx-hero__title,
+.wpc-pricing__title {
+  margin: 0;
+  font-size: var(--fs-h1);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
+}
+.wpc-fx-hero__subtitle {
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+}
+/* Facts as one line of text, not a metric board. */
+.wpc-fx-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  margin: 1.75rem 0 0;
+}
+.wpc-fx-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.wpc-fx-stat dd {
+  order: -1;
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wpc-fx-stat dt {
+  color: var(--c-muted);
+}
+.wpc-fx-hero__photo {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1068 / 768;
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  animation: wpc-settle 1s var(--ease) 0.15s both;
+}
+.wpc-fx-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+}
+.wpc-fx-hero__link,
+.wpc-pricing__compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-ink);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+  cursor: pointer;
+  transition: color 0.2s var(--ease), text-decoration-color 0.2s var(--ease);
+}
+.wpc-fx-hero__link:hover,
+.wpc-pricing__compare:hover {
+  color: var(--c-accent-strong);
+  text-decoration-color: currentColor;
+}
+.wpc-fx-hero__link svg,
+.wpc-pricing__compare svg {
+  transition: transform 0.25s var(--ease);
+}
+.wpc-fx-hero__link:hover svg,
+.wpc-pricing__compare:hover svg {
+  transform: translateY(3px);
+}
+
+.wpc-fx-body {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 3.5rem;
+  padding-block: 1rem var(--sp-section);
+}
+.wpc-fx-index {
+  position: sticky;
+  top: var(--fx-sticky-top);
+  align-self: start;
+}
+.wpc-fx-index__label {
+  margin: 0 0 0.6rem;
+  padding-inline: 0.75rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-fx-index__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.wpc-fx-index__link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.wpc-fx-index__link:hover {
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+}
+.wpc-fx-index__link.is-active {
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
+}
+.wpc-fx-index__name {
+  flex: 1;
+  min-width: 0;
+}
+.wpc-fx-index__count {
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.wpc-fx-filter__title {
+  margin: 0 0 0.6rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-fx-filter__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.wpc-fx-chip {
+  --chip-dot: #8f8a82;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+.wpc-fx-chip[data-status="implemented"] { --chip-dot: #1f9d5c; }
+.wpc-fx-chip[data-status="partial"] { --chip-dot: #2f6fb0; }
+.wpc-fx-chip[data-status="specified"] { --chip-dot: #ea580c; }
+.wpc-fx-chip[data-status="scaffold"] { --chip-dot: #b7791f; }
+.wpc-fx-chip[data-status="planned"] { --chip-dot: #8f8a82; }
+.wpc-fx-chip:hover:not(:disabled) {
+  background: var(--c-surface-3);
+}
+.wpc-fx-chip.is-active {
+  background: var(--c-ink);
+  color: #ffffff;
+}
+/* The selected chip stays navy on hover (one step lighter, the sidebar's raised navy) so its white
+   label stays readable; the general hover rule above is more specific and would turn it light. */
+.wpc-fx-chip.is-active:hover:not(:disabled) {
+  background: var(--c-inverse-2);
+  color: #ffffff;
+}
+.wpc-fx-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.wpc-fx-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-dot);
+}
+.wpc-fx-chip__count {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+.wpc-fx-filter__result {
+  margin: 0.9rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.wpc-fx-legend {
+  margin-top: 0.25rem;
+}
+.wpc-fx-legend summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--c-hairline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.3em;
+  cursor: pointer;
+  list-style: none;
+}
+.wpc-fx-legend summary::-webkit-details-marker {
+  display: none;
+}
+.wpc-fx-legend__list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 1.25rem 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem 2rem;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  animation: wpc-rise 0.3s var(--ease) both;
+}
+.wpc-fx-legend__list li {
+  display: grid;
+  justify-items: start;
+  gap: 0.35rem;
+  color: var(--c-ink-2);
+  font-size: var(--fs-small);
+}
+
+.wpc-fx-cat {
+  margin-top: 3.5rem;
+  scroll-margin-top: var(--fx-sticky-top);
+}
+.wpc-fx-cat:focus {
+  outline: none;
+}
+.wpc-fx-cat__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+.wpc-fx-cat__title {
+  margin: 0;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-fx-cat__sub {
+  margin: 0.25rem 0 0;
+  max-width: 65ch;
+  color: var(--c-muted);
+}
+.wpc-fx-cat__count {
+  flex: none;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+/* Each area is one white panel of module rows. */
+.wpc-fx-grid {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-fx-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.3rem;
+  padding: 1.15rem 1.4rem;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+  transition: background-color 0.2s var(--ease);
+}
+.wpc-fx-card:first-child {
+  box-shadow: none;
+}
+.wpc-fx-card:hover {
+  background: #fbf9f6;
+}
+.wpc-fx-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.wpc-fx-card__title {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.wpc-fx-card__text {
+  margin: 0;
+  max-width: 65ch;
+  color: var(--c-ink-2);
+  line-height: 1.5;
+}
+.wpc-fx-card__roles {
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.wpc-fx-card__roles li:not(:last-child)::after {
+  content: "·";
+  margin-inline: 0.5em;
+}
+
+.wpc-fx-sum {
+  padding-block: var(--sp-section);
+  background: var(--c-surface-2);
+}
+.wpc-fx-sum__head {
+  max-width: 44rem;
+}
+.wpc-fx-sum__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-fx-sum__lead {
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+}
+.wpc-fx-sum__grid {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 2.5rem;
+}
+.wpc-fx-pillar {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.75rem 1.5rem;
+  align-items: start;
+  padding: clamp(1.25rem, 1rem + 1.5vw, 2.25rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-fx-pillar__title {
+  grid-column: 1 / span 5;
+  margin: 0;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-fx-pillar__summary {
+  grid-column: 1 / span 5;
+  margin: 0;
+  color: var(--c-muted);
+}
+.wpc-fx-pillar__photo {
+  grid-column: 1 / span 5;
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  margin-top: 0.5rem;
+  border-radius: var(--r-md);
+}
+.wpc-fx-pillar__list {
+  grid-column: 7 / span 6;
+  grid-row: 1 / span 4;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.wpc-fx-pillar__item {
+  padding: 0.75rem 0;
+  box-shadow: inset 0 -1px 0 var(--c-surface-2);
+}
+.wpc-fx-pillar__item:first-child {
+  padding-top: 0;
+}
+.wpc-fx-pillar__body {
+  display: grid;
+}
+.wpc-fx-pillar__name {
+  font-weight: 600;
+}
+.wpc-fx-pillar__desc {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.wpc-fx-pillar__more {
+  grid-column: 1 / span 5;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent-strong);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wpc-fx-pillar__more:hover .wpc-link__arrow,
+.wpc-fx-pillar__more:focus-visible .wpc-link__arrow {
+  transform: translateX(3px);
+}
+
+/* Closing banner: white panel on the cream, before the black footer. */
+.wpc-fx-cta {
+  padding-block: var(--sp-section);
+}
+.wpc-fx-cta__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: calc(100% - 2 * var(--m));
+  max-width: calc(1280px - 2 * var(--m));
+  padding: clamp(1.75rem, 1rem + 3vw, 3.5rem);
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-fx-cta__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-fx-cta__text {
+  margin: 0.75rem 0 0;
+  max-width: 46ch;
+  color: var(--c-ink-2);
+}
+.wpc-fx-cta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ---- plans & pricing ---- */
+
+.wpc-pricing__inner {
+  padding-block: clamp(2.5rem, 1.5rem + 3vw, 4.5rem) var(--sp-section);
+}
+.wpc-pricing__head {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(2rem, 1rem + 4vw, 4.5rem);
+  align-items: center;
+}
+.wpc-pricing__intro {
+  max-width: 44rem;
+}
+.wpc-pricing__word {
+  display: inline-block;
+  overflow: hidden;
+  padding-block: 0.12em 0.08em;
+  margin-block: -0.12em -0.08em;
+  vertical-align: top;
+}
+.wpc-pricing__word > span {
+  display: inline-block;
+  animation: wpc-line-up 0.8s var(--ease) calc(var(--w, 0) * 100ms + 80ms) both;
+}
+@keyframes wpc-line-up {
+  from { transform: translateY(105%); }
+  to { transform: translateY(0); }
+}
+.wpc-pricing__lead {
+  margin: 1.1rem 0 0;
+  max-width: 52ch;
+  color: var(--c-ink-2);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+  animation: wpc-rise 0.6s var(--ease) 0.3s both;
+}
+.wpc-pricing__aside {
+  display: grid;
+  gap: 1rem;
+}
+.wpc-pricing__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 840 / 560;
+  object-fit: cover;
+  border-radius: var(--r-lg);
+  animation: wpc-settle 1s var(--ease) 0.2s both;
+}
+.wpc-pricing__trial {
+  margin: 0;
+  text-align: center;
+  font-size: var(--fs-lead);
+  font-weight: 500;
+  line-height: 1.35;
+  animation: wpc-rise 0.6s var(--ease) 0.45s both;
+}
+.wpc-pricing__trial strong {
+  color: var(--c-accent-strong);
+  font-weight: 600;
+}
+.wpc-pricing__tray {
+  scroll-margin-top: calc(var(--header-h) + 1.5rem);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1rem;
+  margin-top: 3rem;
+}
+.wpc-plan-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2rem 1.75rem 1.75rem;
+  border-radius: var(--r-lg);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+  color: var(--c-ink);
+  animation: wpc-rise 0.6s var(--ease) calc(0.3s + var(--i, 0) * 0.1s) both;
+  transition:
+    box-shadow 0.25s var(--ease),
+    translate 0.25s var(--ease);
+}
+.wpc-plan-card:hover {
+  box-shadow: 0 0 0 1px var(--c-hairline), var(--sh-hover);
+  translate: 0 -2px;
+}
+.wpc-plan-card.is-featured {
+  background: var(--c-inverse);
+  box-shadow: none;
+  color: #ffffff;
+}
+.wpc-plan-card__name {
+  margin: 0 0 0.3rem;
+  font-size: var(--fs-h3);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.wpc-plan-card__desc {
+  margin: 0;
+  color: var(--c-ink-2);
+  line-height: 1.5;
+}
+.wpc-plan-card__price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 1.5rem 0 0;
+}
+.wpc-plan-card__amount {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.wpc-plan-card__per {
+  margin: 0.25rem 0 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.is-featured .wpc-plan-card__desc,
+.is-featured .wpc-plan-card__per,
+.is-featured .wpc-plan-card__includes li,
+.is-featured .wpc-plan-card__note {
+  color: var(--c-inverse-muted);
+}
+.wpc-plan-card__features {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 1.25rem 0 0;
+  display: grid;
+  gap: 0.5rem;
+  box-shadow: inset 0 1px 0 var(--c-surface-2);
+}
+.is-featured .wpc-plan-card__features {
+  box-shadow: inset 0 1px 0 var(--c-inverse-line);
+}
+.wpc-plan-card__features li {
+  font-weight: 500;
+}
+.wpc-plan-card__includes {
+  margin-top: 1.25rem;
+}
+.wpc-plan-card__includes h3 {
+  margin: 0 0 0.5rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.wpc-plan-card__includes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.wpc-plan-card__includes li {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+}
+.wpc-plan-card__includes li::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 0.6rem;
+  border-radius: 50%;
+  background: var(--c-accent);
+  vertical-align: 0.15em;
+}
+.wpc-plan-card__note {
+  margin: 1.25rem 0 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+.wpc-plan-card__cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  margin-top: 1.75rem;
+  border-radius: var(--r-sm);
+  font-size: 0.96875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.is-featured .wpc-plan-card__cta {
+  background: var(--c-accent);
+  color: var(--c-ink);
+  transition:
+    background-color 0.2s var(--ease),
+    transform 0.12s var(--ease);
+}
+.is-featured .wpc-plan-card__cta:hover {
+  background: #ff7a2e;
+}
+.is-featured .wpc-plan-card__cta:active {
+  transform: scale(0.98);
+}
+.wpc-plan-card__cta:hover .wpc-btn-arrow {
+  transform: translateX(3px);
+}
+.wpc-plan-card__cta.is-locked {
+  background: var(--c-canvas);
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  cursor: not-allowed;
+}
+
+/* FAQ rows */
+.wpc-faq {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin-top: var(--sp-section);
+}
+.wpc-faq__title {
+  grid-column: 1 / span 4;
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+.wpc-faq__list {
+  grid-column: 6 / span 7;
+  display: grid;
+  gap: 0.5rem;
+}
+.wpc-faq__item {
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline);
+}
+.wpc-faq__item summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 0.9rem 3.25rem 0.9rem 1.25rem;
+  border-radius: var(--r-md);
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 0.2s var(--ease);
+}
+.wpc-faq__item summary::-webkit-details-marker {
+  display: none;
+}
+.wpc-faq__item summary:hover {
+  background: #fbf9f6;
+}
+.wpc-faq__item summary::before,
+.wpc-faq__item summary::after {
+  content: "";
+  position: absolute;
+  right: 1.35rem;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--c-ink);
+  transition: transform 0.3s var(--ease);
+}
+.wpc-faq__item summary::after {
+  transform: rotate(90deg);
+}
+.wpc-faq__item[open] summary::after {
+  transform: rotate(0deg);
+}
+.wpc-faq__item p {
+  margin: 0;
+  padding: 0 1.25rem 1.15rem;
+  max-width: 62ch;
+  color: var(--c-ink-2);
+  animation: wpc-rise 0.3s var(--ease) both;
+}
+
+.wpc-pricing__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+.wpc-pricing__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  min-height: 44px;
+  color: var(--c-muted);
+}
+.wpc-pricing__link strong {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-pricing__link:hover {
+  color: var(--c-accent-strong);
+}
+
+
+/* ---- styled dropdown (components/Listbox.tsx) ---- */
+
+.wpc-lb {
+  position: relative;
+  display: grid;
+  gap: 0.4rem;
+  text-align: left;
+}
+.wpc-lb__label {
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.wpc-lb__button {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 50px;
+  padding: 0 0.9rem 0 1rem;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline), 0 1px 2px rgba(42, 37, 78, 0.04);
+  color: var(--c-ink);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+.wpc-lb__button:hover {
+  box-shadow: inset 0 0 0 1px var(--c-ink-2), 0 1px 2px rgba(42, 37, 78, 0.04);
+}
+.wpc-lb.is-open .wpc-lb__button {
+  box-shadow: inset 0 0 0 2px var(--c-accent-strong);
+}
+.wpc-lb__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.wpc-lb__hint {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.wpc-lb__chevron {
+  flex: none;
+  color: var(--c-muted);
+  transition: transform 0.25s var(--ease);
+}
+.wpc-lb.is-open .wpc-lb__chevron {
+  transform: rotate(180deg);
+}
+.wpc-lb__list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 16rem;
+  max-height: min(22rem, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: 0 0 0 1px var(--c-hairline), 0 24px 48px -20px rgba(42, 37, 78, 0.35);
+  outline: none;
+  transform-origin: top center;
+  animation: wpc-pop 0.18s var(--ease) both;
+  scrollbar-width: thin;
+}
+@keyframes wpc-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.wpc-lb__option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 42px;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--r-sm);
+  color: var(--c-ink);
+  font-size: 0.96875rem;
+  cursor: pointer;
+}
+.wpc-lb__option.is-active {
+  background: var(--c-canvas);
+}
+.wpc-lb__option[aria-selected="true"] {
+  font-weight: 600;
+}
+.wpc-lb__option-label {
+  flex: 1;
+  min-width: 0;
+}
+.wpc-lb__option-hint {
+  flex: none;
+  color: var(--c-muted);
+  font-size: 0.8125rem;
+}
+.wpc-lb__tick {
+  flex: none;
+  color: var(--c-accent-strong);
+}
+.wpc-fs__select {
+  max-width: 26rem;
+}
+
+/* ---- hero background: a dot field that lights up around the pointer ---- */
+
+.wpc-hx__bg {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: min(100%, 760px);
+  pointer-events: none;
+}
+.wpc-hx__dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at center, rgba(42, 37, 78, 0.16) 1.1px, transparent 1.6px);
+  background-size: 22px 22px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 30%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 30%, #000 30%, transparent 78%);
+}
+/* The lit copy: orange dots, only inside a soft circle that follows the pointer (--gx / --gy). */
+.wpc-hx__dots--lit {
+  background-image: radial-gradient(circle at center, var(--c-accent) 1.4px, transparent 2px);
+  -webkit-mask-image: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 30%), #000 0%, transparent 70%);
+  mask-image: radial-gradient(240px circle at var(--gx, 50%) var(--gy, 30%), #000 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.45s var(--ease);
+}
+.wpc-hx.is-lit .wpc-hx__dots--lit {
+  opacity: 1;
+}
+/* Touch and pen: no pointer to follow, so a slow light drifts across the field instead. */
+@media (hover: none) {
+  .wpc-hx__dots--lit {
+    opacity: 0.8;
+    animation: wpc-drift-light 9s ease-in-out infinite alternate;
+  }
+}
+@keyframes wpc-drift-light {
+  from { --gx: 20%; --gy: 20%; }
+  to { --gx: 80%; --gy: 45%; }
+}
+@property --gx {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+@property --gy {
+  syntax: "<length-percentage>";
+  inherits: true;
+  initial-value: 30%;
+}
+
+/* ---- mobile menu: a full-height sheet under the header ---- */
+
+.wpc-mobile-nav {
+  position: fixed;
+  z-index: 19;
+  inset: var(--header-h) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem var(--m) calc(1.5rem + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--c-canvas);
+  box-shadow: inset 0 1px 0 var(--c-hairline);
+  animation: wpc-sheet 0.3s var(--ease) both;
+}
+@keyframes wpc-sheet {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wpc-mobile-nav:focus {
+  outline: none;
+}
+.wpc-mobile-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wpc-mobile-nav__list li {
+  box-shadow: inset 0 -1px 0 var(--c-hairline);
+  animation: wpc-rise 0.4s var(--ease) both;
+}
+.wpc-mobile-nav__list li:nth-child(2) { animation-delay: 40ms; }
+.wpc-mobile-nav__list li:nth-child(3) { animation-delay: 80ms; }
+.wpc-mobile-nav__link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+.wpc-mobile-nav__link svg {
+  color: var(--c-muted);
+  transition: transform 0.25s var(--ease), color 0.2s var(--ease);
+}
+.wpc-mobile-nav__link:hover svg,
+.wpc-mobile-nav__link:focus-visible svg {
+  transform: translateX(4px);
+  color: var(--c-accent-strong);
+}
+.wpc-mobile-nav__link.is-active {
+  color: var(--c-accent-strong);
+}
+.wpc-mobile-nav__actions {
+  display: grid;
+  gap: 0.6rem;
+}
+.wpc-mobile-nav__actions .eos-btn {
+  width: 100%;
+  height: 50px;
+}
+.wpc-mobile-nav__actions .eos-btn--secondary {
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline); /* taste-skill-ignore: outline on a secondary button */
+}
+.wpc-mobile-nav__note {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  text-align: center;
+}
+
+/* ---- features: the small-screen jump dropdown ---- */
+
+.wpc-fx-jump {
+  display: none;
+}
+
+
+/* ---- features hero background: the catalogue as a wall of tiles (components/ModuleWall.tsx) ---- */
+
+.wpc-fx-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: clip;
+}
+/* The copy and photo take the pointer; the gaps between them let it reach the wall. */
+.wpc-fx-hero__inner {
+  position: relative;
+  pointer-events: none;
+}
+.wpc-fx-hero__inner > * {
+  pointer-events: auto;
+}
+.wpc-mw {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 1), var(--cell));
+  grid-auto-rows: var(--cell);
+  /* Calm behind the copy, full strength on the right where the photo sits. */
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.3) 42%, #000 68%),
+    linear-gradient(180deg, #000 70%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.22) 0%, rgba(0, 0, 0, 0.3) 42%, #000 68%),
+    linear-gradient(180deg, #000 70%, transparent 100%);
+  mask-composite: intersect;
+}
+.wpc-mw__cell {
+  --lift: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 5px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(42, 37, 78, calc(0.07 + var(--lift) * 0.25));
+  color: var(--c-muted);
+  transform: translateY(calc(var(--lift) * -7px)) scale(calc(1 + var(--lift) * 0.1));
+  transition: transform 0.35s var(--ease), box-shadow 0.35s var(--ease), opacity 0.35s var(--ease),
+    background-color 0.35s var(--ease);
+}
+.wpc-mw__tile {
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline),
+    0 calc(2px + var(--lift) * 14px) calc(4px + var(--lift) * 22px) -6px rgba(42, 37, 78, calc(0.08 + var(--lift) * 0.2));
+  color: var(--c-ink-2);
+}
+.wpc-mw__tile.is-implemented {
+  background: var(--c-accent);
+  color: #fff;
+}
+.wpc-mw__tile.is-partial {
+  background: var(--c-accent-soft);
+  color: var(--c-accent-strong);
+}
+.wpc-mw__tile.is-scaffold,
+.wpc-mw__tile.is-planned {
+  background: transparent;
+  box-shadow: none;
+  outline: 1.5px dashed rgba(42, 37, 78, 0.28);
+  outline-offset: -1.5px;
+  color: var(--c-muted);
+}
+/* The module's name, above the tile under the pointer. */
+.wpc-mw__tip {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  display: grid;
+  gap: 0.1rem;
+  width: max-content;
+  max-width: 14rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--r-sm);
+  background: var(--c-inverse);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+  pointer-events: none;
+}
+.wpc-mw__tip em {
+  color: var(--c-accent-mark);
+  font-size: 0.75rem;
+  font-style: normal;
+}
+.wpc-mw__tile:hover {
+  z-index: 3;
+}
+.wpc-mw__tile:hover .wpc-mw__tip {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* Pointing at a count picks out its tiles. */
+.wpc-mw.is-code .wpc-mw__cell:not(.has-code),
+.wpc-mw.is-modules .wpc-mw__cell:not(.wpc-mw__tile) {
+  opacity: 0.25;
+}
+.wpc-mw.is-code .has-code,
+.wpc-mw.is-modules .wpc-mw__tile {
+  --lift: 0.6;
+}
+.wpc-fx-stat--wall {
+  cursor: default;
+}
+.wpc-fx-stat--wall dt {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--c-hairline);
+  text-underline-offset: 0.3em;
+  transition: color 0.2s var(--ease);
+}
+.wpc-fx-stat--wall:hover dt {
+  color: var(--c-accent-strong);
+}
+/* Touch: nothing to follow, so a slow wave crosses the wall corner to corner. */
+@media (hover: none) {
+  .wpc-mw__cell {
+    animation: wpc-mw-wave 7s var(--ease) infinite;
+    animation-delay: calc(var(--d, 0) * 110ms);
+  }
+}
+@keyframes wpc-mw-wave {
+  0%, 16%, 100% { transform: none; }
+  8% { transform: translateY(-5px) scale(1.08); }
+}
+@media (max-width: 1100px) {
+  /* One column: the copy runs full width, so keep the wall quiet above the photo. */
+  .wpc-mw {
+    -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.07) 12%, rgba(0, 0, 0, 0.07) 52%, #000 62%, #000 85%, transparent 100%);
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.07) 12%, rgba(0, 0, 0, 0.07) 52%, #000 62%, #000 85%, transparent 100%);
+  }
+}
+
+
+/* ---- pricing hero background: the free trial as a dial around the photo (components/TrialDial.tsx) ---- */
+
+.wpc-pricing {
+  overflow-x: clip;
+}
+/* A square that holds the whole dial; the photo is its round face. */
+.wpc-pricing__dialwrap {
+  position: relative;
+  isolation: isolate;
+  justify-self: center;
+  width: min(100%, 500px);
+  aspect-ratio: 1;
+  margin-block: -4% 0.5rem; /* top: the outer ring of fine marks needs no extra air; bottom: room for the day label */
+}
+.wpc-pricing__dialwrap .wpc-pricing__photo {
+  position: absolute;
+  top: 15.2%;
+  left: 15.2%;
+  width: 69.6%;
+  height: 69.6%;
+  aspect-ratio: auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.wpc-dial {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.wpc-dial__glow {
+  fill: var(--c-accent-soft);
+  opacity: 0.7;
+  filter: blur(36px);
+}
+.wpc-dial__face {
+  fill: none;
+  stroke: var(--c-hairline);
+  stroke-width: 1;
+}
+.wpc-dial__minutes {
+  stroke: rgba(42, 37, 78, 0.22);
+  stroke-width: 1.2;
+  transform-origin: 0 0;
+  animation: wpc-dial-turn 140s linear infinite;
+}
+@keyframes wpc-dial-turn {
+  to { transform: rotate(360deg); }
+}
+.wpc-dial__tick {
+  stroke: rgba(42, 37, 78, 0.2);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke 0.2s var(--ease), stroke-width 0.2s var(--ease);
+}
+.wpc-dial__tick.is-used {
+  stroke: var(--c-accent);
+}
+.wpc-dial__tick.is-now {
+  stroke: var(--c-accent-strong);
+  stroke-width: 5;
+}
+.wpc-dial__track {
+  fill: none;
+  stroke: rgba(42, 37, 78, 0.08);
+  stroke-width: 4;
+}
+/* The trial arc starts at twelve o'clock and draws itself in on arrival. */
+.wpc-dial__arc {
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-origin: 0 0;
+  transition: stroke-dashoffset 0.35s var(--ease);
+  animation: wpc-dial-fill 2.4s var(--ease) 0.5s both;
+}
+.wpc-dial.is-scrubbing .wpc-dial__arc {
+  animation: none;
+}
+@keyframes wpc-dial-fill {
+  from { stroke-dashoffset: 100; }
+  to { stroke-dashoffset: 0; }
+}
+.wpc-dial__label rect {
+  fill: var(--c-inverse);
+}
+.wpc-dial__label text {
+  fill: #ffffff;
+  font-size: 27px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+/* Touch: no pointer to scrub with, so the trial fills and empties slowly. */
+@media (hover: none) {
+  .wpc-dial__arc {
+    animation: wpc-dial-fill 5s var(--ease) 0.5s infinite alternate both;
+  }
+}
+
+
+/* ---- pricing hero: ledger-paper band behind the whole first section ---- */
+
+.wpc-pricing__head {
+  position: relative;
+  isolation: isolate;
+  padding-bottom: clamp(1rem, 0.5rem + 2vw, 2.5rem);
+}
+/* Full-bleed: from the top of the page to just under the section, edge to edge. */
+.wpc-pricing__head::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  top: calc(-1 * clamp(2.5rem, 1.5rem + 3vw, 4.5rem));
+  bottom: -1rem;
+  left: calc(50% - 50vw);
+  right: calc(50% - 50vw);
+  background:
+    radial-gradient(38rem 28rem at 78% 42%, rgba(253, 228, 211, 0.85), transparent 70%),
+    radial-gradient(30rem 20rem at 8% 88%, rgba(253, 186, 140, 0.22), transparent 70%),
+    repeating-linear-gradient(180deg, transparent 0 31px, rgba(42, 37, 78, 0.055) 31px 32px);
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 72%, transparent 100%);
+}
+/* The ledger's margin: a double orange rule down the left of the content. */
+.wpc-pricing__head::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: calc(-1 * clamp(2.5rem, 1.5rem + 3vw, 4.5rem));
+  bottom: 0;
+  left: clamp(-2.25rem, -2vw, -0.6rem);
+  width: 5px;
+  border-inline: 1px solid rgba(242, 96, 12, 0.35);
+  -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ---- pricing hero: the trial journey (components/TrialJourney.tsx) ---- */
+
+.wpc-tj__label {
+  margin: 2rem 0 0.6rem;
+  color: var(--c-muted);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  animation: wpc-rise 0.6s var(--ease) 0.4s both;
+}
+.wpc-tj {
+  max-width: 34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wpc-tj__step {
+  position: relative;
+  padding-left: 2.75rem;
+  animation: wpc-rise 0.6s var(--ease) both;
+}
+.wpc-tj__step:nth-child(1) { animation-delay: 0.45s; }
+.wpc-tj__step:nth-child(2) { animation-delay: 0.5s; }
+.wpc-tj__step:nth-child(3) { animation-delay: 0.55s; }
+.wpc-tj__step:nth-child(4) { animation-delay: 0.6s; }
+.wpc-tj__step:nth-child(5) { animation-delay: 0.65s; }
+/* The rail between numbers; the open step's segment fills while the journey plays by itself. */
+.wpc-tj__step:not(:last-child)::before,
+.wpc-tj__step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 2.4rem;
+  bottom: -0.15rem;
+  left: 0.95rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--c-hairline);
+}
+.wpc-tj__step:not(:last-child)::after {
+  background: var(--c-accent);
+  transform-origin: top;
+  transform: scaleY(0);
+}
+.wpc-tj__step.is-done::after {
+  transform: scaleY(1);
+}
+.wpc-tj.is-auto .wpc-tj__step.is-active::after {
+  animation: wpc-tj-fill var(--step-ms, 5s) linear both;
+}
+@keyframes wpc-tj-fill {
+  to { transform: scaleY(1); }
+}
+.wpc-tj__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 48px;
+  margin-left: -2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-ink-2);
+  font: inherit;
+  font-size: 1.0625rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s var(--ease);
+}
+.wpc-tj__head:hover {
+  color: var(--c-ink);
+}
+.wpc-tj__num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-hairline);
+  color: var(--c-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.25s var(--ease), color 0.25s var(--ease), box-shadow 0.25s var(--ease),
+    transform 0.25s var(--ease);
+}
+.wpc-tj__head:hover .wpc-tj__num {
+  box-shadow: inset 0 0 0 1px var(--c-ink-2);
+}
+.wpc-tj__step.is-done .wpc-tj__num {
+  background: var(--c-accent-soft);
+  box-shadow: none;
+  color: var(--c-accent-strong);
+}
+.wpc-tj__step.is-active .wpc-tj__head {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.wpc-tj__step.is-active .wpc-tj__num {
+  background: var(--c-ink);
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+  color: #ffffff;
+  transform: scale(1.06);
+}
+/* Open/close by animating the row height (0fr -> 1fr); closed steps are hidden from assistive tech. */
+.wpc-tj__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition: grid-template-rows 0.4s var(--ease), visibility 0s linear 0.4s;
+}
+.wpc-tj__body > p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--c-ink-2);
+  line-height: 1.55;
+}
+.wpc-tj__step.is-active .wpc-tj__body {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition: grid-template-rows 0.4s var(--ease), visibility 0s;
+}
+.wpc-tj__step.is-active .wpc-tj__body > p {
+  padding-bottom: 0.9rem;
+}
+.wpc-pricing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  animation: wpc-rise 0.6s var(--ease) 0.7s both;
+}
+
+
+/* ---- features: product-area colours, as in the admin sidebar ---- */
+#wpc-cat-student-lifecycle,
+.wpc-fx-index__link[data-area="student-lifecycle"] { --area: #3b82f6; --area-t: #eff6ff; --area-at: #1d4ed8; }
+#wpc-cat-academics,
+.wpc-fx-index__link[data-area="academics"] { --area: #7c3aed; --area-t: #f5f3ff; --area-at: #6d28d9; }
+#wpc-cat-practice,
+.wpc-fx-index__link[data-area="practice"] { --area: #4338ca; --area-t: #eef2ff; --area-at: #4338ca; }
+#wpc-cat-campus-life,
+.wpc-fx-index__link[data-area="campus-life"] { --area: #e45a8a; --area-t: #fff1f5; --area-at: #be185d; }
+#wpc-cat-facilities,
+.wpc-fx-index__link[data-area="facilities"] { --area: #d97706; --area-t: #fffbeb; --area-at: #b45309; }
+#wpc-cat-finance-operations,
+.wpc-fx-index__link[data-area="finance-operations"] { --area: #0f9f8a; --area-t: #f0fdfa; --area-at: #0f766e; }
+#wpc-cat-governance,
+.wpc-fx-index__link[data-area="governance"] { --area: #c026d3; --area-t: #fdf4ff; --area-at: #a21caf; }
+#wpc-cat-support,
+.wpc-fx-index__link[data-area="support"] { --area: #64748b; --area-t: #f1f5f9; --area-at: #334155; }
+#wpc-cat-sports,
+.wpc-fx-index__link[data-area="sports"] { --area: #059669; --area-t: #ecfdf5; --area-at: #047857; }
+#wpc-cat-platform,
+.wpc-fx-index__link[data-area="platform"] { --area: #4338ca; --area-t: #eef2ff; --area-at: #4338ca; }
+/* The area's panel carries a top rule in its colour; rows take its tint on hover. */
+.wpc-fx-cat .wpc-fx-grid {
+  box-shadow: 0 0 0 1px var(--c-hairline), inset 0 3px 0 var(--area, transparent);
+}
+.wpc-fx-cat .wpc-fx-card:hover {
+  background: var(--area-t, #fbf9f6);
+}
+.wpc-fx-cat .wpc-fx-card:hover .wpc-fx-card__title {
+  color: var(--area-at, var(--c-ink));
+}
+/* Index: hover takes the area's tint; the active row keeps it with the admin's 3px indicator. */
+.wpc-fx-index__link[data-area]:hover {
+  background: var(--area-t);
+  color: var(--area-at);
+}
+.wpc-fx-index__link[data-area].is-active {
+  background: var(--area-t);
+  box-shadow: inset 3px 0 0 var(--area);
+  color: var(--area-at);
+}
+.wpc-fx-index__link[data-area].is-active .wpc-fx-index__count {
+  color: var(--area-at);
+}
+
+/* ---- focus ---- */
+
+.wpc a:focus-visible,
+.wpc button:focus-visible,
+.wpc summary:focus-visible,
+.wpc select:focus-visible,
+.wpc .eos-btn:focus-visible {
+  outline: 2px solid var(--c-accent-strong);
+  outline-offset: 3px;
+}
+.wpc-tr a:focus-visible,
+.wpc-footer a:focus-visible,
+.is-featured .wpc-plan-card__cta:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* ---- responsive ---- */
+
+@media (max-width: 1024px) {
+  .wpc-ch__head,
+  .wpc-ch__table,
+  .wpc-tr__title,
+  .wpc-tr__list,
+  .wpc-st__title,
+  .wpc-st__steps,
+  .wpc-st__cta,
+  .wpc-faq__title,
+  .wpc-faq__list {
+    grid-column: 1 / -1;
+  }
+  .wpc-ch__table {
+    margin-top: 1.5rem;
+  }
+  .wpc-tr__list {
+    margin-top: 1rem;
+  }
+  .wpc-st__title {
+    position: static;
+    margin-bottom: 0.75rem;
+  }
+  .wpc-pricing__head {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-pricing__aside {
+    max-width: 560px;
+  }
+  .wpc-pricing__dialwrap {
+    width: min(100%, 380px);
+  }
+}
+
+@media (max-width: 1100px) {
+  .wpc-fx-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding-top: 0;
+  }
+  .wpc-fx {
+    --fx-sticky-top: calc(var(--header-h) + 4.5rem);
+  }
+  .wpc-fx-index {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 15;
+    margin-inline: calc(var(--m) * -1);
+    padding: 0.6rem var(--m);
+    background: var(--c-canvas);
+    box-shadow: inset 0 -1px 0 var(--c-hairline);
+  }
+  .wpc-fx-index__label,
+  .wpc-fx-index__list {
+    display: none;
+  }
+  .wpc-fx-jump {
+    display: block;
+  }
+  .wpc-fx-jump .wpc-lb__button {
+    min-height: 46px;
+  }
+  .wpc-fx-jump .wpc-lb__list {
+    max-height: min(26rem, 65vh);
+  }
+  .wpc-fx-filter {
+    padding-top: 1.75rem;
+  }
+}
+
+@media (max-width: 860px) {
+  .wpc-header__bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .wpc-nav,
+  .wpc-header__signin {
+    display: none;
+  }
+  .wpc-nav-toggle {
+    display: inline-flex;
+  }
+  .wpc-ws__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__nav {
+    display: none;
+  }
+  .wpc-ws__main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .wpc-in__col,
+  .wpc-in__media {
+    grid-column: 1 / -1;
+  }
+  .wpc-in__media {
+    position: relative;
+    top: auto;
+    margin-top: 1.5rem;
+  }
+  .wpc-in__media::before {
+    aspect-ratio: 3 / 2;
+  }
+  .wpc-fx-hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-fx-hero__photo {
+    grid-column: 1;
+    grid-row: auto;
+    margin-top: 2rem;
+  }
+  .wpc-fx-pillar__title,
+  .wpc-fx-pillar__summary,
+  .wpc-fx-pillar__photo,
+  .wpc-fx-pillar__list,
+  .wpc-fx-pillar__more {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+  .wpc-footer__brand {
+    grid-column: 1 / -1;
+    margin-bottom: 1rem;
+  }
+  .wpc-footer__col {
+    grid-column: span 4;
+  }
+}
+
+@media (max-width: 600px) {
+  .wpc-hx__title {
+    max-width: none;
+  }
+  .wpc-hx .wpc-fs__chips {
+    border-radius: var(--r-md);
+  }
+  .wpc-hx .wpc-fs__select {
+    min-width: 0;
+    width: 100%;
+  }
+  .wpc-hx__stage {
+    margin-top: 2rem;
+  }
+  .wpc-ws__role {
+    display: none;
+  }
+  .wpc-ws__main {
+    padding: 1rem;
+  }
+  .wpc-ws__side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wpc-ws__photo {
+    display: none;
+  }
+  .wpc-ch__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+  .wpc-ch__arrow {
+    display: none;
+  }
+  .wpc-tr__list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  .wpc-st__cta {
+    padding: 1.5rem;
+  }
+  .wpc-fx-card__head,
+  .wpc-fx-cat__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .wpc-fx-card {
+    padding: 1rem 1.1rem;
+  }
+  .wpc-plan-card {
+    padding: 1.6rem 1.25rem 1.25rem;
+  }
+  .wpc-footer__mark {
+    font-size: 15vw;
+  }
+  .wpc-footer__col {
+    grid-column: span 6;
+  }
+  .wpc-footer__legal {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 400px) {
+  .wpc-header__bar {
+    gap: 0.5rem;
+  }
+  .wpc-brand .eos-wordmark {
+    font-size: 15px !important; /* Wordmark sets its size inline (a prop); small phones need it smaller. */
+  }
+  .wpc-header__cta-long {
+    display: none;
+  }
+  .wpc-header__cta-short {
+    display: inline;
+  }
+  .wpc-header__actions .eos-btn {
+    padding-inline: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wpc-page,
+  .wpc-rv.is-in,
+  .wpc-rvg.is-in > *,
+  .wpc-hx__copy > *,
+  .wpc-hx__picker,
+  .wpc-ws,
+  .wpc-roll__text,
+  .wpc-roll::after,
+  .wpc-ch__row,
+  .wpc-mobile-nav,
+  .wpc-mobile-nav__list li,
+  .wpc-lb__list,
+  .wpc-hx__dots--lit,
+  .wpc-mw__cell,
+  .wpc-dial__minutes,
+  .wpc-dial__arc,
+  .wpc-tj__label,
+  .wpc-tj__step,
+  .wpc-tj__step::after,
+  .wpc-pricing__actions,
+  .wpc-fx-legend__list,
+  .wpc-fx-hero__photo,
+  .wpc-pricing__word > span,
+  .wpc-pricing__lead,
+  .wpc-pricing__trial,
+  .wpc-pricing__photo,
+  .wpc-plan-card,
+  .wpc-faq__item p {
+    animation: none;
+  }
+  .wpc-rv.is-waiting,
+  .wpc-rvg.is-waiting > * {
+    opacity: 1;
+    transform: none;
+  }
+  .wpc *,
+  .wpc *::before,
+  .wpc *::after {
+    transition-duration: 0.01ms !important;
+  }
+  .wpc .eos-btn:active,
+  .wpc-fs__chip:active,
+  .wpc-footer__link:active,
+  .wpc-footer__social-link:hover,
+  .wpc-footer__link:hover .wpc-footer__icon,
+  .wpc-footer__social-link:active,
+  .is-featured .wpc-plan-card__cta:active,
+  .wpc-plan-card:hover {
+    transform: none;
+    translate: none;
+  }
+}
+
+/* ==== PREVIEW: navy as the primary colour in more places (colours only) ====
+ * Delete this whole block to return to the approved look. Every value is an existing token:
+ * --c-inverse / --c-inverse-2 / --c-inverse-muted are the admin sidebar's navy, raised navy and
+ * muted text on dark; --c-ink is the same navy as ink. The orange primary button is unchanged.
+ */
+
+/* 1-2. Closing calls to action (home "From sign-up to signed in", Features "Start with a free trial"). */
+.wpc-st__cta,
+.wpc-fx-cta__inner {
+  background: var(--c-inverse);
+  box-shadow: none;
+  color: #ffffff;
+}
+.wpc-st__cta-text,
+.wpc-fx-cta__title {
+  color: #ffffff;
+}
+.wpc-st__fine,
+.wpc-fx-cta__text {
+  color: var(--c-inverse-muted);
+}
+.wpc-st__cta .wpc-link {
+  color: #ffffff;
+  text-decoration-color: var(--c-inverse-muted);
+}
+.wpc-st__cta .wpc-link:hover {
+  color: var(--c-accent-mark);
+}
+.wpc-fx-cta__inner .eos-btn--ghost {
+  color: #ffffff;
+}
+.wpc-fx-cta__inner .eos-btn--ghost:hover {
+  background: var(--c-inverse-2);
+}
+.wpc-st__cta a:focus-visible,
+.wpc-st__cta .eos-btn:focus-visible,
+.wpc-fx-cta__inner .eos-btn:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* 3. FAQ: the open question takes the admin sidebar's active-row indicator. */
+.wpc-faq__item[open] {
+  box-shadow: 0 0 0 1px var(--c-hairline), inset 3px 0 0 var(--c-ink);
+}
+/* The open question's header paints over the item, so it carries the bar too (no gap on hover), and
+   only its top corners round so its hover tint meets the answer below cleanly. */
+.wpc-faq__item[open] summary {
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  box-shadow: inset 3px 0 0 var(--c-ink);
+}
+
+/* 4. Text links: a light-navy underline instead of the warm hairline. */
+.wpc-link,
+.wpc-fx-hero__link,
+.wpc-pricing__compare {
+  text-decoration-color: var(--c-inverse-muted);
+}
+/* ==== end PREVIEW ==== */
+
+/* ==== Motion: slow, measured entrances, one per kind of section ====
+ * Borrowed from the reference systems (design-md-library): one measured ease-out for everything,
+ * longer durations than interface feedback, short travel, and no bounce or blur. Every move is
+ * transform and opacity only, and plays once as the block scrolls in (components/Reveal.tsx keeps
+ * content visible until script confirms it starts below the fold). All of it sits behind
+ * `prefers-reduced-motion: no-preference`, so a reduced-motion visitor gets the static page.
+ */
+.wpc {
+  --m-slow: 1.15s;
+  --m-mid: 0.9s;
+  --m-step: 95ms;
+  --ease-soft: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+@keyframes wpc-m-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-rise-sm {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-left {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-right {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-lift {
+  from { opacity: 0; transform: translateY(36px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wpc-m-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes wpc-m-settle {
+  from { transform: scale(1.07); }
+  to { transform: none; }
+}
+@keyframes wpc-m-draw {
+  from { transform: scaleX(0); }
+  to { transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Default for any reveal: a slower, longer rise; groups cascade (capped so long lists don't drag). */
+  .wpc-rv.is-in {
+    animation: wpc-m-rise var(--m-slow) var(--ease) var(--rv-delay, 0ms) both;
+  }
+  .wpc-rvg.is-in > * {
+    animation: wpc-m-rise var(--m-mid) var(--ease) calc(min(var(--i, 0), 8) * var(--m-step)) both;
+  }
+
+  /* Home: the field's words. The copy arrives from the left; each term row follows it across. */
+  .wpc-ch__head.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-ch__rows.wpc-rvg.is-in > * {
+    animation: wpc-m-left 0.8s var(--ease) calc(min(var(--i, 0), 8) * 80ms + 120ms) both;
+  }
+
+  /* Home: what's inside. Rows lift a short way, like a list settling. */
+  .wpc-in__rows.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm var(--m-mid) var(--ease) calc(var(--i, 0) * var(--m-step)) both;
+  }
+
+  /* Home: the navy trust band. The title fades in quietly; each point rises and its orange rule draws. */
+  .wpc-tr__title.wpc-rv.is-in {
+    animation: wpc-m-fade 1.4s var(--ease-soft) both;
+  }
+  .wpc-tr__list.wpc-rvg.is-in > * {
+    animation: wpc-m-rise 1s var(--ease) calc(var(--i, 0) * 140ms + 150ms) both;
+  }
+  .wpc-tr__list.wpc-rvg.is-in .wpc-tr__point::before {
+    transform-origin: left center;
+    animation: wpc-m-draw 0.9s var(--ease) calc(var(--i, 0) * 140ms + 450ms) both;
+  }
+
+  /* Home: getting started. The closing panel lifts in a beat after the title. */
+  .wpc-st__cta.wpc-rv.is-in {
+    animation: wpc-m-lift var(--m-slow) var(--ease) 120ms both;
+  }
+
+  /* Features: each product area. The heading slides in; the panel fades up, then its rows cascade. */
+  .wpc-fx-cat__head.wpc-rv.is-in {
+    animation: wpc-m-left 1s var(--ease) both;
+  }
+  .wpc-fx-grid.wpc-rvg.is-waiting {
+    opacity: 0;
+  }
+  .wpc-fx-grid.wpc-rvg.is-in {
+    animation: wpc-m-fade 0.8s var(--ease-soft) both;
+  }
+  .wpc-fx-grid.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm 0.8s var(--ease) calc(min(var(--i, 0), 8) * 70ms + 150ms) both;
+  }
+
+  /* Features: the four pillars. Cards lift in turn; each photo settles from a slight zoom. */
+  .wpc-fx-sum__grid.wpc-rvg.is-in > * {
+    animation: wpc-m-lift var(--m-slow) var(--ease) calc(var(--i, 0) * 130ms) both;
+  }
+  .wpc-fx-sum__grid.wpc-rvg.is-in .wpc-fx-pillar__photo {
+    animation: wpc-m-settle 1.8s var(--ease-soft) calc(var(--i, 0) * 130ms) both;
+  }
+
+  /* Features: the closing panel. Copy from the left, actions from the right, meeting in the middle. */
+  .wpc-fx-cta__copy.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-fx-cta__actions.wpc-rv.is-in {
+    animation-name: wpc-m-right;
+  }
+
+  /* Billing & Plans: plan cards lift in one after another once the plans load. */
+  .wpc-plan-card {
+    animation: wpc-m-lift var(--m-slow) var(--ease) calc(0.35s + var(--i, 0) * 0.14s) both;
+  }
+  /* FAQ: the title from the left, then the questions settle in order; the close fades last. */
+  .wpc-faq__title.wpc-rv.is-in {
+    animation-name: wpc-m-left;
+  }
+  .wpc-faq__list.wpc-rvg.is-in > * {
+    animation: wpc-m-rise-sm 0.8s var(--ease) calc(var(--i, 0) * 90ms + 120ms) both;
+  }
+  .wpc-pricing__foot.wpc-rv.is-in {
+    animation: wpc-m-fade 1.2s var(--ease-soft) both;
+  }
+
+  /* Interaction states ease a touch more slowly too, so hovers feel of a piece with the entrances. */
+  .wpc-fx-card,
+  .wpc-faq__item summary,
+  .wpc-in__row {
+    transition-duration: 0.35s;
+  }
+  .wpc-plan-card {
+    transition-duration: 0.4s;
+  }
+}
+/* Plan prices: odometer digits (components/RollingNumber.tsx). Each column is exactly one line tall
+   and top-aligned, so the price keeps its size and its baseline with "/month". Fast start, long
+   gentle landing; the right-hand digits turn more and land last. */
+.wpc-odo__col {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: top;
+}
+.wpc-odo__strip {
+  display: block;
+  transform: translateY(0);
+}
+.wpc-odo__strip > span {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+.wpc-odo.is-go .wpc-odo__strip {
+  transform: translateY(calc(var(--odo-to, 0) * -1em));
+  transition: transform var(--odo-dur, 1.2s) cubic-bezier(0.12, 0.8, 0.12, 1);
+}
+/* ==== end Motion ==== */
