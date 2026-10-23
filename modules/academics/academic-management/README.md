@@ -2,7 +2,10 @@
 
 **Domain:** academics
 **Kind:** feature
-**Status:** in progress (issue #100): domain rules and the faculty-load use case are built; persistence, API, events and widgets wait for the decisions in [docs/prd.md](docs/prd.md) section 13.
+**Status:** in progress (issue #100). Built: domain rules, persistence (prefixed tables, row-level security, own
+Alembic chain), every operation of `contracts/openapi.yaml`, event publishing through the shared outbox, the roster
+read model and the `academic-management.course-roster` widget. Outstanding shared work (envelope version, audit SDK,
+error format, backend module loader, HoD department claim, faculty-name lookup): [docs/prd.md](docs/prd.md) section 13.
 
 Programmes, curriculum, courses, credits, faculty-course assignment.
 
@@ -17,11 +20,20 @@ timetables and attendance, coursework, and exams. See [docs/prd.md](docs/prd.md)
 [docs/user-stories.md](docs/user-stories.md).
 
 ## Tests
+Backend, from `modules/academics/academic-management/backend` (a throwaway SQLite database, never a real one):
 ```
-cd modules/academics/academic-management/backend
-PYTHONPATH=src python -m pytest -q
+PYTHONPATH="src:../../../../packages/core/src:../../../../packages/testing/src" python -m pytest -q
 ```
-`PYTHONPATH=src` is needed until the package is installed (`pip install -e backend`).
+(use `;` instead of `:` on Windows). With `PYTHONPATH=src` only, the domain and application tests run and the
+API, migration and tenancy tests are skipped.
+
+Frontend widget: `pnpm --filter @eos/academic-management test`.
+
+## Migrations
+```
+cd modules/academics/academic-management/db && alembic upgrade head
+```
+The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

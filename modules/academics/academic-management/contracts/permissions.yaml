@@ -1,5 +1,7 @@
 # Permission catalogue for academic-management. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Role blocks are platform role ids (platform/identity/config/profiles); eos_core.permissions_for
+# grants a user the keys of every block named after one of their roles.
 module: academic-management
 permissions:
   - key: academic-management:term:read
@@ -35,8 +37,8 @@ permissions:
   - key: academic-management:faculty-load:read
     description: View faculty teaching load per term
 roles:
-  - name: academic-management-admin
-    description: Full administration of the academic catalogue. Default for org-admin.
+  - name: org-admin
+    description: Full administration of the academic catalogue.
     grants:
       - academic-management:term:read
       - academic-management:term:write
@@ -53,8 +55,8 @@ roles:
       - academic-management:faculty-assignment:write
       - academic-management:roster:read-all
       - academic-management:faculty-load:read
-  - name: academic-management-department-head
-    description: Plans offerings and faculty for a department. Default for department-admin.
+  - name: department-admin
+    description: Plans offerings and faculty for a department (HoD).
     grants:
       - academic-management:term:read
       - academic-management:programme:read
@@ -68,8 +70,8 @@ roles:
       - academic-management:faculty-assignment:write
       - academic-management:roster:read-all
       - academic-management:faculty-load:read
-  - name: academic-management-faculty
-    description: Teaches offerings and reads their rosters. Default for faculty.
+  - name: faculty
+    description: Teaches offerings and reads their rosters.
     grants:
       - academic-management:term:read
       - academic-management:programme:read
@@ -78,8 +80,16 @@ roles:
       - academic-management:offering:read
       - academic-management:faculty-assignment:read
       - academic-management:roster:read
-  - name: academic-management-viewer
-    description: Read-only view of the catalogue. Default for student and examination-staff.
+  - name: student
+    description: Read-only view of the catalogue.
+    grants:
+      - academic-management:term:read
+      - academic-management:programme:read
+      - academic-management:curriculum:read
+      - academic-management:course:read
+      - academic-management:offering:read
+  - name: examination-staff
+    description: Read-only view of the catalogue, to plan exams.
     grants:
       - academic-management:term:read
       - academic-management:programme:read
