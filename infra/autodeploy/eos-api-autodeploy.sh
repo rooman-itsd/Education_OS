@@ -7,7 +7,7 @@
 #   main (default)  staging: every merge to main
 #   latest-tag      production: the highest vX.Y.Z release tag (v0.10.0 is above v0.9.0; pre-releases
 #                   such as v1.0.0-rc1 never count), the same one .github/workflows/web.yml publishes to
-#                   `web-release`
+#                   `web-release`. A tag whose commit is not on main is refused.
 set -euo pipefail
 
 CONFIG="${EOS_AUTODEPLOY_CONFIG:-/etc/eos/api-autodeploy.env}"
@@ -31,6 +31,13 @@ if [ "$REF" = latest-tag ]; then
     exit 0
   fi
   target="refs/tags/$label"
+  # Releases come only from main. A tag on any other commit is refused, as web.yml refuses to publish
+  # it, so the web and the API both stay on the previous release.
+  git fetch -q origin main
+  if ! git merge-base --is-ancestor "$target^{commit}" origin/main; then
+    logger -t eos-api-autodeploy "$label is not on main; refused, staying on $(git rev-parse --short HEAD)"
+    exit 0
+  fi
 else
   git fetch -q origin "$REF"
   label="$REF"
