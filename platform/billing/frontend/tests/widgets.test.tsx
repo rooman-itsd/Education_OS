@@ -72,7 +72,8 @@ describe("billing.plan-and-trial", () => {
     const fetchMock = routes({ "/billing/subscription": { status: 200, body: subscription }, "/billing/plans": { status: 200, body: plans } });
     vi.stubGlobal("fetch", fetchMock);
     render(<PlanAndTrial role="org-admin" />);
-    expect(await screen.findByText("Trial")).toBeTruthy();
+    expect(await screen.findByText("Trial", { selector: ".eos-billing__title" })).toBeTruthy(); // the plan
+    expect(screen.getByText("Trial", { selector: ".eos-badge" })).toBeTruthy(); // the status
     expect(screen.getByText(/Free · Trial ends 11 Nov 2026/)).toBeTruthy();
     const list = screen.getByRole("list", { name: "Available plans" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
@@ -85,7 +86,7 @@ describe("billing.plan-and-trial", () => {
   it("hides the plan change from roles other than the org admin", async () => {
     vi.stubGlobal("fetch", routes({ "/billing/subscription": { status: 200, body: subscription }, "/billing/plans": { status: 200, body: plans } }));
     render(<PlanAndTrial role="management" />);
-    expect(await screen.findByText("Trial")).toBeTruthy();
+    expect(await screen.findByText("Trial", { selector: ".eos-billing__title" })).toBeTruthy();
     expect(screen.queryByRole("list", { name: "Available plans" })).toBeNull();
   });
 
