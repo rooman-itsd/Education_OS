@@ -4,7 +4,8 @@ import { ApiError } from "../api/client";
 import { AuthLayout } from "./AuthLayout";
 import { login } from "./session";
 
-export function Login({ slug, onDone, onSignUp }: { slug?: string; onDone: () => void; onSignUp: () => void }) {
+// onSignUp is kept for callers; the registration link now opens the public site's page (/#/register).
+export function Login({ slug, onDone }: { slug?: string; onDone: () => void; onSignUp?: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [org, setOrg] = useState(slug ?? "");
@@ -45,7 +46,7 @@ export function Login({ slug, onDone, onSignUp }: { slug?: string; onDone: () =>
         {error && <p className="eos-form-error" role="alert">{error}</p>}
         <Button variant="primary" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</Button>
         <p className="eos-auth__footnote">
-          New here? <a href="#signup" onClick={(e) => { e.preventDefault(); onSignUp(); }}>Register your organisation</a>
+          New here? <a href="/#/register">Register your organisation</a>
         </p>
       </form>
     </AuthLayout>
