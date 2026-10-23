@@ -252,7 +252,9 @@ describe("fees-accounts.outstanding-dues", () => {
   it("shows an error, not a crash, when the request fails, and retries", async () => {
     const fetchMock = stubFetch(answer(500, { code: "internal", message: "Database unavailable" }), answer(200, outstanding()));
     render(<OutstandingDues role="finance-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Database unavailable");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Could not load fee data.");
+    expect(alert.textContent).not.toContain("Database unavailable"); // server wording is not shown
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("₹10,00,000.00")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -293,7 +295,9 @@ describe("fees-accounts.collection-vs-target", () => {
   });
 
   it("shows an empty state when no targets are set", async () => {
-    stubFetch(answer(200, target({ target_total: "0.00", collected_total: "0.00", periods: [] })));
+    // the backend always returns the year's twelve months, with zero targets when none are set
+    const zero = target().periods.map((p) => ({ ...p, target: "0.00", collected: "0.00" }));
+    stubFetch(answer(200, target({ target_total: "0.00", collected_total: "0.00", periods: zero })));
     render(<CollectionVsTarget role="management" />);
     expect(await screen.findByText("No collection targets set")).toBeTruthy();
     expect(screen.getByText("Set targets for 2026-27 to compare collections against them.")).toBeTruthy();

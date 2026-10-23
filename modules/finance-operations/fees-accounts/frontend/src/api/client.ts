@@ -142,8 +142,8 @@ export function errorMessage(e: unknown): string {
     if (e.status === 0 || e.status === 404 || e.status === 502 || e.status === 503) return "Fee data is not available yet.";
     if (e.status === 401) return "Sign in again to see this.";
     if (e.status === 403) return "You do not have access to this.";
-    return e.message || "Could not load fee data.";
   }
+  // Server wording (a 500's message, a gateway page) is never the headline.
   return "Could not load fee data.";
 }
 

@@ -10,8 +10,9 @@ import { useWidgetData, WidgetStatus } from "./useWidgetData";
 export function CollectionVsTarget(_props: WidgetProps) {
   const load = useWidgetData((signal) => getCollectionVsTarget(undefined, signal));
   const report = load.state === "ready" ? load.data : null;
+  // The report always carries the year's months, so "no targets" is a zero target total, not an empty list.
   const empty =
-    report && report.periods.length === 0 && amount(report.target_total) === 0
+    report && amount(report.target_total) === 0
       ? { title: "No collection targets set", body: `Set targets for ${report.academic_year || "this academic year"} to compare collections against them.` }
       : null;
   const overall = report ? percent(amount(report.collected_total), amount(report.target_total)) : 0;
