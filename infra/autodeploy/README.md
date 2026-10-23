@@ -58,6 +58,10 @@ always follow the same tag.
 
 ### Releasing
 
+Releases come only from `main`: a tag whose commit is not on `main` is refused by the publish job (it
+fails, `web-release` stays as it was) and by the production API (it logs the refusal and stays on the
+previous release). Only the lead creates release tags; a repository ruleset on `v*` enforces it.
+
 From an up-to-date `main` that staging has run without problems:
 
 ```
@@ -79,7 +83,9 @@ git tag v0.1.1 <last-good-commit>
 git push origin v0.1.1
 ```
 
-Never delete or move a published tag: hosts that already fetched it would keep it.
+Never delete or move a published tag: hosts that already fetched it would keep it. The one exception is
+a tag that was refused (not on `main`): nothing deployed it, so delete it
+(`git push origin :refs/tags/<tag>`) and tag the right commit on `main` instead.
 
 ### Setting up production (once, with Proxmox access)
 
@@ -95,3 +101,27 @@ Never delete or move a published tag: hosts that already fetched it would keep i
 
 Check: `journalctl -t eos-web-autodeploy@production` in the nginx container and
 `journalctl -t eos-api-autodeploy` in the production API container.
+
+### The current host becomes production
+
+The plan for Education OS: `educationos.futureacad.ae` stays the public, production name and staging moves
+to `staging.educationos.futureacad.ae`. Until the first `vX.Y.Z` tag exists nothing changes: the current
+site keeps following `main`.
+
+1. **Staging host, before the first release.** An A record for `staging.educationos.futureacad.ae`, then
+   in the nginx container a vhost for it that serves `/var/www/education-os` (the staging web root,
+   `web-dist`) with `/api/` proxied to the staging API container (the `location /api/` block from
+   `../docker/nginx.public-vhost.conf`), and `certbot --nginx -d staging.educationos.futureacad.ae`. The
+   staging API container keeps following `main`. Edit this vhost by hand: once two vhosts carry an
+   `/api/` location, `../docker/wire-api-proxy.sh` rewrites the first one it finds, whichever name it has.
+2. **Production API.** `tools/scripts/deploy-api-lxc.sh` with a new `CTID` and `CT_IP`, then
+   `EOS_DEPLOY_REF=latest-tag` inside it as in step 1 of "Setting up production" above. Production runs
+   with `EOS_DEV_MODE=false`, always; staging may run with `true` until email is delivered.
+3. **Production web.** The `production` web instance as in step 2 above (`web-release` into
+   `/var/www/education-os-production`).
+4. **The switch, once the first release is published.** In the existing `educationos.futureacad.ae`
+   vhost, point `root` at `/var/www/education-os-production` and `/api/` at the production API container,
+   then `nginx -t && nginx -s reload`. Check `https://educationos.futureacad.ae/VERSION` reads the release
+   tag, and `https://staging.educationos.futureacad.ae/VERSION` a short commit sha.
+5. **Smoke check both.** `E2E_BASE_URL=https://educationos.futureacad.ae pnpm --filter e2e e2e`, and the
+   same with the staging URL (`../../tests/e2e/README.md`).

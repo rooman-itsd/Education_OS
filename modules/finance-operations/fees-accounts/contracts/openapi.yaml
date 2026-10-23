@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: fees-accounts API
-  version: 0.2.0
+  version: 0.2.1
   description: >-
     Fee heads and structures, invoices (demands), online and offline payments, receipts, concessions,
     refunds, per-person ledgers and collection reports. Online payments go through the payment adapter
@@ -384,6 +384,7 @@ components:
         late_fee: { $ref: "#/components/schemas/Money" }
         paid_total: { $ref: "#/components/schemas/Money" }
         balance: { $ref: "#/components/schemas/Money" }
+        credit: { $ref: "#/components/schemas/Money", description: "Paid above what is due (for example an online payment that arrived after a counter payment or a cancellation); what finance staff should refund. 0.00 when nothing is owed back." }
         status: { $ref: "#/components/schemas/InvoiceStatus" }
         overdue: { type: boolean }
         due_date: { type: string, format: date }
