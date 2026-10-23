@@ -26,6 +26,8 @@ permissions:
     description: View collection, outstanding and collection-versus-target reports.
   - key: fees-accounts:target:manage
     description: Set collection targets.
+  - key: fees-accounts:dues:read
+    description: Read any person's outstanding fee balance (GET /dues), for modules that gate a decision on dues.
   - key: fees-accounts:self:read
     description: View one's own dues, invoices and receipts.
   - key: fees-accounts:self:pay
@@ -47,6 +49,9 @@ roles:
       - fees-accounts:concession:request
       - fees-accounts:ledger:read
       - fees-accounts:report:read
+      - fees-accounts:dues:read
+  - name: examination-staff
+    grants: [fees-accounts:dues:read]
   - name: management
     grants: [fees-accounts:fee-structure:read, fees-accounts:report:read, fees-accounts:target:manage, fees-accounts:concession:approve]
   - name: org-admin
