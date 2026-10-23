@@ -1,6 +1,6 @@
 # fees-accounts: product requirements
 
-Owner: Gokula Lakshmi (@gokulalakshmirooman-source) · Status: draft for review · Issue #66
+Owner: Gokula Lakshmi (@gokulalakshmirooman-source) · Status: in progress · Issues #66, #107
 Suite E, Finance & operations · tier `common` (every academy type enables it)
 
 ## Purpose
@@ -59,7 +59,11 @@ person, plus the collection reports finance staff and management watch. The cont
 |---|---|---|
 | Calls | payment-sbiepay | `POST /payments` (purpose `fee`), `POST /payments/{reference}/refunds` |
 | Consumes | payment-sbiepay | `payment.succeeded`, `payment.failed`, `payment.refunded` |
-| Consumes | admissions | `admissions.application.accepted` raises the admission fee invoice (event pending in the admissions contract) |
+| Consumes | admissions | `admissions.application.accepted` raises the confirmation fee invoice (person id still to agree, #192) |
+| Consumes | hostel | `hostel.allocation.confirmed` invoices the hostel fee of the structure for that `room_type` and year; `.cancelled` cancels it if unpaid (#175) |
+| Consumes | transport | `transport.pass.issued` invoices the fee of the structure for that `route_id` (staff only if `invoice_staff_transport`); `.cancelled` cancels it if unpaid (#175) |
+| Consumes | library | `library.fine.raised` invoices the fine when `invoice_library_fines` is on; `.waived` cancels it. Library consumes `fees-accounts.invoice.paid` (`source_module=library`) to mark the fine paid (#175) |
+| Serves | examinations | `GET /dues?person_id=&source_module=examinations&source_reference=<exam_cycle_id>`, permission `fees-accounts:dues:read`; examinations decides eligibility (#183) |
 | Publishes | anyone | `invoice.issued`, `invoice.paid`, `invoice.overdue`, `payment.received` and the rest of `events.yaml` |
 | Platform | identity, audit, documents, notification, scheduler | through `packages/sdk` |
 | References | student-information, academic-management | `person_id`, `programme_id` by id; names cached from their events |
@@ -72,9 +76,10 @@ person, plus the collection reports finance staff and management watch. The cont
 
 ## Open questions (for review)
 
-1. Which event from admissions raises the admission fee invoice, and with which payload (person, programme,
-   category)? To agree with Praveen; the name above comes from ARCHITECTURE.md.
+1. `admissions.application.accepted` exists (admissions contract) but carries no person or user id, while
+   invoices key on `person_id`. Asked Praveen on #192 to add the applicant's user id; until then the event is
+   handled only when the payload carries one.
 2. Does enrolment-registration also raise tuition invoices by event, or are they raised in bulk by finance staff?
 3. Whether any fee head needs tax (GST) lines. Not modelled yet.
 4. Dashboard ids: Applicant uses `fees-accounts.fee-due` and Student uses `fees-accounts.fee-dues`. Both are
-   served by `GET /me/dues`; confirm with the layout owner whether they should be one widget id.
+   served by `GET /me/dues` and both ship as widgets (issue #107 lists both); merging them is the layout owner's call.
