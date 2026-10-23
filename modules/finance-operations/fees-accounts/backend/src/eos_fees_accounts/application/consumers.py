@@ -5,13 +5,14 @@ event changes nothing and answers why. Each runs inside the event's organisation
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 from eos_core.tenant import is_bypass, organisation_scope
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
-from ..domain.rules import parse_money
+from ..domain.rules import money, parse_money
 from ..infrastructure.config import load_settings
 from ..infrastructure.models import FeeHead, FeeStructure, Invoice, Payment, Refund
 from . import service
@@ -84,6 +85,8 @@ def _cancel_from_source(db: Session, module: str, reference: str, reason: str) -
 def on_payment_succeeded(db: Session, org: str, p: dict) -> dict:
     if p.get("source_module") != service.MODULE:
         return _ignored("not a fees-accounts payment")
+    if p.get("currency") not in (None, "INR"):
+        return _ignored(f"unsupported currency {p.get('currency')}; fees are invoiced in INR")
     reference = p["reference"]
     inv = db.scalar(_q(db, Invoice).where(Invoice.id == p["source_reference"]).with_for_update())
     if inv is None:
@@ -112,13 +115,40 @@ def on_payment_refunded(db: Session, org: str, p: dict) -> dict:
     if not p.get("refund_id"):
         return _ignored("the event carries no refund_id")
     refund = db.scalar(_q(db, Refund).where(Refund.gateway_refund_id == p["refund_id"]).with_for_update())
-    if refund is None:
-        return _ignored("refund not started from fees-accounts")
-    if refund.status != "requested":
-        return _ignored(f"refund already {refund.status}")
+    if refund is not None:
+        if refund.status != "requested":
+            return _ignored(f"refund already {refund.status}")
+        service.complete_refund(db, refund, None)
+        db.commit()
+        return _done("completed", refund_id=refund.id)
+    # Not started here: finance staff hold payment-sbiepay:payment:refund and may refund at the adapter directly.
+    # The money moved, so the ledger follows it: record the refund against the payment and complete it.
+    payment = db.scalar(_q(db, Payment).where(Payment.gateway_reference == p.get("reference")).with_for_update())
+    if payment is None:
+        return _ignored("no fees-accounts payment with that reference")
+    if db.scalar(_q(db, Refund).where(Refund.gateway_refund_id == p["refund_id"])):
+        return _ignored("refund already recorded by a concurrent delivery")
+    amount = parse_money(p["amount"])
+    left = Decimal(payment.amount) - Decimal(payment.refunded_amount)
+    if amount > left:
+        return _ignored(f"refund of {money(amount)} exceeds the {money(left)} left on the payment")
+    refund = Refund(
+        organisation_id=payment.organisation_id,
+        payment_id=payment.id,
+        invoice_id=payment.invoice_id,
+        person_id=payment.person_id,
+        amount=amount,
+        mode="original",
+        status="requested",
+        reason="refunded at the payment adapter",
+        gateway_refund_id=p["refund_id"],
+        requested_by=None,
+    )
+    db.add(refund)
+    db.flush()
     service.complete_refund(db, refund, None)
     db.commit()
-    return _done("completed", refund_id=refund.id)
+    return _done("completed", refund_id=refund.id, started_at="adapter")
 
 
 # ---------------------------------------------------------------- admissions, hostel, transport, library
@@ -249,5 +279,8 @@ def handle(db: Session, name: str, payload: dict) -> dict:
         except IntegrityError:
             db.rollback()  # a concurrent delivery of the same event got there first
             return _ignored("already applied by a concurrent delivery")
+        except (KeyError, TypeError, ValueError) as e:
+            db.rollback()  # a malformed payload is ignored with its reason, never left for the relay to retry
+            return _ignored(f"malformed payload: {type(e).__name__}: {e}")
         finally:
             db.rollback()  # nothing left open: the next event starts in its own scope

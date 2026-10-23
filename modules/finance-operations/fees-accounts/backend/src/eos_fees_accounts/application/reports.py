@@ -1,5 +1,6 @@
 """The reports behind the dashboard widgets: collections-today, outstanding-dues and collection-vs-target. Days are UTC
-until the organisation's time zone is available to modules."""
+until the organisation's time zone is available to modules. Collections are net of refunds: a refund counts against
+the day (or month) it was completed, by the mode and fee heads of the payment it returns."""
 
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from ..domain import rules
 from ..domain.rules import ZERO, money
 from ..infrastructure.config import load_settings
-from ..infrastructure.models import CollectionTarget, FeeStructure, Invoice, InvoiceLine, Payment
+from ..infrastructure.models import CollectionTarget, FeeStructure, Invoice, InvoiceLine, Payment, Refund
 from . import service
 from .service import _q, balance_of
 
@@ -46,25 +47,48 @@ def _payments_on(db: Session, day: date) -> list[Payment]:
     return list(db.scalars(q))
 
 
+def _refunds_between(db: Session, first: date, end: date) -> list[Refund]:
+    """Refunds completed on a day in [first, end): money that went back out."""
+    start, _ = service.day_bounds(first)
+    stop, _ = service.day_bounds(end)
+    q = _q(db, Refund).where(Refund.status == "completed", Refund.completed_at >= start, Refund.completed_at < stop)
+    return list(db.scalars(q))
+
+
+def _net(payments: list[Payment], refunds: list[Refund]) -> Decimal:
+    return sum((Decimal(p.amount) for p in payments), ZERO) - sum((Decimal(r.amount) for r in refunds), ZERO)
+
+
 def collections(db: Session, day: date | None) -> dict:
     day = day or service.today()
     payments = _payments_on(db, day)
     previous = _payments_on(db, day - timedelta(days=1))
+    refunds = _refunds_between(db, day, day + timedelta(days=1))
+    previous_refunds = _refunds_between(db, day - timedelta(days=1), day)
+    refunded_payments = {
+        p.id: p for p in db.scalars(_q(db, Payment).where(Payment.id.in_([r.payment_id for r in refunds])))
+    }
     by_mode: dict[str, list[Decimal]] = defaultdict(list)
     for p in payments:
         by_mode[p.mode].append(Decimal(p.amount))
-    lines = _lines_by_invoice(db, list({p.invoice_id for p in payments}))
+    for r in refunds:
+        if (p := refunded_payments.get(r.payment_id)) is not None:
+            by_mode[p.mode].append(-Decimal(r.amount))
+    lines = _lines_by_invoice(db, list({p.invoice_id for p in payments} | {r.invoice_id for r in refunds}))
     return {
         "date": day.isoformat(),
-        "total": money(sum((Decimal(p.amount) for p in payments), ZERO)),
+        "total": money(_net(payments, refunds)),
         "count": len(payments),
-        "previous_day_total": money(sum((Decimal(p.amount) for p in previous), ZERO)),
+        "previous_day_total": money(_net(previous, previous_refunds)),
         "by_mode": [
-            {"mode": mode, "amount": money(sum(amounts, ZERO)), "count": len(amounts)}
+            {"mode": mode, "amount": money(sum(amounts, ZERO)), "count": sum(1 for a in amounts if a > 0)}
             for mode in rules.PAYMENT_MODES
             if (amounts := by_mode.get(mode))
         ],
-        "by_fee_head": _by_head([(lines[p.invoice_id], Decimal(p.amount)) for p in payments]),
+        "by_fee_head": _by_head(
+            [(lines[p.invoice_id], Decimal(p.amount)) for p in payments]
+            + [(lines[r.invoice_id], -Decimal(r.amount)) for r in refunds]
+        ),
     }
 
 
@@ -109,6 +133,8 @@ def collection_vs_target(db: Session, academic_year: str | None) -> dict:
     collected = defaultdict(lambda: ZERO)
     for p in db.scalars(q):
         collected[p.paid_on.strftime("%Y-%m")] += Decimal(p.amount)
+    for r in _refunds_between(db, first, end):
+        collected[r.completed_at.strftime("%Y-%m")] -= Decimal(r.amount)
     return {
         "academic_year": year,
         "target_total": money(sum(target.values(), ZERO)),

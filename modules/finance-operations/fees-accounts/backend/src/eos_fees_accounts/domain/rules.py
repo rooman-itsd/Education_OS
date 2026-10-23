@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, InvalidOperation
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
@@ -155,14 +155,24 @@ def ageing_bucket(due_date: date, today: date) -> str:
 
 def allocate(amount: Decimal, weights: list[Decimal]) -> list[Decimal]:
     """Spread `amount` over lines in proportion to `weights` (e.g. a payment over an invoice's fee heads), exact to
-    the paisa: the last line takes the remainder."""
+    the paisa by largest remainder: every share is rounded towards zero, then the paisa left over go one each to the
+    lines that lost most to rounding (the last line first on a tie). No share ever has the opposite sign of `amount`."""
     total = sum(weights, ZERO)
     if not weights:
         return []
     if total <= 0:
         return [amount, *([ZERO] * (len(weights) - 1))]
-    shares = [(amount * w / total).quantize(CENT, ROUND_HALF_UP) for w in weights[:-1]]
-    return [*shares, amount - sum(shares, ZERO)]
+    exact = [amount * w / total for w in weights]
+    shares = [x.quantize(CENT, ROUND_DOWN) for x in exact]
+    left = amount - sum(shares, ZERO)
+    step = CENT if left > 0 else -CENT
+    order = sorted(range(len(shares)), key=lambda i: (-abs(exact[i] - shares[i]), -i))
+    k = 0
+    while left != 0:
+        shares[order[k % len(order)]] += step
+        left -= step
+        k += 1
+    return shares
 
 
 def concession_amount(total: Decimal, amount: Decimal | None, percent: Decimal | None) -> Decimal:

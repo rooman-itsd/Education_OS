@@ -80,6 +80,19 @@ def test_allocate_is_proportional_and_exact():
     assert rules.allocate(D("10.00"), []) == []
 
 
+def test_allocate_never_gives_a_negative_share():
+    # Rounding half up on every line but the last used to leave the last line with -0.01 here.
+    shares = rules.allocate(D("0.03"), [D("1")] * 5)
+    assert sum(shares, D(0)) == D("0.03") and all(s >= 0 for s in shares), shares
+    for amount, weights in (
+        (D("0.01"), [D("1")] * 3),
+        (D("1.00"), [D("3"), D("3"), D("3")]),
+        (D("99.99"), [D("1"), D("2")]),
+    ):
+        shares = rules.allocate(amount, weights)
+        assert sum(shares, D(0)) == amount and all(s >= 0 for s in shares), (amount, shares)
+
+
 def test_concession_amount_or_percent():
     assert rules.concession_amount(D("1000"), D("250.00"), None) == D("250.00")
     assert rules.concession_amount(D("1000"), None, D("12.5")) == D("125.00")

@@ -7,7 +7,7 @@ from eos_core.db import SessionLocal
 from eos_core.tenant import platform_scope
 from eos_fees_accounts.application import consumers
 from eos_fees_accounts.domain import rules
-from fees_support import BASE, adhoc, head, pay_cash, published
+from fees_support import BASE, TODAY, adhoc, head, pay_cash, published
 
 
 def handle(name, payload):
@@ -139,3 +139,137 @@ def test_concession_percent_has_two_decimals_and_targets_are_checked(client, org
     assert client.put(f"{BASE}/collection-targets", json=dup, headers=org.manager).status_code == 422
     foreign = {"academic_year": "2026-27", "targets": [{"period": "2026-10", "amount": "1", "fee_head_id": "not-ours"}]}
     assert client.put(f"{BASE}/collection-targets", json=foreign, headers=org.manager).status_code == 422
+
+
+# ---------------------------------------------------------------- second review (F1-F7)
+
+
+def succeeded(org, inv, reference, amount, currency="INR") -> dict:
+    return {
+        "organisation_id": org.id,
+        "reference": reference,
+        "purpose": "fee",
+        "source_module": "fees-accounts",
+        "source_reference": inv["id"],
+        "amount": amount,
+        "currency": currency,
+        "completed_at": "2026-10-22T09:00:00+00:00",
+    }
+
+
+def test_a_refund_started_at_the_adapter_is_recorded(client, org):  # F1
+    inv = adhoc(client, org, "800.00")
+    handle(consumers.PAYMENT_SUCCEEDED, succeeded(org, inv, "ADP1", "800.00"))
+    refunded = {
+        "organisation_id": org.id,
+        "reference": "ADP1",
+        "purpose": "fee",
+        "source_module": "fees-accounts",
+        "source_reference": inv["id"],
+        "refund_id": "started-in-the-adapter",
+        "amount": "300.00",
+        "refunded_total": "300.00",
+        "currency": "INR",
+        "gateway_refund_id": "G1",
+    }
+    assert handle(consumers.PAYMENT_REFUNDED, refunded)["result"] == "completed"
+    assert handle(consumers.PAYMENT_REFUNDED, refunded)["reason"] == "refund already completed"
+    after = client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()
+    assert after["paid_total"] == "500.00" and after["status"] == "partially_paid" and after["balance"] == "300.00"
+    assert (
+        after["payments"][0]["refunded_amount"] == "300.00" and after["payments"][0]["status"] == "partially_refunded"
+    )
+    too_much = {**refunded, "refund_id": "second", "amount": "600.00"}
+    assert handle(consumers.PAYMENT_REFUNDED, too_much)["reason"].startswith("refund of 600.00 exceeds the 500.00")
+    unknown = {**refunded, "refund_id": "third", "reference": "NOT-OURS"}
+    assert handle(consumers.PAYMENT_REFUNDED, unknown)["reason"] == "no fees-accounts payment with that reference"
+
+
+def test_a_concession_never_exceeds_what_is_invoiced(client, org):  # F2
+    inv = adhoc(client, org, "500.00")
+    r = client.post(
+        f"{BASE}/concessions",
+        json={"invoice_id": inv["id"], "kind": "waiver", "amount": "800.00", "reason": "x"},
+        headers=org.staff,
+    )
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "exceeds_total"
+    first = client.post(
+        f"{BASE}/concessions",
+        json={"invoice_id": inv["id"], "kind": "sibling", "amount": "300.00", "reason": "x"},
+        headers=org.staff,
+    ).json()["id"]
+    second = client.post(
+        f"{BASE}/concessions",
+        json={"invoice_id": inv["id"], "kind": "scholarship", "percent": 100, "reason": "x"},
+        headers=org.staff,
+    ).json()["id"]
+    assert (
+        client.post(f"{BASE}/concessions/{first}/decision", json={"decision": "approved"}, headers=org.manager).json()[
+            "approved_amount"
+        ]
+        == "300.00"
+    )
+    r = client.post(f"{BASE}/concessions/{second}/decision", json={"decision": "approved"}, headers=org.manager)
+    assert r.status_code == 200 and r.json()["approved_amount"] == "200.00"  # capped at what is left of the total
+    after = client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()
+    assert after["concession_total"] == "500.00" and after["status"] == "paid" and after["credit"] == "0.00"
+    statement = client.get(f"{BASE}/accounts/{org.ids['student']}/statement", headers=org.staff).json()
+    assert statement["closing_balance"] == "0.00"
+
+
+def test_foreign_currency_is_ignored_and_an_overpayment_shows_as_credit(client, org):  # F3
+    inv = adhoc(client, org, "1000.00")
+    pay_cash(client, org, inv["id"], "600.00")
+    assert handle(consumers.PAYMENT_SUCCEEDED, succeeded(org, inv, "USD1", "1000.00", "USD"))["result"] == "ignored"
+    assert handle(consumers.PAYMENT_SUCCEEDED, succeeded(org, inv, "INR1", "1000.00"))["result"] == "applied"
+    after = client.get(f"{BASE}/invoices/{inv['id']}", headers=org.staff).json()
+    assert after["paid_total"] == "1600.00" and after["balance"] == "0.00" and after["credit"] == "600.00"
+    assert after["status"] == "paid" and len(after["payments"]) == 2
+    dues = client.get(f"{BASE}/dues", params={"person_id": org.ids["student"]}, headers=org.exams).json()
+    assert dues["balance"] == "0.00"
+
+
+def test_a_malformed_event_is_ignored_with_its_reason(client, org):  # F5
+    result = handle(consumers.PAYMENT_SUCCEEDED, {"organisation_id": org.id, "source_module": "fees-accounts"})
+    assert result["result"] == "ignored" and result["reason"].startswith("malformed payload: KeyError")
+    bad_date = {**succeeded(org, adhoc(client, org, "10.00"), "BAD1", "10.00"), "completed_at": "not a date"}
+    assert handle(consumers.PAYMENT_SUCCEEDED, bad_date)["reason"].startswith("malformed payload: ValueError")
+    assert handle(consumers.FINE_RAISED, {"organisation_id": org.id})["result"] == "ignored"
+
+
+def test_collections_are_net_of_refunds(client, org):  # F6
+    inv = adhoc(client, org, "1000.00")
+    p = pay_cash(client, org, inv["id"], "1000.00")
+    kept = pay_cash(client, org, adhoc(client, org, "250.00")["id"], "250.00")
+    r = client.post(
+        f"{BASE}/payments/{p['id']}/refunds",
+        json={"amount": "1000.00", "reason": "x", "mode": "cash"},
+        headers=org.staff,
+    )
+    assert r.status_code == 202 and r.json()["status"] == "completed"
+    report = client.get(f"{BASE}/reports/collections", params={"date": TODAY}, headers=org.staff).json()
+    assert report["total"] == "250.00" and report["count"] == 2
+    assert report["by_mode"] == [{"mode": "cash", "amount": "250.00", "count": 2}]
+    assert {h["amount"] for h in report["by_fee_head"]} == {"250.00", "0.00"}
+    target = client.get(
+        f"{BASE}/reports/collection-vs-target", params={"academic_year": "2026-27"}, headers=org.staff
+    ).json()
+    assert target["collected_total"] == "250.00"
+    assert [x for x in target["periods"] if x["period"] == "2026-10"][0]["collected"] == "250.00"
+    assert kept["status"] == "completed"
+
+
+def test_ad_hoc_invoices_refuse_inactive_fee_heads(client, org):  # F7
+    h = head(client, org, "INACT", "other")
+    body = {"code": "INACT", "name": "Inactive", "category": "other", "refundable": False, "active": False}
+    assert client.put(f"{BASE}/fee-heads/{h['id']}", json=body, headers=org.staff).status_code == 200
+    r = client.post(
+        f"{BASE}/invoices",
+        json={
+            "person_id": org.ids["student"],
+            "lines": [{"fee_head_id": h["id"], "amount": "10.00"}],
+            "due_date": "2026-11-01",
+        },
+        headers=org.staff,
+    )
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "unknown_fee_head"

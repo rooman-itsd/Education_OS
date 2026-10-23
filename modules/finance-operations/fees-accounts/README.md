@@ -26,7 +26,7 @@ reports behind the Applicant, Student, Finance Staff and Management dashboards. 
 |---|---|---|
 | domain | `backend/src/eos_fees_accounts/domain/rules.py` | Exact money, instalment splits that never lose a paisa, late fees (flat or per day, grace, cap), status from balance, ageing, proportional allocation, concessions, academic years. Pure Python. |
 | application | `application/service.py` | Fee heads, structures, invoices (single, bulk, from events), counter and online payments, receipts, voids, refunds, concessions, statements, `/me/*`, `/dues`, settings, targets. |
-| | `application/reports.py` | Collections for a day, outstanding with ageing, collected against target. |
+| | `application/reports.py` | Collections for a day and collected against target, both net of refunds completed in the period (a refund counts on the day it completed, by the mode and fee heads of the payment it returns); outstanding with ageing. |
 | | `application/consumers.py` | Handlers for every event in `module.yaml` `consumes_events`. Each is idempotent and runs in a fresh transaction of the event's organisation; they refuse to run inside `platform_scope`. |
 | | `application/jobs.py` | `run_daily`: late fees and `invoice.overdue` once per invoice. |
 | infrastructure | `infrastructure/models.py` | 12 `fees_accounts_*` tables. Each has `organisation_id`; money is `Numeric(12, 2)`. |
@@ -43,7 +43,8 @@ Rules the code keeps:
 - **Online payments are applied once.** They are idempotent by the gateway reference.
 - **Refunds never exceed what was paid.** Refunds the gateway hasn't settled yet count against the balance.
 - **A refund reduces what was paid.** The balance comes back unless a concession or cancellation covers it, so the statement and the dues always agree. A fully refunded invoice can then be cancelled.
-- **A concession keeps its full value.** If it exceeds what is still due, the credit stays visible for a refund, and a later void doesn't shrink it.
+- **A concession is capped at what is invoiced.** A request above the invoice total is refused; an approval is capped at total plus late fee less earlier concessions (not at what is still due, so a later void doesn't shrink it). Money paid above what is due shows as the invoice's `credit`, for finance staff to refund.
+- **Refunds made at the adapter are recorded.** A `payment-sbiepay.payment.refunded` event for a payment of ours that fees-accounts didn't start is recorded against that payment and completed, so the ledger follows the money.
 
 ### Running the tests
 

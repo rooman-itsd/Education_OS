@@ -262,6 +262,7 @@ def invoice_dicts(db: Session, invoices: list[Invoice]) -> list[dict]:
                 "late_fee": money(inv.late_fee),
                 "paid_total": money(inv.paid_total),
                 "balance": money(max(bal, ZERO)),
+                "credit": money(max(-bal, ZERO)),
                 "status": inv.status,
                 "overdue": rules.is_overdue(inv.status, bal, inv.due_date, now),
                 "due_date": _iso(inv.due_date),
@@ -448,13 +449,15 @@ def issue_invoice(
     structure: FeeStructure | None = None,
     instalment: int | None = None,
     source: dict | None = None,
+    active_heads_only: bool = False,
 ) -> Invoice:
     """Create an invoice with its lines and publish fees-accounts.invoice.issued, in the caller's transaction.
-    `lines` are (fee_head_id, description, amount); the fee heads must belong to the organisation."""
+    `lines` are (fee_head_id, description, amount); the fee heads must belong to the organisation, and to an
+    active head when a user picks them (`active_heads_only`)."""
     heads = {h.id: h for h in db.scalars(_q(db, FeeHead).where(FeeHead.id.in_([line[0] for line in lines])))}
     for i, (head_id, _, amount) in enumerate(lines):
-        if head_id not in heads:
-            raise invalid("unknown_fee_head", "every line needs a fee head of your organisation", f"lines[{i}]")
+        if head_id not in heads or (active_heads_only and not heads[head_id].active):
+            raise invalid("unknown_fee_head", "every line needs an active fee head of your organisation", f"lines[{i}]")
         if amount <= 0:
             raise invalid("invalid_amount", "line amounts must be greater than zero", f"lines[{i}].amount")
     if not lines:
@@ -583,6 +586,7 @@ def create_invoice(db: Session, actor: Actor, body: dict) -> dict:
             title=first or "Invoice",
             actor_id=actor.user_id,
             source=source,
+            active_heads_only=True,
         )
         if not first:
             inv.title = db.scalar(_q(db, InvoiceLine).where(InvoiceLine.invoice_id == inv.id)).fee_head_name
@@ -1022,6 +1026,8 @@ def request_concession(db: Session, actor: Actor, body: dict) -> dict:
     if percent is not None and percent != percent.quantize(Decimal("0.01")):
         raise invalid("invalid_concession", "percent has at most two decimal places", "percent")
     _rule(rules.concession_amount, Decimal(inv.total), amount, percent)
+    if amount is not None and amount > Decimal(inv.total):
+        raise invalid("exceeds_total", f"amount exceeds the invoice total of {money(inv.total)}", "amount")
     c = Concession(
         organisation_id=actor.organisation_id,
         invoice_id=inv.id,
@@ -1055,9 +1061,12 @@ def decide_concession(db: Session, actor: Actor, concession_id: str, decision: s
     if inv.status not in rules.OPEN_INVOICE_STATUSES:
         raise conflict("not_open", f"the invoice is {inv.status}")
     worth = rules.concession_amount(Decimal(inv.total), c.amount, c.percent)
-    # The full worth is kept even when it exceeds what is still due: a later void restores the balance against the
-    # whole concession, and a credit left over is visible for a refund.
-    approved = worth
+    # Capped at what is invoiced (total and late fee) less earlier concessions, not at what is still due: a later void
+    # restores the balance against the whole concession, yet nothing is waived that was never invoiced, so money paid
+    # above the balance stays visible as `credit` and the ledger never owes what nobody paid.
+    approved = min(worth, Decimal(inv.total) + Decimal(inv.late_fee) - Decimal(inv.concession_total))
+    if approved <= 0:
+        raise conflict("nothing_to_waive", "earlier concessions already cover everything invoiced")
     c.status, c.approved_amount = "approved", approved
     inv.concession_total = Decimal(inv.concession_total) + approved
     _publish(
