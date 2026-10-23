@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import { getOpenByPriority, type OpenByPriority, type Priority } from "../api/client";
+import { getOpenByPriority, HelpdeskApiError, type OpenByPriority, type Priority } from "../api/client";
 
-type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; data: OpenByPriority };
+type Failure = { title: string; detail?: string; retry: boolean };
+type State = { kind: "loading" } | { kind: "error"; failure: Failure } | { kind: "ready"; data: OpenByPriority };
+
+/**
+ * What the error state says, as the examinations widgets do. A missing or unreachable service (404, 502, 503,
+ * network failure) is "not available yet", not the user's connection; retrying cannot fix 401 or 403.
+ */
+export function describeFailure(e: unknown): Failure {
+  if (!(e instanceof HelpdeskApiError) || [404, 502, 503].includes(e.status)) {
+    return { title: "Helpdesk data is not available yet.", retry: true };
+  }
+  if (e.status === 401) return { title: "Sign in again to see this.", retry: false };
+  if (e.status === 403) return { title: "You do not have access to this.", retry: false };
+  return { title: "Could not load open tickets", detail: "Try again in a moment.", retry: true };
+}
 
 /** Words for the priorities, and the tone of each row; status always comes with a word, never colour alone. */
 const LABEL: Record<Priority, string> = { urgent: "Urgent", high: "High", medium: "Medium", low: "Low" };
@@ -26,7 +40,7 @@ export function OpenByPriorityWidget(_props: WidgetProps) {
     getOpenByPriority(undefined, signal)
       .then((data) => setState({ kind: "ready", data }))
       .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error" });
+        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error", failure: describeFailure(e) });
       });
   }, []);
 
@@ -38,9 +52,10 @@ export function OpenByPriorityWidget(_props: WidgetProps) {
 
   if (state.kind === "loading") return <SkeletonLines lines={4} />;
   if (state.kind === "error") {
+    const { title, detail, retry } = state.failure;
     return (
-      <ErrorState title="Could not load open tickets" onRetry={() => load()}>
-        Check your connection and try again.
+      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+        {detail}
       </ErrorState>
     );
   }

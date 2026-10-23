@@ -74,7 +74,7 @@ describe("helpdesk.open-by-priority widget", () => {
   it("shows an error, not a crash, when the request fails, and retries", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, statusText: "", json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: "", json: async () => ({}) })
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "", json: async () => counts() });
     vi.stubGlobal("fetch", fetchMock);
     render(<OpenByPriorityWidget role="support-staff" />);
@@ -82,5 +82,27 @@ describe("helpdesk.open-by-priority widget", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Urgent")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("says the data is not available yet while the helpdesk API is not mounted (404), and can retry", async () => {
+    vi.stubGlobal("fetch", answer(404, { detail: "Not Found" }));
+    render(<OpenByPriorityWidget role="support-staff" />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Helpdesk data is not available yet.");
+    expect(alert.textContent).not.toContain("connection");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("reports a network failure as not available, not as the user's connection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<OpenByPriorityWidget role="support-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Helpdesk data is not available yet.");
+  });
+
+  it("offers no retry when access is refused (403)", async () => {
+    vi.stubGlobal("fetch", answer(403, { detail: { code: "forbidden" } }));
+    render(<OpenByPriorityWidget role="support-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("You do not have access to this.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });

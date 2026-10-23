@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contract 0.2.0: the profile roles `support-staff`, `org-admin` and `management` get the grants of
+  `helpdesk-agent`, `helpdesk-admin` and `helpdesk-viewer`, the defaults the catalogue already named for them.
+  Tokens carry profile roles, so before this a support-staff user was refused every helpdesk operation.
 - Contract 0.1.1: `POST /tickets` answers 409 when `assign_to_me` is sent by a caller who is not a member of the
   category's default queue (the same `assignee_not_in_queue` as `/assign`), so a ticket is never assigned to an agent
   who cannot open it. A public reply by the ticket's own requester through `POST /tickets/{id}/comments` is no longer
@@ -34,3 +37,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   (`application/jobs.py`). A ticket raised with `assign_to_me` also publishes `helpdesk.ticket.assigned`.
 - API, lifecycle, permission and job tests, the cross-tenant leak test (`eos_testing`), and a test that the routes
   match the contract's operations. `pyproject.toml` test extras: httpx and eos-testing.
+- The Support Staff widget `helpdesk.open-by-priority` (`frontend/src/widgets/OpenByPriorityWidget.tsx`), its API
+  client and Vitest tests; the frontend `test` script, Vitest globals and `vitest.config.ts`.
+- The widget says "Helpdesk data is not available yet." when the API answers 404, 502 or 503 or cannot be reached,
+  instead of asking the user to check their connection, as the examinations widgets do; 401 and 403 offer no retry.
