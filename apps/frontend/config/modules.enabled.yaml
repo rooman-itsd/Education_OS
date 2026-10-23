@@ -6,4 +6,5 @@
 #     - finance-operations/fees-accounts
 modules:
   - campus-life/hostel
+  - support/helpdesk
 platform: []
