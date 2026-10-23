@@ -13,4 +13,19 @@ describe("registerEnabledModules", () => {
     expect(third).toEqual(first);
     for (const id of ["hostel.notices"]) expect(registry.get(id)).toBeDefined();
   });
+
+  it("reads the platform: list the same way as modules:, naming them platform/<service>", async () => {
+    const loaded = await registerEnabledModules();
+    const yaml = (await import("../config/modules.enabled.yaml?raw")).default as string;
+    const platform = yaml
+      .split("\n")
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n")
+      .match(/^platform:\s*\[([^\]]*)\]/m)?.[1]
+      ?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) ?? [];
+    for (const name of platform) expect(loaded).toContain(`platform/${name}`);
+    for (const name of loaded.filter((n) => n.startsWith("platform/"))) expect(platform).toContain(name.slice("platform/".length));
+  });
 });
