@@ -30,7 +30,8 @@ export interface Ticket {
   blocks_use: boolean;
   assignee_id?: string | null;
   vendor?: { name: string } | null;
-  sla_breached: ("response" | "resolution")[];
+  /** Absent on older servers; treated as not breached. */
+  sla_breached?: ("response" | "resolution")[];
   resolution_due_at?: string;
 }
 
@@ -94,4 +95,23 @@ export function listOpenTickets(pageSize: number, signal?: AbortSignal): Promise
 /** GET /summary: counts for the tickets widget. Permission maintenance:ticket:read. */
 export function getSummary(signal?: AbortSignal): Promise<Summary> {
   return get<Summary>("/summary", signal);
+}
+
+export interface Failure {
+  title: string;
+  detail?: string;
+  retry: boolean;
+}
+
+/**
+ * What a widget's error state says, as the other modules' widgets do. A missing or unreachable service (404, 502,
+ * 503, network failure) is "not available yet", not the user's connection; retrying cannot fix 401 or 403.
+ */
+export function describeFailure(e: unknown, what: string): Failure {
+  if (!(e instanceof MaintenanceApiError) || [404, 502, 503].includes(e.status)) {
+    return { title: "Maintenance data is not available yet.", retry: true };
+  }
+  if (e.status === 401) return { title: "Sign in again to see this.", retry: false };
+  if (e.status === 403) return { title: "You do not have access to this.", retry: false };
+  return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
 }

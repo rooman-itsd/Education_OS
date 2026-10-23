@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from eos_core import events
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.rules import (
@@ -470,24 +471,33 @@ def raise_ticket(db: Session, actor: Actor, data: dict) -> dict:
     except RuleViolationError as v:
         raise _rule(v) from v
     duplicates = _possible_duplicates(db, category.id, target)
-    t = _new_ticket(
-        db,
-        actor,
-        organisation_id=actor.organisation_id,
-        reported_by=actor.user_id,
-        category=category,
-        kind=data.get("kind") or "corrective",
-        title=data["title"],
-        description=data.get("description"),
-        target=target,
-        priority=data.get("priority"),
-        blocks_use=bool(data.get("blocks_use")),
-        settings=settings,
-        now=clock(),
-        photo_document_ids=data.get("photo_document_ids"),
-        source=data.get("source"),
-    )
-    db.commit()
+    # Two people raising at the same moment can be handed the same number (the lock in repo.next_number covers
+    # Postgres; SQLite has none): the unique constraint refuses the second insert, which is retried once.
+    for attempt in (1, 2):
+        try:
+            t = _new_ticket(
+                db,
+                actor,
+                organisation_id=actor.organisation_id,
+                reported_by=actor.user_id,
+                category=category,
+                kind=data.get("kind") or "corrective",
+                title=data["title"],
+                description=data.get("description"),
+                target=target,
+                priority=data.get("priority"),
+                blocks_use=bool(data.get("blocks_use")),
+                settings=settings,
+                now=clock(),
+                photo_document_ids=data.get("photo_document_ids"),
+                source=data.get("source"),
+            )
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()
+            if attempt == 2:
+                raise
     return {"ticket": ticket_dict(db, actor, t, settings), "possible_duplicates": duplicates}
 
 

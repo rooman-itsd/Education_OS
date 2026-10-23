@@ -5,7 +5,7 @@ scope and filter by organisation themselves."""
 from __future__ import annotations
 
 from eos_core.db import scoped
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 from sqlalchemy.orm import Session
 
 from ..domain.rules import OPEN_STATUSES
@@ -68,7 +68,13 @@ def schedules(db: Session) -> list[Schedule]:
 
 def next_number(db: Session, organisation_id: str, year: int) -> str:
     """MT-<year>-<sequence>, counted within the organisation. Filters by organisation explicitly so the scheduler
-    sweep, which runs in platform scope, numbers each organisation's tickets on their own."""
+    sweep, which runs in platform scope, numbers each organisation's tickets on their own. On Postgres a
+    transaction-scoped advisory lock per organisation serialises two raises that would otherwise count the same
+    rows and collide on uq_maintenance_ticket_number; SQLite has one writer at a time."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"maintenance:number:{organisation_id}"}
+        )
     prefix = f"MT-{year}-"
     count = db.scalar(
         select(func.count())

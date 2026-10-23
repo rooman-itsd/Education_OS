@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Summary, Ticket, TicketPage } from "../src/api/client";
+import type { Priority, Summary, Ticket, TicketPage } from "../src/api/client";
 import { widgets } from "../src/widgets";
 import { TicketsWidget } from "../src/widgets/TicketsWidget";
 
@@ -101,7 +101,20 @@ describe("maintenance.tickets widget", () => {
     expect(await screen.findByText("No open tickets")).toBeTruthy();
   });
 
-  it("shows an error, not a crash, when the request fails, and retries", async () => {
+  it("renders a row that has no sla_breached or an unknown priority instead of crashing", async () => {
+    const bare = ticket({ id: "t-9", number: "MT-2026-00009", title: "Door handle loose" }) as Partial<Ticket>;
+    delete bare.sla_breached;
+    const odd = ticket({ id: "t-8", number: "MT-2026-00008", priority: "critical" as Priority });
+    vi.stubGlobal("fetch", api(page([bare as Ticket, odd]), summary({ sla_breached_open: 0 })));
+    render(<TicketsWidget role="facility-staff" />);
+    expect(await screen.findByText("MT-2026-00009 · Door handle loose")).toBeTruthy();
+    const rows = screen.getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain("Medium");
+    expect(rows[1]?.textContent).toContain("critical");
+  });
+
+  it("says the service is not available yet when it is missing or down (404, 503, network), and retries", async () => {
     let fail = true;
     const fetchMock = vi.fn().mockImplementation(async (url: string) => {
       if (fail) return { ok: false, status: 503, statusText: "", json: async () => ({}) };
@@ -109,9 +122,35 @@ describe("maintenance.tickets widget", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     render(<TicketsWidget role="facility-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not load maintenance tickets");
+    expect((await screen.findByRole("alert")).textContent).toContain("Maintenance data is not available yet.");
     fail = false;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("MT-2026-00001 · Projector will not turn on")).toBeTruthy();
+    cleanup();
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<TicketsWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Maintenance data is not available yet.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("offers no retry when the session has expired (401) or access is refused (403)", async () => {
+    vi.stubGlobal("fetch", api(page([]), summary(), 403));
+    render(<TicketsWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("You do not have access to this.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    cleanup();
+
+    vi.stubGlobal("fetch", api(page([]), summary(), 401));
+    render(<TicketsWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Sign in again to see this.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("shows a plain error with retry for any other failure", async () => {
+    vi.stubGlobal("fetch", api(page([]), summary(), 500));
+    render(<TicketsWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not load maintenance tickets");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

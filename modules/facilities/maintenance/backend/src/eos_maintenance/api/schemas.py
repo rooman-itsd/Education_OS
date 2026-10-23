@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -14,6 +14,20 @@ HoldReason = Literal["waiting_parts", "waiting_vendor", "waiting_access", "other
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class Patch(Strict):
+    """A partial body. Every field is optional, but only the fields in NULLABLE may be set to null explicitly:
+    null on anything else would clear a column that cannot be empty, so it is refused (422) instead of a 500."""
+
+    NULLABLE: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="after")
+    def no_explicit_null_on_required_fields(self):
+        bad = [k for k in self.model_fields_set if getattr(self, k) is None and k not in self.NULLABLE]
+        if bad:
+            raise ValueError(f"{', '.join(sorted(bad))} cannot be null")
+        return self
 
 
 class ReferenceIn(Strict):
@@ -54,7 +68,9 @@ class CategoryIn(Strict):
     active: bool = True
 
 
-class CategoryPatch(Strict):
+class CategoryPatch(Patch):
+    NULLABLE = frozenset({"description"})
+
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = None
     default_priority: Priority | None = None
@@ -75,7 +91,9 @@ class TicketIn(Strict):
     source: ReferenceIn | None = None
 
 
-class TicketPatch(Strict):
+class TicketPatch(Patch):
+    NULLABLE = frozenset({"description"})
+
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     category_id: str | None = None
@@ -162,7 +180,9 @@ class ScheduleIn(Strict):
     active: bool = True
 
 
-class SchedulePatch(Strict):
+class SchedulePatch(Patch):
+    NULLABLE = frozenset({"description", "priority", "default_assignee_id", "lead_days"})
+
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     category_id: str | None = None
@@ -185,6 +205,9 @@ def dump(model: BaseModel | None, *, partial: bool = False) -> dict:
     data = model.model_dump(exclude_unset=partial)
     if isinstance(data.get("sla_override"), dict):
         data["sla_override"] = {k: v for k, v in data["sla_override"].items() if v is not None}
-    if not partial:
+    if partial:
+        nullable = getattr(model, "NULLABLE", frozenset())
+        data = {k: v for k, v in data.items() if v is not None or k in nullable}
+    else:
         data = {k: v for k, v in data.items() if v is not None}
     return data

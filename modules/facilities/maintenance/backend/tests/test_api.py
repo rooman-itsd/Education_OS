@@ -7,6 +7,7 @@ from eos_core.db import SessionLocal
 from eos_core.events import OutboxEvent
 from eos_maintenance.application import service
 from eos_maintenance.application.jobs import run_sweeps
+from eos_maintenance.infrastructure import repository as repo
 from sqlalchemy import select, text
 
 MANAGER = "maintenance-manager"
@@ -251,6 +252,41 @@ def test_priority_change_recomputes_the_sla(client, org):
     assert r["resolution_due_at"] == (NOW + timedelta(hours=8)).isoformat()
     changed = events(org.id, "maintenance.ticket.priority-changed")[0].payload
     assert (changed["from"], changed["to"]) == ("medium", "urgent")
+
+
+def test_patch_refuses_explicit_null_on_fields_that_cannot_be_empty(client, org):
+    _, mgr = org.user(MANAGER)
+    cat = category(client, mgr)
+    t = report(client, mgr, cat)["ticket"]
+    for body in ({"title": None}, {"priority": None}, {"blocks_use": None}):
+        r = client.patch(f"{BASE}/tickets/{t['id']}", json=body, headers=mgr)
+        assert r.status_code == 422, (body, r.text)
+    cleared = client.patch(f"{BASE}/tickets/{t['id']}", json={"description": None}, headers=mgr)
+    assert cleared.status_code == 200 and cleared.json()["description"] is None  # description may be emptied
+    assert client.patch(f"{BASE}/categories/{cat['id']}", json={"name": None}, headers=mgr).status_code == 422
+    s = client.post(f"{BASE}/schedules", json=schedule_body(cat), headers=mgr).json()
+    assert client.patch(f"{BASE}/schedules/{s['id']}", json={"next_due_on": None}, headers=mgr).status_code == 422
+    assert client.patch(f"{BASE}/schedules/{s['id']}", json={"every": None}, headers=mgr).status_code == 422
+    reset = client.patch(f"{BASE}/schedules/{s['id']}", json={"lead_days": None}, headers=mgr)
+    assert reset.status_code == 200 and reset.json()["lead_days"] == 3  # null lead_days means the default again
+
+
+def test_raise_retries_once_when_two_raises_get_the_same_number(client, org, monkeypatch):
+    _, mgr = org.user(MANAGER)
+    cat = category(client, mgr)
+    first = report(client, mgr, cat)["ticket"]
+    real, calls = repo.next_number, []
+
+    def colliding(db, organisation_id, year):
+        calls.append(1)
+        return first["number"] if len(calls) == 1 else real(db, organisation_id, year)
+
+    monkeypatch.setattr(repo, "next_number", colliding)
+    second = report(client, mgr, cat)["ticket"]  # the first attempt hits uq_maintenance_ticket_number, the retry wins
+    assert len(calls) == 2
+    assert second["number"] == "MT-2026-00002" and second["id"] != first["id"]
+    ids = {x["id"] for x in client.get(f"{BASE}/tickets?scope=managed", headers=mgr).json()["items"]}
+    assert ids == {first["id"], second["id"]}
 
 
 # ---------------------------------------------------------------- work log

@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import { getSummary, listOpenTickets, type Priority, type Summary, type Ticket, type TicketStatus } from "../api/client";
+import {
+  describeFailure,
+  getSummary,
+  listOpenTickets,
+  type Failure,
+  type Priority,
+  type Summary,
+  type Ticket,
+  type TicketStatus,
+} from "../api/client";
 
-type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; tickets: Ticket[]; total: number; summary: Summary };
+type State =
+  | { kind: "loading" }
+  | { kind: "error"; failure: Failure }
+  | { kind: "ready"; tickets: Ticket[]; total: number; summary: Summary };
 type Tone = "danger" | "warning" | "info" | "neutral";
 
 /** Words for priorities and statuses; status always comes with a word, never colour alone. */
@@ -16,6 +28,10 @@ const STATUS: Partial<Record<TicketStatus, string>> = {
 };
 
 const SHOWN = 5;
+
+/** Unknown priorities (a newer server) fall back to a neutral badge with the raw word, never a crash. */
+const tone = (p: Priority): Tone => TONE[p] ?? "neutral";
+const priorityLabel = (p: Priority): string => PRIORITY[p] ?? String(p);
 
 function who(t: Ticket): string {
   if (t.vendor) return `Vendor: ${t.vendor.name}`;
@@ -35,7 +51,9 @@ export function TicketsWidget(_props: WidgetProps) {
     Promise.all([listOpenTickets(SHOWN, signal), getSummary(signal)])
       .then(([page, summary]) => setState({ kind: "ready", tickets: page.items, total: page.total, summary }))
       .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error" });
+        if ((e as { name?: string })?.name !== "AbortError") {
+          setState({ kind: "error", failure: describeFailure(e, "maintenance tickets") });
+        }
       });
   }, []);
 
@@ -47,9 +65,10 @@ export function TicketsWidget(_props: WidgetProps) {
 
   if (state.kind === "loading") return <SkeletonLines lines={4} />;
   if (state.kind === "error") {
+    const { title, detail, retry } = state.failure;
     return (
-      <ErrorState title="Could not load maintenance tickets" onRetry={() => load()}>
-        Check your connection and try again.
+      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+        {detail}
       </ErrorState>
     );
   }
@@ -76,17 +95,21 @@ export function TicketsWidget(_props: WidgetProps) {
       </p>
       <List divided label="Open maintenance tickets">
         {state.tickets.map((t, i) => {
-          const breached = t.sla_breached.length > 0;
+          const breached = (t.sla_breached ?? []).length > 0;
           return (
             <ListRow
               key={t.id}
               index={i}
               icon={breached ? Icons.AlertTriangle : t.kind === "corrective" ? Icons.Wrench : Icons.CalendarCheck2}
-              tone={breached ? "danger" : TONE[t.priority]}
+              tone={breached ? "danger" : tone(t.priority)}
               title={`${t.number} · ${t.title}`}
               meta={`${t.target.label} · ${who(t)}${t.blocks_use ? " · Out of use" : ""}`}
               trailing={
-                breached ? <Badge tone="danger">Past SLA</Badge> : <Badge tone={TONE[t.priority]}>{PRIORITY[t.priority]}</Badge>
+                breached ? (
+                  <Badge tone="danger">Past SLA</Badge>
+                ) : (
+                  <Badge tone={tone(t.priority)}>{priorityLabel(t.priority)}</Badge>
+                )
               }
             />
           );
