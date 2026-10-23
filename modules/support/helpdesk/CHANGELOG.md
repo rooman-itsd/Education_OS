@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contract 0.2.0: the profile roles `support-staff`, `org-admin` and `management` get the grants of
+  `helpdesk-agent`, `helpdesk-admin` and `helpdesk-viewer`, the defaults the catalogue already named for them.
+  Tokens carry profile roles, so before this a support-staff user was refused every helpdesk operation.
 - Contract 0.1.1: `POST /tickets` answers 409 when `assign_to_me` is sent by a caller who is not a member of the
   category's default queue (the same `assignee_not_in_queue` as `/assign`), so a ticket is never assigned to an agent
   who cannot open it. A public reply by the ticket's own requester through `POST /tickets/{id}/comments` is no longer

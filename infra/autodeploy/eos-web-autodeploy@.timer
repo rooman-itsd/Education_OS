@@ -1,0 +1,10 @@
+[Unit]
+Description=Education OS web (%i): check for a new build every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

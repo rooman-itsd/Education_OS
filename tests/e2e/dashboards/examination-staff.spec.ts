@@ -43,7 +43,7 @@ test.beforeAll(async ({ request }) => {
 });
 
 async function signIn(page: Page) {
-  await page.goto("/");
+  await page.goto("/app"); // the dashboard app lives at /app; / is the public site
   // exact: the organisation field's hint also says "email"
   await page.getByLabel("Email", { exact: true }).fill(user.email);
   await page.getByLabel("Password", { exact: true }).fill(user.password);
