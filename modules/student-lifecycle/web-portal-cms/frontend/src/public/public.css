@@ -3032,6 +3032,17 @@
 .wpc-reg__done .wpc-reg__actions {
   margin-top: 1.75rem;
 }
+/* The email confirmation code form. */
+.wpc-reg__verify {
+  max-width: 28rem;
+  margin-top: 1.5rem;
+}
+.wpc-reg__verify .wpc-field {
+  margin-top: 0;
+}
+.wpc-reg__verify .wpc-reg__actions {
+  margin-top: 1rem;
+}
 
 /* The academy package picker: a radio group of cards. */
 .wpc-ap {

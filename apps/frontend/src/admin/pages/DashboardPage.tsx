@@ -28,6 +28,7 @@ import { MiniHistogram, MiniPie, MiniStackedBars, MiniDonut, MiniHBars, MiniGaug
 import { StatGrid, PageHeader, BTN_PRIMARY, BTN_SECONDARY } from '../components/ui/dashboard';
 import { HistogramPanel, BreakdownPanel, ActionSummaryPanel, UpcomingPanel, ActivityPanel, PanelLink, activityToneForRole } from '../components/ui/panels';
 import { ENROLLMENT_TREND, ADMISSIONS_FUNNEL, FUNNEL_COLORS, MOCK_AUDIT_LOGS } from '../data/mockData';
+import { OrganisationApprovalQueue } from '../components/organisations/OrganisationApprovalQueue';
 
 const ENROLLMENT_SERIES = [
   { key: 'academics', name: 'Academic' },
@@ -70,8 +71,12 @@ const getGreeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 17 ? 
 
 export const DashboardPage: React.FC = () => {
   const org = useOrganisation();
-  const { session } = useAuth();
+  const { session, preview } = useAuth();
   const viewerName = session?.me.name || session?.me.email || 'Administrator';
+  // A signed-in super admin (live API) works the organisation approval queue; organisation admins
+  // and preview keep the sample figures below.
+  const superAdmin = Boolean(session?.me.is_super_admin) && !preview;
+  const [pendingOrganisations, setPendingOrganisations] = useState<number | null>(null);
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -127,20 +132,27 @@ export const DashboardPage: React.FC = () => {
           ]}
         />
       ) },
-    { label: 'Pending Approvals', icon: FileClock, value: <CountUp key={refreshKey} end={38} />, delta: '12 urgent', deltaTone: 'alert' as const, to: '/admissions',
-      viz: (
-        // 38 pending by queue: admissions, other, examination, finance, grievance
-        <MiniHBars
-          delay={300}
-          bars={[
-            { value: 12, color: '#E45B67' },
-            { value: 10, color: '#6256C9' },
-            { value: 8, color: '#E89A35' },
-            { value: 5, color: '#315EA8' },
-            { value: 3, color: '#159A72' }
-          ]}
-        />
-      ) },
+    superAdmin
+      ? {
+          label: 'Pending Approvals',
+          icon: FileClock,
+          value: pendingOrganisations === null ? '–' : <CountUp key={`orgs-${pendingOrganisations}`} end={pendingOrganisations} />,
+          note: 'Organisations awaiting approval'
+        }
+      : { label: 'Pending Approvals', icon: FileClock, value: <CountUp key={refreshKey} end={38} />, delta: '12 urgent', deltaTone: 'alert' as const, to: '/admissions',
+        viz: (
+          // 38 pending by queue: admissions, other, examination, finance, grievance
+          <MiniHBars
+            delay={300}
+            bars={[
+              { value: 12, color: '#E45B67' },
+              { value: 10, color: '#6256C9' },
+              { value: 8, color: '#E89A35' },
+              { value: 5, color: '#315EA8' },
+              { value: 3, color: '#159A72' }
+            ]}
+          />
+        ) },
     {
       label: 'Fee Collection',
       icon: IndianRupee,
@@ -263,6 +275,10 @@ export const DashboardPage: React.FC = () => {
       />
 
       <StatGrid stats={kpis} colorful />
+
+      {superAdmin && (
+        <OrganisationApprovalQueue onCountChange={setPendingOrganisations} onNotify={showToast} refreshKey={refreshKey} />
+      )}
 
       {/* Enrollment + admissions overview */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

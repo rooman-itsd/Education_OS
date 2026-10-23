@@ -9,8 +9,8 @@ import type { BadgeTone, PageTheme } from "@eos/ui-kit";
  * only what the shared shell (header, footer, routing) needs.
  */
 
-/** The public routes, carried in the URL hash: `#/`, `#/features`, `#/signup` (plans), `#/register`. */
-export type PublicRoute = "home" | "features" | "signup" | "register";
+/** The public routes, carried in the URL hash: `#/`, `#/features`, `#/signup` (plans), `#/register`, `#/verify`. */
+export type PublicRoute = "home" | "features" | "signup" | "register" | "verify";
 
 /** Where "Sign in" hands off to — the role-dashboard app, served at /app (apps/frontend/src/main.tsx). */
 export const APP_URL = "/app";
