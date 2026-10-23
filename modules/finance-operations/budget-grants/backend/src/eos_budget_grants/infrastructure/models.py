@@ -8,7 +8,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from eos_core.db import Base, TenantMixin, TimestampMixin, new_id
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 PREFIX = "budget_grants_"
@@ -164,6 +164,20 @@ class Alert(Base, TenantMixin):
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class AuditEntry(Base, TenantMixin):
+    """Who changed what and when, for every state change (PRD rule "every state change writes an audit record").
+    Holds ids and the action only. Stands in for the audit SDK until it ships, as in hostel and helpdesk."""
+
+    __tablename__ = f"{PREFIX}audit_entry"
+    __table_args__ = (Index("ix_budget_grants_audit_entity", "organisation_id", "entity", "entity_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    actor: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    action: Mapped[str] = mapped_column(String(60))
+    entity: Mapped[str] = mapped_column(String(40))
+    entity_id: Mapped[str] = mapped_column(String(36))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 TABLES = [
     m.__table__
     for m in (
@@ -177,5 +191,6 @@ TABLES = [
         FundsReceived,
         UtilisationCertificate,
         Alert,
+        AuditEntry,
     )
 ]

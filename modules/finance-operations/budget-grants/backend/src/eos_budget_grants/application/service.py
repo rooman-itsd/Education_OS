@@ -20,6 +20,7 @@ from ..domain.rules import ZERO, RuleError, money, parse_money
 from ..infrastructure.config import load_settings
 from ..infrastructure.models import (
     Alert,
+    AuditEntry,
     Budget,
     BudgetHead,
     Expenditure,
@@ -49,6 +50,21 @@ def today() -> date:
 def _publish(db: Session, name: str, organisation_id: str, payload: dict, actor: str | None = None) -> None:
     events.publish(
         db, f"{MODULE}.{name}", organisation_id, {"organisation_id": organisation_id, **payload}, actor=actor
+    )
+
+
+def _audit(db: Session, actor_id: str | None, action: str, entity: str, row) -> None:
+    """One audit record per state change, in the same transaction. The row is flushed first so a new one has its id."""
+    db.flush()
+    db.add(
+        AuditEntry(
+            organisation_id=row.organisation_id,
+            actor=actor_id,
+            action=action,
+            entity=entity,
+            entity_id=row.id,
+            occurred_at=clock(),
+        )
     )
 
 
@@ -215,6 +231,7 @@ def record_expenditure(
     )
     db.add(e)
     db.flush()
+    _audit(db, actor_id, f"expenditure.{kind}", "expenditure", e)
     check_thresholds(db, line)
     return e
 
@@ -379,6 +396,7 @@ def create_head(db: Session, actor: Actor, body: dict) -> dict:
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
     h = BudgetHead(organisation_id=actor.organisation_id, **body)
     db.add(h)
+    _audit(db, actor.user_id, "budget_head.created", "budget_head", h)
     _commit_unique(db, f"budget head code {body['code']} is already used")
     return head_dict(h)
 
@@ -398,6 +416,7 @@ def update_head(db: Session, actor: Actor, head_id: str, body: dict) -> dict:
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
     for key, value in body.items():
         setattr(h, key, value)
+    _audit(db, actor.user_id, "budget_head.updated", "budget_head", h)
     _commit_unique(db, f"budget head code {body['code']} is already used")
     return head_dict(h)
 
@@ -503,6 +522,7 @@ def create_budget(db: Session, actor: Actor, body: dict) -> dict:
     db.add(b)
     db.flush()
     _set_budget_lines(db, b, lines)
+    _audit(db, actor.user_id, "budget.created", "budget", b)
     db.commit()
     return budget_dict(db, b)
 
@@ -522,6 +542,7 @@ def update_budget(db: Session, actor: Actor, budget_id: str, body: dict) -> dict
     )
     _set_budget_lines(db, b, lines)
     b.prepared_by = actor.user_id  # the person who last shaped it may not approve it
+    _audit(db, actor.user_id, "budget.updated", "budget", b)
     db.commit()
     return budget_dict(db, b)
 
@@ -531,6 +552,7 @@ def submit_budget(db: Session, actor: Actor, budget_id: str) -> dict:
     if b.status not in rules.EDITABLE_BUDGET_STATUSES:
         raise conflict("not_submittable", f"the budget is {b.status}")
     b.status, b.prepared_by = "submitted", actor.user_id
+    _audit(db, actor.user_id, "budget.submitted", "budget", b)
     db.commit()
     return budget_dict(db, b)
 
@@ -561,6 +583,7 @@ def decide_budget(db: Session, actor: Actor, budget_id: str, decision: str, note
             },
             actor.user_id,
         )
+    _audit(db, actor.user_id, f"budget.{b.status}", "budget", b)
     db.commit()
     return budget_dict(db, b)
 
@@ -603,6 +626,7 @@ def request_reappropriation(db: Session, actor: Actor, body: dict) -> dict:
         requested_by=actor.user_id,
     )
     db.add(r)
+    _audit(db, actor.user_id, "reappropriation.requested", "reappropriation", r)
     db.commit()
     return reappropriation_dict(r)
 
@@ -618,6 +642,7 @@ def decide_reappropriation(db: Session, actor: Actor, reappropriation_id: str, d
     r.decided_by, r.decided_at, r.decision_note = actor.user_id, clock(), note
     if decision == "rejected":
         r.status = "rejected"
+        _audit(db, actor.user_id, f"reappropriation.{r.status}", "reappropriation", r)
         db.commit()
         return reappropriation_dict(r)
     src, dst = _budget_line_pair(db, r.from_line_id, r.to_line_id, lock=True)
@@ -636,6 +661,7 @@ def decide_reappropriation(db: Session, actor: Actor, reappropriation_id: str, d
         actor.user_id,
     )
     check_thresholds(db, src)
+    _audit(db, actor.user_id, f"reappropriation.{r.status}", "reappropriation", r)
     db.commit()
     return reappropriation_dict(r)
 
@@ -739,6 +765,7 @@ def reverse_expenditure(db: Session, actor: Actor, expenditure_id: str, reason: 
     if e.reversed:
         raise conflict("already_reversed", "the entry is already reversed")
     e.reversed, e.reversal_reason = True, reason
+    _audit(db, actor.user_id, "expenditure.reversed", "expenditure", e)
     db.commit()
     return expenditure_dict(e)
 
@@ -863,6 +890,7 @@ def create_grant(db: Session, actor: Actor, body: dict) -> dict:
         },
         actor.user_id,
     )
+    _audit(db, actor.user_id, "grant.sanctioned", "grant", g)
     db.commit()
     return grant_dict(db, g)
 
@@ -911,6 +939,7 @@ def update_grant(db: Session, actor: Actor, grant_id: str, body: dict) -> dict:
     db.flush()
     for line in changed:
         check_thresholds(db, line)
+    _audit(db, actor.user_id, "grant.revised", "grant", g)
     _commit_unique(db, f"grant {values['code']} is already recorded")
     return grant_dict(db, g)
 
@@ -936,6 +965,7 @@ def funds_received(db: Session, actor: Actor, grant_id: str, body: dict) -> dict
         {"grant_id": g.id, "amount": money(amount), "received_on": _iso(body["received_on"])},
         actor.user_id,
     )
+    _audit(db, actor.user_id, "grant.funds_received", "grant", g)
     db.commit()
     return grant_dict(db, g)
 
@@ -945,7 +975,10 @@ def close_grant(db: Session, actor: Actor, grant_id: str, unspent_action: str, n
     if g.status != "active":
         raise conflict("grant_closed", "the grant is already closed")
     lines = _lines_of(db, grant_id=g.id)
-    spent = sum((t[1] for t in line_totals(db, [x.id for x in lines]).values()), ZERO)
+    totals = line_totals(db, [x.id for x in lines]).values()
+    if sum((t[0] for t in totals), ZERO) > 0:
+        raise conflict("open_commitments", "release or pay the orders still committed on this grant first")
+    spent = sum((t[1] for t in totals), ZERO)
     unspent = _received_total(db, g.id) - spent
     g.status, g.unspent_action, g.close_note, g.closed_at = "closed", unspent_action, note, clock()
     _publish(
@@ -955,6 +988,7 @@ def close_grant(db: Session, actor: Actor, grant_id: str, unspent_action: str, n
         {"grant_id": g.id, "unspent": money(unspent), "unspent_action": unspent_action},
         actor.user_id,
     )
+    _audit(db, actor.user_id, "grant.closed", "grant", g)
     db.commit()
     return grant_dict(db, g)
 
@@ -1047,6 +1081,7 @@ def draft_certificate(db: Session, actor: Actor, grant_id: str, period_from: dat
         prepared_by=actor.user_id,
     )
     db.add(c)
+    _audit(db, actor.user_id, "certificate.drafted", "utilisation_certificate", c)
     db.commit()
     return certificate_dict(c)
 
@@ -1065,6 +1100,7 @@ def decide_certificate(db: Session, actor: Actor, certificate_id: str, decision:
         c.status, c.approved_by = "approved", actor.user_id
     else:
         c.status = "returned"
+    _audit(db, actor.user_id, f"certificate.{c.status}", "utilisation_certificate", c)
     db.commit()
     return certificate_dict(c)
 
@@ -1089,5 +1125,6 @@ def mark_certificate_submitted(db: Session, actor: Actor, certificate_id: str, b
         },
         actor.user_id,
     )
+    _audit(db, actor.user_id, "certificate.submitted", "utilisation_certificate", c)
     db.commit()
     return certificate_dict(c)

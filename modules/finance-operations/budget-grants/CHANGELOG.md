@@ -36,4 +36,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - manual spend and certificate periods stay inside the budget year or grant period;
   - code races answer 409;
   - the daily job starts on a fresh transaction.
-- Tests: 41, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.
+- Tests: 44, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.
+- Audit trail: `budget_grants_audit_entry` records every state change in the same transaction (actor, action, entity, id),
+  until the audit SDK exists, as in hostel and helpdesk.
+- A grant with open commitments can't be closed (`open_commitments`), and amounts larger than the column holds are refused.

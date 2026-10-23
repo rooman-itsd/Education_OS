@@ -1,5 +1,5 @@
 """Initial budget-grants schema: budget heads, budgets, grants, their lines, commitments and spend, reappropriations,
-investigators, funds received, utilisation certificates and published alerts. Every table carries organisation_id;
+investigators, funds received, utilisation certificates and published alerts and the audit trail. Every table carries organisation_id;
 on Postgres each gets the tenant_isolation row-level-security policy.
 
 Revision ID: budget_grants_0001
@@ -29,6 +29,7 @@ TABLES = [
     "budget_grants_funds_received",
     "budget_grants_utilisation_certificate",
     "budget_grants_alert",
+    "budget_grants_audit_entry",
 ]
 MONEY = sa.Numeric(14, 2)
 
@@ -206,6 +207,18 @@ def upgrade() -> None:
     )
     _enable_rls("budget_grants_alert")
 
+    op.create_table(
+        "budget_grants_audit_entry",
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
+        sa.Column("actor", sa.String(36), nullable=True),
+        sa.Column("action", sa.String(60), nullable=False),
+        sa.Column("entity", sa.String(40), nullable=False),
+        sa.Column("entity_id", sa.String(36), nullable=False),
+        _ts("occurred_at"),
+    )
+    _enable_rls("budget_grants_audit_entry")
+
     for table in TABLES:
         op.create_index(f"ix_{table}_organisation_id", table, ["organisation_id"])
     op.create_index("ix_budget_grants_budget_financial_year", "budget_grants_budget", ["financial_year"])
@@ -224,6 +237,9 @@ def upgrade() -> None:
     op.create_index("ix_budget_grants_funds_received_grant_id", "budget_grants_funds_received", ["grant_id"])
     op.create_index(
         "ix_budget_grants_utilisation_certificate_grant_id", "budget_grants_utilisation_certificate", ["grant_id"]
+    )
+    op.create_index(
+        "ix_budget_grants_audit_entity", "budget_grants_audit_entry", ["organisation_id", "entity", "entity_id"]
     )
 
 

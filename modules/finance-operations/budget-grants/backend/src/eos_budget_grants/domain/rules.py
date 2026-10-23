@@ -9,6 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
+MAX_AMOUNT = Decimal("1000000000000")  # Numeric(14, 2) holds 12 digits before the point
 
 HEAD_KINDS = ("recurring", "non_recurring")
 BUDGET_STATUSES = ("draft", "submitted", "returned", "approved", "closed")
@@ -42,6 +43,8 @@ def parse_money(value: str | Decimal | int, field: str = "amount", *, positive: 
         raise RuleError("invalid_amount", f"{field} must be a decimal string in rupees", field=field) from e
     if not amount.is_finite() or amount != amount.quantize(CENT):
         raise RuleError("invalid_amount", f"{field} must have at most two decimal places", field=field)
+    if abs(amount) >= MAX_AMOUNT:
+        raise RuleError("invalid_amount", f"{field} is too large", field=field)
     if positive and amount <= 0:
         raise RuleError("invalid_amount", f"{field} must be greater than zero", field=field)
     if not positive and amount < 0:

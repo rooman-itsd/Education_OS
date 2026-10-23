@@ -31,7 +31,7 @@ research grants with their own lines, funds received and utilisation certificate
 | | `application/reports.py` | Budget against spend per head, with grant totals. |
 | | `application/consumers.py` | Purchase orders issued, cancelled and paid; payroll paid. Idempotent by source; each event runs in its own organisation's scope. |
 | | `application/jobs.py` | `run_daily`: certificate reminders, once per grant, due date and window. |
-| infrastructure | `infrastructure/models.py` | 10 `budget_grants_*` tables. Each has `organisation_id`; money is `Numeric(14, 2)`. |
+| infrastructure | `infrastructure/models.py` | 11 `budget_grants_*` tables, including `audit_entry`. Each has `organisation_id`; money is `Numeric(14, 2)`. |
 | | `infrastructure/config.py` | `BUDGET_GRANTS_*` settings. |
 | api | `api/router.py`, `api/schemas.py`, `api/deps.py` | Every operation of the contract, strict request bodies, and the token and permission check through `eos_core`. |
 | db | `db/` | Alembic chain `budget_grants_0001` with its own version table. It applies the `tenant_isolation` policy on Postgres. |
@@ -42,7 +42,8 @@ Rules the code keeps:
 - **Nothing is deleted.** Manual entries are reversed with a reason, and approved budgets change only by reappropriation. Entries from other modules are reversed only by those modules' events.
 - **Preparer and approver are different people,** for budgets, reappropriations and certificates. For a budget, the preparer is whoever last edited or submitted it.
 - **Certificate due dates are period ends.** A grant starting 2026-04-01 with yearly certificates has due dates 2027-03-31 and so on, so a certificate for that period covers its due date. A returned certificate is redrafted, never certified as it stands.
-- **Every change publishes an event.** It goes to the outbox in the same transaction. Until the audit SDK exists, the outbox is the audit trail.
+- **Every change is audited.** An `audit_entry` row (actor, action, entity, id) is written in the same transaction. That covers changes from other modules' events too, until the audit SDK exists. Changes the contract defines events for also publish them to the outbox.
+- **A grant with orders still committed can't be closed.** Release or pay them first.
 
 ### Running the tests
 
