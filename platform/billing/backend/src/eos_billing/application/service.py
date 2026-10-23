@@ -11,7 +11,7 @@ from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..domain.models import Plan, Subscription
+from ..domain.models import Invoice, Plan, Subscription
 
 
 class BillingError(Exception):
@@ -121,10 +121,27 @@ def confirm_payment(db: Session, *, reference: str) -> Subscription:
 def _activate(db: Session, sub: Subscription, plan_id: str, billing_cycle: str, reference: str) -> None:
     from_plan = sub.plan_id
     days = 365 if billing_cycle == "yearly" else 30
+    now = utcnow()
     sub.plan_id, sub.status, sub.pending_plan_id = plan_id, "active", None
     sub.trial_ends_at = None
-    sub.current_period_ends_at = utcnow() + timedelta(days=days)
+    sub.current_period_ends_at = now + timedelta(days=days)
     sub.payment_reference = reference
+    plan = get_plan(db, plan_id)
+    months = 12 if billing_cycle == "yearly" else 1
+    db.add(
+        Invoice(
+            organisation_id=sub.organisation_id,
+            subscription_id=sub.id,
+            plan_id=plan_id,
+            amount=float(plan.price_per_month or 0) * months,
+            currency=plan.currency,
+            status="paid",
+            issued_at=now,
+            period_start=now,
+            period_end=sub.current_period_ends_at,
+            payment_reference=reference,
+        )
+    )
     events.publish(
         db,
         "billing.subscription.upgraded",
@@ -137,6 +154,13 @@ def _activate(db: Session, sub: Subscription, plan_id: str, billing_cycle: str, 
         sub.organisation_id,
         {"organisation_id": sub.organisation_id, "plan": plan_id},
     )
+
+
+def list_invoices(db: Session, organisation_id: str) -> list[dict]:
+    """The organisation's invoices, newest first."""
+    with organisation_scope(organisation_id):
+        q = scoped(db, select(Invoice), Invoice).order_by(Invoice.issued_at.desc())
+        return [i.to_dict() for i in db.scalars(q)]
 
 
 def cancel(db: Session, *, organisation_id: str) -> Subscription:
