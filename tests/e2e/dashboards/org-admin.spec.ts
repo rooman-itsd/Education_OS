@@ -49,7 +49,8 @@ test("the organisation admin signs in and sees every widget of the layout", asyn
 test("plan, usage, modules, users and invoices show the organisation's real data", async ({ page }) => {
   await signIn(page);
   const plan = widget(page, "Plan and trial");
-  await expect(plan.getByText("Trial", { exact: true })).toBeVisible();
+  await expect(plan.locator(".eos-billing__title")).toHaveText("Trial"); // the plan
+  await expect(plan.locator(".eos-badge")).toHaveText("Trial"); // the status
   await expect(plan.getByText(/Trial ends/)).toBeVisible();
   await expect(widget(page, "Usage against limits").getByText("1 of 25 users")).toBeVisible();
   await expect(widget(page, "Enabled modules").getByRole("list", { name: "Modules by suite" })).toBeVisible();
@@ -72,8 +73,8 @@ test("the package change switches the plan and the dashboard comes back on it, w
   await signIn(page);
   const plan = widget(page, "Plan and trial");
   await plan.getByRole("button", { name: "Switch to Standard" }).click();
-  await expect(widget(page, "Plan and trial").getByText("Standard", { exact: true })).toBeVisible();
-  await expect(widget(page, "Plan and trial").getByText("Active", { exact: true })).toBeVisible();
+  await expect(widget(page, "Plan and trial").locator(".eos-billing__title")).toHaveText("Standard");
+  await expect(widget(page, "Plan and trial").locator(".eos-badge").first()).toHaveText("Active");
   await expect(widget(page, "Invoices").getByText(/Standard · ₹24,999/)).toBeVisible();
   await expect(widget(page, "Usage against limits").getByText("1 of 500 users")).toBeVisible();
 });
