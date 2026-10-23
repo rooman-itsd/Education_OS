@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helpdesk API
-  version: 0.1.1
+  version: 0.2.0
   description: "Ticketing for all user roles with categories and routing. See docs/prd.md."
 servers:
   - url: /api/v1/helpdesk
