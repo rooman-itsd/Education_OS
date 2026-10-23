@@ -9,18 +9,18 @@ import type { BadgeTone, PageTheme } from "@eos/ui-kit";
  * only what the shared shell (header, footer, routing) needs.
  */
 
-/** The three public routes, carried in the URL hash: `#/`, `#/features`, `#/signup`. */
-export type PublicRoute = "home" | "features" | "signup";
+/** The public routes, carried in the URL hash: `#/`, `#/features`, `#/signup` (plans), `#/register`. */
+export type PublicRoute = "home" | "features" | "signup" | "register";
 
 /** Where "Sign in" hands off to — the role-dashboard app, served at /app (apps/frontend/src/main.tsx). */
 export const APP_URL = "/app";
 
 /**
- * The app's own organisation sign-up (apps/frontend/src/auth/SignUp.tsx): the main app opens it when
- * it loads at `#signup` with nobody signed in. It creates the organisation and administrator account
- * and verifies the email; the public site only shows the plans and hands off to it.
+ * Organisation registration on the public site (pages/RegisterPage.tsx): the academy package picker
+ * and the form that submits to platform/tenancy POST /register. Every "start the trial" call to action
+ * on the plans page leads here.
  */
-export const ORG_SIGNUP_URL = "/app#signup";
+export const ORG_SIGNUP_URL = "#/register";
 
 /**
  * The public site's palette: warm cream canvas, the admin sidebar's navy (#2a254e) as ink, and one
