@@ -63,9 +63,17 @@ describe("academic-management.course-roster widget", () => {
   });
 
   it("says so when the caller teaches nothing this term", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(200, { academic_period_id: null, items: [] })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(200, { academic_period_id: "t-1", items: [] })));
     render(<CourseRoster role="faculty" />);
     expect(await screen.findByText("No courses this term")).toBeTruthy();
+  });
+
+  it("treats 'no term is active' (404 active_term_not_found) as nothing this term, not as a failure", async () => {
+    const body = { detail: { code: "active_term_not_found", message: "no academic term was given and no term is active" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(404, body)));
+    render(<CourseRoster role="faculty" />);
+    expect(await screen.findByText("No courses this term")).toBeTruthy();
+    expect(screen.queryByText("Could not load your courses")).toBeNull();
   });
 
   it("offers a retry after a failure, and the retry loads again", async () => {

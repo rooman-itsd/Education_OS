@@ -241,3 +241,64 @@ def test_a_section_only_assignment_lists_only_that_section(client, world, org):
         "items"
     ]
     assert [s["code"] for s in item["sections"]] == ["B"]
+
+
+# ---------------------------------------------------------------- the term of /me/offerings; withdrawals and malformed events
+
+
+def test_my_offerings_needs_a_term_that_exists(client, org):
+    """The contract's academic_period_id is a required uuid: no active term is 404 active_term_not_found, an unknown
+    term is 404, and a value that is not a uuid is refused (the id was echoed back before)."""
+    _, teacher_h = org.user("faculty")
+    r = client.get(f"{BASE}/me/offerings", headers=teacher_h)
+    assert (r.status_code, r.json()["detail"]["code"]) == (404, "active_term_not_found")
+    unknown = client.get(f"{BASE}/me/offerings?academic_period_id={new_id()}", headers=teacher_h)
+    assert (unknown.status_code, unknown.json()["detail"]["code"]) == (404, "not_found")
+    assert client.get(f"{BASE}/me/offerings?academic_period_id=not-a-uuid", headers=teacher_h).status_code == 422
+    _, admin = org.user("org-admin")
+    term = make_term(client, admin)
+    ok(client.post(f"{BASE}/terms/{term['id']}/activate", headers=admin))
+    assert ok(client.get(f"{BASE}/me/offerings", headers=teacher_h)) == {"academic_period_id": term["id"], "items": []}
+
+
+def test_a_withdrawal_before_its_confirmation_names_a_section_of_the_offering(client, world):
+    """The row is written with the section's offering, so the foreign key holds on PostgreSQL (SQLite does not
+    enforce it unless asked, hence the pragma): a withdrawal naming a section of another offering is rejected."""
+    from sqlalchemy import text
+
+    w = world
+    stray = {
+        "registration_id": new_id(),
+        "person_id": new_id(),
+        "course_offering_id": new_id(),  # not the offering section A belongs to
+        "section_id": w["a"]["id"],
+        "withdrawn_at": "2026-10-22T09:30:00+00:00",
+    }
+    envelope = {
+        "id": new_id(),
+        "name": roster.WITHDRAWN,
+        "version": 1,
+        "organisation_id": w["org"].id,
+        "occurred_at": "2026-10-22T09:00:00+00:00",
+        "payload": stray,
+    }
+    with SessionLocal() as db:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        assert roster.handle_event(db, envelope) == roster.REJECTED_UNKNOWN_SECTION
+    with SessionLocal() as db:
+        db.execute(text("PRAGMA foreign_keys=ON"))
+        good = {**stray, "course_offering_id": w["o"]["id"]}
+        assert roster.handle_event(db, {**envelope, "id": new_id(), "payload": good}) == roster.APPLIED
+    assert roster_of(client, w)["total"] == 0  # kept as withdrawn, never enrolled
+    late = confirmed(w["o"], w["a"], registration_id=stray["registration_id"])
+    assert deliver("course-registration.confirmed", w["org"].id, late) == roster.STALE
+
+
+@pytest.mark.parametrize("name", ["course-registration.confirmed", "course-registration.withdrawn"])
+def test_a_payload_missing_an_agreed_field_is_rejected_once_and_not_redelivered_forever(client, world, name):
+    w = world
+    event_id = new_id()
+    payload = {"registration_id": new_id(), "section_id": w["a"]["id"]}  # no person_id, no course_offering_id
+    assert deliver(name, w["org"].id, payload, event_id=event_id) == roster.REJECTED_MALFORMED_PAYLOAD
+    assert deliver(name, w["org"].id, payload, event_id=event_id) == roster.DUPLICATE
+    assert roster_of(client, w)["total"] == 0

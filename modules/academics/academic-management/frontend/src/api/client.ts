@@ -29,7 +29,7 @@ export interface MyOffering {
   enrolled_count: number;
 }
 
-/** GET /me/offerings */
+/** GET /me/offerings; academic_period_id is null only for the client-side empty page (404 active_term_not_found). */
 export interface MyOfferings {
   academic_period_id: string | null;
   items: MyOffering[];
@@ -81,9 +81,18 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** GET /me/offerings: the offerings the caller teaches in the active term. Permission academic-management:roster:read. */
-export function getMyOfferings(signal?: AbortSignal): Promise<MyOfferings> {
-  return get<MyOfferings>("/me/offerings", signal);
+/**
+ * GET /me/offerings: the offerings the caller teaches in the active term. Permission academic-management:roster:read.
+ * The contract answers 404 `active_term_not_found` when no term is active; for the widget that is "nothing this
+ * term", not a failure, so it becomes an empty page.
+ */
+export async function getMyOfferings(signal?: AbortSignal): Promise<MyOfferings> {
+  try {
+    return await get<MyOfferings>("/me/offerings", signal);
+  } catch (e) {
+    if (e instanceof AcademicManagementApiError && e.status === 404) return { academic_period_id: null, items: [] };
+    throw e;
+  }
 }
 
 /** GET /offerings/{id}/roster: the enrolled learners of one offering the caller teaches. */

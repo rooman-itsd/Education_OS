@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `GET /me/offerings` needs a term: 404 `active_term_not_found` when none is given or active, 404 for an unknown
+  one, and `academic_period_id` must be a uuid (contract 0.2.3 declares the 404; the widget shows "no courses").
+- Roster consumer: a withdrawal that arrives before its confirmation is recorded only against a section of the
+  offering it names, with that section's offering id; a payload missing an agreed field is rejected once
+  (`rejected:malformed_payload`) and recorded, never redelivered forever.
+- Concurrent creates of a programme's curriculum: the version constraint answers 409 `concurrent_version`.
+- `programme_ids` of an offering must be programmes of the organisation: 422 `unknown_programme` naming the item.
+- `x-permission-any` on `getRoster` and `listMyOfferings` lists the roster keys the guard accepts; a test compares
+  every route's guard with its operation.
 - Contract 0.2.2: `GET /faculty-load` declares its 503 `faculty_directory_unavailable` (ErrorResponse), returned
   while no identity lookup of faculty names is available to modules.
 - Concurrent creates of one code: the database's code constraint answers 409 `duplicate_code`, like the pre-check;

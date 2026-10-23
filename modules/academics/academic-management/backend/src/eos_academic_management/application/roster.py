@@ -39,6 +39,7 @@ REJECTED_OFFERING_NOT_OPEN = "rejected:offering_not_open"
 REJECTED_SECTION_CLOSED = "rejected:section_closed"
 REJECTED_SECTION_FULL = "rejected:section_full"
 REJECTED_UNKNOWN_SECTION = "rejected:unknown_section"
+REJECTED_MALFORMED_PAYLOAD = "rejected:malformed_payload"  # a required payload field is missing
 
 
 def _time(value: object, fallback: object) -> datetime:
@@ -92,11 +93,15 @@ def handle_event(db: Session, envelope: dict) -> str:
         return DUPLICATE
     payload = envelope.get("payload") or {}
     occurred_at = envelope.get("occurred_at")
-    outcome, admitted_to = {
-        CONFIRMED: _confirmed,
-        WITHDRAWN: _withdrawn,
-        SECTION_CHANGED: _section_changed,
-    }[name](db, organisation_id, payload, occurred_at)
+    handler = {CONFIRMED: _confirmed, WITHDRAWN: _withdrawn, SECTION_CHANGED: _section_changed}[name]
+    try:
+        outcome, admitted_to = handler(db, organisation_id, payload, occurred_at)
+    except KeyError:
+        # A payload missing an agreed field can never be applied; redelivering it would only fail the same way,
+        # so the rejection is recorded like the others and the envelope id is not applied again.
+        db.rollback()
+        db.info["organisation_id"] = organisation_id
+        outcome, admitted_to = REJECTED_MALFORMED_PAYLOAD, None
     if admitted_to is not None and _over_capacity(db, admitted_to):
         # A concurrent registration took the last seat between the check and this write: undo this one.
         db.rollback()
@@ -147,15 +152,18 @@ def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) 
     withdrawn_at = _time(p.get("withdrawn_at"), occurred_at)
     if entry is None:
         # The withdrawal arrived before its confirmation: keep it, so the late confirmation is recognised as stale.
-        if repo.get(db, SectionRow, p["section_id"]) is None:
+        # The section must be this organisation's and belong to the offering named, as _admit checks for the other
+        # events; the row's offering is the section's, so the foreign key always holds.
+        section = repo.get(db, SectionRow, p["section_id"])
+        if section is None or section.course_offering_id != p["course_offering_id"]:
             return REJECTED_UNKNOWN_SECTION, None
         db.add(
             RosterEntryRow(
                 organisation_id=organisation_id,
                 registration_id=p["registration_id"],
                 person_id=p["person_id"],
-                course_offering_id=p["course_offering_id"],
-                section_id=p["section_id"],
+                course_offering_id=section.course_offering_id,
+                section_id=section.id,
                 status=repo.WITHDRAWN,
                 enrolled_at=withdrawn_at,
                 withdrawn_at=withdrawn_at,

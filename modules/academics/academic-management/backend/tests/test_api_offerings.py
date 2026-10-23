@@ -9,6 +9,13 @@ from conftest import BASE, assign, make_course, make_offering, make_term, ok, op
 from eos_core.db import new_id  # noqa: E402
 
 HOD = "department-admin"
+PROGRAMME = {
+    "name": "P",
+    "level": "undergraduate",
+    "department_id": "11111111-1111-4111-8111-111111111111",
+    "duration_terms": 2,
+    "credits_required": 8,
+}
 
 
 def setup(client, org, sections=(("A", 2),)):
@@ -169,3 +176,30 @@ def test_an_event_is_written_only_if_its_change_commits(client, org, monkeypatch
     assert outbox(org.id) == before
     assert [s["code"] for s in ok(client.get(f"{BASE}/offerings/{o['id']}/sections", headers=h))["items"]] == ["A"]
     assert service.MODULE == "academic-management"
+
+
+def test_programme_ids_must_be_programmes_of_the_organisation(client, org, other_org):
+    """An unknown programme, including another organisation's, is 422 unknown_programme naming the item; on create
+    and on update. A known one is stored."""
+    h, o, course, term = setup(client, org)
+    _, admin = org.user("org-admin")
+    _, other_admin = other_org.user("org-admin")
+    mine = ok(client.post(f"{BASE}/programmes", json={**PROGRAMME, "code": "MINE"}, headers=admin), 201)
+    theirs = ok(client.post(f"{BASE}/programmes", json={**PROGRAMME, "code": "THEIRS"}, headers=other_admin), 201)
+    body = {"course_id": course["id"], "academic_period_id": term["id"], "sections": [{"code": "Z", "capacity": 1}]}
+    for bad in (theirs["id"], new_id()):
+        r = client.post(f"{BASE}/offerings", json={**body, "programme_ids": [mine["id"], bad]}, headers=h)
+        detail = r.json()["detail"]
+        assert (r.status_code, detail["code"], detail["details"]["field"]) == (
+            422,
+            "unknown_programme",
+            "programme_ids[1]",
+        )
+        r = client.patch(f"{BASE}/offerings/{o['id']}", json={"programme_ids": [bad]}, headers=h)
+        assert (r.status_code, r.json()["detail"]["code"]) == (422, "unknown_programme")
+    assert ok(client.get(f"{BASE}/offerings?programme_id={theirs['id']}", headers=h))["total"] == 0
+    created = ok(client.post(f"{BASE}/offerings", json={**body, "programme_ids": [mine["id"]]}, headers=h), 201)
+    assert created["programme_ids"] == [mine["id"]]
+    assert ok(client.patch(f"{BASE}/offerings/{o['id']}", json={"programme_ids": [mine["id"]]}, headers=h))[
+        "programme_ids"
+    ] == [mine["id"]]

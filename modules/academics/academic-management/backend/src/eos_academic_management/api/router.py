@@ -345,11 +345,11 @@ def get_roster(
 
 @router.get("/me/offerings")
 def list_my_offerings(
-    academic_period_id: str | None = None,
+    academic_period_id: str | None = Query(None, pattern=s.UUID),
     a: Actor = Depends(require(k.ROSTER_READ, k.ROSTER_READ_ALL)),
     db: Session = Depends(get_db),
 ):
-    return svc.list_my_offerings(db, a, academic_period_id)
+    return _run(svc.list_my_offerings, db, a, academic_period_id)
 
 
 @router.get("/faculty-load", response_model=s.FacultyLoadReportOut, response_model_exclude_none=False)

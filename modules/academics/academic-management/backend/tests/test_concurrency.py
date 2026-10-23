@@ -184,11 +184,24 @@ def test_postgres_constraint_names_are_recognised():
             super().__init__("duplicate key value violates unique constraint")
             self.diag = Diag(name)
 
-    assert repo.is_code_conflict(IntegrityError("INSERT", {}, PgError("uq_academic_management_course_code"))) is True
-    assert (
-        repo.is_code_conflict(IntegrityError("INSERT", {}, PgError("uq_academic_management_curriculum_version")))
-        is False
-    )
+    code, version = PgError("uq_academic_management_course_code"), PgError("uq_academic_management_curriculum_version")
+    assert repo.is_code_conflict(IntegrityError("INSERT", {}, code)) is True
+    assert repo.is_code_conflict(IntegrityError("INSERT", {}, version)) is False
+    assert repo.is_version_conflict(IntegrityError("INSERT", {}, version)) is True
+    assert repo.is_version_conflict(IntegrityError("INSERT", {}, code)) is False
+
+
+def test_a_curriculum_version_that_slips_past_the_read_is_409(client, org, monkeypatch):
+    """The race: two creates on one programme read the same versions before either inserted. The database's version
+    constraint refuses the second, which answers 409 concurrent_version instead of failing with a server error."""
+    _, h = org.user(ADMIN)
+    programme = make_programme(client, h)
+    assert ok(client.post(f"{BASE}/programmes/{programme['id']}/curricula", json={}, headers=h), 201)["version"] == 1
+    monkeypatch.setattr(repo, "curricula_of", lambda db, programme_id: [])  # the competing create is not visible
+    r = client.post(f"{BASE}/programmes/{programme['id']}/curricula", json={}, headers=h)
+    assert (r.status_code, r.json()["detail"]["code"]) == (409, "concurrent_version")
+    monkeypatch.undo()
+    assert ok(client.post(f"{BASE}/programmes/{programme['id']}/curricula", json={}, headers=h), 201)["version"] == 2
 
 
 def test_another_integrity_error_is_not_turned_into_a_409(org):

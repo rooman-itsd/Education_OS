@@ -59,4 +59,5 @@ def require(*permissions: str):
             raise HTTPException(err.status, err.body())
         return actor
 
+    dep.permissions = frozenset(permissions)  # read by the test that compares each route with its x-permission
     return dep

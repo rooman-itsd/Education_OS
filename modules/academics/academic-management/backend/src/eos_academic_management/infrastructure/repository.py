@@ -58,6 +58,13 @@ def curriculum_items(db: Session, curriculum_id: str) -> list[CurriculumItemRow]
     return list(db.scalars(query.order_by(CurriculumItemRow.programme_term, CurriculumItemRow.id)))
 
 
+def programmes_by_id(db: Session, programme_ids) -> dict[str, ProgrammeRow]:
+    ids = set(programme_ids)
+    if not ids:
+        return {}
+    return {p.id: p for p in db.scalars(q(db, ProgrammeRow).where(ProgrammeRow.id.in_(ids)))}
+
+
 def courses_by_id(db: Session, course_ids) -> dict[str, CourseRow]:
     ids = set(course_ids)
     if not ids:
@@ -137,18 +144,35 @@ CODE_CONSTRAINTS = {
         ("organisation_id", "course_offering_id", "code"),
     ),
 }
+# The constraint that numbers curriculum versions of one programme (contract `version`, FR-4).
+VERSION_CONSTRAINTS = {
+    "uq_academic_management_curriculum_version": (
+        "academic_management_curriculum",
+        ("organisation_id", "programme_id", "version"),
+    ),
+}
 
 
-def is_code_conflict(err: IntegrityError) -> bool:
-    """True only when `err` is a violation of one of the code constraints above. PostgreSQL names the constraint
-    (psycopg `diag.constraint_name`); SQLite names its columns ("UNIQUE constraint failed: t.a, t.b"). Any other
-    integrity error (another constraint, a foreign key, a NOT NULL) is not a duplicate code."""
+def _violates(err: IntegrityError, constraints: dict[str, tuple[str, tuple[str, ...]]]) -> bool:
+    """True only when `err` is a violation of one of `constraints`. PostgreSQL names the constraint (psycopg
+    `diag.constraint_name`); SQLite names its columns ("UNIQUE constraint failed: t.a, t.b"). Any other integrity
+    error (another constraint, a foreign key, a NOT NULL) does not count."""
     orig = err.orig
     name = getattr(getattr(orig, "diag", None), "constraint_name", None)
     if name:
-        return name in CODE_CONSTRAINTS
+        return name in constraints
     message = str(orig)
     return any(
         message == "UNIQUE constraint failed: " + ", ".join(f"{table}.{column}" for column in columns)
-        for table, columns in CODE_CONSTRAINTS.values()
+        for table, columns in constraints.values()
     )
+
+
+def is_code_conflict(err: IntegrityError) -> bool:
+    """A duplicate code (contract Conflict), and nothing else."""
+    return _violates(err, CODE_CONSTRAINTS)
+
+
+def is_version_conflict(err: IntegrityError) -> bool:
+    """Two concurrent creates numbered a programme's curriculum the same, and nothing else."""
+    return _violates(err, VERSION_CONSTRAINTS)

@@ -115,3 +115,18 @@ def test_the_contract_lists_every_route_this_module_serves(client):
         (p, m) for p, item in CONTRACT["paths"].items() for m in item if m in {"get", "post", "put", "patch", "delete"}
     }
     assert served == declared
+
+
+def test_every_route_is_guarded_by_exactly_the_keys_its_operation_declares(client):
+    """Each route's require() guard holds the operation's x-permission, plus the keys of x-permission-any where the
+    contract lists several; a guard that accepts more or less than the contract says is a drift."""
+    from eos_academic_management.api.router import router
+
+    for route in router.routes:
+        guards = [d.call.permissions for d in route.dependant.dependencies if hasattr(d.call, "permissions")]
+        assert len(guards) == 1, route.path
+        for method in route.methods:
+            op = CONTRACT["paths"][route.path][method.lower()]
+            declared = {op["x-permission"], *op.get("x-permission-any", [])}
+            assert op["x-permission"] in op.get("x-permission-any", [op["x-permission"]]), route.path
+            assert guards[0] == declared, (method, route.path, sorted(guards[0]), sorted(declared))

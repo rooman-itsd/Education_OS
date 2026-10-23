@@ -101,6 +101,25 @@ def _insert_coded(db: Session, row) -> None:
         raise
 
 
+def _insert_versioned(db: Session, row: CurriculumRow) -> None:
+    """Insert a curriculum version. next_version is computed from a read, so two concurrent creates on one programme
+    can pick the same number; the database's version constraint refuses the second, and that refusal, and only that
+    one, becomes a 409 the caller can retry. Any other integrity error is re-raised unchanged."""
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError as err:
+        db.rollback()
+        if repo.is_version_conflict(err):
+            raise AcademicManagementError(
+                409,
+                "concurrent_version",
+                f"version {row.version} of this programme's curriculum was created by a concurrent request; retry",
+                field="version",
+            ) from err
+        raise
+
+
 def _changed(row, changes: dict) -> list[str]:
     changed = []
     for field, value in changes.items():
@@ -528,8 +547,7 @@ def create_curriculum(db: Session, a: Actor, programme_id: str, body: dict) -> d
         items = []
     version = cur.next_version(c.version for c in repo.curricula_of(db, programme.id))
     row = CurriculumRow(organisation_id=a.organisation_id, programme_id=programme.id, version=version, status=cur.DRAFT)
-    db.add(row)
-    db.flush()
+    _insert_versioned(db, row)
     _replace_items(db, row, items)
     db.commit()
     return curriculum_dict(db, row)
@@ -692,6 +710,23 @@ def list_offerings(db: Session, filters: dict, limit: int, offset: int) -> dict:
     return _page([offering_dict(db, o) for o in rows[offset : offset + limit]], len(rows))
 
 
+def _known_programme_ids(db: Session, programme_ids: Iterable[str]) -> list[str]:
+    """CreateOfferingRequest and UpdateOfferingRequest: every programme_id is a programme of the caller's
+    organisation; an unknown one (including another organisation's) is 422 unknown_programme naming the item.
+    An archived programme is still a valid reference: the offering may predate the archive."""
+    ids = list(programme_ids)
+    known = repo.programmes_by_id(db, ids)
+    for index, programme_id in enumerate(ids):
+        if programme_id not in known:
+            raise AcademicManagementError(
+                422,
+                "unknown_programme",
+                f"programme_ids[{index}]: programme not found in your organisation",
+                field=f"programme_ids[{index}]",
+            )
+    return ids
+
+
 def _section_codes_unique(codes: list[str]) -> None:
     seen: list[str] = []
     for code in codes:
@@ -717,7 +752,7 @@ def create_offering(db: Session, a: Actor, body: dict) -> dict:
         course_id=course.id,
         academic_period_id=body["academic_period_id"],
         status=off.PLANNED,
-        programme_ids=list(body.get("programme_ids") or []),
+        programme_ids=_known_programme_ids(db, body.get("programme_ids") or []),
     )
     db.add(row)
     db.flush()
@@ -767,7 +802,10 @@ def get_offering(db: Session, offering_id: str) -> dict:
 
 def update_offering(db: Session, a: Actor, offering_id: str, body: dict) -> dict:
     row = _offering(db, offering_id)
-    changed = _changed(row, {"programme_ids": list(body.get("programme_ids", row.programme_ids) or [])})
+    changes = {}
+    if "programme_ids" in body:
+        changes["programme_ids"] = _known_programme_ids(db, body["programme_ids"] or [])
+    changed = _changed(row, changes)
     if changed:
         _publish(db, a, "offering.updated", {"course_offering_id": row.id, "changed_fields": changed})
     db.commit()
@@ -940,7 +978,16 @@ def get_roster(db: Session, a: Actor, offering_id: str, section_id: str | None, 
 
 
 def list_my_offerings(db: Session, a: Actor, academic_period_id: str | None) -> dict:
-    period = academic_period_id or (repo.active_term(db).id if repo.active_term(db) else None)
+    """The term is the requested one, else the active one (as getFacultyLoad does): 404 active_term_not_found when
+    neither exists, 404 not_found when the requested term is not in the caller's organisation. The contract's
+    academic_period_id is a required uuid, so the report never carries a term that does not exist."""
+    if academic_period_id:
+        term = _term(db, academic_period_id)
+    else:
+        term = repo.active_term(db)
+        if term is None:
+            raise not_found("active_term_not_found", "no academic term was given and no term is active")
+    period = term.id
     mine = repo.active_assignments_of_faculty(db, a.user_id)
     by_offering: dict[str, list[FacultyAssignmentRow]] = {}
     for x in mine:
@@ -948,7 +995,7 @@ def list_my_offerings(db: Session, a: Actor, academic_period_id: str | None) -> 
     items = []
     for offering_id, assigned in by_offering.items():
         row = repo.offering(db, offering_id)
-        if row is None or (period and row.academic_period_id != period):
+        if row is None or row.academic_period_id != period:
             continue
         counts = repo.enrolled_counts(db, row.id)
         sections = repo.sections_of(db, row.id)
