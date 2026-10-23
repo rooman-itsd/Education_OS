@@ -24,3 +24,16 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - threshold alerts and certificate reminders.
 - Alembic chain `budget_grants_0001`: 10 tables, each with `organisation_id` and the `tenant_isolation` policy on Postgres.
 - `config/env.example` lists every key with its default; `module.yaml` status is `in-progress`.
+- Fixes from review:
+  - certificate due dates are period ends, so a certified period covers its due date;
+  - a line that any entry or reappropriation refers to is never deleted;
+  - a grant line is never revised below what is used on it, and a revision re-checks the thresholds;
+  - a head deactivated later doesn't block revising its existing line;
+  - only a draft certificate is decided;
+  - whoever edits or submits a budget becomes its preparer and can't approve it;
+  - malformed event payloads are ignored with the reason;
+  - text fields are never null;
+  - manual spend and certificate periods stay inside the budget year or grant period;
+  - code races answer 409;
+  - the daily job starts on a fresh transaction.
+- Tests: 41, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.

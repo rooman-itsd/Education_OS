@@ -18,6 +18,7 @@ def run_daily(db: Session, day: date | None = None) -> dict:
     """Publish budget-grants.utilisation-certificate.due for every active grant whose next certificate falls due within
     a reminder window (BUDGET_GRANTS_UC_REMINDER_DAYS), once per grant, due date and window."""
     day = day or service.today()
+    db.rollback()  # never inherit an open transaction begun in another scope
     windows = sorted(load_settings().uc_reminder_days, reverse=True)
     with platform_scope():
         grants = [(g.id, g.organisation_id) for g in db.scalars(select(Grant).where(Grant.status == "active"))]

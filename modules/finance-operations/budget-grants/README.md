@@ -40,7 +40,8 @@ Rules the code keeps:
 - **Never spend past a line.** A line's available amount is its allocation less what is committed and spent. Manual spend can't exceed it. Procurement checks `/availability` before approving, and the commitment starts at the purchase order (#221).
 - **Spend from other modules is always recorded.** It's real money, even if it takes a line past its allocation. Finance staff are told when a line crosses 80% and 100%, once each.
 - **Nothing is deleted.** Manual entries are reversed with a reason, and approved budgets change only by reappropriation. Entries from other modules are reversed only by those modules' events.
-- **Preparer and approver are different people,** for budgets, reappropriations and certificates.
+- **Preparer and approver are different people,** for budgets, reappropriations and certificates. For a budget, the preparer is whoever last edited or submitted it.
+- **Certificate due dates are period ends.** A grant starting 2026-04-01 with yearly certificates has due dates 2027-03-31 and so on, so a certificate for that period covers its due date. A returned certificate is redrafted, never certified as it stands.
 - **Every change publishes an event.** It goes to the outbox in the same transaction. Until the audit SDK exists, the outbox is the audit trail.
 
 ### Running the tests

@@ -130,7 +130,7 @@ def test_manual_spend_never_exceeds_available_and_is_reversed_not_deleted(client
         json={"line_id": line, "amount": "850", "date": TODAY, "description": "Travel"},
         headers=org.staff,
     ).json()
-    assert e["kind"] == "actual" and e["source"] == {"module": "manual", "reference": None}
+    assert e["kind"] == "actual" and e["source"] == {"module": "manual", "reference": ""}
     assert [x["percent"] for x in outbox("budget-grants.line.threshold-reached", org.id) if x["line_id"] == line] == [
         80
     ]

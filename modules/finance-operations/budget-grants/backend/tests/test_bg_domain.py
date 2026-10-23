@@ -44,9 +44,11 @@ def test_add_months_keeps_month_ends_valid():
 
 def test_certificate_due_dates():
     start, end = date(2026, 4, 1), date(2028, 3, 31)
-    assert rules.uc_due_dates(start, end, "yearly") == [date(2027, 4, 1), date(2028, 3, 31)]
-    assert rules.uc_due_dates(start, end, "half_yearly")[:2] == [date(2026, 10, 1), date(2027, 4, 1)]
+    assert rules.uc_due_dates(start, end, "yearly") == [date(2027, 3, 31), date(2028, 3, 31)]
+    assert rules.uc_due_dates(start, end, "half_yearly")[:2] == [date(2026, 9, 30), date(2027, 3, 31)]
     assert rules.uc_due_dates(start, end, "on_completion") == [end]
-    assert rules.next_uc_due(start, end, "yearly", None) == date(2027, 4, 1)
-    assert rules.next_uc_due(start, end, "yearly", date(2027, 4, 1)) == date(2028, 3, 31)
+    assert rules.next_uc_due(start, end, "yearly", None) == date(2027, 3, 31)
+    assert rules.next_uc_due(start, end, "yearly", date(2027, 3, 31)) == date(
+        2028, 3, 31
+    )  # a certificate to the period end covers it
     assert rules.next_uc_due(start, end, "yearly", date(2028, 3, 31)) is None

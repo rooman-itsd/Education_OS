@@ -11,7 +11,8 @@ from decimal import Decimal
 
 from eos_core import events
 from eos_core.db import scoped, utcnow
-from sqlalchemy import select
+from sqlalchemy import or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -275,7 +276,7 @@ def expenditure_dict(e: Expenditure) -> dict:
         "amount": money(e.amount),
         "date": _iso(e.date),
         "description": e.description,
-        "source": {"module": e.source_module, "reference": e.source_reference},
+        "source": {"module": e.source_module, "reference": e.source_reference or ""},
         "reversed": e.reversed,
         "document_id": e.document_id,
         "recorded_at": _iso(e.recorded_at),
@@ -327,12 +328,13 @@ def grant_dict(db: Session, g: Grant) -> dict:
         "end_date": _iso(g.end_date),
         "status": g.status,
         "department_id": g.department_id,
-        "investigators": [{"user_id": i.user_id, "name": None, "role": i.role} for i in investigators],
+        "investigators": [{"user_id": i.user_id, "name": "", "role": i.role} for i in investigators],
         "uc_frequency": g.uc_frequency,
         "next_uc_due": _iso(grant_next_uc_due(db, g)),
         "lines": lines,
         "funds_received": [
-            {"amount": money(f.amount), "received_on": _iso(f.received_on), "reference": f.reference} for f in received
+            {"amount": money(f.amount), "received_on": _iso(f.received_on), "reference": f.reference or ""}
+            for f in received
         ],
         "unspent_action": g.unspent_action,
     }
@@ -377,8 +379,17 @@ def create_head(db: Session, actor: Actor, body: dict) -> dict:
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
     h = BudgetHead(organisation_id=actor.organisation_id, **body)
     db.add(h)
-    db.commit()
+    _commit_unique(db, f"budget head code {body['code']} is already used")
     return head_dict(h)
+
+
+def _commit_unique(db: Session, message: str) -> None:
+    """Commit; a concurrent request that took the same unique code answers 409 like the check before it."""
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise conflict("code_taken", message) from e
 
 
 def update_head(db: Session, actor: Actor, head_id: str, body: dict) -> dict:
@@ -387,19 +398,20 @@ def update_head(db: Session, actor: Actor, head_id: str, body: dict) -> dict:
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
     for key, value in body.items():
         setattr(h, key, value)
-    db.commit()
+    _commit_unique(db, f"budget head code {body['code']} is already used")
     return head_dict(h)
 
 
 def _checked_lines(
-    db: Session, items: list[dict], amount_key: str, *, positive: bool
+    db: Session, items: list[dict], amount_key: str, *, positive: bool, existing: set[str] | None = None
 ) -> list[tuple[str, Decimal, str]]:
-    """(budget_head_id, amount, note) for each item: an active head of the organisation, at most once."""
+    """(budget_head_id, amount, note) for each item: a head of the organisation, at most once, and active unless the
+    line already exists (a head deactivated later must not block revising what was sanctioned)."""
     heads = _heads(db)
     seen, out = set(), []
     for i, item in enumerate(items):
         head = heads.get(item["budget_head_id"])
-        if head is None or not head.active:
+        if head is None or (not head.active and head.id not in (existing or set())):
             raise invalid(
                 "unknown_budget_head", "every line needs an active budget head of your organisation", f"lines[{i}]"
             )
@@ -446,9 +458,21 @@ def _budget_exists(db: Session, financial_year: str, department_id: str | None, 
     return db.scalar(q) is not None
 
 
+def line_in_use(db: Session, line_id: str) -> bool:
+    """Whether any entry (even a reversed or released one) or reappropriation refers to the line."""
+    if db.scalar(_q(db, Expenditure).where(Expenditure.line_id == line_id)) is not None:
+        return True
+    q = _q(db, Reappropriation).where(
+        or_(Reappropriation.from_line_id == line_id, Reappropriation.to_line_id == line_id)
+    )
+    return db.scalar(q) is not None
+
+
 def _set_budget_lines(db: Session, b: Budget, lines: list[tuple[str, Decimal, str]]) -> None:
     for old in _lines_of(db, budget_id=b.id):
-        db.delete(old)  # a draft's lines are not yet open for spending, so they have no entries
+        if line_in_use(db, old.id):  # an event can name a line of a draft budget; its record is kept
+            raise conflict("line_in_use", "a budget line with entries cannot be replaced")
+        db.delete(old)
     db.flush()
     for head_id, allocated, note in lines:
         db.add(
@@ -497,6 +521,7 @@ def update_budget(db: Session, actor: Actor, budget_id: str, body: dict) -> dict
         body.get("title") or "",
     )
     _set_budget_lines(db, b, lines)
+    b.prepared_by = actor.user_id  # the person who last shaped it may not approve it
     db.commit()
     return budget_dict(db, b)
 
@@ -505,7 +530,7 @@ def submit_budget(db: Session, actor: Actor, budget_id: str) -> dict:
     b = _get(db, Budget, budget_id, "budget", lock=True)
     if b.status not in rules.EDITABLE_BUDGET_STATUSES:
         raise conflict("not_submittable", f"the budget is {b.status}")
-    b.status = "submitted"
+    b.status, b.prepared_by = "submitted", actor.user_id
     db.commit()
     return budget_dict(db, b)
 
@@ -676,9 +701,20 @@ def list_expenditures(db: Session, filters: dict, cursor: str | None, limit: int
     }
 
 
+def _line_period(db: Session, line: Line) -> tuple[date, date]:
+    if line.kind == "grant":
+        g = _get(db, Grant, line.grant_id, "grant")
+        return g.start_date, g.end_date
+    b = _get(db, Budget, line.budget_id, "budget")
+    return rules.financial_year_bounds(b.financial_year, load_settings().financial_year_start_month)
+
+
 def record_manual_expenditure(db: Session, actor: Actor, body: dict) -> dict:
     line = open_line(db, body["line_id"], lock=True)
     amount = _rule(parse_money, body["amount"])
+    first, last = _line_period(db, line)
+    if not first <= body["date"] <= last:
+        raise invalid("date_outside_period", f"the date must be between {first} and {last}", "date")
     left = line_available(db, line)
     if amount > left:
         raise invalid("exceeds_available", f"amount exceeds the {money(left)} available on the line", "amount")
@@ -747,11 +783,13 @@ def get_grant(db: Session, actor: Actor, grant_id: str) -> dict:
     return grant_dict(db, _readable_grant(db, actor, grant_id))
 
 
-def _grant_values(db: Session, body: dict) -> tuple[dict, list[tuple[str, Decimal, str]], list[dict]]:
+def _grant_values(
+    db: Session, body: dict, existing: set[str] | None = None
+) -> tuple[dict, list[tuple[str, Decimal, str]], list[dict]]:
     sanctioned = _rule(parse_money, body["sanctioned_amount"], "sanctioned_amount")
     if body["end_date"] <= body["start_date"]:
         raise invalid("invalid_period", "end_date must be after start_date", "end_date")
-    lines = _checked_lines(db, body["lines"], "sanctioned", positive=False)
+    lines = _checked_lines(db, body["lines"], "sanctioned", positive=False, existing=existing)
     if sum((x[1] for x in lines), ZERO) != sanctioned:
         raise invalid("lines_not_sanctioned_total", "line totals must equal the sanctioned amount", "lines")
     investigators = body["investigators"]
@@ -808,6 +846,7 @@ def create_grant(db: Session, actor: Actor, body: dict) -> dict:
             )
         )
     _set_investigators(db, g, investigators)
+    db.flush()
     principal = next(i["user_id"] for i in investigators if i["role"] == "principal")
     _publish(
         db,
@@ -834,21 +873,27 @@ def update_grant(db: Session, actor: Actor, grant_id: str, body: dict) -> dict:
     g = _get(db, Grant, grant_id, "grant", lock=True)
     if g.status != "active":
         raise conflict("grant_closed", "a closed grant cannot be revised")
-    values, lines, investigators = _grant_values(db, body)
+    existing = {x.budget_head_id: x for x in _lines_of(db, grant_id=g.id)}
+    values, lines, investigators = _grant_values(db, body, existing=set(existing))
     if _grant_code_taken(db, values["code"], except_id=g.id):
         raise conflict("code_taken", f"grant {values['code']} is already recorded")
-    existing = {x.budget_head_id: x for x in _lines_of(db, grant_id=g.id)}
     wanted = {head_id: (sanctioned, note) for head_id, sanctioned, note in lines}
     totals = line_totals(db, [x.id for x in existing.values()])
+    changed = []
     for head_id, line in existing.items():
         if head_id not in wanted:
-            committed, spent = totals[line.id]
-            if committed or spent:
-                raise conflict("line_in_use", "a grant line with commitments or spend cannot be removed")
+            if line_in_use(db, line.id):
+                raise conflict("line_in_use", "a grant line with entries cannot be removed")
             db.delete(line)
     for head_id, (sanctioned, note) in wanted.items():
         if head_id in existing:
+            committed, spent = totals[existing[head_id].id]
+            if sanctioned < committed + spent:
+                raise conflict(
+                    "below_used", f"a line cannot be revised below the {money(committed + spent)} already used on it"
+                )
             existing[head_id].allocated, existing[head_id].note = sanctioned, note
+            changed.append(existing[head_id])
         else:
             db.add(
                 Line(
@@ -863,7 +908,10 @@ def update_grant(db: Session, actor: Actor, grant_id: str, body: dict) -> dict:
     for key, value in values.items():
         setattr(g, key, value)
     _set_investigators(db, g, investigators)
-    db.commit()
+    db.flush()
+    for line in changed:
+        check_thresholds(db, line)
+    _commit_unique(db, f"grant {values['code']} is already recorded")
     return grant_dict(db, g)
 
 
@@ -955,6 +1003,8 @@ def draft_certificate(db: Session, actor: Actor, grant_id: str, period_from: dat
     g = _get(db, Grant, grant_id, "grant")
     if period_to < period_from:
         raise invalid("invalid_period", "period_to must not be before period_from", "period_to")
+    if period_from < g.start_date or period_to > g.end_date:
+        raise invalid("outside_grant", f"the period must lie within {g.start_date} and {g.end_date}", "period_from")
     lines = _lines_of(db, grant_id=g.id)
     heads = _heads(db)
     receipts = list(db.scalars(_q(db, FundsReceived).where(FundsReceived.grant_id == g.id)))
@@ -1005,7 +1055,7 @@ def decide_certificate(db: Session, actor: Actor, certificate_id: str, decision:
     if decision not in ("approved", "returned"):
         raise invalid("invalid_decision", "a certificate is approved or returned", "decision")
     c = _get(db, UtilisationCertificate, certificate_id, "utilisation certificate", lock=True)
-    if c.status not in ("draft", "returned"):
+    if c.status != "draft":  # a returned certificate is redrafted with POST, never certified as it stands
         raise conflict("not_draft", f"the certificate is {c.status}")
     if c.prepared_by == actor.user_id:
         raise forbidden("you cannot certify a certificate you prepared")

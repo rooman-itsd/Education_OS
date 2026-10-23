@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from bg_support import BASE, TODAY, YEAR, approved_budget, grant, head, outbox
+from bg_support import BASE, YEAR, approved_budget, grant, head, outbox
 from eos_budget_grants.application import consumers, jobs
 from eos_core.db import SessionLocal
 
@@ -126,7 +126,7 @@ def test_budget_vs_spend_report(client, org):
     by = {x["budget_head_id"]: x["id"] for x in b["lines"]}
     client.post(
         f"{BASE}/expenditures",
-        json={"line_id": by[h1["id"]], "amount": "300", "date": TODAY, "description": "x"},
+        json={"line_id": by[h1["id"]], "amount": "300", "date": "2034-06-01", "description": "x"},
         headers=org.staff,
     )
     g = grant(client, org, amount="2000.00")
@@ -146,13 +146,13 @@ def test_budget_vs_spend_report(client, org):
 
 
 def test_certificate_reminders_once_per_window(client, org):
-    g = grant(client, org)  # first certificate due 2027-04-01
+    g = grant(client, org)  # first certificate due 2027-03-31, the end of the first year
     with SessionLocal() as db:
         jobs.run_daily(db, date(2027, 2, 1))  # 59 days: no reminder
-        jobs.run_daily(db, date(2027, 3, 3))  # 29 days: the 30-day reminder
+        jobs.run_daily(db, date(2027, 3, 3))  # 28 days: the 30-day reminder
         jobs.run_daily(db, date(2027, 3, 4))  # still the 30-day window: nothing new
-        jobs.run_daily(db, date(2027, 3, 26))  # 6 days: the 7-day reminder
+        jobs.run_daily(db, date(2027, 3, 26))  # 5 days: the 7-day reminder
     mine = [
         e["days_left"] for e in outbox("budget-grants.utilisation-certificate.due", org.id) if e["grant_id"] == g["id"]
     ]
-    assert mine == [29, 6]
+    assert mine == [28, 5]

@@ -4,7 +4,7 @@ no framework; every amount is a Decimal with two places (the contract's Money is
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 CENT = Decimal("0.01")
@@ -91,13 +91,14 @@ def add_months(day: date, months: int) -> date:
 
 
 def uc_due_dates(start: date, end: date, frequency: str) -> list[date]:
-    """When utilisation certificates fall due: every year or half year from the start, the last on the end date;
-    or only at completion."""
+    """The end of each certificate period: every year or half year from the start (a grant starting 2026-04-01 has
+    yearly periods ending 2027-03-31, 2028-03-31...), the last on the end date; or only the end date. A certificate
+    whose period ends on such a date covers it."""
     if frequency == "on_completion":
         return [end]
     step = 12 if frequency == "yearly" else 6
     dates, k = [], 1
-    while (d := add_months(start, step * k)) < end:
+    while (d := add_months(start, step * k) - timedelta(days=1)) < end:
         dates.append(d)
         k += 1
     return [*dates, end]

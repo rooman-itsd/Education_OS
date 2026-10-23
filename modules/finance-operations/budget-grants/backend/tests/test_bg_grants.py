@@ -6,7 +6,7 @@ from bg_support import BASE, TODAY, grant, head, outbox
 def test_grant_sanction_and_investigator_access(client, org):
     g = grant(client, org)
     assert g["status"] == "active" and g["sanctioned_amount"] == "500000.00" and g["organisation_id"] == org.id
-    assert len(g["lines"]) == 2 and g["next_uc_due"] == "2027-04-01" and g["balance"] == "0.00"
+    assert len(g["lines"]) == 2 and g["next_uc_due"] == "2027-03-31" and g["balance"] == "0.00"
     [event] = [e for e in outbox("budget-grants.grant.sanctioned", org.id) if e["grant_id"] == g["id"]]
     assert event["principal_investigator_id"] == org.ids["faculty"] and event["funder"] == "DST"
     assert client.get(f"{BASE}/grants/{g['id']}", headers=org.faculty).status_code == 200  # an investigator
@@ -143,7 +143,7 @@ def test_funds_spend_certificate_and_close(client, org):
         for e in outbox("budget-grants.utilisation-certificate.submitted", org.id)
         if e["grant_id"] == g["id"]
     ] == ["200.00"]
-    assert client.get(f"{BASE}/grants/{g['id']}", headers=org.research).json()["next_uc_due"] == "2027-04-01"
+    assert client.get(f"{BASE}/grants/{g['id']}", headers=org.research).json()["next_uc_due"] == "2028-03-31"  # covered
     listed = client.get(f"{BASE}/grants/{g['id']}/utilisation-certificates", headers=org.faculty).json()
     assert [c["id"] for c in listed] == [uc["id"]]
 
@@ -190,7 +190,7 @@ def test_my_grants(client, org):
     g = grant(client, org)
     mine = client.get(f"{BASE}/me/grants", headers=org.scholar).json()
     assert [x["id"] for x in mine] == [g["id"]] and mine[0]["my_role"] == "co_investigator"
-    assert mine[0]["next_uc_due"] == "2027-04-01" and mine[0]["balance"] == "0.00"
+    assert mine[0]["next_uc_due"] == "2027-03-31" and mine[0]["balance"] == "0.00"
     assert client.get(f"{BASE}/me/grants", headers=org.faculty).json()[0]["my_role"] == "principal"
     assert client.get(f"{BASE}/me/grants", headers=org.dept).json() == []
     assert client.get(f"{BASE}/me/grants", headers=org.research).status_code == 403

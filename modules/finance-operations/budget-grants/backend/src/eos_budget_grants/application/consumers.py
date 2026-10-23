@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 from eos_core.tenant import is_bypass, organisation_scope
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, StatementError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -183,6 +183,13 @@ def on_payroll_paid(db: Session, p: dict) -> dict:
     return {"result": "spent", "expenditure_id": e.id}
 
 
+REQUIRED_IDS = {
+    PO_ISSUED: ("purchase_order_id", "line_id"),
+    PO_CANCELLED: ("purchase_order_id", "line_id"),
+    INVOICE_PAID: ("vendor_invoice_id", "line_id"),
+    PAYROLL_PAID: ("run_id",),
+}
+
 HANDLERS = {
     PO_ISSUED: on_po_issued,
     PO_CANCELLED: on_po_cancelled,
@@ -196,9 +203,14 @@ def handle(db: Session, name: str, payload: dict) -> dict:
     handler = HANDLERS.get(name)
     if handler is None:
         return _ignored(f"budget-grants does not consume {name}")
-    org = (payload or {}).get("organisation_id")
+    if not isinstance(payload, dict):
+        return _ignored("malformed payload: not an object")
+    org = payload.get("organisation_id")
     if not org:
         return _ignored("the event carries no organisation_id")
+    missing = [k for k in REQUIRED_IDS[name] if not isinstance(payload.get(k), str) or not payload.get(k)]
+    if missing:
+        return _ignored(f"malformed payload: {', '.join(missing)} must be a non-empty string")
     if is_bypass():
         raise RuntimeError("consumers.handle must not run inside platform_scope")
     db.rollback()  # a fresh transaction, so Postgres row-level security is set for this event's organisation
@@ -208,7 +220,7 @@ def handle(db: Session, name: str, payload: dict) -> dict:
         except (BudgetError, rules.RuleError) as e:
             db.rollback()
             return _ignored(getattr(e, "message", str(e)))
-        except (KeyError, TypeError, ValueError) as e:
+        except (KeyError, TypeError, ValueError, StatementError) as e:
             db.rollback()
             return _ignored(f"malformed payload: {e}")
         except IntegrityError:
