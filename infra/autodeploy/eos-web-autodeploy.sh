@@ -4,7 +4,7 @@
 # whenever the built VERSION differs from the one being served.
 set -euo pipefail
 
-REPO="${EOS_REPO:-https://github.com/faizanrooman/Education_OS.git}"
+REPO="${EOS_REPO:-https://github.com/rooman-itsd/Education_OS.git}"
 SRC=/opt/eos-web-dist
 WWW=/var/www/education-os
 

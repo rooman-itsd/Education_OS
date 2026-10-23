@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # One-time install of the auto-deploy timer inside the nginx container. Run as root there:
-#   bash <(curl -fsSL https://raw.githubusercontent.com/faizanrooman/Education_OS/main/infra/autodeploy/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/rooman-itsd/Education_OS/main/infra/autodeploy/install.sh)
 set -euo pipefail
-RAW="https://raw.githubusercontent.com/faizanrooman/Education_OS/main"
+RAW="https://raw.githubusercontent.com/rooman-itsd/Education_OS/main"
 
 # Guard: this belongs inside the nginx container, not on the Proxmox host.
 if ! command -v nginx >/dev/null || [ ! -d /etc/nginx/sites-available ]; then

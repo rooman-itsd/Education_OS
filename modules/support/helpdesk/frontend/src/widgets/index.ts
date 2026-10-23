@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "@eos/ui-kit";
+import { OpenByPriorityWidget } from "./OpenByPriorityWidget";
 
 /**
  * Dashboard widgets exported by helpdesk.
@@ -7,4 +8,14 @@ import type { DashboardWidget } from "@eos/ui-kit";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's generated API client in ../api.
  */
-export const widgets: DashboardWidget[] = [];
+export const widgets: DashboardWidget[] = [
+  {
+    id: "helpdesk.open-by-priority",
+    title: "Open tickets by priority",
+    permission: "helpdesk:ticket:read",
+    size: "1x1",
+    kind: "list",
+    subtitle: "Your queues",
+    component: OpenByPriorityWidget,
+  },
+];
