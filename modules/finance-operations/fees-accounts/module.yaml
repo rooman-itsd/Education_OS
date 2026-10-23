@@ -26,8 +26,15 @@ consumes_events:
   - payment-sbiepay.payment.succeeded
   - payment-sbiepay.payment.failed
   - payment-sbiepay.payment.refunded
-  # Pending in the admissions contract; named in docs/architecture/ARCHITECTURE.md. Raises the admission fee invoice.
+  # Raises the admission (confirmation) fee invoice. Needs a person id in the payload; asked on #192.
   - admissions.application.accepted
+  # Agreed with hostel, transport and library on #175: raise and cancel their fee invoices.
+  - hostel.allocation.confirmed
+  - hostel.allocation.cancelled
+  - transport.pass.issued
+  - transport.pass.cancelled
+  - library.fine.raised
+  - library.fine.waived
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
