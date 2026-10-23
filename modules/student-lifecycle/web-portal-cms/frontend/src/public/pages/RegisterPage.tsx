@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { Button, ErrorState } from "@eos/ui-kit";
+import { Button, ButtonLink, ErrorState } from "@eos/ui-kit";
 import { APP_URL, type PublicRoute } from "../content";
 import { BrandedLoader } from "../components/BrandedLoader";
 import { AcademyPicker } from "../components/AcademyPicker";
@@ -7,6 +7,7 @@ import {
   getAcademyTypes,
   PublicApiError,
   register,
+  verifyRegistration,
   type AcademyType,
   type RegisteredOrganisation,
 } from "../../api/public-client";
@@ -19,11 +20,13 @@ import {
  * as one message. There is no plan field: every organisation starts on the free trial (billing),
  * and paid plans are chosen after approval.
  *
- * On success the page says the registration is waiting for approval by the Education OS team; it
- * never claims approval. Product decision: there is no email-verification step in this journey.
- * NOTE: platform/tenancy still creates the organisation as `pending_verification` and only accepts
- * approval from `pending_approval`; until tenancy can register straight into `pending_approval`
- * (an owner change, requested from Faizan), a super admin has to move the organisation on first.
+ * Lifecycle (platform/tenancy): register → `pending_verification` → POST /register/verify →
+ * `pending_approval` → super admin approves → `active`. The administrator's email is verified with
+ * the 48-hour token tenancy emails them; in dev mode (EOS_DEV_MODE=true) the register response carries
+ * `verification_token`, and the page verifies with it at once. Otherwise it shows a "check your email"
+ * step where the token is pasted. Only after verification does the page say the registration is
+ * waiting for approval (or, if tenancy auto-approved, that the organisation is active); it never
+ * claims approval itself and never calls an admin endpoint.
  */
 
 /** platform/tenancy SLUG_RE and RESERVED (eos_tenancy/application/service.py). */
@@ -115,7 +118,13 @@ export function RegisterPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ org: RegisteredOrganisation; email: string } | null>(null);
+  /** Registered, email not yet verified: the "check your email" step. */
+  const [registered, setRegistered] = useState<RegisteredOrganisation | null>(null);
+  const [token, setToken] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  /** Verified: `status` is tenancy's answer, pending_approval unless it auto-approved. */
+  const [done, setDone] = useState<{ org: RegisteredOrganisation; email: string; status: string } | null>(null);
 
   const loadTypes = () => {
     setLoadState("loading");
@@ -166,8 +175,19 @@ export function RegisterPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
         admin: { name: form.name.trim(), email: form.email.trim(), password: form.password },
         accepted_terms: true,
       });
-      setDone({ org, email: form.email.trim() });
       window.scrollTo({ top: 0 });
+      if (org.verification_token) {
+        // Dev mode: tenancy handed us the token instead of emailing it; verify straight away.
+        try {
+          const v = await verifyRegistration(org.verification_token);
+          setDone({ org, email: form.email.trim(), status: v.status });
+          return;
+        } catch {
+          // Fall through to the token step, prefilled, so the visitor can still finish.
+          setToken(org.verification_token);
+        }
+      }
+      setRegistered(org);
     } catch (err) {
       if (err instanceof PublicApiError) {
         if (err.status === 409) {
@@ -190,31 +210,116 @@ export function RegisterPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
     }
   };
 
+  const onVerify = async (e: FormEvent) => {
+    e.preventDefault();
+    if (verifying || !registered) return;
+    const t = token.trim();
+    if (!t) {
+      setVerifyError("Paste the verification token from the email.");
+      return;
+    }
+    setVerifying(true);
+    setVerifyError(null);
+    try {
+      const v = await verifyRegistration(t);
+      setDone({ org: registered, email: form.email.trim(), status: v.status });
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      if (err instanceof PublicApiError && (err.status === 400 || err.status === 404)) {
+        setVerifyError("That verification token isn't valid or has expired. Check the email and try again.");
+      } else {
+        setVerifyError("Couldn't reach the service. Please try again.");
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const tick = (
+    <span className="wpc-reg__done-mark" aria-hidden>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
+  );
+  const backHome = (
+    <a className="wpc-link" href="#/" onClick={(e) => { e.preventDefault(); onNavigate("home"); }}>
+      Back to home
+    </a>
+  );
+
   if (done) {
+    const active = done.status === "active";
     return (
       <div className="wpc-page wpc-reg">
         <div className="wpc-container wpc-reg__done" role="status">
-          <span className="wpc-reg__done-mark" aria-hidden>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12.5l4.5 4.5L19 7.5" />
-            </svg>
-          </span>
-          <h1 className="wpc-reg__title">Waiting for approval</h1>
+          {tick}
+          <h1 className="wpc-reg__title">{active ? "Approved, you can sign in" : "Waiting for approval"}</h1>
           <p className="wpc-reg__lead">
-            Your organisation registration has been submitted successfully and is waiting for approval by the
-            Education OS administration team.
+            {active
+              ? "Your email is verified and your organisation is active."
+              : "Your email is verified. Your organisation registration is waiting for approval by the Education OS administration team."}
           </p>
           <ol className="wpc-reg__next">
-            <li>The Education OS team reviews your organisation and academy package.</li>
+            {!active && <li>The Education OS team reviews your organisation and academy package.</li>}
             <li>
-              Once approved, sign in as the organisation administrator with <strong>{done.email}</strong>.
+              Your organisation's short name is <strong>{done.org.slug}</strong>; you'll need it at sign-in.
+            </li>
+            <li>
+              {active ? "Sign in" : "Once approved, sign in"} as the organisation administrator with{" "}
+              <strong>{done.email}</strong>.
             </li>
           </ol>
           <div className="wpc-reg__actions">
-            <a className="wpc-link" href="#/" onClick={(e) => { e.preventDefault(); onNavigate("home"); }}>
-              Back to home
-            </a>
+            {active && (
+              <ButtonLink variant="primary" href={APP_URL}>
+                Sign in
+              </ButtonLink>
+            )}
+            {backHome}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (registered) {
+    return (
+      <div className="wpc-page wpc-reg">
+        <div className="wpc-container wpc-reg__done">
+          {tick}
+          <h1 className="wpc-reg__title">Check your email</h1>
+          <p className="wpc-reg__lead" role="status">
+            We sent a verification token to <strong>{form.email.trim()}</strong>. Paste it below to verify your
+            email for <strong>{registered.name}</strong>. The token is valid for 48 hours.
+          </p>
+          <form className="wpc-reg__form" onSubmit={onVerify} noValidate>
+            <div className="wpc-field">
+              <label htmlFor={`${uid}-token`}>Verification token</label>
+              <input
+                id={`${uid}-token`}
+                type="text"
+                autoComplete="one-time-code"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={token}
+                aria-invalid={verifyError ? true : undefined}
+                aria-describedby={verifyError ? `${uid}-token-err` : undefined}
+                onChange={(e) => setToken(e.target.value)}
+              />
+              {verifyError && (
+                <p id={`${uid}-token-err`} className="wpc-reg__err" role="alert">
+                  {verifyError}
+                </p>
+              )}
+            </div>
+            <div className="wpc-reg__actions">
+              <Button variant="primary" type="submit" disabled={verifying} aria-busy={verifying || undefined}>
+                {verifying ? "Verifying…" : "Verify email"}
+              </Button>
+              {backHome}
+            </div>
+          </form>
         </div>
       </div>
     );

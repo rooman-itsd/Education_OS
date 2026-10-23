@@ -2904,9 +2904,9 @@
   margin: 0;
   padding: 0.9rem 1.1rem;
   border-radius: var(--r-md);
-  background: #fef2f2;
-  box-shadow: inset 3px 0 0 #b91c1c;
-  color: #991b1b;
+  background: var(--eos-danger-tint);
+  box-shadow: inset 3px 0 0 var(--eos-danger), 0 0 0 1px var(--eos-danger-ring);
+  color: var(--eos-danger);
   font-weight: 500;
 }
 .wpc-reg__section {
@@ -2929,7 +2929,7 @@
 }
 .wpc-reg__err {
   margin: 0.4rem 0 0;
-  color: #b91c1c;
+  color: var(--eos-danger);
   font-size: var(--fs-small);
   font-weight: 500;
 }
@@ -2969,7 +2969,7 @@
   box-shadow: inset 0 0 0 2px var(--c-accent-strong);
 }
 .wpc-field input[aria-invalid="true"] {
-  box-shadow: inset 0 0 0 2px #b91c1c;
+  box-shadow: inset 0 0 0 2px var(--eos-danger), 0 0 0 3px var(--eos-danger-ring);
 }
 .wpc-reg__submit {
   display: grid;
@@ -3057,7 +3057,7 @@
   box-shadow: inset 0 0 0 1px var(--c-ink-2), var(--sh-hover);
 }
 .wpc-ap__card.is-selected {
-  background: #fffaf6;
+  background: color-mix(in srgb, var(--c-accent-soft) 30%, var(--c-surface));
   box-shadow: inset 0 0 0 2px var(--c-accent-strong);
 }
 /* The real radio stays in the page for keyboards and screen readers; the card is its visible face. */
@@ -3089,7 +3089,7 @@
 .wpc-ap__card.is-selected .wpc-ap__tick {
   background: var(--c-accent-strong);
   box-shadow: none;
-  color: #ffffff;
+  color: var(--c-surface);
 }
 .wpc-ap__title {
   color: var(--c-ink);

@@ -12,13 +12,30 @@ type Reply = { status: number; body?: unknown } | "network-error" | Promise<neve
 const json = (status: number, body: unknown) =>
   Promise.resolve({ ok: status < 400, status, statusText: "", json: async () => body } as Response);
 
+/** What tenancy returns from POST /register in production: the token goes by email, not in the body. */
+const REGISTERED = { id: "o1", slug: "riverside-sports-college", name: "Riverside Sports College", academy_type: "sports-college", status: "pending_verification" };
+/** The same in dev mode (EOS_DEV_MODE=true): the token is in the body. */
+const REGISTERED_DEV = { ...REGISTERED, verification_token: "tok-dev-123" };
+const VERIFIED = { id: "o1", slug: "riverside-sports-college", status: "pending_approval" };
+
 /**
- * fetch stub routed by path: GET /tenancy/academy-types and POST /tenancy/register answer as given;
- * "network-error" rejects like an unreachable server. Every call goes through the real public-client.
+ * fetch stub routed by path: GET /tenancy/academy-types, POST /tenancy/register and POST
+ * /tenancy/register/verify answer as given; "network-error" rejects like an unreachable server.
+ * Every call goes through the real public-client.
  */
-function mockApi({ types = { status: 200, body: TYPES } as Reply, register = { status: 201, body: {} } as Reply } = {}) {
+function mockApi({
+  types = { status: 200, body: TYPES } as Reply,
+  register = { status: 201, body: REGISTERED_DEV } as Reply,
+  verify = { status: 200, body: VERIFIED } as Reply,
+} = {}) {
   const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
-    const reply = url.endsWith("/tenancy/academy-types") ? types : url.endsWith("/tenancy/register") ? register : null;
+    const reply = url.endsWith("/tenancy/academy-types")
+      ? types
+      : url.endsWith("/tenancy/register")
+        ? register
+        : url.endsWith("/tenancy/register/verify")
+          ? verify
+          : null;
     if (!reply) return Promise.reject(new Error(`unexpected ${url}`));
     if (reply === "network-error") return Promise.reject(new TypeError("Failed to fetch"));
     if (reply instanceof Promise) return reply;
@@ -29,6 +46,8 @@ function mockApi({ types = { status: 200, body: TYPES } as Reply, register = { s
 }
 
 const registerCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([url]) => String(url).endsWith("/tenancy/register"));
+const verifyCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([url]) => String(url).endsWith("/tenancy/register/verify"));
+const verifyBody = (f: ReturnType<typeof mockApi>, i = 0) => JSON.parse(String(verifyCalls(f)[i]![1]?.body));
 
 async function renderReady() {
   render(<RegisterPage onNavigate={() => {}} />);
@@ -140,15 +159,12 @@ describe("RegisterPage: the form", () => {
 });
 
 describe("RegisterPage: submitting to POST /tenancy/register", () => {
-  it("sends exactly the contract's fields (trimmed, terms accepted, no plan) and shows the confirmation", async () => {
-    const f = mockApi({ register: { status: 201, body: { id: "o1", slug: "riverside-sports-college", name: "Riverside Sports College", academy_type: "sports-college", status: "pending_verification" } } });
+  it("sends exactly the contract's fields (trimmed, terms accepted, no plan)", async () => {
+    const f = mockApi();
     await renderReady();
     fillValidForm();
     submit();
-    expect(await screen.findByRole("heading", { name: "Waiting for approval" })).toBeTruthy();
-    expect(screen.getByText(/waiting for approval by the Education OS administration team/)).toBeTruthy();
-    expect(screen.getByText("asha@riverside.example.com")).toBeTruthy();
-    expect(screen.queryByText(/verify your email/i)).toBeNull();
+    await screen.findByRole("heading", { name: "Waiting for approval" });
 
     const [, init] = registerCalls(f)[0]!;
     expect(init?.method).toBe("POST");
@@ -159,6 +175,89 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
       admin: { name: "Asha Rao", email: "asha@riverside.example.com", password: "Passw0rd!x" },
       accepted_terms: true,
     });
+  });
+
+  it("dev mode: verifies with the token from the register response, then shows 'Waiting for approval' with the short name", async () => {
+    const f = mockApi({ register: { status: 201, body: REGISTERED_DEV } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    expect(await screen.findByRole("heading", { name: "Waiting for approval" })).toBeTruthy();
+    expect(verifyCalls(f)).toHaveLength(1);
+    expect(verifyCalls(f)[0]![1]?.method).toBe("POST");
+    expect(verifyBody(f)).toEqual({ token: "tok-dev-123" });
+    expect(screen.getByText(/Your email is verified/)).toBeTruthy();
+    expect(screen.getByText(/waiting for approval by the Education OS administration team/)).toBeTruthy();
+    expect(screen.getByText("riverside-sports-college")).toBeTruthy();
+    expect(screen.getByText("asha@riverside.example.com")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Check your email" })).toBeNull();
+  });
+
+  it("dev mode: when tenancy auto-approves (verify returns active) it says the organisation is approved and offers sign-in", async () => {
+    mockApi({ verify: { status: 200, body: { ...VERIFIED, status: "active" } } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    expect(await screen.findByRole("heading", { name: "Approved, you can sign in" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/app");
+    expect(screen.getByText("riverside-sports-college")).toBeTruthy();
+    expect(screen.queryByText(/waiting for approval/i)).toBeNull();
+  });
+
+  it("production: without a token in the response it asks the visitor to check their email, and does not claim approval", async () => {
+    const f = mockApi({ register: { status: 201, body: REGISTERED } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
+    expect(screen.getByText("asha@riverside.example.com")).toBeTruthy();
+    expect(screen.getByLabelText("Verification token")).toBeTruthy();
+    expect(verifyCalls(f)).toHaveLength(0);
+    expect(screen.queryByRole("heading", { name: "Waiting for approval" })).toBeNull();
+  });
+
+  it("production: pasting the emailed token posts it to /tenancy/register/verify, then shows 'Waiting for approval'", async () => {
+    const f = mockApi({ register: { status: 201, body: REGISTERED } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    await screen.findByRole("heading", { name: "Check your email" });
+    fireEvent.change(screen.getByLabelText("Verification token"), { target: { value: "  tok-from-email  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    expect(await screen.findByRole("heading", { name: "Waiting for approval" })).toBeTruthy();
+    expect(verifyCalls(f)).toHaveLength(1);
+    expect(verifyBody(f)).toEqual({ token: "tok-from-email" });
+    expect(screen.getByText("riverside-sports-college")).toBeTruthy();
+  });
+
+  it.each([400, 404])("production: a wrong token (%i) shows a message, keeps the input and its value, and does not move on", async (status) => {
+    const f = mockApi({ register: { status: 201, body: REGISTERED }, verify: { status, body: { detail: "invalid or expired token" } } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    await screen.findByRole("heading", { name: "Check your email" });
+    const input = screen.getByLabelText("Verification token") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "wrong-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/isn't valid or has expired/);
+    expect(screen.getByLabelText("Verification token")).toBe(input);
+    expect(input.value).toBe("wrong-token");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(verifyCalls(f)).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Waiting for approval" })).toBeNull();
+    await waitFor(() => expect((screen.getByRole("button", { name: "Verify email" }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("production: an empty token is not sent", async () => {
+    const f = mockApi({ register: { status: 201, body: REGISTERED } });
+    await renderReady();
+    fillValidForm();
+    submit();
+    await screen.findByRole("heading", { name: "Check your email" });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    expect(await screen.findByText("Paste the verification token from the email.")).toBeTruthy();
+    expect(verifyCalls(f)).toHaveLength(0);
   });
 
   it("disables the button while sending, so the form cannot be submitted twice", async () => {
