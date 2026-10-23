@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (backend built and tested; widget and host registration to come)
+**Status:** in-progress (backend and widget built and tested; `apps/frontend` and `apps/backend` registration to come)
 
 Ticketing for all user roles with categories and routing.
 
@@ -62,8 +62,19 @@ noted in `application/service.py` where they are decided.
   an identity mapping from profile roles to them.
 - A daily call of `application.jobs.run_auto_close`, until `platform/scheduler` delivers `scheduler.job.due`.
 
-Not built yet: the Support Staff widget `helpdesk.open-by-priority` (it reads `GET /stats/open-by-priority`, served
-above) and the registration in `apps/backend` and `apps/frontend`.
+## Frontend
+`frontend/src/widgets/OpenByPriorityWidget.tsx` is the Support Staff widget `helpdesk.open-by-priority`
+(`platform/identity/config/dashboards/support-staff.yaml` already lists it): open tickets in the caller's queues,
+one row per priority, urgent first, with unassigned, assigned-to-you and on-hold counts, from
+`GET /api/v1/helpdesk/stats/open-by-priority` (permission `helpdesk:ticket:read`). It uses `@eos/ui-kit` (`List`,
+`ListRow`, `Badge`, `SkeletonLines`, `EmptyState`, `ErrorState`). While the API is not mounted or unreachable (404,
+502, 503, network failure) it says "Helpdesk data is not available yet."; a 401 or 403 offers no retry.
+`frontend/src/api/client.ts` is a small typed client matching the contract's `OpenByPriority`, until the repo has a
+generated client. Tests are in `frontend/tests/` (Vitest and Testing Library).
+
+Not built yet: links from each row to a filtered ticket list (that helpdesk page does not exist), the lead's
+`scope=all` view (no dashboard layout for a support lead exists; the widget uses the default `my_queues`), and the
+registration in `apps/backend` and `apps/frontend`.
 
 ## Run the checks
 ```
@@ -73,6 +84,7 @@ PYTHONPATH=src:../../../../packages/core/src:../../../../packages/testing/src py
 cd modules/support/helpdesk/db && alembic upgrade head                   # own tables only; EOS_DATABASE_URL
 ruff check --config tools/config/ruff.toml modules/support/helpdesk     # from the repo root
 ruff format --config tools/config/ruff.toml --check modules/support/helpdesk
+pnpm --filter @eos/helpdesk typecheck && pnpm --filter @eos/helpdesk test   # widget; after pnpm install at the root
 ```
 Instead of `PYTHONPATH`, the module can be installed with its test extras, from the repo root:
 `pip install ./packages/core ./packages/testing "./modules/support/helpdesk/backend[test]"`. It does not depend on

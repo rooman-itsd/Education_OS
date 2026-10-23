@@ -15,11 +15,23 @@ const widgetModules = import.meta.glob<{ widgets?: DashboardWidget[] }>(
   "../../../modules/*/*/frontend/src/widgets/index.ts",
 );
 
+let registering: Promise<string[]> | undefined;
+
 /**
  * Register the widgets of every module listed in config/modules.enabled.yaml.
  * Entries are `<domain>/<module>` paths relative to modules/, e.g. `academics/lms`.
+ * Runs once: later calls (React StrictMode runs effects twice in development) get the same result
+ * instead of registering every widget again. A failed run is retried by the next call.
  */
-export async function registerEnabledModules(): Promise<string[]> {
+export function registerEnabledModules(): Promise<string[]> {
+  registering ??= registerOnce().catch((e: unknown) => {
+    registering = undefined;
+    throw e;
+  });
+  return registering;
+}
+
+async function registerOnce(): Promise<string[]> {
   const enabled = (parse(enabledRaw) as Enabled | null)?.modules ?? [];
   const loaded: string[] = [];
   for (const name of enabled) {
