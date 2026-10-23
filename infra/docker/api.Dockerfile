@@ -12,9 +12,11 @@ COPY integrations integrations
 COPY apps/backend apps/backend
 COPY tools/scripts/enabled-modules.py tools/scripts/enabled-modules.py
 # Everything apps/backend/config/modules.enabled.yaml enables (tools/scripts/enabled-modules.py).
+# The script's output is assigned first: a `$(...)` inside the pip command would hide its failure and build
+# an image that cannot start.
 RUN pip install --no-cache-dir pyyaml \
- && pip install --no-cache-dir -e packages/core -e packages/testing \
-      $(python tools/scripts/enabled-modules.py install --pip) -e apps/backend
+ && enabled="$(python tools/scripts/enabled-modules.py install --pip)" \
+ && pip install --no-cache-dir -e packages/core -e packages/testing $enabled -e apps/backend
 ENV EOS_REPO_ROOT=/repo EOS_DEV_MODE=false
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')" || exit 1
