@@ -89,4 +89,13 @@ describe("inventory-equipment.my-loans widget", () => {
     expect(await screen.findByText("Violin VN-03")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("survives a loan whose due date is missing or malformed and whose item was deleted", async () => {
+    const { loanItems, shortDate } = await import("../src/api/client");
+    expect(shortDate("not-a-date")).toBe("—");
+    expect(shortDate(null)).toBe("—");
+    expect(shortDate("2026-10-30T10:00:00+00:00")).toBe("30 Oct");
+    expect(loanItems({ lines: [{ item_name: null, unit_tag: "VN-03", quantity: 1 }] } as never)).toBe("Item VN-03");
+    expect(loanItems({ lines: [{ item_name: "Reed", unit_tag: null, quantity: 2.5 }] } as never)).toBe("Reed × 2.5");
+  });
 });

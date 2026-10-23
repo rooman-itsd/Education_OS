@@ -61,9 +61,43 @@ describe("inventory-equipment.low-stock widget", () => {
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "", json: async () => lines });
     vi.stubGlobal("fetch", fetchMock);
     render(<LowStockWidget role="facility-staff" />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not load low stock");
+    expect((await screen.findByRole("alert")).textContent).toContain("Inventory data is not available yet.");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Rosin")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers no retry when the session has expired (401) or access is refused (403)", async () => {
+    vi.stubGlobal("fetch", answer(403, { detail: { code: "forbidden" } }));
+    render(<LowStockWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("You do not have access to this.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    cleanup();
+    vi.stubGlobal("fetch", answer(401, { detail: "token expired" }));
+    render(<LowStockWidget role="facility-staff" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Sign in again to see this.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("names a server fault without blaming the connection, and still retries", async () => {
+    vi.stubGlobal("fetch", answer(500, { detail: "boom" }));
+    render(<LowStockWidget role="facility-staff" />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Could not load low stock");
+    expect(alert.textContent).not.toContain("connection");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("formats quantities without float noise and caps the list at six rows", async () => {
+    const many: LowStockLine[] = [
+      { ...lines[1]!, item_id: "f", item_name: "Flour", available: 10.200000000000001, reorder_level: 12.5, unit_of_measure: "kg" },
+      ...Array.from({ length: 8 }, (_, i) => ({ ...lines[1]!, item_id: `x${i}`, item_name: `Item ${i}` })),
+    ];
+    vi.stubGlobal("fetch", answer(200, many));
+    render(<LowStockWidget role="facility-staff" />);
+    expect(await screen.findByText("10.2 kg left")).toBeTruthy();
+    expect(screen.getByText("Reorder level 12.5 kg")).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(7); // six rows and the "more" row
+    expect(screen.getByText("3 more")).toBeTruthy();
   });
 });

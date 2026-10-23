@@ -76,7 +76,7 @@ describe("inventory-equipment.overdue-loans widget", () => {
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "", json: async () => page([loan({})]) });
     vi.stubGlobal("fetch", fetchMock);
     render(<OverdueLoansWidget role="equipment-manager" />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not load overdue loans");
+    expect((await screen.findByRole("alert")).textContent).toContain("Inventory data is not available yet.");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Tripod")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);

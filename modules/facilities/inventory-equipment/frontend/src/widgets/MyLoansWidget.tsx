@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import { listLoans, loanItems, shortDate, type Loan, type LoanStatus } from "../api/client";
+import { listLoans, loanItems, shortDate, type Loan, type LoanStatus, describeFailure, type Failure } from "../api/client";
 
-type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; data: Loan[]; total: number };
+type State = { kind: "loading" } | { kind: "error"; failure: Failure } | { kind: "ready"; data: Loan[]; total: number };
 type Tone = "danger" | "warning" | "info" | "success" | "neutral";
 
 /** Open loan statuses in words, and the tone of each; status always comes with a word, never colour alone. */
@@ -35,11 +35,11 @@ export function MyLoansWidget(_props: WidgetProps) {
     setState({ kind: "loading" });
     listLoans({ scope: "mine", open: true, page_size: 50 }, signal)
       .then((page) => {
-        const data = [...page.items].sort((a, b) => a.due_at.localeCompare(b.due_at));
+        const data = [...page.items].sort((a, b) => (a.due_at ?? "").localeCompare(b.due_at ?? ""));
         setState({ kind: "ready", data, total: page.total });
       })
       .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error" });
+        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error", failure: describeFailure(e, "your loans") });
       });
   }, []);
 
@@ -51,9 +51,10 @@ export function MyLoansWidget(_props: WidgetProps) {
 
   if (state.kind === "loading") return <SkeletonLines lines={4} />;
   if (state.kind === "error") {
+    const { title, detail, retry } = state.failure;
     return (
-      <ErrorState title="Could not load your loans" onRetry={() => load()}>
-        Check your connection and try again.
+      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+        {detail}
       </ErrorState>
     );
   }

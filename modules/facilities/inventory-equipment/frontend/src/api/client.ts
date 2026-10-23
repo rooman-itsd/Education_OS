@@ -22,7 +22,8 @@ export type LoanStatus =
 /** contract LowStockLine */
 export interface LowStockLine {
   item_id: string;
-  item_name: string;
+  /** Null when the item was deleted after the loan was made. */
+  item_name: string | null;
   category_id?: string;
   available: number;
   reorder_level: number;
@@ -118,14 +119,43 @@ export function listLoans(query: LoanQuery = {}, signal?: AbortSignal): Promise<
   return get<LoanPage>(`/loans${qs ? `?${qs}` : ""}`, signal);
 }
 
+/** A quantity for display: no float noise ("10.200000000000001" is "10.2"), at most two decimals. */
+export function qty(n: number): string {
+  return Number.isFinite(n) ? n.toLocaleString("en-GB", { maximumFractionDigits: 2 }) : "—";
+}
+
 /** "Violin VN-03, Music stand × 2": what a loan holds, for one line of a widget row. */
 export function loanItems(loan: Loan): string {
   return loan.lines
-    .map((l) => (l.unit_tag ? `${l.item_name} ${l.unit_tag}` : l.quantity > 1 ? `${l.item_name} × ${l.quantity}` : l.item_name))
+    .map((l) => {
+      const name = l.item_name ?? "Item";
+      return l.unit_tag ? `${name} ${l.unit_tag}` : l.quantity > 1 ? `${name} × ${qty(l.quantity)}` : name;
+    })
     .join(", ");
 }
 
-/** "30 Oct" */
-export function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+/** "30 Oct"; "—" when the value is missing or not a date (Date gives "Invalid Date" instead of throwing). */
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+export interface Failure {
+  title: string;
+  detail?: string;
+  retry: boolean;
+}
+
+/**
+ * What a widget's error state says, as the other modules' widgets do. A missing or unreachable service (404, 502,
+ * 503, network failure) is "not available yet", not the user's connection; retrying cannot fix 401 or 403.
+ */
+export function describeFailure(e: unknown, what: string): Failure {
+  if (!(e instanceof InventoryApiError) || [404, 502, 503].includes(e.status)) {
+    return { title: "Inventory data is not available yet.", retry: true };
+  }
+  if (e.status === 401) return { title: "Sign in again to see this.", retry: false };
+  if (e.status === 403) return { title: "You do not have access to this.", retry: false };
+  return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
 }
