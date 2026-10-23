@@ -2,7 +2,7 @@
 
 **Domain:** finance-operations
 **Kind:** feature
-**Status:** in-progress (backend built; widgets next)
+**Status:** in-progress (backend and widgets built; mounting in apps/backend pending)
 
 Fee structures, invoices, online and counter payments, receipts, concessions, refunds, ledgers and the collection
 reports behind the Applicant, Student, Finance Staff and Management dashboards. Requirements:
@@ -75,6 +75,23 @@ alembic -x url=postgresql+psycopg://... upgrade head
 - **People are identity users.** Until student-information maps users to people, a person's `person_id` is their identity user id; `/me/*` relies on it.
 - **Days are UTC.** That applies to due dates, overdue and reports, until the organisation's time zone is available to modules.
 - **Applicant invoices from admissions** are raised only when `admissions.application.accepted` carries a person or user id (#192).
+
+## Frontend
+
+`frontend/src/widgets/index.ts` exports the five dashboard widgets. The role layouts in
+`platform/identity/config/dashboards/` place them, and `apps/frontend/config/modules.enabled.yaml` registers the module.
+
+| Widget | Dashboard | Endpoint | Permission |
+|---|---|---|---|
+| `fees-accounts.fee-due` | Applicant | `GET /me/dues` | `fees-accounts:self:read` |
+| `fees-accounts.fee-dues` | Student | `GET /me/dues` | `fees-accounts:self:read` |
+| `fees-accounts.collections-today` | Finance Staff | `GET /reports/collections` | `fees-accounts:report:read` |
+| `fees-accounts.outstanding-dues` | Finance Staff | `GET /reports/outstanding` | `fees-accounts:report:read` |
+| `fees-accounts.collection-vs-target` | Management | `GET /reports/collection-vs-target` | `fees-accounts:report:read` |
+
+- **Data:** each widget reads through `src/api/client.ts`, a hand-written typed client that the generated client will replace.
+- **States:** each widget shows loading, empty, and error with a retry. Until the backend is mounted, the error reads "Fee data is not available yet".
+- **Tests:** `cd modules/finance-operations/fees-accounts/frontend && pnpm test` (vitest and Testing Library).
 
 ## Layout
 | Path | Purpose |
