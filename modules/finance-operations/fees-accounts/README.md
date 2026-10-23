@@ -29,7 +29,7 @@ reports behind the Applicant, Student, Finance Staff and Management dashboards. 
 | | `application/reports.py` | Collections for a day and collected against target, both net of refunds completed in the period (a refund counts on the day it completed, by the mode and fee heads of the payment it returns); outstanding with ageing. |
 | | `application/consumers.py` | Handlers for every event in `module.yaml` `consumes_events`. Each is idempotent and runs in a fresh transaction of the event's organisation; they refuse to run inside `platform_scope`. |
 | | `application/jobs.py` | `run_daily`: late fees and `invoice.overdue` once per invoice. |
-| infrastructure | `infrastructure/models.py` | 12 `fees_accounts_*` tables. Each has `organisation_id`; money is `Numeric(12, 2)`. |
+| infrastructure | `infrastructure/models.py` | 13 `fees_accounts_*` tables, including `audit_entry` (migration `fees_accounts_0002`). Each has `organisation_id`; money is `Numeric(12, 2)`. |
 | | `infrastructure/payment_adapter.py` | HTTP client for payment-sbiepay. It forwards the caller's token. |
 | | `infrastructure/config.py` | `FEES_ACCOUNTS_*` settings. |
 | api | `api/router.py`, `api/schemas.py`, `api/deps.py` | Every operation of the contract, strict request bodies, and the token and permission check through `eos_core`. |
@@ -39,7 +39,7 @@ Rules the code keeps:
 - **Money is exact.** It uses `Decimal` throughout, and amounts are decimal strings in the API.
 - **Numbers are sequential.** Invoice and receipt numbers are sequential per organisation and never reused; the counter row is locked.
 - **Nothing financial is deleted.** Invoices are cancelled, payments voided or refunded, each with a reason.
-- **Every change publishes an event.** It goes to the outbox in the same transaction. Until the audit SDK exists, the outbox is the audit trail.
+- **Every change is audited.** A `fees_accounts_audit_entry` row (actor, action, entity, id) is written in the same transaction, for API calls, consumed events and the daily job alike, until the audit SDK exists. The `fees-accounts.*` events of the contract go to the outbox too.
 - **Online payments are applied once.** They are idempotent by the gateway reference.
 - **Refunds never exceed what was paid.** Refunds the gateway hasn't settled yet count against the balance.
 - **A refund reduces what was paid.** The balance comes back unless a concession or cancellation covers it, so the statement and the dues always agree. A fully refunded invoice can then be cancelled.
