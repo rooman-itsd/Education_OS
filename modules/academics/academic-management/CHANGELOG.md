@@ -3,6 +3,18 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Audit trail (FR-16, definition of done "audit events for every state change"), interim until the audit SDK ships:
+  `academic_management_audit_entry` (revision `am_0002`, organisation_id and the shared RLS policy) is shaped like
+  platform/audit's `Record` contract: `client_token`, `action`, `entity_type`, `entity_id`, a one-line `summary`,
+  and `before`/`after` holding the changed fields only, plus the actor and time. Names, roll numbers and course
+  descriptions are never copied. A replayed `client_token` returns the original record (unique per organisation,
+  inserted in a savepoint); roster records use the envelope id as token and the envelope's actor (None when the
+  system caused the change). Written in the same transaction as each change and
+  its event, including roster changes applied from enrolment events; events are still published through
+  `eos_core.events.publish`. A change that alters nothing writes no entry. Once the SDK exists, stored rows are to be
+  backfilled to `POST /records` with their `client_token`, so the backfill cannot double-record. `PUT
+  /curricula/{id}` with the same items (in any order) no longer rewrites them, so the item ids it returns stay the
+  same. Pending architectural confirmation (PRD section 13).
 - `GET /me/offerings` needs a term: 404 `active_term_not_found` when none is given or active, 404 for an unknown
   one, and `academic_period_id` must be a uuid (contract 0.2.3 declares the 404; the widget shows "no courses").
 - Roster consumer: a withdrawal that arrives before its confirmation is recorded only against a section of the
