@@ -6,7 +6,7 @@
 #     - finance-operations/fees-accounts
 modules:
   - academics/academic-management
-  - finance-operations/fees-accounts
   - campus-life/hostel
+  - finance-operations/fees-accounts
   - support/helpdesk
 platform: []
