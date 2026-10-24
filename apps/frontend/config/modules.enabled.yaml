@@ -7,5 +7,6 @@
 modules:
   - academics/academic-management
   - campus-life/hostel
+  - finance-operations/fees-accounts
   - support/helpdesk
 platform: []
