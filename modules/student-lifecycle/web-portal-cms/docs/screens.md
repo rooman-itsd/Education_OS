@@ -1,7 +1,7 @@
 # web-portal-cms — screen inventory
 
-Week 1 scope is contracts and PRD only; no frontend code is built yet. This is the planned screen
-list the contracts above are designed to support.
+The public screens marked **built** exist in `frontend/src/public/`; the rest are planned and the
+contracts above are designed to support them.
 
 ## Public
 
@@ -9,11 +9,11 @@ list the contracts above are designed to support.
 |---|---|---|
 | Home / public pages | Published CMS pages | `GET /pages`, `GET /pages/{slug}` (this module) |
 | Announcements / notices | Published announcements | `GET /announcements` (this module) |
-| Pricing / sign-up landing | Marketing copy plus the plan list | `GET /pages/{slug}` (this module, `scope=public`), `GET /plans` (`platform/billing`, direct call) |
-| Sign-up form | Organisation + admin details, academy type, plan choice | `GET /academy-types` (`platform/tenancy`, direct), `POST /register` (`platform/tenancy`, direct) |
-| Sign-up confirmation | "Check your email" | None — static/CMS content |
-| Email verification landing | Confirms the emailed link | `POST /register/verify` (`platform/tenancy`, direct) |
-| Waiting for approval | Shown after verification, before super-admin approval | None — static/CMS content |
+| Plans & pricing (`#/signup`), **built** | The plan list; every organisation starts on the free trial | `GET /plans` (`platform/billing`, direct call) |
+| Create your organisation (`#/register`), **built** | Academy package picker (one choice) and the organisation + administrator form. No plan choice: registration always starts the trial | `GET /academy-types`, `POST /register` (`platform/tenancy`, direct) |
+| Check your email (after submitting), **built** | Asks the administrator to confirm the address; confirms automatically where the API returns the token (dev mode) | `POST /register/verify` (`platform/tenancy`, direct) |
+| Email verification landing (`#/verify?token=…`), **built** | Confirms the emailed link or a pasted token, then removes the token from the address bar | `POST /register/verify` (`platform/tenancy`, direct) |
+| Waiting for approval, **built** | Shown once tenancy returns `pending_approval`; the request is now with the platform's super admin | None |
 
 ## Staff (CMS console)
 
