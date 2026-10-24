@@ -53,3 +53,27 @@ roles:
       - helpdesk:self:raise
       - helpdesk:ticket:read
       - helpdesk:ticket:read-all
+  # Profile roles (platform/identity/config/profiles). A token carries these, not the helpdesk-* roles above, so
+  # each default named above is granted here too, as hostel does for student.
+  - name: support-staff
+    description: The Support Staff (Helpdesk) profile role. Same grants as helpdesk-agent.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:work
+  - name: org-admin
+    description: The organisation admin. Same grants as helpdesk-admin.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:read-all
+      - helpdesk:settings:manage
+  - name: management
+    description: The Management profile role (VC, Registrar). Same grants as helpdesk-viewer.
+    grants:
+      - helpdesk:self:read
+      - helpdesk:self:raise
+      - helpdesk:ticket:read
+      - helpdesk:ticket:read-all

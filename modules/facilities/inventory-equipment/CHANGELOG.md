@@ -13,3 +13,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Alembic chain `ie_0001`: eight `inventory_equipment_*` tables with `organisation_id`, RLS policy on Postgres.
 - Tests: domain unit tests, API integration tests, cross-tenant leak test, migration test (25 passing).
 - `docs/user-stories.md`.
+- Widgets (#109): `inventory-equipment.low-stock` (GET /low-stock), `inventory-equipment.my-loans`
+  (GET /loans?scope=mine&open=true) and `inventory-equipment.overdue-loans` (GET /loans?scope=managed&status=overdue),
+  each with loading, empty and error states; typed API client in `frontend/src/api/client.ts`; vitest widget tests (13 passing).

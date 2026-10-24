@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: academic-management API
-  version: 0.2.1
+  version: 0.2.3
   description: |
     Programmes, curriculum, courses, credits, faculty-course assignment.
     Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
-    `x-permission` on each operation names the key from contracts/permissions.yaml it requires.
+    `x-permission` on each operation names the key from contracts/permissions.yaml it requires. Where any one
+    of several keys is enough, `x-permission-any` lists them all (the API guard accepts exactly that set).
 servers:
   - url: /api/v1/academic-management
 tags:
@@ -329,6 +330,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: A concurrent request created the same version number (code `concurrent_version`); retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /curricula/{curriculum_id}:
     parameters:
@@ -620,6 +627,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          description: A programme_ids entry is not a programme of the caller's organisation (code `unknown_programme`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /offerings/{course_offering_id}:
     parameters:
@@ -664,6 +677,12 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "422":
+          description: A programme_ids entry is not a programme of the caller's organisation (code `unknown_programme`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /offerings/{course_offering_id}/status:
     parameters:
@@ -880,10 +899,12 @@ paths:
       summary: Students enrolled in an offering
       description: |
         Read model built from enrolment-registration events. Callers with only
-        academic-management:roster:read get 403 for offerings they are not assigned to.
+        academic-management:roster:read get 403 for offerings they are not assigned to; callers holding
+        academic-management:roster:read-all (x-permission-any) read every roster of the organisation.
         Used by widget academic-management.course-roster.
       operationId: getRoster
       x-permission: academic-management:roster:read
+      x-permission-any: [academic-management:roster:read, academic-management:roster:read-all]
       parameters:
         - name: section_id
           in: query
@@ -923,8 +944,11 @@ paths:
       description: |
         The caller's active faculty assignments, one row per offering, with enrolment counts.
         Defaults to the active term. Used by widget academic-management.course-roster (Faculty dashboard).
+        Callers holding academic-management:roster:read-all may call it too (x-permission-any); they see
+        their own assignments, like everyone else.
       operationId: listMyOfferings
       x-permission: academic-management:roster:read
+      x-permission-any: [academic-management:roster:read, academic-management:roster:read-all]
       parameters:
         - name: academic_period_id
           in: query
@@ -950,6 +974,14 @@ paths:
                       $ref: "#/components/schemas/MyOffering"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: |
+            `academic_period_id` was not given and no term is active (code `active_term_not_found`), or the
+            given term does not exist in the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /faculty-load:
     get:
@@ -996,6 +1028,15 @@ paths:
           description: |
             `academic_period_id` was not given and no term is active (code `active_term_not_found`), or the
             given term does not exist in the caller's organisation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: |
+            Faculty display names cannot be resolved (code `faculty_directory_unavailable`). `faculty_name` is
+            required and is resolved from platform/identity; until an identity lookup is available to modules, the
+            report is refused rather than showing ids as names. A report with no listed faculty is still returned.
           content:
             application/json:
               schema:

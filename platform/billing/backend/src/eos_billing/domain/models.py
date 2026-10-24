@@ -73,3 +73,36 @@ class Subscription(Base, TenantMixin, TimestampMixin):
             "current_period_ends_at": self.current_period_ends_at.isoformat() if self.current_period_ends_at else None,
             "pending_plan": self.pending_plan_id,
         }
+
+
+class Invoice(Base, TenantMixin, TimestampMixin):
+    """One charge for a subscription period. Written when a paid plan is activated (payment confirmed, or
+    activated at once when no payment adapter is configured); the PDF in platform/documents comes later."""
+
+    __tablename__ = "billing_invoice"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    subscription_id: Mapped[str] = mapped_column(String(36), index=True)
+    plan_id: Mapped[str] = mapped_column(String(40))
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    currency: Mapped[str] = mapped_column(String(3), default="INR")
+    status: Mapped[str] = mapped_column(String(10), default="paid")  # draft | due | paid | void
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    payment_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "organisation_id": self.organisation_id,
+            "plan": self.plan_id,
+            "amount": float(self.amount or 0),
+            "currency": self.currency,
+            "status": self.status,
+            "issued_at": self.issued_at.isoformat() if self.issued_at else None,
+            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_end": self.period_end.isoformat() if self.period_end else None,
+            "payment_reference": self.payment_reference,
+            "document_id": self.document_id,
+        }
