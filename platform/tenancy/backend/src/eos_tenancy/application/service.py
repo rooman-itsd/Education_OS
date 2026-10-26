@@ -138,9 +138,7 @@ def _admin_email(db: Session, organisation_id: str) -> str | None:
             from eos_identity.domain.models import User
 
             return db.scalar(
-                select(User.email)
-                .where(User.organisation_id == organisation_id)
-                .order_by(User.created_at.asc())
+                select(User.email).where(User.organisation_id == organisation_id).order_by(User.created_at.asc())
             )
         except Exception:
             return None

@@ -46,8 +46,7 @@ def test_package_needs_super_admin_approval(client, manual_approval):
     from eos_core import notify
 
     approval_emails = [
-        m for m in notify.sent
-        if m["to"] == "admin@pending.example.com" and "approved" in m["subject"].lower()
+        m for m in notify.sent if m["to"] == "admin@pending.example.com" and "approved" in m["subject"].lower()
     ]
     assert len(approval_emails) == 1
     assert approval_emails[0]["organisation_id"] == v.json()["id"]
@@ -101,8 +100,7 @@ def test_package_rejection_sends_email(client, manual_approval):
 
     # rejection email was sent
     rejection_emails = [
-        m for m in notify.sent
-        if m["to"] == "admin@rejected.example.com" and "not approved" in m["subject"].lower()
+        m for m in notify.sent if m["to"] == "admin@rejected.example.com" and "not approved" in m["subject"].lower()
     ]
     assert len(rejection_emails) == 1
     assert "Incomplete documentation" in rejection_emails[0]["body"]
