@@ -40,3 +40,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - malformed event payloads are ignored with the reason instead of raising out of `consumers.handle`;
   - the collections and collection-vs-target reports are net of refunds completed in the period;
   - ad hoc invoices refuse inactive fee heads.
+- Widgets (#246): `fee-due`, `fee-dues`, `collections-today`, `outstanding-dues` and `collection-vs-target`, with loading,
+  empty and error-with-retry states; 28 tests. Frontend test dependencies came in #245. The module is enabled on the
+  dashboard in `apps/frontend/config/modules.enabled.yaml`.
+- Audit trail (definition of done): `fees_accounts_audit_entry` (migration `fees_accounts_0002`) records every state change
+  in the same transaction, for the API, consumed events and the daily job, until the audit SDK exists, as in hostel
+  and helpdesk. Amounts larger than `Numeric(12, 2)` holds are refused with 422 instead of failing in the database.

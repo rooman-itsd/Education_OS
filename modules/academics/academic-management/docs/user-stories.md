@@ -101,5 +101,5 @@ As a student or examination staff member, I read programmes, published curricula
 ## Every change
 
 ### AM-10 Audit and events (FR-9, FR-16) · Partial
-- Writing to `platform/audit` waits for the audit SDK. Until then the outbox row of each change is the only record (Himanshu's recommendation on issue #100); this is not full audit.
+- Every state change, including roster changes applied from enrolment events, writes an `academic_management_audit_entry` row in the same transaction, shaped like platform/audit's `Record`: `client_token`, action, `entity_type`, entity id, a one-line summary and the changed fields before and after (never names, roll numbers or descriptions), plus the reason for an offering status change. A change that alters nothing writes no row; a replayed `client_token` returns the original row. Writing to `platform/audit` waits for the audit SDK; the rows are then backfilled with their tokens.
 - Every state change publishes the matching event of `contracts/events.yaml` in the same transaction (`eos_core.events.publish`). The envelope `version` is not set yet: the shared outbox has no version column (Faizan).

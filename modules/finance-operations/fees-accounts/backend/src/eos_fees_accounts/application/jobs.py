@@ -46,6 +46,7 @@ def run_daily(db: Session, day: date | None = None) -> dict:
             fee = rules.late_fee(_rule_of(inv.late_fee_rule), inv.due_date, day)
             if fee > Decimal(inv.late_fee):
                 inv.late_fee, inv.late_fee_updated_on = fee, day
+                service._audit(db, None, "invoice.late_fee_updated", "invoice", inv)
                 counts["late_fees_updated"] += 1
             if not inv.overdue_notified:
                 inv.overdue_notified = True
@@ -60,6 +61,7 @@ def run_daily(db: Session, day: date | None = None) -> dict:
                         "due_date": inv.due_date.isoformat(),
                     },
                 )
+                service._audit(db, None, "invoice.overdue", "invoice", inv)
                 counts["overdue_published"] += 1
             db.commit()
     return counts

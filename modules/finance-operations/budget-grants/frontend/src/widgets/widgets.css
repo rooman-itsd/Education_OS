@@ -1,0 +1,29 @@
+/* budget-grants dashboard widgets. Colours and spacing come from the shell's tokens (--eos-*). */
+.eos-budget { display: flex; flex-direction: column; gap: 12px; font-size: 13px; min-width: 0; }
+.eos-budget__muted { color: var(--eos-muted); font-size: 12px; margin: 0; }
+.eos-budget__heading { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--eos-muted); }
+
+/* Key figures at the top of each widget. */
+.eos-budget__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px 12px; margin: 0; }
+.eos-budget__summary div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eos-budget__summary dt { color: var(--eos-muted); font-size: 11px; }
+.eos-budget__summary dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.eos-budget__headline dd { font-size: 20px; }
+.eos-budget__summary [data-warn] dd, .eos-budget [data-warn] { color: var(--eos-danger); }
+
+/* Percent used beside its badge. */
+.eos-budget__trailing { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; white-space: nowrap; }
+.eos-budget__trailing--stack { flex-direction: column; align-items: flex-end; gap: 2px; }
+.eos-budget__overall { display: flex; flex-direction: column; gap: 6px; }
+.eos-budget__overall .eos-budget__trailing { justify-content: flex-start; }
+
+/* Budget heads: a bar each, tinted at the 80% and 100% thresholds (the badge says it in words). */
+.eos-budget__bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.eos-budget__bars li { display: flex; flex-direction: column; gap: 4px; }
+.eos-budget__bar-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.eos-budget__bar-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.eos-budget__bar-row[data-level="warning"] .eos-progress__fill { background-image: none; background-color: var(--eos-warning); }
+.eos-budget__bar-row[data-level="danger"] .eos-progress__fill { background-image: none; background-color: var(--eos-danger); }
+
+/* My grants: funder line, figures and certificate due under the title. */
+.eos-budget__meta { display: flex; flex-direction: column; gap: 2px; }

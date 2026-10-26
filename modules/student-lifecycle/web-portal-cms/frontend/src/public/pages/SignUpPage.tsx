@@ -11,7 +11,7 @@ import { getPlans, type Plan } from "../../api/public-client";
 /**
  * "Get started": plans and pricing, rendered from billing's public GET /billing/plans. Creating the
  * organisation and administrator account is not done here — the free-trial button hands off to the
- * app's own organisation sign-up (ORG_SIGNUP_URL), which owns registration and email verification.
+ * public site's registration page (ORG_SIGNUP_URL, pages/RegisterPage.tsx), which submits to tenancy.
  *
  * Honesty rules (features.md §H, §J):
  *  - Registration always starts the free trial — POST /register takes no plan — so only the trial is
