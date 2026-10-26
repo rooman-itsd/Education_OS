@@ -25,6 +25,8 @@ from sqlalchemy.orm import Session
 from ..domain.offerings import OPEN, SECTION_OPEN
 from ..infrastructure import repository as repo
 from ..infrastructure.models import OfferingRow, ProcessedEventRow, RosterEntryRow, SectionRow
+from . import service
+from .access import Actor
 
 SOURCE = "enrolment-registration"
 CONFIRMED = f"{SOURCE}.course-registration.confirmed"
@@ -95,7 +97,7 @@ def handle_event(db: Session, envelope: dict) -> str:
     occurred_at = envelope.get("occurred_at")
     handler = {CONFIRMED: _confirmed, WITHDRAWN: _withdrawn, SECTION_CHANGED: _section_changed}[name]
     try:
-        outcome, admitted_to = handler(db, organisation_id, payload, occurred_at)
+        outcome, admitted_to = handler(db, organisation_id, payload, occurred_at, envelope)
     except KeyError:
         # A payload missing an agreed field can never be applied; redelivering it would only fail the same way,
         # so the rejection is recorded like the others and the envelope id is not applied again.
@@ -119,35 +121,58 @@ def _over_capacity(db: Session, section_id: str) -> bool:
     return section is not None and repo.enrolled_in_section(db, section_id) > section.capacity
 
 
-def _confirmed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
+def _record(db: Session, action: str, entry: RosterEntryRow, envelope: dict, before=None, after=None) -> None:
+    """The audit record of one applied event. The actor is the envelope's: the user who caused the change, or None
+    when the system did (platform/event-bus envelope; platform/audit Record). The envelope id is the client_token,
+    one logical action per delivered event. Names and roll numbers are never copied (NOT_RECORDED)."""
+    user_id = envelope.get("actor")
+    actor = Actor(user_id=user_id, organisation_id=entry.organisation_id) if user_id else None
+    token = f"event:{envelope['id']}"
+    service._audit(db, actor, action, "roster_entry", entry, before=before, after=after, client_token=token)
+
+
+def _new_row(entry: RosterEntryRow) -> dict:
+    return service._fields(entry, "person_id", "course_offering_id", "section_id", "status")
+
+
+def _confirmed(
+    db: Session, organisation_id: str, p: dict, occurred_at: object, envelope: dict
+) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     if entry is not None and entry.status == repo.WITHDRAWN:
         return STALE, None  # the withdrawal of this registration was already applied
     if entry is not None:
-        entry.person_id = p["person_id"]
-        entry.student_name = p.get("student_name", entry.student_name)
-        entry.roll_number = p.get("roll_number", entry.roll_number)
+        filled = {
+            "person_id": p["person_id"],
+            "student_name": p.get("student_name", entry.student_name),
+            "roll_number": p.get("roll_number", entry.roll_number),
+        }
+        before, after = service._apply(entry, filled)
+        if after:  # a repeated confirmation with the same data changes nothing
+            _record(db, "roster_entry.confirmed", entry, envelope, before, after)
         return APPLIED, None  # an enrolled row (from a section change that arrived first) keeps its section
     rejected = _admit(db, p["course_offering_id"], p["section_id"], p["registration_id"])
     if rejected:
         return rejected, None
-    db.add(
-        RosterEntryRow(
-            organisation_id=organisation_id,
-            registration_id=p["registration_id"],
-            person_id=p["person_id"],
-            course_offering_id=p["course_offering_id"],
-            section_id=p["section_id"],
-            student_name=p.get("student_name"),
-            roll_number=p.get("roll_number"),
-            status=repo.ENROLLED,
-            enrolled_at=_time(p.get("confirmed_at"), occurred_at),
-        )
+    entry = RosterEntryRow(
+        organisation_id=organisation_id,
+        registration_id=p["registration_id"],
+        person_id=p["person_id"],
+        course_offering_id=p["course_offering_id"],
+        section_id=p["section_id"],
+        student_name=p.get("student_name"),
+        roll_number=p.get("roll_number"),
+        status=repo.ENROLLED,
+        enrolled_at=_time(p.get("confirmed_at"), occurred_at),
     )
+    db.add(entry)
+    _record(db, "roster_entry.confirmed", entry, envelope, after=_new_row(entry))
     return APPLIED, p["section_id"]
 
 
-def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
+def _withdrawn(
+    db: Session, organisation_id: str, p: dict, occurred_at: object, envelope: dict
+) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     withdrawn_at = _time(p.get("withdrawn_at"), occurred_at)
     if entry is None:
@@ -157,26 +182,29 @@ def _withdrawn(db: Session, organisation_id: str, p: dict, occurred_at: object) 
         section = repo.get(db, SectionRow, p["section_id"])
         if section is None or section.course_offering_id != p["course_offering_id"]:
             return REJECTED_UNKNOWN_SECTION, None
-        db.add(
-            RosterEntryRow(
-                organisation_id=organisation_id,
-                registration_id=p["registration_id"],
-                person_id=p["person_id"],
-                course_offering_id=section.course_offering_id,
-                section_id=section.id,
-                status=repo.WITHDRAWN,
-                enrolled_at=withdrawn_at,
-                withdrawn_at=withdrawn_at,
-            )
+        entry = RosterEntryRow(
+            organisation_id=organisation_id,
+            registration_id=p["registration_id"],
+            person_id=p["person_id"],
+            course_offering_id=section.course_offering_id,
+            section_id=section.id,
+            status=repo.WITHDRAWN,
+            enrolled_at=withdrawn_at,
+            withdrawn_at=withdrawn_at,
         )
+        db.add(entry)
+        _record(db, "roster_entry.withdrawn", entry, envelope, after=_new_row(entry))
         return APPLIED, None
     if entry.status == repo.WITHDRAWN:
         return APPLIED, None  # already withdrawn: the same state again
-    entry.status, entry.withdrawn_at = repo.WITHDRAWN, withdrawn_at
+    before, after = service._apply(entry, {"status": repo.WITHDRAWN, "withdrawn_at": withdrawn_at})
+    _record(db, "roster_entry.withdrawn", entry, envelope, before, after)
     return APPLIED, None
 
 
-def _section_changed(db: Session, organisation_id: str, p: dict, occurred_at: object) -> tuple[str, str | None]:
+def _section_changed(
+    db: Session, organisation_id: str, p: dict, occurred_at: object, envelope: dict
+) -> tuple[str, str | None]:
     entry = repo.roster_entry(db, p["registration_id"])
     if entry is not None and entry.status == repo.WITHDRAWN:
         return STALE, None
@@ -188,17 +216,19 @@ def _section_changed(db: Session, organisation_id: str, p: dict, occurred_at: ob
     if entry is None:
         # The change arrived before its confirmation: record the registration in its new section; the confirmation
         # then only fills in the remaining fields.
-        db.add(
-            RosterEntryRow(
-                organisation_id=organisation_id,
-                registration_id=p["registration_id"],
-                person_id=p["person_id"],
-                course_offering_id=p["course_offering_id"],
-                section_id=p["to_section_id"],
-                status=repo.ENROLLED,
-                enrolled_at=_time(None, occurred_at),
-            )
+        entry = RosterEntryRow(
+            organisation_id=organisation_id,
+            registration_id=p["registration_id"],
+            person_id=p["person_id"],
+            course_offering_id=p["course_offering_id"],
+            section_id=p["to_section_id"],
+            status=repo.ENROLLED,
+            enrolled_at=_time(None, occurred_at),
         )
+        db.add(entry)
+        _record(db, "roster_entry.section_changed", entry, envelope, after=_new_row(entry))
         return APPLIED, p["to_section_id"]
-    entry.section_id = p["to_section_id"]
+    before, after = service._apply(entry, {"section_id": p["to_section_id"]})
+    if after:  # a change into the section it is already in records nothing
+        _record(db, "roster_entry.section_changed", entry, envelope, before, after)
     return APPLIED, p["to_section_id"]

@@ -3,8 +3,9 @@
 **Domain:** academics
 **Kind:** feature
 **Status:** in progress (issue #100). Built: domain rules, persistence (prefixed tables, row-level security, own
-Alembic chain), every operation of `contracts/openapi.yaml`, event publishing through the shared outbox, the roster
-read model and the `academic-management.course-roster` widget. Outstanding shared work (envelope version, audit SDK,
+Alembic chain), every operation of `contracts/openapi.yaml`, event publishing through the shared outbox, an audit
+entry for every state change (module-local until the audit SDK ships), the roster read model and the
+`academic-management.course-roster` widget. Outstanding shared work (envelope version, audit SDK,
 error format, backend module loader, HoD department claim, faculty-name lookup): [docs/prd.md](docs/prd.md) section 13.
 
 Programmes, curriculum, courses, credits, faculty-course assignment.
