@@ -81,7 +81,7 @@ describe("budget-grants.budget-vs-spend", () => {
     const { by_head: _omitted, ...withoutHeads } = report();
     stubFetch(answer(200, withoutHeads));
     render(<BudgetVsSpend role="finance-staff" />);
-    expect(await screen.findByText("₹10,50,000")).toBeTruthy();
+    expect(await screen.findByText("₹10,50,000.00")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

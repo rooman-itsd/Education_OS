@@ -60,7 +60,7 @@ export function BudgetVsSpend({ role }: WidgetProps) {
   const available = allocated - used;
   const pct = usedPercent(used, allocated);
   const heads = report
-    ? report.by_head
+    ? (report.by_head ?? [])
         .map((h) => ({ ...h, used: paise(h.committed) + paise(h.spent), alloc: paise(h.allocated) }))
         .sort((a, b) => share(b.used, b.alloc) - share(a.used, a.alloc))
     : [];
