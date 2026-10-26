@@ -170,6 +170,32 @@ class ProcessedEventRow(Base, TenantMixin):
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class AuditEntry(Base, TenantMixin):
+    """Who changed what and when, for every state change (FR-16). Interim, until the audit SDK ships: the columns
+    follow platform/audit's `Record` (contracts/openapi.yaml) so each row can be backfilled to `POST /records` with its
+    `client_token`, which makes the backfill idempotent. `before` and `after` hold changed fields only, never a whole
+    entity, personal details or free-text documents (service.NOT_RECORDED). `reason` is not in the platform contract:
+    it keeps the reason given for an offering status change. `module` is not stored: it is always this module."""
+
+    __tablename__ = f"{PREFIX}audit_entry"
+    __table_args__ = (
+        Index("ix_academic_management_audit_entity", "organisation_id", "entity_type", "entity_id"),
+        UniqueConstraint("organisation_id", "client_token", name="uq_academic_management_audit_client_token"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    client_token: Mapped[str] = mapped_column(String(120))
+    actor: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    action: Mapped[str] = mapped_column(String(60))
+    entity_type: Mapped[str] = mapped_column(String(40))
+    entity_id: Mapped[str] = mapped_column(String(36))
+    summary: Mapped[str] = mapped_column(String(300))
+    before: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)  # SQL NULL, not JSON null
+    after: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 TABLES = [
     m.__table__
     for m in (
@@ -183,5 +209,6 @@ TABLES = [
         FacultyAssignmentRow,
         RosterEntryRow,
         ProcessedEventRow,
+        AuditEntry,
     )
 ]
