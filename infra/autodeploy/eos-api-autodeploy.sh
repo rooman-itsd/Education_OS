@@ -51,8 +51,12 @@ fi
 git reset -q --hard "$target"
 
 $COMPOSE build --quiet api
-# Schema first: each platform service's Alembic chain, against the running database.
-$COMPOSE run --rm --no-deps -T api sh -c 'for s in identity tenancy billing; do (cd platform/$s/db && alembic upgrade head); done' \
+# Schema first, against the running database: every Alembic chain apps/backend/config/modules.enabled.yaml
+# enables (platform services, then modules and integrations). stamp-chains.py first records chains whose
+# tables the API already created at start-up, so a module enabled since the last deploy is upgraded, not
+# created twice.
+$COMPOSE run --rm --no-deps -T -v "$APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py" api sh -c \
+  'python /repo/stamp-chains.py && for d in $(python tools/scripts/enabled-modules.py chains); do (cd "$d" && alembic upgrade head) || exit 1; done' \
   || logger -t eos-api-autodeploy "migrations failed at $want; API not restarted"
 $COMPOSE up -d --quiet-pull
 docker image prune -f >/dev/null
