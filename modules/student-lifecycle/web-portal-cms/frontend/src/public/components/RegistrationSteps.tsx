@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { Button } from "@eos/ui-kit";
+import { Button, ButtonLink } from "@eos/ui-kit";
 import { APP_URL } from "../content";
 import { PublicApiError, verifyRegistration, type VerifiedOrganisation } from "../../api/public-client";
 
@@ -9,9 +9,11 @@ import { PublicApiError, verifyRegistration, type VerifiedOrganisation } from ".
  * /tenancy/register/verify moves it to `pending_approval`, the only state the super admin can approve.
  *
  * - Where the API returns the token in the register response (EOS_DEV_MODE=true: local and staging),
- *   VerifyEmail confirms it straight away, as apps/frontend/src/auth/SignUp.tsx does.
- * - Otherwise (production) the token arrives by email; the visitor enters it here, or opens the
- *   emailed link, which lands on the public site's verify route (pages/VerifyPage.tsx).
+ *   pages/RegisterPage.tsx confirms it straight away (and shows VerifyEmail, prefilled, if that fails).
+ * - Otherwise (production) the token arrives by email; the visitor enters it here, right after
+ *   registering, or later at the public site's verify route (pages/VerifyPage.tsx, `#/verify`), which
+ *   is also where an emailed `#/verify?token=…` link lands.
+ * Both pages render these two components, so the copy and the error handling are the same.
  *
  * The token is never logged or stored; the verify route removes it from the address bar.
  */
@@ -23,11 +25,14 @@ export function VerifyEmail({
   email,
   initialToken = "",
   autoSubmit = false,
+  laterLink = false,
   onVerified,
 }: {
   email?: string;
   initialToken?: string;
   autoSubmit?: boolean;
+  /** Mention `#/verify`, where the code can be entered later (shown right after registering). */
+  laterLink?: boolean;
   onVerified: (org: VerifiedOrganisation) => void;
 }) {
   const uid = useId();
@@ -48,7 +53,7 @@ export function VerifyEmail({
       onVerified(await verifyRegistration(code));
     } catch (err) {
       setError(
-        err instanceof PublicApiError && err.status === 400
+        err instanceof PublicApiError && (err.status === 400 || err.status === 404)
           ? INVALID_TOKEN
           : "Couldn't reach the service. Please check your connection and try again.",
       );
@@ -122,6 +127,15 @@ export function VerifyEmail({
           </div>
         </form>
       )}
+      {laterLink && (
+        <p className="wpc-reg__hint">
+          Closed this page before confirming? You can enter the code later at{" "}
+          <a className="wpc-link" href="#/verify">
+            the verification page
+          </a>
+          .
+        </p>
+      )}
     </div>
   );
 }
@@ -129,10 +143,13 @@ export function VerifyEmail({
 /** What the visitor sees once the email is confirmed, from the status tenancy returned. */
 export function RegistrationOutcome({
   status,
+  slug,
   email,
   onHome,
 }: {
   status: string;
+  /** The organisation's short name; sign-in asks for it, so it is shown whenever known. */
+  slug?: string;
   email?: string;
   onHome: () => void;
 }) {
@@ -156,26 +173,31 @@ export function RegistrationOutcome({
             Your email is confirmed and your organisation registration is waiting for approval by the Education OS
             administration team.
           </p>
-          <ol className="wpc-reg__next">
-            <li>The Education OS team reviews your organisation and academy package.</li>
-            <li>
-              Once approved, sign in as the organisation administrator
-              {email ? (
-                <>
-                  {" "}
-                  with <strong>{email}</strong>
-                </>
-              ) : null}
-              .
-            </li>
-          </ol>
         </>
       )}
+      <ol className="wpc-reg__next">
+        {!active && <li>The Education OS team reviews your organisation and academy package.</li>}
+        {slug && (
+          <li>
+            Your organisation's short name is <strong>{slug}</strong>; you'll need it at sign-in.
+          </li>
+        )}
+        <li>
+          {active ? "Sign in" : "Once approved, sign in"} as the organisation administrator
+          {email ? (
+            <>
+              {" "}
+              with <strong>{email}</strong>
+            </>
+          ) : null}
+          .
+        </li>
+      </ol>
       <div className="wpc-reg__actions">
         {active && (
-          <a className="eos-btn eos-btn--primary" href={APP_URL}>
+          <ButtonLink variant="primary" href={APP_URL}>
             Sign in
-          </a>
+          </ButtonLink>
         )}
         <a
           className="wpc-link"

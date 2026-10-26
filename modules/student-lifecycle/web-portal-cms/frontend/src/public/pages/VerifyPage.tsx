@@ -27,7 +27,7 @@ export function VerifyPage({ onNavigate }: { onNavigate: (route: PublicRoute) =>
   return (
     <div className="wpc-page wpc-reg">
       {verified ? (
-        <RegistrationOutcome status={verified.status} onHome={() => onNavigate("home")} />
+        <RegistrationOutcome status={verified.status} slug={verified.slug} onHome={() => onNavigate("home")} />
       ) : (
         <VerifyEmail initialToken={token} autoSubmit={Boolean(token)} onVerified={setVerified} />
       )}

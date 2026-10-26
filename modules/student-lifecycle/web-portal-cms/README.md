@@ -40,8 +40,9 @@ How an organisation goes live (ADR-0005; registration itself is `platform/tenanc
    the page confirms it at once; otherwise the administrator pastes the emailed token or opens the
    `#/verify?token=…` link. The organisation becomes `pending_approval`.
 3. **Super admin approval.** The request goes to the platform's super admin only, never to another
-   organisation: it appears in the "Organisations awaiting approval" queue on the super admin's
-   Dashboard in the admin console (`admin.html`). Approving makes the organisation `active`.
+   organisation. The super admin approves it through `platform/tenancy`'s approve endpoint; the
+   "Organisations awaiting approval" queue on the admin console dashboard (`admin.html`) is a separate
+   PR (#270). Approving makes the organisation `active`.
 4. **Sign in.** Only then can the organisation admin sign in at `/app`; before approval sign-in is
    refused. Each organisation has its own admin; there is one super admin for the whole platform.
 

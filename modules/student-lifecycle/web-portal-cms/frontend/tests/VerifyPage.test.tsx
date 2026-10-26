@@ -32,6 +32,7 @@ describe("VerifyPage (#/verify, where the emailed link lands)", () => {
     render(<VerifyPage onNavigate={() => {}} />);
     expect(window.location.hash).toBe("#/verify");
     expect(await screen.findByRole("heading", { name: "Waiting for approval" })).toBeTruthy();
+    expect(screen.getByText("riverside")).toBeTruthy(); // the short name sign-in asks for
     expect(String(f.mock.calls[0]?.[0])).toMatch(/\/tenancy\/register\/verify$/);
     expect(JSON.parse(String(f.mock.calls[0]?.[1]?.body))).toEqual({ token: "tok-link-789" });
   });

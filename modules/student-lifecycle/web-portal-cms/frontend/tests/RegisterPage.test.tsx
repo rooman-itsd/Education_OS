@@ -186,11 +186,11 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     expect(verifyCalls(f)).toHaveLength(1);
     expect(verifyCalls(f)[0]![1]?.method).toBe("POST");
     expect(verifyBody(f)).toEqual({ token: "tok-dev-123" });
-    expect(screen.getByText(/Your email is verified/)).toBeTruthy();
+    expect(screen.getByText(/Your email is confirmed/)).toBeTruthy();
     expect(screen.getByText(/waiting for approval by the Education OS administration team/)).toBeTruthy();
     expect(screen.getByText("riverside-sports-college")).toBeTruthy();
     expect(screen.getByText("asha@riverside.example.com")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Check your email" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Check your email to confirm your address" })).toBeNull();
   });
 
   it("dev mode: when tenancy auto-approves (verify returns active) it says the organisation is approved and offers sign-in", async () => {
@@ -198,7 +198,7 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     await renderReady();
     fillValidForm();
     submit();
-    expect(await screen.findByRole("heading", { name: "Approved, you can sign in" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Your organisation is ready" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/app");
     expect(screen.getByText("riverside-sports-college")).toBeTruthy();
     expect(screen.queryByText(/waiting for approval/i)).toBeNull();
@@ -209,9 +209,9 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     await renderReady();
     fillValidForm();
     submit();
-    expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Check your email to confirm your address" })).toBeTruthy();
     expect(screen.getByText("asha@riverside.example.com")).toBeTruthy();
-    expect(screen.getByLabelText("Verification token")).toBeTruthy();
+    expect(screen.getByLabelText("Verification code")).toBeTruthy();
     expect(verifyCalls(f)).toHaveLength(0);
     expect(screen.queryByRole("heading", { name: "Waiting for approval" })).toBeNull();
   });
@@ -221,9 +221,9 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     await renderReady();
     fillValidForm();
     submit();
-    await screen.findByRole("heading", { name: "Check your email" });
-    fireEvent.change(screen.getByLabelText("Verification token"), { target: { value: "  tok-from-email  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    await screen.findByRole("heading", { name: "Check your email to confirm your address" });
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "  tok-from-email  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm email" }));
     expect(await screen.findByRole("heading", { name: "Waiting for approval" })).toBeTruthy();
     expect(verifyCalls(f)).toHaveLength(1);
     expect(verifyBody(f)).toEqual({ token: "tok-from-email" });
@@ -235,18 +235,18 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     await renderReady();
     fillValidForm();
     submit();
-    await screen.findByRole("heading", { name: "Check your email" });
-    const input = screen.getByLabelText("Verification token") as HTMLInputElement;
+    await screen.findByRole("heading", { name: "Check your email to confirm your address" });
+    const input = screen.getByLabelText("Verification code") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "wrong-token" } });
-    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm email" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/isn't valid or has expired/);
-    expect(screen.getByLabelText("Verification token")).toBe(input);
+    expect(alert.textContent).toMatch(/invalid, has expired or has already been used/);
+    expect(screen.getByLabelText("Verification code")).toBe(input);
     expect(input.value).toBe("wrong-token");
     expect(input.getAttribute("aria-invalid")).toBe("true");
     expect(verifyCalls(f)).toHaveLength(1);
     expect(screen.queryByRole("heading", { name: "Waiting for approval" })).toBeNull();
-    await waitFor(() => expect((screen.getByRole("button", { name: "Verify email" }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Confirm email" }) as HTMLButtonElement).disabled).toBe(false));
   });
 
   it("production: an empty token is not sent", async () => {
@@ -254,9 +254,9 @@ describe("RegisterPage: submitting to POST /tenancy/register", () => {
     await renderReady();
     fillValidForm();
     submit();
-    await screen.findByRole("heading", { name: "Check your email" });
-    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
-    expect(await screen.findByText("Paste the verification token from the email.")).toBeTruthy();
+    await screen.findByRole("heading", { name: "Check your email to confirm your address" });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm email" }));
+    expect(await screen.findByText("Enter the verification code from the email.")).toBeTruthy();
     expect(verifyCalls(f)).toHaveLength(0);
   });
 
