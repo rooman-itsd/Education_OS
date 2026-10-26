@@ -7,7 +7,7 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from eos_billing.domain.models import Plan, Subscription
+from eos_billing.domain.models import Invoice, Plan, Subscription
 from eos_core.db import Base
 from sqlalchemy import create_engine
 
@@ -15,7 +15,7 @@ config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
-TABLES = {Plan.__tablename__, Subscription.__tablename__}
+TABLES = {Plan.__tablename__, Subscription.__tablename__, Invoice.__tablename__}
 VERSION_TABLE = "billing_alembic_version"
 target_metadata = Base.metadata
 
