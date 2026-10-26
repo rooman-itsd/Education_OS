@@ -90,13 +90,13 @@ def test_package_rejection_sends_email(client, manual_approval):
         json={"reason": "Incomplete documentation"},
         headers=sa,
     )
-    assert rej.status_code == 200 and rej.json()["status"] == "suspended"
+    assert rej.status_code == 200 and rej.json()["status"] == "archived"
 
     # cannot sign in
     r = client.post(
         "/api/v1/identity/auth/login", json={"email": "admin@rejected.example.com", "password": "Passw0rd!x"}
     )
-    assert r.status_code == 401 and "suspended" in r.json()["detail"]
+    assert r.status_code == 401 and "archived" in r.json()["detail"]
 
     # rejection email was sent
     rejection_emails = [

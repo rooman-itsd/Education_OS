@@ -163,7 +163,7 @@ def admin_reject(
     p: Principal = Depends(require("platform:organisations:manage")),
     db: Session = Depends(get_db),
 ):
-    """Reject an organisation's registration awaiting approval."""
+    """Reject an organisation's registration awaiting approval: it is archived and the admin is emailed the reason."""
     try:
         return service.reject(db, org_id, rejected_by=p.user_id, reason=body.reason).to_dict()
     except TenancyError as e:

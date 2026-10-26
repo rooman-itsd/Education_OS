@@ -126,22 +126,13 @@ def verify(db: Session, token: str) -> Organisation:
 
 
 def _admin_email(db: Session, organisation_id: str) -> str | None:
+    """The address that registered the organisation: every registration leaves a token row with it."""
     with platform_scope():
-        email = db.scalar(
+        return db.scalar(
             select(RegistrationToken.email)
             .where(RegistrationToken.organisation_id == organisation_id)
             .order_by(RegistrationToken.expires_at.desc())
         )
-        if email:
-            return email
-        try:
-            from eos_identity.domain.models import User
-
-            return db.scalar(
-                select(User.email).where(User.organisation_id == organisation_id).order_by(User.created_at.asc())
-            )
-        except Exception:
-            return None
 
 
 def _activate(db: Session, org: Organisation, *, approved_by: str | None, reason: str) -> None:
@@ -321,21 +312,21 @@ def set_status(db: Session, organisation_id: str, status: str, reason: str) -> O
         name = {"active": "activated", "suspended": "suspended", "archived": "archived"}.get(status, "status_changed")
         events.publish(db, f"tenancy.organisation.{name}", org.id, {"organisation_id": org.id, "reason": reason})
         email = _admin_email(db, org.id)
-        if email and status == "suspended":
-            subject = (
-                f"Your Education OS registration for {org.name} was not approved"
-                if prev_status == "pending_approval"
-                else f"Your Education OS organisation {org.name} has been suspended"
-            )
-            body = (
-                f"Your registration for {org.name} was not approved. Reason: {reason}"
-                if prev_status == "pending_approval"
-                else f"Your organisation {org.name} status was updated to suspended. Reason: {reason}"
-            )
+        rejected = prev_status in ("pending_verification", "pending_approval") and status in ("archived", "suspended")
+        if email and rejected:
             notify.send_email(
                 email,
-                subject,
-                body,
+                f"Your Education OS registration for {org.name} was not approved",
+                f"Your registration for {org.name} was not approved. Reason: {reason}",
+                organisation_id=org.id,
+                status=status,
+                reason=reason,
+            )
+        elif email and status in ("suspended", "archived") and prev_status == "active":
+            notify.send_email(
+                email,
+                f"Your Education OS organisation {org.name} has been {status}",
+                f"Your organisation {org.name} status was updated to {status}. Reason: {reason}",
                 organisation_id=org.id,
                 status=status,
                 reason=reason,
@@ -352,12 +343,13 @@ def set_status(db: Session, organisation_id: str, status: str, reason: str) -> O
     return org
 
 
-def reject(db: Session, organisation_id: str, *, rejected_by: str, reason: str = "") -> Organisation:
-    """Super admin rejects an organisation registration awaiting approval."""
+def reject(db: Session, organisation_id: str, *, rejected_by: str, reason: str = "") -> Organisation:  # noqa: ARG001
+    """Super admin refuses a registration awaiting approval: the organisation is archived (closed for good,
+    as the admin console's approval queue does through PUT /status) and the registering address is told why."""
     org = get_organisation(db, organisation_id)
     if org.status != "pending_approval":
         raise TenancyError(f"organisation is {org.status}, nothing to reject", 409)
-    return set_status(db, organisation_id, "suspended", reason=reason or "registration rejected")
+    return set_status(db, organisation_id, "archived", reason=reason or "registration rejected")
 
 
 def set_overrides(db: Session, organisation_id: str, grant: list[str], revoke: list[str], reason: str) -> dict:
