@@ -9,12 +9,22 @@ events:
     description: >-
       A message was accepted by the provider. Accepted is not the same as read; for email it
       means the provider took it, nothing more.
+
+      provider_message_id: the key is ALWAYS present in this payload, and its value is either a
+      string or null -- null when the provider returned no usable reference. It is written below
+      as `string|null` rather than with the `?` suffix some other modules use, because nothing in
+      this repository defines or parses either notation: no tool validates a payload against these
+      declarations, so this sentence, not the type token, is what a consumer author should rely on.
+      "Always present" and "may be null" are different promises, and both are meant here. The value here
+      and the one on the message row are normalised once together, so they are always the same: a consumer
+      reading this payload and a client reading GET /messages/{id} see the same reference, or the same null,
+      never one of each.
     payload:
       message_id: uuid
       template: string
       channel: string
       recipient_id: uuid
-      provider_message_id: string
+      provider_message_id: string|null      # key always present; null when the provider gave no usable reference
 
   - name: notification.message.failed
     version: 1
