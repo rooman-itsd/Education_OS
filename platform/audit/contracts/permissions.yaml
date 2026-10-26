@@ -37,3 +37,10 @@ roles:
     grants:
       - audit:record:read
       - audit:record:export
+
+  - name: org-admin
+    description: >-
+      The organisation admin reads the organisation's audit trail on their dashboard
+      (audit.recent-activity). Same grant as audit-reader.
+    grants:
+      - audit:record:read
