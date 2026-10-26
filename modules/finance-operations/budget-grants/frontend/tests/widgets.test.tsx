@@ -77,6 +77,14 @@ const nothing = (over: Partial<BudgetVsSpendReport> = {}): BudgetVsSpendReport =
   report({ allocated: "0.00", committed: "0.00", spent: "0.00", by_head: [], grants: { active: 0, sanctioned: "0.00", spent: "0.00", ucs_due_30_days: 0 }, ...over });
 
 describe("budget-grants.budget-vs-spend", () => {
+  it("renders a report without by_head instead of unmounting the dashboard", async () => {
+    const { by_head: _omitted, ...withoutHeads } = report();
+    stubFetch(answer(200, withoutHeads));
+    render(<BudgetVsSpend role="finance-staff" />);
+    expect(await screen.findByText("₹10,50,000")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("shows totals, percent used, the heads closest to their limit and grant totals from GET /reports/budget-vs-spend", async () => {
     const fetchMock = stubFetch(answer(200, report()));
     render(<BudgetVsSpend role="finance-staff" />);

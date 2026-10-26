@@ -109,8 +109,8 @@ async function get<T>(path: string, query: Record<string, string | undefined> = 
   }
   if (!res.ok) {
     // ErrorResponse { code, message } from the contract; { detail } from the gateway.
-    const body = (await res.json().catch(() => undefined)) as { message?: string; detail?: string } | undefined;
-    throw new BudgetGrantsApiError(res.status, body?.message ?? body?.detail ?? res.statusText);
+    const body = (await res.json().catch(() => undefined)) as { message?: string; detail?: string | { message?: string } } | undefined;
+    throw new BudgetGrantsApiError(res.status, body?.message ?? (typeof body?.detail === "string" ? body.detail : body?.detail?.message) ?? res.statusText);
   }
   return (await res.json()) as T;
 }

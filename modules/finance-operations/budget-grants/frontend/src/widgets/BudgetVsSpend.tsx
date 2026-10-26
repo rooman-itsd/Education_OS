@@ -35,7 +35,7 @@ function share(used: number, allocated: number): number {
 function isEmpty(report: BudgetVsSpendReport | null): boolean {
   if (!report) return false;
   const nothing = paise(report.allocated) === 0 && paise(report.committed) === 0 && paise(report.spent) === 0;
-  return nothing && report.by_head.length === 0 && (report.grants?.active ?? 0) === 0;
+  return nothing && (report.by_head ?? []).length === 0 && (report.grants?.active ?? 0) === 0;
 }
 
 /**
