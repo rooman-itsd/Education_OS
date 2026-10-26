@@ -1,12 +1,16 @@
 # What this host composes. Each entry is mounted at /api/v1/<name> behind the entitlement gate, so a module
 # listed here is still only reachable by organisations whose entitlement includes it.
-#   modules       feature modules, as <domain>/<module> (same entries as apps/frontend/config/modules.enabled.yaml;
-#                 the two lists need not match: a module can have an API and no widgets)
+#   modules       feature modules, as <domain>/<module>. Every module apps/frontend/config/modules.enabled.yaml
+#                 lists whose backend has api/router.py must be here too (apps/backend/tests checks), or the
+#                 dashboard shows widgets whose requests 404; a module with an API and no widgets is only here.
 #   integrations  adapters, as <adapter> under integrations/
 #   platform      platform services, as <service> under platform/
 # Each entry's package must be installed (tools/scripts/py-setup.sh and the API image install every entry
 # here); its router is eos_<name>.api.router:router and its Alembic chain, if any, is <entry>/db.
 modules:
+  - academics/academic-management
   - campus-life/hostel
+  - finance-operations/fees-accounts
+  - support/helpdesk
 integrations: []
 platform: [identity, tenancy, billing]
