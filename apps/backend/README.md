@@ -8,14 +8,37 @@ the **entitlement gate** (ADR-0005): a request to a feature module is refused wi
 organisation is suspended, and `read_only` for writes after a trial ends. Platform services
 (identity, tenancy, billing, ...) are always reachable and do their own permission checks.
 
-| Mounted today | Package |
-|---|---|
-| `/api/v1/identity` | `platform/identity/backend` |
-| `/api/v1/tenancy` | `platform/tenancy/backend` |
-| `/api/v1/billing` | `platform/billing/backend` |
-| `/api/v1/health` | this host |
+## What it mounts: `config/modules.enabled.yaml`
 
-Feature modules are added to `PLATFORM_ROUTERS`/`config/modules.enabled.yaml` as they ship.
+One file decides what this host serves:
+
+```yaml
+modules:                    # feature modules, <domain>/<module>
+  - campus-life/hostel
+integrations: []            # adapters under integrations/, e.g. payment-sbiepay
+platform: [identity, tenancy, billing]
+```
+
+Every entry follows the same layout, so the entry alone is enough: package `eos_<name>` (from
+`<entry>/backend/`, or the entry folder itself for an adapter with `src/` at its root), router
+`eos_<name>.api.router:router` mounted at `/api/v1/<name>`, and its Alembic chain, if any, in `<entry>/db`.
+`/api/v1/health` lists the mounted modules and integrations. A listed entry that is not installed stops
+start-up with a message naming it, instead of serving 404s.
+
+`tools/scripts/enabled-modules.py` reads the same file for everything that runs before the API:
+`tools/scripts/py-setup.sh` and the API image install every entry, CI runs each enabled module's tests and
+its chain (upgrade, row-level-security check, downgrade) on Postgres, and the API auto-deploy upgrades
+every enabled chain before restarting.
+
+**Enabling a module's backend** is a one-line PR adding its entry here (block style, alphabetical),
+reviewed by the app owner, once the module has `api/router.py` and its migrations. The frontend has its
+own list, `apps/frontend/config/modules.enabled.yaml`, with the same entry format; the two need not match.
+
+| Mounted today | From |
+|---|---|
+| `/api/v1/identity`, `/tenancy`, `/billing` | `platform:` |
+| `/api/v1/hostel` | `modules:` (`modules/campus-life/hostel`) |
+| `/api/v1/health` | this host |
 
 ## Run locally
 
@@ -42,8 +65,9 @@ verification token in the register response so the flow can be driven without em
 
 ```
 pytest apps/backend packages/core platform/identity/backend
+for t in $(python tools/scripts/enabled-modules.py tests); do pytest "$t"; done   # enabled modules' own suites
 ```
 
-`apps/backend/tests/test_foundation.py` is the phase 1 gate: register, verify, sign in, trial entitlement
+`apps/backend/tests/test_module_loader.py` covers the mounting rules above. `apps/backend/tests/test_foundation.py` is the phase 1 gate: register, verify, sign in, trial entitlement
 enforced by the gate, upgrade unlocks, org admin toggles, super admin overrides, impersonation,
 suspension, and the cross-tenant leak check.

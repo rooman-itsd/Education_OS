@@ -32,6 +32,7 @@ Source of truth: `backend/src/eos_academic_management/infrastructure/models.py` 
 | `faculty_assignment` | Who teaches an offering or section (FR-11, FR-12) | — |
 | `roster_entry` | Read model of course registrations (FR-14), one row per registration | (organisation_id, registration_id) |
 | `processed_event` | Envelope ids of consumed events, so a redelivered event is applied once | (organisation_id, event_id) |
+| `audit_entry` | Who changed what and when, one row per state change (FR-16), until the audit SDK ships. Shaped like platform/audit's `Record`: `client_token`, `action`, `entity_type`, `entity_id`, `summary`, changed-fields-only `before`/`after` (JSON), `actor`, `occurred_at`, plus `reason`. Never names, roll numbers or descriptions | (organisation_id, client_token) |
 
 Rows are never deleted by the use cases: courses and programmes are archived, sections closed, assignments ended,
 and withdrawn registrations kept with `status = withdrawn`.
