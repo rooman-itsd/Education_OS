@@ -35,6 +35,12 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Organisation" } } } }, "409": { description: Nothing to approve } }
+  /admin/organisations/{id}/reject:
+    post:
+      summary: Reject an organisation registration awaiting approval. Super admin only (platform:organisations:manage).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Organisation" } } } }, "409": { description: Nothing to reject } }
   /academy-types:
     get:
       summary: Academy types an organisation can choose at registration (the institution profiles).
