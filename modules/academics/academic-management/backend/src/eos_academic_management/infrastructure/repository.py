@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .models import (
+    AuditEntry,
     CourseRow,
     CurriculumItemRow,
     CurriculumRow,
@@ -151,6 +152,13 @@ VERSION_CONSTRAINTS = {
         ("organisation_id", "programme_id", "version"),
     ),
 }
+# One audit record per client_token (platform/audit NewRecord: a replayed token returns the original record).
+AUDIT_TOKEN_CONSTRAINTS = {
+    "uq_academic_management_audit_client_token": (
+        "academic_management_audit_entry",
+        ("organisation_id", "client_token"),
+    ),
+}
 
 
 def _violates(err: IntegrityError, constraints: dict[str, tuple[str, tuple[str, ...]]]) -> bool:
@@ -176,3 +184,15 @@ def is_code_conflict(err: IntegrityError) -> bool:
 def is_version_conflict(err: IntegrityError) -> bool:
     """Two concurrent creates numbered a programme's curriculum the same, and nothing else."""
     return _violates(err, VERSION_CONSTRAINTS)
+
+
+def is_audit_token_conflict(err: IntegrityError) -> bool:
+    """An audit record with this client_token already exists in the organisation, and nothing else."""
+    return _violates(err, AUDIT_TOKEN_CONSTRAINTS)
+
+
+def audit_entry_by_token(db: Session, organisation_id: str, client_token: str) -> AuditEntry | None:
+    query = q(db, AuditEntry).where(
+        AuditEntry.organisation_id == organisation_id, AuditEntry.client_token == client_token
+    )
+    return db.scalars(query).first()

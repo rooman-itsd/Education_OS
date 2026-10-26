@@ -19,6 +19,7 @@ from ..domain.rules import ZERO, RuleError, money, parse_money
 from ..infrastructure import payment_adapter
 from ..infrastructure.config import load_settings
 from ..infrastructure.models import (
+    AuditEntry,
     BulkJob,
     CollectionTarget,
     Concession,
@@ -51,6 +52,21 @@ def today() -> date:
 def _publish(db: Session, name: str, organisation_id: str, payload: dict, actor: str | None = None) -> None:
     events.publish(
         db, f"{MODULE}.{name}", organisation_id, {"organisation_id": organisation_id, **payload}, actor=actor
+    )
+
+
+def _audit(db: Session, actor_id: str | None, action: str, entity: str, row) -> None:
+    """One audit record per state change, in the same transaction. The row is flushed first so a new one has its id."""
+    db.flush()
+    db.add(
+        AuditEntry(
+            organisation_id=row.organisation_id,
+            actor=actor_id,
+            action=action,
+            entity=entity,
+            entity_id=row.id,
+            occurred_at=clock(),
+        )
     )
 
 
@@ -304,6 +320,7 @@ def create_fee_head(db: Session, actor: Actor, body: dict) -> dict:
         raise conflict("code_taken", f"fee head code {body['code']} is already used")
     h = FeeHead(organisation_id=actor.organisation_id, **body)
     db.add(h)
+    _audit(db, actor.user_id, "fee_head.created", "fee_head", h)
     db.commit()
     return head_dict(h)
 
@@ -314,6 +331,7 @@ def update_fee_head(db: Session, actor: Actor, head_id: str, body: dict) -> dict
         raise conflict("code_taken", f"fee head code {body['code']} is already used")
     for key, value in body.items():
         setattr(h, key, value)
+    _audit(db, actor.user_id, "fee_head.updated", "fee_head", h)
     db.commit()
     return head_dict(h)
 
@@ -382,6 +400,7 @@ def get_structure(db: Session, structure_id: str) -> dict:
 def create_structure(db: Session, actor: Actor, body: dict) -> dict:
     s = FeeStructure(organisation_id=actor.organisation_id, status="draft", **_structure_values(db, body))
     db.add(s)
+    _audit(db, actor.user_id, "fee_structure.created", "fee_structure", s)
     db.commit()
     return structure_dict(s)
 
@@ -392,6 +411,7 @@ def update_structure(db: Session, actor: Actor, structure_id: str, body: dict) -
         raise conflict("not_draft", "only a draft can be edited; archive it and create a new one")
     for key, value in _structure_values(db, body).items():
         setattr(s, key, value)
+    _audit(db, actor.user_id, "fee_structure.updated", "fee_structure", s)
     db.commit()
     return structure_dict(s)
 
@@ -414,6 +434,7 @@ def publish_structure(db: Session, actor: Actor, structure_id: str) -> dict:
         },
         actor.user_id,
     )
+    _audit(db, actor.user_id, "fee_structure.published", "fee_structure", s)
     db.commit()
     return structure_dict(s)
 
@@ -423,6 +444,7 @@ def archive_structure(db: Session, actor: Actor, structure_id: str) -> dict:
     if s.status == "archived":
         raise conflict("already_archived", "the structure is already archived")
     s.status = "archived"
+    _audit(db, actor.user_id, "fee_structure.archived", "fee_structure", s)
     db.commit()
     return structure_dict(s)
 
@@ -513,6 +535,7 @@ def issue_invoice(
         },
         actor_id,
     )
+    _audit(db, actor_id, "invoice.issued", "invoice", inv)
     db.flush()
     return inv
 
@@ -616,6 +639,7 @@ def bulk_invoices(db: Session, actor: Actor, body: dict) -> dict:
         requested_by=actor.user_id,
     )
     db.add(job)
+    _audit(db, actor.user_id, "bulk_job.started", "bulk_job", job)
     db.commit()
     created = skipped = 0
     errors = []
@@ -635,6 +659,7 @@ def bulk_invoices(db: Session, actor: Actor, body: dict) -> dict:
             skipped += 1
     job = _get(db, BulkJob, job.id, "bulk job")
     job.created, job.skipped, job.errors, job.status = created, skipped, errors, "completed"
+    _audit(db, actor.user_id, "bulk_job.completed", "bulk_job", job)
     db.commit()
     return bulk_dict(job)
 
@@ -704,6 +729,7 @@ def _cancel(db: Session, inv: Invoice, reason: str, actor_id: str | None) -> Non
         {"invoice_id": inv.id, "person_id": inv.person_id, "reason": reason},
         actor_id,
     )
+    _audit(db, actor_id, "invoice.cancelled", "invoice", inv)
 
 
 # ---------------------------------------------------------------- payments and receipts
@@ -794,6 +820,7 @@ def apply_payment(
         actor_id,
     )
     _refresh(db, inv, actor_id)
+    _audit(db, actor_id, "payment.received", "payment", p)
     return p
 
 
@@ -915,6 +942,7 @@ def void_payment(db: Session, actor: Actor, payment_id: str, reason: str) -> dic
         },
         actor.user_id,
     )
+    _audit(db, actor.user_id, "payment.voided", "payment", p)
     db.commit()
     return payment_dict(p)
 
@@ -976,6 +1004,7 @@ def refund_payment(db: Session, actor: Actor, payment_id: str, body: dict) -> di
             r.status = "failed"
     else:
         complete_refund(db, r, actor.user_id)
+    _audit(db, actor.user_id, f"refund.{r.status}", "refund", r)
     db.commit()
     return refund_dict(r)
 
@@ -1003,6 +1032,7 @@ def complete_refund(db: Session, r: Refund, actor_id: str | None) -> None:
         },
         actor_id,
     )
+    _audit(db, actor_id, "refund.completed", "refund", r)
 
 
 # ---------------------------------------------------------------- concessions
@@ -1042,6 +1072,7 @@ def request_concession(db: Session, actor: Actor, body: dict) -> dict:
         requested_by=actor.user_id,
     )
     db.add(c)
+    _audit(db, actor.user_id, "concession.requested", "concession", c)
     db.commit()
     return concession_dict(c)
 
@@ -1055,6 +1086,7 @@ def decide_concession(db: Session, actor: Actor, concession_id: str, decision: s
     c.decided_by, c.decided_at, c.decision_note = actor.user_id, clock(), note
     if decision == "rejected":
         c.status = "rejected"
+        _audit(db, actor.user_id, "concession.rejected", "concession", c)
         db.commit()
         return concession_dict(c)
     inv = _get(db, Invoice, c.invoice_id, "invoice", lock=True)
@@ -1083,6 +1115,7 @@ def decide_concession(db: Session, actor: Actor, concession_id: str, decision: s
         actor.user_id,
     )
     _refresh(db, inv, actor.user_id)
+    _audit(db, actor.user_id, "concession.approved", "concession", c)
     db.commit()
     return concession_dict(c)
 
@@ -1234,6 +1267,7 @@ def put_settings(db: Session, actor: Actor, body: dict) -> dict:
     row.invoice_library_fines = bool(body.get("invoice_library_fines", False))
     row.invoice_staff_transport = bool(body.get("invoice_staff_transport", False))
     db.add(row)
+    _audit(db, actor.user_id, "settings.updated", "settings", row)
     db.commit()
     return get_settings(db)
 
@@ -1276,6 +1310,8 @@ def put_targets(db: Session, actor: Actor, academic_year: str, targets: list[dic
     for old in db.scalars(_q(db, CollectionTarget).where(CollectionTarget.academic_year == academic_year)):
         db.delete(old)
     db.add_all(rows)
+    for t in rows:
+        _audit(db, actor.user_id, "collection_target.set", "collection_target", t)
     db.commit()
     return list_targets(db, academic_year)
 

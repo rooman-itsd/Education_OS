@@ -1,23 +1,26 @@
 """Use cases of academic-management (docs/prd.md, contracts/openapi.yaml). Each one applies the domain rules, changes
 state and publishes the matching event of contracts/events.yaml through eos_core.events.publish in the same
-transaction, then commits once. Permission keys are checked by the API layer (api/deps.require).
+transaction, writes an audit entry (`_audit`) in that same transaction, then commits once. Permission keys are
+checked by the API layer (api/deps.require).
 
 Known dependencies, not worked around here:
 - The shared outbox has no `version` column yet (packages/core, Faizan), so events are published without the
   envelope version declared in contracts/events.yaml.
-- The audit SDK does not exist (packages/sdk is empty). Until it does, the outbox rows are the only record of each
-  state change; this is not full audit integration (FR-16).
+- The audit SDK does not exist (packages/sdk is empty). Until it does, academic_management_audit_entry stands in for
+  it, as hostel's and helpdesk's audit tables do, shaped like platform/audit's Record so its rows can be backfilled
+  with their client_token; it is not the platform audit trail (FR-16).
 - No trusted department claim exists, so department-level authorisation is not enforced: `department_id` is a filter,
   never a grant."""
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Iterable
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from eos_core import events
-from eos_core.db import utcnow
+from eos_core.db import new_id, utcnow
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,6 +35,7 @@ from ..domain.load import LoadEntry
 from ..domain.values import ensure_unique_code
 from ..infrastructure import repository as repo
 from ..infrastructure.models import (
+    AuditEntry,
     CourseRow,
     CurriculumItemRow,
     CurriculumRow,
@@ -84,6 +88,87 @@ def _publish(db: Session, actor: Actor | None, entity_event: str, payload: dict)
     )
 
 
+# Never copied into an audit record's before/after (platform/audit NewRecord: "never the whole entity, never secrets,
+# passwords, tokens or full documents"): a learner's name and roll number are personal details, a course description
+# is free text. A change to one is still recorded, by field name in the summary.
+NOT_RECORDED = frozenset({"student_name", "roll_number", "description"})
+
+
+def _value(value):
+    """A JSON value for before/after."""
+    if isinstance(value, Decimal):
+        return _number(value)
+    if isinstance(value, datetime | date):
+        return iso(value)
+    if isinstance(value, list | tuple):
+        return [_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _value(v) for k, v in value.items()}
+    return value
+
+
+def _recorded(fields: dict | None) -> dict | None:
+    if fields is None:
+        return None
+    return {k: _value(v) for k, v in fields.items() if k not in NOT_RECORDED}
+
+
+def _summary(entity_type: str, row, action: str, changed: Iterable[str] | None) -> str:
+    """One line, ids and codes only: "term 2026-ODD updated: name"."""
+    label = getattr(row, "code", None) or (f"version {row.version}" if hasattr(row, "version") else row.id)
+    text = f"{entity_type.replace('_', ' ')} {label} {action.split('.', 1)[1].replace('_', ' ')}"
+    if changed:
+        text += ": " + ", ".join(sorted(changed))
+    return " ".join(text.split())[:300]
+
+
+def _audit(
+    db: Session,
+    actor: Actor | None,
+    action: str,
+    entity_type: str,
+    row,
+    *,
+    before: dict | None = None,
+    after: dict | None = None,
+    reason: str | None = None,
+    client_token: str | None = None,
+) -> AuditEntry:
+    """One audit record per state change, in the same transaction, shaped like platform/audit's NewRecord. `before`
+    and `after` are the changed fields only (None for a creation's `before`). The row is flushed first so a new one
+    has its id.
+
+    `client_token` identifies the logical action; without one, each call is its own action. A token already recorded
+    returns the original record and appends nothing. The insert runs in a savepoint, so a concurrent request that
+    records the same token first makes this one return that record instead of failing the whole transaction."""
+    db.flush()
+    token = client_token or new_id()
+    existing = repo.audit_entry_by_token(db, row.organisation_id, token)
+    if existing is not None:
+        return existing
+    entry = AuditEntry(
+        organisation_id=row.organisation_id,
+        client_token=token,
+        actor=actor.user_id if actor else None,
+        action=action,
+        entity_type=entity_type,
+        entity_id=row.id,
+        summary=_summary(entity_type, row, action, after if before is not None else None),
+        before=_recorded(before),
+        after=_recorded(after),
+        reason=reason,
+        occurred_at=clock(),
+    )
+    try:
+        with db.begin_nested():
+            db.add(entry)
+    except IntegrityError as err:
+        if not repo.is_audit_token_conflict(err):
+            raise
+        return repo.audit_entry_by_token(db, row.organisation_id, token)
+    return entry
+
+
 def _insert_coded(db: Session, row) -> None:
     """Insert a row whose `code` is unique (term, programme, course, section). The pre-check with ensure_unique_code
     gives the usual answer; this covers the race where a concurrent request inserts the same code in between: the
@@ -120,13 +205,23 @@ def _insert_versioned(db: Session, row: CurriculumRow) -> None:
         raise
 
 
-def _changed(row, changes: dict) -> list[str]:
-    changed = []
+def _apply(row, changes: dict) -> tuple[dict, dict]:
+    """Set the fields that differ; (before, after) of those fields only."""
+    before, after = {}, {}
     for field, value in changes.items():
         if getattr(row, field) != value:
+            before[field], after[field] = getattr(row, field), value
             setattr(row, field, value)
-            changed.append(field)
-    return changed
+    return before, after
+
+
+def _changed(row, changes: dict) -> list[str]:
+    return list(_apply(row, changes)[1])
+
+
+def _fields(row, *names: str) -> dict:
+    """A creation's `after`: the named fields of the new row, never the whole entity."""
+    return {name: getattr(row, name) for name in names}
 
 
 def _page(items: list, total: int) -> dict:
@@ -355,6 +450,7 @@ def create_term(db: Session, a: Actor, body: dict) -> dict:
             "ends_on": iso(row.ends_on),
         },
     )
+    _audit(db, a, "term.created", "term", row, after=_fields(row, "code", "name", "starts_on", "ends_on", "status"))
     db.commit()
     return term_dict(row)
 
@@ -367,7 +463,11 @@ def update_term(db: Session, a: Actor, term_id: str, body: dict) -> dict:
     row = _term(db, term_id)
     dates = _domain(trm.DateRange, body.get("starts_on", row.starts_on), body.get("ends_on", row.ends_on))
     _domain(trm.ensure_no_overlap, dates, [_domain_term(t) for t in repo.terms(db)], ignore_id=row.id)
-    _changed(row, {"name": body.get("name", row.name), "starts_on": dates.starts_on, "ends_on": dates.ends_on})
+    before, after = _apply(
+        row, {"name": body.get("name", row.name), "starts_on": dates.starts_on, "ends_on": dates.ends_on}
+    )
+    if after:
+        _audit(db, a, "term.updated", "term", row, before=before, after=after)
     db.commit()  # contracts/events.yaml declares no term.updated event
     return term_dict(row)
 
@@ -378,9 +478,8 @@ def activate_term(db: Session, a: Actor, term_id: str) -> dict:
     target = rows[plan.activated_id]
     if target.status == trm.ACTIVE and not plan.closed_ids:
         return term_dict(target)  # already the only active term: nothing changes, nothing is published
-    for closed in plan.closed_ids:
-        rows[closed].status = trm.CLOSED
-    target.status = trm.ACTIVE
+    closed_changes = [(rows[closed], _apply(rows[closed], {"status": trm.CLOSED})) for closed in plan.closed_ids]
+    activated = _apply(target, {"status": trm.ACTIVE})
     _publish(
         db,
         a,
@@ -391,6 +490,11 @@ def activate_term(db: Session, a: Actor, term_id: str) -> dict:
             "activated_at": iso(clock()),
         },
     )
+    for term, (before, after) in closed_changes:
+        if after:
+            _audit(db, a, "term.closed", "term", term, before=before, after=after)
+    if activated[1]:
+        _audit(db, a, "term.activated", "term", target, before=activated[0], after=activated[1])
     db.commit()
     return term_dict(target)
 
@@ -440,6 +544,14 @@ def create_programme(db: Session, a: Actor, body: dict) -> dict:
             "credits_required": _number(row.credits_required),
         },
     )
+    _audit(
+        db,
+        a,
+        "programme.created",
+        "programme",
+        row,
+        after=_fields(row, "code", "name", "level", "department_id", "duration_terms", "credits_required", "status"),
+    )
     db.commit()
     return programme_dict(row)
 
@@ -456,7 +568,7 @@ def update_programme(db: Session, a: Actor, programme_id: str, body: dict) -> di
         duration_terms=body.get("duration_terms", row.duration_terms),
         credits_required=body.get("credits_required", row.credits_required),
     )
-    changed = _changed(
+    before, after = _apply(
         row,
         {
             "name": body.get("name", row.name),
@@ -465,8 +577,9 @@ def update_programme(db: Session, a: Actor, programme_id: str, body: dict) -> di
             "credits_required": shape.credits_required,
         },
     )
-    if changed:
-        _publish(db, a, "programme.updated", {"programme_id": row.id, "changed_fields": changed})
+    if after:
+        _publish(db, a, "programme.updated", {"programme_id": row.id, "changed_fields": list(after)})
+        _audit(db, a, "programme.updated", "programme", row, before=before, after=after)
     db.commit()
     return programme_dict(row)
 
@@ -477,6 +590,7 @@ def archive_programme(db: Session, a: Actor, programme_id: str) -> dict:
     row.status = _domain(prg.archive, row.status)
     if was != row.status:
         _publish(db, a, "programme.archived", {"programme_id": row.id, "archived_at": iso(clock())})
+        _audit(db, a, "programme.archived", "programme", row, before={"status": was}, after={"status": row.status})
     db.commit()
     return programme_dict(row)
 
@@ -532,6 +646,15 @@ def _replace_items(db: Session, curriculum: CurriculumRow, items: list[cur.Curri
         )
 
 
+def _item_values(items: Iterable[cur.CurriculumItem]) -> list[dict]:
+    """Curriculum items for an audit record, in a stable order (items carry no position of their own)."""
+    rows = [
+        {"course_id": i.course_id, "programme_term": i.programme_term, "category": i.category, "credits": i.credits}
+        for i in items
+    ]
+    return sorted(rows, key=lambda r: (r["programme_term"], r["course_id"], r["category"], r["credits"]))
+
+
 def create_curriculum(db: Session, a: Actor, programme_id: str, body: dict) -> dict:
     programme = _programme(db, programme_id)
     if body.get("items") is not None:
@@ -549,6 +672,8 @@ def create_curriculum(db: Session, a: Actor, programme_id: str, body: dict) -> d
     row = CurriculumRow(organisation_id=a.organisation_id, programme_id=programme.id, version=version, status=cur.DRAFT)
     _insert_versioned(db, row)
     _replace_items(db, row, items)
+    after = {**_fields(row, "programme_id", "version", "status"), "items": _item_values(items)}
+    _audit(db, a, "curriculum.created", "curriculum", row, after=after)
     db.commit()
     return curriculum_dict(db, row)
 
@@ -561,7 +686,16 @@ def replace_curriculum_items(db: Session, a: Actor, curriculum_id: str, body: di
     row = _curriculum(db, curriculum_id)
     _domain(cur.ensure_editable, row.status)
     programme = _programme(db, row.programme_id)
-    _replace_items(db, row, _validated_items(db, body["items"], programme.duration_terms))
+    items = _validated_items(db, body["items"], programme.duration_terms)
+    # Items carry no position (they are read back by programme term), so the same items in any order are the same
+    # curriculum: nothing is rewritten, item ids stay as they are, and no audit entry is written. Otherwise the record
+    # holds only the items removed (before) and added (after).
+    old, new = Counter(_item(i) for i in repo.curriculum_items(db, row.id)), Counter(items)
+    if new != old:
+        _replace_items(db, row, items)
+        before = {"items": _item_values((old - new).elements())}
+        after = {"items": _item_values((new - old).elements())}
+        _audit(db, a, "curriculum.items_replaced", "curriculum", row, before=before, after=after)
     db.commit()
     return curriculum_dict(db, row)
 
@@ -577,8 +711,8 @@ def publish_curriculum(db: Session, a: Actor, curriculum_id: str) -> dict:
         credits_required=Decimal(programme.credits_required),
         duration_terms=programme.duration_terms,
     )
-    row.status, row.published_at = cur.PUBLISHED, clock()
-    programme.published_curriculum_id = row.id
+    published = _apply(row, {"status": cur.PUBLISHED, "published_at": clock()})
+    pointer = _apply(programme, {"published_curriculum_id": row.id})
     _publish(
         db,
         a,
@@ -591,6 +725,9 @@ def publish_curriculum(db: Session, a: Actor, curriculum_id: str) -> dict:
             "published_at": iso(row.published_at),
         },
     )
+    _audit(db, a, "curriculum.published", "curriculum", row, before=published[0], after=published[1])
+    if pointer[1]:  # the programme's own row changed too: its published curriculum is now this one
+        _audit(db, a, "programme.curriculum_published", "programme", programme, before=pointer[0], after=pointer[1])
     db.commit()
     return curriculum_dict(db, row)
 
@@ -645,6 +782,10 @@ def create_course(db: Session, a: Actor, body: dict) -> dict:
             "department_id": row.department_id,
         },
     )
+    after = _fields(
+        row, "code", "title", "credits", "lecture_hours", "practical_hours", "course_type", "department_id", "status"
+    )
+    _audit(db, a, "course.created", "course", row, after=after)
     db.commit()
     return course_dict(row)
 
@@ -662,7 +803,7 @@ def update_course(db: Session, a: Actor, course_id: str, body: dict) -> dict:
         lecture_hours=body.get("lecture_hours", row.lecture_hours),
         practical_hours=body.get("practical_hours", row.practical_hours),
     )
-    changed = _changed(
+    before, after = _apply(
         row,
         {
             "title": body.get("title", row.title),
@@ -674,8 +815,9 @@ def update_course(db: Session, a: Actor, course_id: str, body: dict) -> dict:
             "department_id": body.get("department_id", row.department_id),
         },
     )
-    if changed:
-        _publish(db, a, "course.updated", {"course_id": row.id, "changed_fields": changed})
+    if after:
+        _publish(db, a, "course.updated", {"course_id": row.id, "changed_fields": list(after)})
+        _audit(db, a, "course.updated", "course", row, before=before, after=after)
     db.commit()
     return course_dict(row)
 
@@ -686,6 +828,7 @@ def archive_course(db: Session, a: Actor, course_id: str) -> dict:
     row.status = _domain(crs.archive, row.status)
     if was != row.status:
         _publish(db, a, "course.archived", {"course_id": row.id, "archived_at": iso(clock())})
+        _audit(db, a, "course.archived", "course", row, before={"status": was}, after={"status": row.status})
     db.commit()
     return course_dict(row)
 
@@ -772,6 +915,8 @@ def create_offering(db: Session, a: Actor, body: dict) -> dict:
             "department_id": course.department_id,
         },
     )
+    after = _fields(row, "course_id", "academic_period_id", "programme_ids", "status")
+    _audit(db, a, "offering.created", "offering", row, after=after)
     for s, shape in zip(sections, shapes, strict=True):
         _add_section(db, a, row, s["code"], shape.capacity)
     db.commit()
@@ -793,6 +938,8 @@ def _add_section(db: Session, a: Actor, offering: OfferingRow, code: str, capaci
         "section.created",
         {"section_id": section.id, "course_offering_id": offering.id, "code": code, "capacity": capacity},
     )
+    after = _fields(section, "course_offering_id", "code", "capacity", "status")
+    _audit(db, a, "section.created", "section", section, after=after)
     return section
 
 
@@ -805,9 +952,10 @@ def update_offering(db: Session, a: Actor, offering_id: str, body: dict) -> dict
     changes = {}
     if "programme_ids" in body:
         changes["programme_ids"] = _known_programme_ids(db, body["programme_ids"] or [])
-    changed = _changed(row, changes)
-    if changed:
-        _publish(db, a, "offering.updated", {"course_offering_id": row.id, "changed_fields": changed})
+    before, after = _apply(row, changes)
+    if after:
+        _publish(db, a, "offering.updated", {"course_offering_id": row.id, "changed_fields": list(after)})
+        _audit(db, a, "offering.updated", "offering", row, before=before, after=after)
     db.commit()
     return offering_dict(db, row)
 
@@ -822,6 +970,16 @@ def change_offering_status(db: Session, a: Actor, offering_id: str, body: dict) 
         a,
         "offering.status-changed",
         {"course_offering_id": row.id, "from_status": previous, "to_status": target, "changed_at": iso(clock())},
+    )
+    _audit(
+        db,
+        a,
+        f"offering.{target}",
+        "offering",
+        row,
+        before={"status": previous},
+        after={"status": target},
+        reason=body.get("reason"),
     )
     db.commit()
     return offering_dict(db, row)
@@ -853,8 +1011,8 @@ def update_section(db: Session, a: Actor, section_id: str, body: dict) -> dict:
         capacity=body.get("capacity", section.capacity),
         status=body.get("status", section.status),
     )
-    changed = _changed(section, {"capacity": shape.capacity, "status": shape.status})
-    if changed:
+    before, after = _apply(section, {"capacity": shape.capacity, "status": shape.status})
+    if after:
         _publish(
             db,
             a,
@@ -866,6 +1024,7 @@ def update_section(db: Session, a: Actor, section_id: str, body: dict) -> dict:
                 "status": section.status,
             },
         )
+        _audit(db, a, "section.updated", "section", section, before=before, after=after)
     db.commit()
     counts = repo.enrolled_counts(db, section.course_offering_id)
     return section_dict(section, counts.get(section.id, 0))
@@ -916,6 +1075,8 @@ def create_assignment(db: Session, a: Actor, offering_id: str, body: dict) -> di
             "contact_hours": _number(assignment.contact_hours),
         },
     )
+    after = _fields(assignment, "course_offering_id", "section_id", "faculty_id", "role", "contact_hours", "status")
+    _audit(db, a, "faculty_assignment.created", "faculty_assignment", assignment, after=after)
     db.commit()
     return assignment_dict(assignment)
 
@@ -925,8 +1086,8 @@ def end_assignment(db: Session, a: Actor, assignment_id: str) -> dict:
     if assignment is None:
         raise not_found("not_found", "faculty assignment not found in your organisation")
     row = _offering(db, assignment.course_offering_id)
-    assignment.status = _domain(asg.ensure_can_end, _domain_assignment(assignment), offering_status=row.status)
-    assignment.ended_at = clock()
+    status = _domain(asg.ensure_can_end, _domain_assignment(assignment), offering_status=row.status)
+    ended = _apply(assignment, {"status": status, "ended_at": clock()})
     _publish(
         db,
         a,
@@ -939,6 +1100,7 @@ def end_assignment(db: Session, a: Actor, assignment_id: str) -> dict:
             "ended_at": iso(assignment.ended_at),
         },
     )
+    _audit(db, a, "faculty_assignment.ended", "faculty_assignment", assignment, before=ended[0], after=ended[1])
     db.commit()
     return assignment_dict(assignment)
 
