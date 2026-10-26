@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: budget-grants API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Annual budgets by budget head and cost centre, reappropriation, commitments and actual spend, externally
     funded grants with their own budget lines, funds received and utilisation certificates. Spend arrives from
@@ -228,6 +228,7 @@ components:
       required: [code, name]
       properties:
         id: { type: string, format: uuid, readOnly: true }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         code: { type: string, pattern: "^[A-Z0-9_]{2,20}$" }
         name: { type: string }
         kind: { type: string, enum: [recurring, non_recurring] }
@@ -258,6 +259,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         financial_year: { type: string }
         department_id: { type: string, format: uuid, nullable: true }
         department_name: { type: string, nullable: true }
@@ -283,6 +285,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             status: { type: string, enum: [requested, approved, rejected] }
             requested_by: { type: string, format: uuid }
             decided_by: { type: string, format: uuid, nullable: true }
@@ -318,6 +321,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         line_id: { type: string, format: uuid }
         kind: { type: string, enum: [commitment, actual] }
         amount: { $ref: "#/components/schemas/Money" }
@@ -370,6 +374,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         code: { type: string }
         title: { type: string }
         funder: { type: string }
@@ -393,6 +398,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         grant_id: { type: string, format: uuid }
         period_from: { type: string, format: date }
         period_to: { type: string, format: date }
@@ -410,6 +416,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
         code: { type: string }
         title: { type: string }
         funder: { type: string }

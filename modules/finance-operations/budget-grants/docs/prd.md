@@ -50,8 +50,8 @@ funds received, and utilisation certificates (UCs) for funders. Contract: `contr
 | Direction | With | How |
 |---|---|---|
 | Called by | procurement | `GET /lines`, `GET /availability` |
-| Consumes | procurement | `purchase-order.issued`, `purchase-order.cancelled`, `vendor-invoice.paid` (proposed in the procurement contract) |
-| Consumes | hr-payroll | `payroll-run.paid` (proposed in the hr-payroll contract) |
+| Consumes | procurement | `purchase-order.issued` (commitment), `purchase-order.cancelled` (release), `vendor-invoice.paid` (commitment to spent), all on `line_id` (procurement contract, #173) |
+| Consumes | hr-payroll | `payroll-run.paid`: `net_total` is charged to the salary head (`BUDGET_GRANTS_SALARY_BUDGET_HEAD_CODE`) of the institution-wide approved budget of the financial year of `paid_on` (hr-payroll contract, #171) |
 | Publishes | notification and others | `line.threshold-reached`, `utilisation-certificate.due` and the rest of `events.yaml` |
 | Platform | identity, audit, documents, notification, scheduler | through `packages/sdk` |
 
@@ -64,7 +64,7 @@ funds received, and utilisation certificates (UCs) for funders. Contract: `contr
 ## Open questions (for review)
 
 1. The funder's UC format differs by agency; the PDF layout is one generic template for now.
-2. Should procurement reserve the amount at indent approval (a commitment before the purchase order)?
-   Proposed: commitment starts at the purchase order, so `/availability` is a check, not a reservation.
+2. Decided (#221): the commitment starts at the purchase order, so `/availability` is a check, not a
+   reservation, and `procurement.indent.approved` reserves nothing.
 3. Payroll spend is charged to one institution-wide salary head. Department-wise salary budgets would need a
    department breakdown in `hr-payroll.payroll-run.paid`.
