@@ -31,15 +31,19 @@ New organisations register on the public site (`/#/register`) and verify their a
 email; they then wait for the platform's super admin. Only a signed-in super admin (live API, not
 preview) sees, on the Dashboard:
 
-- the **Pending Approvals** tile with the number of organisations awaiting approval;
+- the **Pending Approvals** tile with the number of organisations awaiting approval (verified ones);
 - the **Organisations awaiting approval** panel (`components/organisations/OrganisationApprovalQueue.tsx`):
-  review an organisation, then approve it with an optional reason.
+  review an organisation, then approve it (optional reason) or reject it (reason required).
+  Organisations whose administrator has not verified their email yet are listed as *Waiting for
+  email verification* and cannot be decided on.
 
-It calls `platform/tenancy` (`lib/organisationsAdmin.ts`): `GET /admin/organisations?status=pending_approval`,
-`GET /admin/organisations/{id}` and `POST /admin/organisations/{id}/approve`, which need
+It calls `platform/tenancy` (`lib/organisationsAdmin.ts`): `GET /admin/organisations?status=pending_approval`
+and `?status=pending_verification`, `GET /admin/organisations/{id}`, `POST /admin/organisations/{id}/approve`
+and, for a rejection, `PUT /admin/organisations/{id}/status` with `{ status: "archived", reason }`. They need
 `platform:organisations:read` / `manage` (super admin only). Approving makes the organisation
-`active`, and its organisation admin can sign in. Organisation admins never see the queue, and
-nothing here changes an organisation's status directly. Rejection is not built yet.
+`active`, and its organisation admin can sign in. The buttons follow the status the drawer fetched,
+so an organisation decided on elsewhere shows *No longer awaiting approval* (the API's 409 is handled
+the same way). A 401 signs the super admin out. Organisation admins never see the queue.
 
 ## Layout
 

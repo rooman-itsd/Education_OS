@@ -25,8 +25,8 @@ const me = (over: Record<string, unknown>) => ({
 
 function stubPending(orgs: unknown[]) {
   const f = vi.fn((url: string) =>
-    url.endsWith("?status=pending_approval")
-      ? Promise.resolve({ ok: true, status: 200, statusText: "", json: async () => orgs } as Response)
+    url.endsWith("?status=pending_approval") || url.endsWith("?status=pending_verification")
+      ? Promise.resolve({ ok: true, status: 200, statusText: "", json: async () => (url.endsWith("?status=pending_approval") ? orgs : []) } as Response)
       : Promise.reject(new Error(`unexpected ${url}`)),
   );
   vi.stubGlobal("fetch", f);

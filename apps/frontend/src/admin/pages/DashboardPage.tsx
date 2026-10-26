@@ -71,7 +71,7 @@ const getGreeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 17 ? 
 
 export const DashboardPage: React.FC = () => {
   const org = useOrganisation();
-  const { session, preview } = useAuth();
+  const { session, preview, signOut } = useAuth();
   const viewerName = session?.me.name || session?.me.email || 'Administrator';
   // A signed-in super admin (live API) works the organisation approval queue; organisation admins
   // and preview keep the sample figures below.
@@ -105,7 +105,7 @@ export const DashboardPage: React.FC = () => {
       icon: RefreshCw,
       run: () => {
         setRefreshKey((k) => k + 1);
-        showToast('Sample figures reloaded');
+        showToast(superAdmin ? 'Approval queue reloaded' : 'Sample figures reloaded');
       }
     }
   ];
@@ -277,7 +277,15 @@ export const DashboardPage: React.FC = () => {
       <StatGrid stats={kpis} colorful />
 
       {superAdmin && (
-        <OrganisationApprovalQueue onCountChange={setPendingOrganisations} onNotify={showToast} refreshKey={refreshKey} />
+        <OrganisationApprovalQueue
+          onCountChange={setPendingOrganisations}
+          onNotify={showToast}
+          onSessionExpired={() => {
+            signOut();
+            navigate('/login', { replace: true });
+          }}
+          refreshKey={refreshKey}
+        />
       )}
 
       {/* Enrollment + admissions overview */}
