@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: fees-accounts API
-  version: 0.1.0
+  version: 0.2.1
   description: >-
     Fee heads and structures, invoices (demands), online and offline payments, receipts, concessions,
     refunds, per-person ledgers and collection reports. Online payments go through the payment adapter
@@ -176,7 +176,7 @@ paths:
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Receipt" } } } } }
   /concessions:
     get:
-      summary: Concessions and waivers. Permission fees-accounts:concession:request.
+      summary: Concessions and waivers. Permission fees-accounts:concession:request, or fees-accounts:concession:approve to review requests.
       parameters:
         - { name: person_id, in: query, schema: { type: string, format: uuid } }
         - { name: status, in: query, schema: { type: string, enum: [requested, approved, rejected] } }
@@ -216,6 +216,25 @@ paths:
     get:
       summary: The caller's receipts. Permission fees-accounts:self:read.
       responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Receipt" } } } } } }
+  /dues:
+    get:
+      summary: >-
+        Outstanding balance of one person, optionally narrowed to invoices raised by one module and reference
+        (for example examinations and an exam cycle). Read by other modules at a decision point, such as
+        examination eligibility; fees-accounts only reports, the caller decides. Permission fees-accounts:dues:read.
+      parameters:
+        - { name: person_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: source_module, in: query, schema: { type: string }, description: "Only invoices whose source.module matches" }
+        - { name: source_reference, in: query, schema: { type: string }, description: "Only invoices whose source.reference matches; needs source_module" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Dues" } } } } }
+  /settings:
+    get:
+      summary: The organisation's fees settings. Permission fees-accounts:fee-structure:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeeSettings" } } } } }
+    put:
+      summary: Change the organisation's fees settings. Permission fees-accounts:fee-structure:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FeeSettings" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FeeSettings" } } } } }
   /collection-targets:
     get:
       summary: Collection targets by period. Permission fees-accounts:report:read.
@@ -265,7 +284,7 @@ components:
     FeeHead:
       allOf:
         - { $ref: "#/components/schemas/FeeHeadInput" }
-        - { type: object, properties: { id: { type: string, format: uuid } } }
+        - { type: object, properties: { id: { type: string, format: uuid }, organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" } } }
     FeeStructureInput:
       type: object
       required: [name, academic_year, items, instalments]
@@ -284,6 +303,8 @@ components:
           minItems: 1
           description: Shares of the total, in order. Percentages must add up to 100.
           items: { type: object, required: [label, percent, due_date], properties: { label: { type: string }, percent: { type: number, minimum: 0, maximum: 100 }, due_date: { type: string, format: date } } }
+        room_type: { type: string, nullable: true, description: "Hostel room type this structure prices. Matched against room_type in hostel.allocation.confirmed." }
+        route_id: { type: string, format: uuid, nullable: true, description: "Transport route this structure prices. Matched against route_id in transport.pass.issued." }
         allow_part_payment: { type: boolean, default: false }
         late_fee: { $ref: "#/components/schemas/LateFeeRule" }
     LateFeeRule:
@@ -300,6 +321,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" }
             status: { type: string, enum: [draft, published, archived] }
             total: { $ref: "#/components/schemas/Money" }
             published_at: { type: string, format: date-time, nullable: true }
@@ -349,6 +371,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" }
         number: { type: string, description: "Organisation-wide sequential number" }
         person_id: { type: string, format: uuid }
         person_name: { type: string, description: "Cached from student-information" }
@@ -361,6 +384,7 @@ components:
         late_fee: { $ref: "#/components/schemas/Money" }
         paid_total: { $ref: "#/components/schemas/Money" }
         balance: { $ref: "#/components/schemas/Money" }
+        credit: { $ref: "#/components/schemas/Money", description: "Paid above what is due (for example an online payment that arrived after a counter payment or a cancellation); what finance staff should refund. 0.00 when nothing is owed back." }
         status: { $ref: "#/components/schemas/InvoiceStatus" }
         overdue: { type: boolean }
         due_date: { type: string, format: date }
@@ -396,6 +420,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" }
         invoice_id: { type: string, format: uuid }
         person_id: { type: string, format: uuid }
         amount: { $ref: "#/components/schemas/Money" }
@@ -433,6 +458,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" }
         number: { type: string, description: "Organisation-wide sequential number" }
         payment_id: { type: string, format: uuid }
         invoice_id: { type: string, format: uuid }
@@ -458,6 +484,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, description: "The owning organisation (row-level security)" }
             person_id: { type: string, format: uuid }
             status: { type: string, enum: [requested, approved, rejected] }
             approved_amount: { $ref: "#/components/schemas/Money" }
@@ -499,6 +526,28 @@ components:
               due_date: { type: string, format: date }
               overdue: { type: boolean }
               can_pay_online: { type: boolean }
+    Dues:
+      type: object
+      properties:
+        person_id: { type: string, format: uuid }
+        balance: { $ref: "#/components/schemas/Money" }
+        overdue: { $ref: "#/components/schemas/Money" }
+        invoices:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              number: { type: string }
+              balance: { $ref: "#/components/schemas/Money" }
+              due_date: { type: string, format: date }
+              overdue: { type: boolean }
+              source: { $ref: "#/components/schemas/InvoiceSource" }
+    FeeSettings:
+      type: object
+      properties:
+        invoice_library_fines: { type: boolean, default: false, description: "Raise an invoice for each library.fine.raised; when false, fines are settled at the library desk" }
+        invoice_staff_transport: { type: boolean, default: false, description: "Raise transport invoices for passes with rider_type staff" }
     CollectionTarget:
       type: object
       required: [period, amount]

@@ -36,7 +36,7 @@ test("register, approve, sign in, dashboard", async ({ page, request }) => {
   };
 
   await test.step("register the organisation", async () => {
-    await page.goto("/#signup");
+    await page.goto("/app#signup"); // the dashboard app lives at /app; / is the public site
     await expect(page.getByRole("heading", { name: "Register your organisation" })).toBeVisible();
     await page.getByLabel("Organisation name").fill(org.name);
     await page.getByLabel("Short name").fill(org.slug);

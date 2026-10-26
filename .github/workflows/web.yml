@@ -1,10 +1,12 @@
-# Build and test on every push and PR. On push to main, publish the web build to the
-# `web-dist` branch, which the server pulls every minute (see infra/autodeploy/).
+# Build and test on every push and PR. On push to main, publish the web build to the `web-dist`
+# branch (staging); on a `v*` release tag, to the `web-release` branch (production). Each web server
+# pulls its branch every minute (see infra/autodeploy/).
 name: web
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
 
 permissions:
@@ -28,7 +30,10 @@ jobs:
       - run: pnpm -r --if-present typecheck
       - run: pnpm -r --if-present test
       - run: pnpm --filter @eos/frontend build
-      - run: echo "${GITHUB_SHA::7}" > apps/frontend/dist/VERSION
+      - name: Stamp the version served at /VERSION
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="$GITHUB_REF_NAME (${GITHUB_SHA::7})"; else v="${GITHUB_SHA::7}"; fi
+          echo "$v" > apps/frontend/dist/VERSION
       - uses: actions/upload-artifact@v4
         with:
           name: web-dist
@@ -36,20 +41,52 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: build
     runs-on: ubuntu-latest
+    env:
+      TARGET: ${{ github.ref_type == 'tag' && 'web-release' || 'web-dist' }}
+      REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
     steps:
+      - uses: actions/checkout@v4
+        if: github.ref_type == 'tag'
+        with:
+          fetch-depth: 0
+      # Releases come only from main: a tag on a commit main does not contain is refused, never published.
+      - name: Refuse a release tag whose commit is not on main
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at ${GITHUB_SHA::7}, which is not on main; releases come only from main"
+            exit 1
+          fi
       - uses: actions/download-artifact@v4
         with:
           name: web-dist
           path: dist
-      - name: Push build to the web-dist branch
+      # Production follows the highest vX.Y.Z tag, like the production API (infra/autodeploy/README.md).
+      # Any other tag (below it, or a pre-release such as v1.0.0-rc1) is built and tested but not published.
+      - name: Skip a tag that is not the highest release
+        id: latest
+        run: |
+          publish=true
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            highest="$(git ls-remote --tags --refs "$REMOTE" 'v*' | sed 's#.*refs/tags/##' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+            if [ "$GITHUB_REF_NAME" != "$highest" ]; then
+              publish=false
+              echo "::notice::$GITHUB_REF_NAME is not the highest release ($highest); web-release unchanged"
+            fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+      - name: Push the build to its deploy branch
+        if: steps.latest.outputs.publish == 'true'
         working-directory: dist
         run: |
-          git init -q -b web-dist
+          git init -q -b "$TARGET"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "web build ${GITHUB_SHA::7}"
-          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" web-dist
+          git commit -q -m "web build $(cat VERSION)"
+          git push -q --force "$REMOTE" "$TARGET"

@@ -15,23 +15,51 @@ const widgetModules = import.meta.glob<{ widgets?: DashboardWidget[] }>(
   "../../../modules/*/*/frontend/src/widgets/index.ts",
 );
 
+/** Platform services' widgets (billing, tenancy, identity, audit, ...), listed under `platform:`. */
+const platformModules = import.meta.glob<{ widgets?: DashboardWidget[] }>(
+  "../../../platform/*/frontend/src/widgets/index.ts",
+);
+
+let registering: Promise<string[]> | undefined;
+
 /**
  * Register the widgets of every module listed in config/modules.enabled.yaml.
- * Entries are `<domain>/<module>` paths relative to modules/, e.g. `academics/lms`.
+ * `modules:` entries are `<domain>/<module>` paths relative to modules/, e.g. `academics/lms`;
+ * `platform:` entries are service names under platform/, e.g. `billing`, returned as `platform/billing`.
+ * Runs once: later calls (React StrictMode runs effects twice in development) get the same result
+ * instead of registering every widget again. A failed run is retried by the next call.
  */
-export async function registerEnabledModules(): Promise<string[]> {
-  const enabled = (parse(enabledRaw) as Enabled | null)?.modules ?? [];
+export function registerEnabledModules(): Promise<string[]> {
+  registering ??= registerOnce().catch((e: unknown) => {
+    registering = undefined;
+    throw e;
+  });
+  return registering;
+}
+
+async function registerOnce(): Promise<string[]> {
+  const enabled = (parse(enabledRaw) as Enabled | null) ?? {};
   const loaded: string[] = [];
-  for (const name of enabled) {
-    const key = `../../../modules/${name}/frontend/src/widgets/index.ts`;
-    const load = widgetModules[key];
+  const entries: Array<[string, string, (() => Promise<{ widgets?: DashboardWidget[] }>) | undefined]> = [
+    ...(enabled.modules ?? []).map((name): [string, string, (() => Promise<{ widgets?: DashboardWidget[] }>) | undefined] => [
+      name,
+      name,
+      widgetModules[`../../../modules/${name}/frontend/src/widgets/index.ts`],
+    ]),
+    ...(enabled.platform ?? []).map((name): [string, string, (() => Promise<{ widgets?: DashboardWidget[] }>) | undefined] => [
+      name,
+      `platform/${name}`,
+      platformModules[`../../../platform/${name}/frontend/src/widgets/index.ts`],
+    ]),
+  ];
+  for (const [name, label, load] of entries) {
     if (!load) {
       console.warn(`modules.enabled.yaml lists "${name}" but it has no frontend/src/widgets/index.ts`);
       continue;
     }
     const mod = await load();
     registry.register(mod.widgets ?? []);
-    loaded.push(name);
+    loaded.push(label);
   }
   return loaded;
 }
