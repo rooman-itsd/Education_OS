@@ -25,22 +25,6 @@ data until each module's backend is built.
 - **Preview:** with no API running, or with `admin.html?preview=1`, the login page is a demo and any
   credentials sign in to sample data.
 
-## Organisation approval (super admin)
-
-New organisations register on the public site (`/#/register`) and verify their administrator's
-email; they then wait for the platform's super admin. Only a signed-in super admin (live API, not
-preview) sees, on the Dashboard:
-
-- the **Pending Approvals** tile with the number of organisations awaiting approval;
-- the **Organisations awaiting approval** panel (`components/organisations/OrganisationApprovalQueue.tsx`):
-  review an organisation, then approve it with an optional reason.
-
-It calls `platform/tenancy` (`lib/organisationsAdmin.ts`): `GET /admin/organisations?status=pending_approval`,
-`GET /admin/organisations/{id}` and `POST /admin/organisations/{id}/approve`, which need
-`platform:organisations:read` / `manage` (super admin only). Approving makes the organisation
-`active`, and its organisation admin can sign in. Organisation admins never see the queue, and
-nothing here changes an organisation's status directly. Rejection is not built yet.
-
 ## Layout
 
 | Path | What |
