@@ -8,11 +8,14 @@ import { SiteFooter } from "./components/SiteFooter";
 import { HomePage } from "./pages/HomePage";
 import { FeaturesPage } from "./pages/FeaturesPage";
 import { SignUpPage } from "./pages/SignUpPage";
+import { RegisterPage } from "./pages/RegisterPage";
+import { VerifyPage } from "./pages/VerifyPage";
 
 /**
  * Root of the Education OS public website.
  *
- * Self-contained: it owns its own lightweight hash routing (`#/`, `#/features`, `#/signup`), the
+ * Self-contained: it owns its own lightweight hash routing (`#/`, `#/features`, `#/signup`,
+ * `#/register`, `#/verify?token=…`), the
  * brand theme, and the shared header/footer, so apps/frontend only has to mount <PublicSite /> at a
  * public entry (see the module README / handoff note). It composes the public platform APIs through
  * src/api/public-client.ts and never duplicates tenancy/billing/identity logic.
@@ -22,6 +25,8 @@ function parseRoute(hash: string): PublicRoute {
   const path = hash.replace(/^#\/?/, "");
   if (path.startsWith("features")) return "features";
   if (path.startsWith("signup")) return "signup";
+  if (path.startsWith("register")) return "register";
+  if (path.startsWith("verify")) return "verify";
   return "home";
 }
 
@@ -57,6 +62,8 @@ export function PublicSite() {
         {route === "home" && <HomePage onNavigate={navigate} />}
         {route === "features" && <FeaturesPage onNavigate={navigate} />}
         {route === "signup" && <SignUpPage onNavigate={navigate} />}
+        {route === "register" && <RegisterPage onNavigate={navigate} />}
+        {route === "verify" && <VerifyPage onNavigate={navigate} />}
       </main>
       <SiteFooter onNavigate={navigate} />
     </ThemeScope>
