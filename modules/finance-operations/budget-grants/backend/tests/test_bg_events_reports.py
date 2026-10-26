@@ -68,6 +68,40 @@ def test_purchase_order_commitment_release_and_payment(client, org):
     )
 
 
+def test_a_late_purchase_order_never_double_counts(client, org):
+    """The invoice arrived before its order: the spend is recorded, and the late order commits only what is unpaid."""
+    b = approved_budget(client, org, {head(client, org)["id"]: "10000"}, year="2035-36")
+    line = b["lines"][0]["id"]
+
+    def paid(invoice, po, amount):
+        return {
+            "organisation_id": org.id,
+            "vendor_invoice_id": invoice,
+            "purchase_order_id": po,
+            "vendor_id": "V",
+            "line_id": line,
+            "amount": amount,
+            "paid_on": "2035-10-20",
+        }
+
+    def issued(po, total):
+        return {"organisation_id": org.id, "purchase_order_id": po, "vendor_id": "V", "line_id": line, "total": total}
+
+    assert handle(consumers.INVOICE_PAID, paid("VI-L1", "PO-L1", "4000.00"))["result"] == "spent"
+    assert (
+        handle(consumers.PO_ISSUED, issued("PO-L1", "4000.00"))["reason"]
+        == "the purchase order is already paid in full"
+    )
+    after = line_of(client, org, b["id"])
+    assert (after["committed"], after["spent"], after["available"]) == ("0.00", "4000.00", "6000.00")
+    assert handle(consumers.INVOICE_PAID, paid("VI-L2", "PO-L2", "2500.00"))["result"] == "spent"
+    late = handle(consumers.PO_ISSUED, issued("PO-L2", "4000.00"))
+    assert (late["result"], late["committed"]) == ("committed", "1500.00")
+    after = line_of(client, org, b["id"])
+    assert (after["committed"], after["spent"], after["available"]) == ("1500.00", "6500.00", "2000.00")
+    assert handle(consumers.PO_ISSUED, issued("PO-L2", "4000.00"))["result"] == "ignored"  # repeated event
+
+
 def test_spend_on_grant_lines_from_events(client, org):
     g = grant(client, org, amount="1000.00")
     line = g["lines"][0]["id"]

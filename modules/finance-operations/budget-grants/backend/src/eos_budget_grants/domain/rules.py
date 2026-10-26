@@ -3,6 +3,7 @@ no framework; every amount is a Decimal with two places (the contract's Money is
 
 from __future__ import annotations
 
+import re
 from calendar import monthrange
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -10,6 +11,8 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
 MAX_AMOUNT = Decimal("1000000000000")  # Numeric(14, 2) holds 12 digits before the point
+FINANCIAL_YEAR = re.compile(r"^([0-9]{4})-([0-9]{2})$")
+FIRST_YEAR, LAST_YEAR = 1900, 9998  # the year after the last one must still be a date
 
 HEAD_KINDS = ("recurring", "non_recurring")
 BUDGET_STATUSES = ("draft", "submitted", "returned", "approved", "closed")
@@ -76,11 +79,14 @@ def financial_year_of(day: date, start_month: int) -> str:
 
 
 def financial_year_bounds(financial_year: str, start_month: int) -> tuple[date, date]:
-    """First and last day of a financial year such as '2026-27'."""
-    try:
-        first = int(financial_year.split("-")[0])
-    except ValueError as e:
-        raise RuleError("invalid_financial_year", "financial_year looks like 2026-27", field="financial_year") from e
+    """First and last day of a financial year such as '2026-27': a year, a dash and the last two digits of the year
+    after it (so 2026-28 and 9999-00 are refused, and hr-payroll.payroll-run.paid always finds the year it names)."""
+    m = FINANCIAL_YEAR.match(financial_year or "")
+    first = int(m[1]) if m else 0
+    if m is None or int(m[2]) != (first + 1) % 100 or not FIRST_YEAR <= first <= LAST_YEAR:
+        raise RuleError(
+            "invalid_financial_year", "financial_year looks like 2026-27: a year and the next", field="financial_year"
+        )
     start = date(first, start_month, 1)
     end_month = start_month - 1 or 12
     end_year = first + 1 if start_month > 1 else first

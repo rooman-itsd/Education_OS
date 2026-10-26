@@ -3,7 +3,7 @@
 from datetime import date
 
 from bg_support import BASE, TODAY, YEAR, approved_budget, auth, grant, head, outbox
-from eos_budget_grants.application import consumers, jobs
+from eos_budget_grants.application import consumers, jobs, service
 from eos_core.db import SessionLocal
 from eos_core.security import create_token
 
@@ -223,3 +223,47 @@ def test_dates_stay_inside_the_budget_year_or_grant_period(client, org):
         headers=org.research,
     )
     assert outside.status_code == 422 and outside.json()["detail"]["code"] == "outside_grant"
+
+
+def _grant_body(org, h, code):
+    return {
+        "code": code,
+        "title": "t",
+        "funder": "f",
+        "sanctioned_amount": "1",
+        "start_date": "2026-04-01",
+        "end_date": "2027-03-31",
+        "investigators": [{"user_id": org.ids["faculty"], "role": "principal"}],
+        "lines": [{"budget_head_id": h["id"], "sanctioned": "1"}],
+    }
+
+
+def test_a_duplicate_code_that_slips_past_the_check_is_409(client, org, monkeypatch):
+    """Two requests race for one code: the loser's pre-check passed, so the database refuses at the first flush."""
+    taken, other = head(client, org, "RACED", "x"), head(client, org)
+    monkeypatch.setattr(service, "_code_taken", lambda *a, **k: False)
+    r = client.post(f"{BASE}/budget-heads", json={"code": "RACED", "name": "y"}, headers=org.staff)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "code_taken"
+    r = client.put(f"{BASE}/budget-heads/{other['id']}", json={"code": "RACED", "name": "y"}, headers=org.staff)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "code_taken"
+    assert client.get(f"{BASE}/budget-heads", headers=org.staff).status_code == 200  # the session is usable again
+    g = client.post(f"{BASE}/grants", json=_grant_body(org, taken, "G-RACED"), headers=org.research)
+    assert g.status_code == 201, g.text
+    second = client.post(f"{BASE}/grants", json=_grant_body(org, taken, "G-OTHER"), headers=org.research).json()
+    monkeypatch.setattr(service, "_grant_code_taken", lambda *a, **k: False)
+    r = client.post(f"{BASE}/grants", json=_grant_body(org, taken, "G-RACED"), headers=org.research)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "code_taken"
+    r = client.put(f"{BASE}/grants/{second['id']}", json=_grant_body(org, taken, "G-RACED"), headers=org.research)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "code_taken"
+    assert client.get(f"{BASE}/grants/{second['id']}", headers=org.research).json()["code"] == "G-OTHER"
+
+
+def test_financial_years_are_a_year_and_the_next(client, org):
+    h = head(client, org)
+    for bad in ("2026-28", "9999-00", "1899-00"):
+        r = client.post(
+            f"{BASE}/budgets",
+            json={"financial_year": bad, "lines": [{"budget_head_id": h["id"], "allocated": "1"}]},
+            headers=org.staff,
+        )
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "invalid_financial_year", (bad, r.text)

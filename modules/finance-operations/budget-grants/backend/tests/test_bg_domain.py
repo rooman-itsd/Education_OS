@@ -33,8 +33,9 @@ def test_financial_years():
     assert rules.financial_year_of(date(2027, 4, 1), 4) == "2027-28"
     assert rules.financial_year_bounds("2026-27", 4) == (date(2026, 4, 1), date(2027, 3, 31))
     assert rules.financial_year_bounds("2026-27", 1) == (date(2026, 1, 1), date(2026, 12, 31))
-    with pytest.raises(RuleError):
-        rules.financial_year_bounds("this year", 4)
+    for bad in ("this year", "2026-28", "9999-00", "1899-00", "2026-2027", ""):
+        with pytest.raises(RuleError, match="2026-27"):
+            rules.financial_year_bounds(bad, 4)
 
 
 def test_add_months_keeps_month_ends_valid():

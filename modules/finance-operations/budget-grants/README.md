@@ -63,6 +63,8 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 - **Mounting:** mount `eos_budget_grants.api.router:router` under `/api/v1/budget-grants` and add the package to `apps/backend`.
 - **CI:** add the backend to `tools/scripts/py-setup.sh` and to the pytest line in `.github/workflows/api.yml`.
 - **Events:** until the event bus exists, relay the events in `consumes_events` to `application.consumers.handle(db, name, payload)`.
+  Deliver one purchase order's events in order (issued, then paid or cancelled). If a paid invoice arrives before its
+  order anyway, the spend is recorded and the late order commits only what is not yet paid, so nothing is counted twice.
 - **Daily job:** until the scheduler exists, call `application.jobs.run_daily(db)` once a day.
 
 ### Assumptions to revisit

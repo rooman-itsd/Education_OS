@@ -22,7 +22,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - `/me/grants` and the budget-vs-spend report;
   - commitments and spend from procurement and hr-payroll events;
   - threshold alerts and certificate reminders.
-- Alembic chain `budget_grants_0001`: 10 tables, each with `organisation_id` and the `tenant_isolation` policy on Postgres.
+- Alembic chain `budget_grants_0001`: 11 tables, each with `organisation_id` and the `tenant_isolation` policy on Postgres.
 - `config/env.example` lists every key with its default; `module.yaml` status is `in-progress`.
 - Fixes from review:
   - certificate due dates are period ends, so a certified period covers its due date;
@@ -40,3 +40,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `budget_grants_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel and helpdesk.
 - A grant with open commitments can't be closed (`open_commitments`), and amounts larger than the column holds are refused.
+- Fixes from the second review:
+  - a duplicate budget head or grant code that slips past the pre-check (two requests racing) is 409 `code_taken`,
+    not 500: the write runs through `_unique`, which catches the database's refusal at flush as well as at commit;
+  - a financial year is fully validated: a year and the next (`2026-27`), between 1900 and 9998, so `2026-28` and
+    `9999-00` are 422 `invalid_financial_year`;
+  - a purchase order delivered after one of its invoices was paid commits only what is not yet paid (nothing when
+    paid in full), so an out-of-order delivery never counts the money twice.

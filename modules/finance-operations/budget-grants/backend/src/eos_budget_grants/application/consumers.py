@@ -49,14 +49,19 @@ def _day(raw: str | None) -> date:
     return date.fromisoformat(raw[:10]) if raw else service.today()
 
 
-def _outstanding_commitment(db: Session, purchase_order_id: str, line_id: str) -> Decimal:
+def _order_total(db: Session, purchase_order_id: str, line_id: str, kind: str) -> Decimal:
+    """What the entries of one purchase order on a line add up to: its outstanding commitment, or what is paid."""
     q = _q(db, Expenditure).where(
         Expenditure.purchase_order_id == purchase_order_id,
         Expenditure.line_id == line_id,
-        Expenditure.kind == "commitment",
+        Expenditure.kind == kind,
         Expenditure.reversed.is_(False),
     )
     return sum((Decimal(e.amount) for e in db.scalars(q)), ZERO)
+
+
+def _outstanding_commitment(db: Session, purchase_order_id: str, line_id: str) -> Decimal:
+    return _order_total(db, purchase_order_id, line_id, "commitment")
 
 
 def on_po_issued(db: Session, p: dict) -> dict:
@@ -66,11 +71,15 @@ def on_po_issued(db: Session, p: dict) -> dict:
     line = _line(db, p.get("line_id"))
     if line is None:
         return _ignored("the purchase order names no line of this organisation")
+    # Delivered late, after an invoice of this order was paid: only what is not yet paid is still a commitment.
+    amount = parse_money(p["total"], "total") - _order_total(db, po, line.id, "actual")
+    if amount <= 0:
+        return _ignored("the purchase order is already paid in full")
     e = service.record_expenditure(
         db,
         line,
         kind="commitment",
-        amount=parse_money(p["total"], "total"),
+        amount=amount,
         day=service.today(),
         description=f"Purchase order {p.get('number') or po}",
         actor_id=None,
@@ -79,7 +88,7 @@ def on_po_issued(db: Session, p: dict) -> dict:
         purchase_order_id=po,
     )
     db.commit()
-    return {"result": "committed", "expenditure_id": e.id}
+    return {"result": "committed", "expenditure_id": e.id, "committed": rules.money(amount)}
 
 
 def on_po_cancelled(db: Session, p: dict) -> dict:

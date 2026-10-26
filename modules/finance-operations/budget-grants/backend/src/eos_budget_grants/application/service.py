@@ -395,16 +395,21 @@ def create_head(db: Session, actor: Actor, body: dict) -> dict:
     if _code_taken(db, body["code"]):
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
     h = BudgetHead(organisation_id=actor.organisation_id, **body)
-    db.add(h)
-    _audit(db, actor.user_id, "budget_head.created", "budget_head", h)
-    _commit_unique(db, f"budget head code {body['code']} is already used")
+
+    def save() -> None:
+        db.add(h)
+        _audit(db, actor.user_id, "budget_head.created", "budget_head", h)
+        db.commit()
+
+    _unique(db, f"budget head code {body['code']} is already used", save)
     return head_dict(h)
 
 
-def _commit_unique(db: Session, message: str) -> None:
-    """Commit; a concurrent request that took the same unique code answers 409 like the check before it."""
+def _unique(db: Session, message: str, fn) -> None:
+    """Run a write that takes a unique code, through its commit. A concurrent request that took the same code
+    answers 409 like the check before it, whether the database refuses at the first flush or at the commit."""
     try:
-        db.commit()
+        fn()
     except IntegrityError as e:
         db.rollback()
         raise conflict("code_taken", message) from e
@@ -414,10 +419,14 @@ def update_head(db: Session, actor: Actor, head_id: str, body: dict) -> dict:
     h = _get(db, BudgetHead, head_id, "budget head")
     if _code_taken(db, body["code"], except_id=h.id):
         raise conflict("code_taken", f"budget head code {body['code']} is already used")
-    for key, value in body.items():
-        setattr(h, key, value)
-    _audit(db, actor.user_id, "budget_head.updated", "budget_head", h)
-    _commit_unique(db, f"budget head code {body['code']} is already used")
+
+    def save() -> None:
+        for key, value in body.items():
+            setattr(h, key, value)
+        _audit(db, actor.user_id, "budget_head.updated", "budget_head", h)
+        db.commit()
+
+    _unique(db, f"budget head code {body['code']} is already used", save)
     return head_dict(h)
 
 
@@ -859,39 +868,43 @@ def create_grant(db: Session, actor: Actor, body: dict) -> dict:
     if _grant_code_taken(db, values["code"]):
         raise conflict("code_taken", f"grant {values['code']} is already recorded")
     g = Grant(organisation_id=actor.organisation_id, status="active", **values)
-    db.add(g)
-    db.flush()
-    for head_id, sanctioned, note in lines:
-        db.add(
-            Line(
-                organisation_id=g.organisation_id,
-                kind="grant",
-                grant_id=g.id,
-                budget_head_id=head_id,
-                allocated=sanctioned,
-                note=note,
-            )
-        )
-    _set_investigators(db, g, investigators)
-    db.flush()
     principal = next(i["user_id"] for i in investigators if i["role"] == "principal")
-    _publish(
-        db,
-        "grant.sanctioned",
-        g.organisation_id,
-        {
-            "grant_id": g.id,
-            "code": g.code,
-            "funder": g.funder,
-            "sanctioned_amount": money(g.sanctioned_amount),
-            "principal_investigator_id": principal,
-            "start_date": _iso(g.start_date),
-            "end_date": _iso(g.end_date),
-        },
-        actor.user_id,
-    )
-    _audit(db, actor.user_id, "grant.sanctioned", "grant", g)
-    db.commit()
+
+    def save() -> None:
+        db.add(g)
+        db.flush()
+        for head_id, sanctioned, note in lines:
+            db.add(
+                Line(
+                    organisation_id=g.organisation_id,
+                    kind="grant",
+                    grant_id=g.id,
+                    budget_head_id=head_id,
+                    allocated=sanctioned,
+                    note=note,
+                )
+            )
+        _set_investigators(db, g, investigators)
+        db.flush()
+        _publish(
+            db,
+            "grant.sanctioned",
+            g.organisation_id,
+            {
+                "grant_id": g.id,
+                "code": g.code,
+                "funder": g.funder,
+                "sanctioned_amount": money(g.sanctioned_amount),
+                "principal_investigator_id": principal,
+                "start_date": _iso(g.start_date),
+                "end_date": _iso(g.end_date),
+            },
+            actor.user_id,
+        )
+        _audit(db, actor.user_id, "grant.sanctioned", "grant", g)
+        db.commit()
+
+    _unique(db, f"grant {values['code']} is already recorded", save)
     return grant_dict(db, g)
 
 
@@ -907,40 +920,47 @@ def update_grant(db: Session, actor: Actor, grant_id: str, body: dict) -> dict:
         raise conflict("code_taken", f"grant {values['code']} is already recorded")
     wanted = {head_id: (sanctioned, note) for head_id, sanctioned, note in lines}
     totals = line_totals(db, [x.id for x in existing.values()])
-    changed = []
     for head_id, line in existing.items():
-        if head_id not in wanted:
-            if line_in_use(db, line.id):
-                raise conflict("line_in_use", "a grant line with entries cannot be removed")
-            db.delete(line)
-    for head_id, (sanctioned, note) in wanted.items():
+        if head_id not in wanted and line_in_use(db, line.id):
+            raise conflict("line_in_use", "a grant line with entries cannot be removed")
+    for head_id, (sanctioned, _note) in wanted.items():
         if head_id in existing:
             committed, spent = totals[existing[head_id].id]
             if sanctioned < committed + spent:
                 raise conflict(
                     "below_used", f"a line cannot be revised below the {money(committed + spent)} already used on it"
                 )
-            existing[head_id].allocated, existing[head_id].note = sanctioned, note
-            changed.append(existing[head_id])
-        else:
-            db.add(
-                Line(
-                    organisation_id=g.organisation_id,
-                    kind="grant",
-                    grant_id=g.id,
-                    budget_head_id=head_id,
-                    allocated=sanctioned,
-                    note=note,
+
+    def save() -> None:
+        changed = []
+        for head_id, line in existing.items():
+            if head_id not in wanted:
+                db.delete(line)
+        for head_id, (sanctioned, note) in wanted.items():
+            if head_id in existing:
+                existing[head_id].allocated, existing[head_id].note = sanctioned, note
+                changed.append(existing[head_id])
+            else:
+                db.add(
+                    Line(
+                        organisation_id=g.organisation_id,
+                        kind="grant",
+                        grant_id=g.id,
+                        budget_head_id=head_id,
+                        allocated=sanctioned,
+                        note=note,
+                    )
                 )
-            )
-    for key, value in values.items():
-        setattr(g, key, value)
-    _set_investigators(db, g, investigators)
-    db.flush()
-    for line in changed:
-        check_thresholds(db, line)
-    _audit(db, actor.user_id, "grant.revised", "grant", g)
-    _commit_unique(db, f"grant {values['code']} is already recorded")
+        for key, value in values.items():
+            setattr(g, key, value)
+        _set_investigators(db, g, investigators)
+        db.flush()
+        for line in changed:
+            check_thresholds(db, line)
+        _audit(db, actor.user_id, "grant.revised", "grant", g)
+        db.commit()
+
+    _unique(db, f"grant {values['code']} is already recorded", save)
     return grant_dict(db, g)
 
 
