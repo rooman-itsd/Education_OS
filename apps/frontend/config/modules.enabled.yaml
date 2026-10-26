@@ -8,6 +8,7 @@
 #     - billing
 modules:
   - academics/academic-management
+  - academics/examinations
   - campus-life/hostel
   - support/helpdesk
 platform:

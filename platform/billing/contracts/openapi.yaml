@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: billing API
-  version: 0.1.0
+  version: 0.1.1
   description: "Plans, trials, subscriptions, upgrades and invoices. See ADR-0005."
 servers:
   - url: /api/v1/billing
@@ -26,7 +26,7 @@ paths:
       responses: { "204": { description: Scheduled } }
   /invoices:
     get:
-      summary: Invoices of the caller's organisation.
+      summary: Invoices of the caller's organisation, newest first; one per paid period. Permission billing:subscription:read.
       responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Invoice" } } } } } }
   /webhooks/payment:
     post:
@@ -87,8 +87,13 @@ components:
       type: object
       properties:
         id: { type: string }
+        organisation_id: { type: string, format: uuid }
+        plan: { type: string, description: "Plan id the period was charged for" }
         amount: { type: number }
         currency: { type: string }
         status: { type: string, enum: [draft, due, paid, void] }
         issued_at: { type: string, format: date-time }
-        document_id: { type: string, description: "PDF in platform/documents" }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+        payment_reference: { type: string, nullable: true, description: "Reference the payment adapter confirmed" }
+        document_id: { type: string, nullable: true, description: "PDF in platform/documents; null until generated" }

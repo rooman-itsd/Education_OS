@@ -62,6 +62,14 @@ def subscription(
     return sub.to_dict()
 
 
+@router.get("/invoices")
+def invoices(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
+    """Invoices of the caller's organisation, newest first (one per paid period)."""
+    return service.list_invoices(db, p.organisation_id)
+
+
 @router.post("/subscription/upgrade", status_code=201)
 def upgrade(
     body: Upgrade, p: Principal = Depends(require("billing:subscription:manage")), db: Session = Depends(get_db)
