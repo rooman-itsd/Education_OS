@@ -5,8 +5,10 @@
 #   2. stamp-chains.py     only for a database whose tables the API created before migrations existed
 #   3. alembic upgrade     every chain apps/backend/config/modules.enabled.yaml enables, platform first
 #   4. init_db             outbox_event, the one table with no chain yet; goes when it gets an event-bus chain
+#
+# CI runs this same file against its Postgres service (EOS_REPO_ROOT set to the checkout, .venv on PATH).
 set -eu
-cd /repo
+cd "$(dirname "$0")/../.."
 python infra/docker/db-roles.py
 python infra/docker/stamp-chains.py
 for chain in $(python tools/scripts/enabled-modules.py chains); do
