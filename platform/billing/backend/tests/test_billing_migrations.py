@@ -7,12 +7,12 @@ from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
-from eos_billing.domain.models import Plan, Subscription
+from eos_billing.domain.models import Invoice, Plan, Subscription
 from eos_core.db import Base
 from sqlalchemy import create_engine, inspect
 
 DB_DIR = Path(__file__).resolve().parents[2] / "db"
-TABLES = {Plan.__tablename__, Subscription.__tablename__}
+TABLES = {Plan.__tablename__, Subscription.__tablename__, Invoice.__tablename__}
 
 
 def _config(url: str) -> Config:
@@ -30,7 +30,8 @@ def test_upgrade_matches_models_and_downgrade_removes_tables():
         tables = set(inspect(conn).get_table_names())
         assert TABLES <= tables
         assert "billing_alembic_version" in tables
-        assert "organisation_id" in {c["name"] for c in inspect(conn).get_columns("billing_subscription")}
+        for t in ("billing_subscription", "billing_invoice"):
+            assert "organisation_id" in {c["name"] for c in inspect(conn).get_columns(t)}
         ctx = MigrationContext.configure(
             conn,
             opts={
