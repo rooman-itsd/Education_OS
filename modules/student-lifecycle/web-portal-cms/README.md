@@ -10,97 +10,59 @@ Public website, CMS marketing pages, announcements, and the organisation sign-up
 ---
 
 ## Scope
+The organisation's public website: CMS pages, announcements/notices, and the organisation
+sign-up page. The sign-up page composes `platform/billing`'s existing `GET /plans` and
+`platform/tenancy`'s existing `GET /academy-types` / `POST /register` / `POST /register/verify`
+directly — this module does not duplicate registration or plan logic, and never creates an
+organisation, a plan, a Person/Student record, or an admissions application.
 
-`web-portal-cms` owns the public-facing presence and the entry experience for prospective institutions:
-- The public website shell, brand styling (`public.css`), responsive layouts, and hash-based navigation:
-  - `#/` (`HomePage`): Hero section, value proposition, product pillars, student lifecycle journey, platform differentiators, and FAQ.
-  - `#/features` (`FeaturesPage`): Comprehensive catalogue across Student Lifecycle, Academics & LMS, Practice & Experiential Learning, Facilities, Governance, Support, and Specialized Sports suites.
-  - `#/signup` (`SignUpPage`): Live billing plans from `GET /api/v1/billing/plans`, trial journey breakdown, FAQ, and registration entry.
-- Direct composition of platform services without duplicating logic:
-  - Composes `platform/billing` for transparent plan tiers and trial duration.
-  - Composes `platform/tenancy` for academy profile selection, organization registration, token verification, and Super Admin approval/rejection.
-  - Composes `platform/identity` for login gating based on organisation activation status.
+Explicitly not this module's responsibility: organisation registration and entitlement
+(`platform/tenancy`), plans/subscriptions (`platform/billing`), creating a Person/Student record
+(`student-information`, a manual staff action), or the admissions funnel (`admissions`, its own
+anonymous flow). See [docs/prd.md](docs/prd.md) for the full scope.
 
-**Explicitly not this module's responsibility:**  
-Organisation tenancy records and entitlements (`platform/tenancy`), plan definitions and subscription billing (`platform/billing`), creating Person/Student records (`student-information`), or the anonymous applicant admissions funnel (`admissions`). See [docs/prd.md](docs/prd.md) and [docs/features.md](docs/features.md) for architectural boundaries.
+## Public website and organisation registration
 
----
+The public site is served at `/` (`frontend/src/public/PublicSite.tsx`, mounted by
+`apps/frontend/src/main.tsx`); the dashboard app is at `/app`. Routes are in the URL hash:
 
-## Public Surface
+| Route | Page |
+|---|---|
+| `#/` | Home |
+| `#/features` | Features: the module catalogue with an honest status for each |
+| `#/signup` | Plans & pricing (`GET /billing/plans`) |
+| `#/register` | Create your organisation: academy package picker and form (`POST /tenancy/register`) |
+| `#/verify?token=…` | Where the verification email's link lands (`POST /tenancy/register/verify`) |
 
-- **API Contract:** [contracts/openapi.yaml](contracts/openapi.yaml)
-- **Domain Events:** [contracts/events.yaml](contracts/events.yaml)
-- **Permissions:** [contracts/permissions.yaml](contracts/permissions.yaml)
+How an organisation goes live (ADR-0005; registration itself is `platform/tenancy`'s):
 
----
+1. **Register** at `#/register`: choose the academy package (one per organisation), enter the
+   organisation and its first administrator. Tenancy creates the organisation as
+   `pending_verification`, together with its organisation admin account.
+2. **Verify the email.** Where the API returns the token (`EOS_DEV_MODE=true`, local and staging)
+   the page confirms it at once; otherwise the administrator pastes the emailed token or opens the
+   `#/verify?token=…` link. The organisation becomes `pending_approval`.
+3. **Super admin approval.** The request goes to the platform's super admin only, never to another
+   organisation. The super admin approves it through `platform/tenancy`'s approve endpoint; the
+   "Organisations awaiting approval" queue on the admin console dashboard (`admin.html`) is a separate
+   PR (#270). Approving makes the organisation `active`.
+4. **Sign in.** Only then can the organisation admin sign in at `/app`; before approval sign-in is
+   refused. Each organisation has its own admin; there is one super admin for the whole platform.
 
-## Onboarding & Registration Lifecycle (M1 Foundation)
+Not yet built (follow-ups): the approval email (`platform/notification` with the SMTP adapter in
+`integrations/messaging-providers`), and the CMS pages and announcements of this module's contract.
 
-The end-to-end onboarding experience follows ADR-0004 (Institution Profiles) and ADR-0005 (Multi-Tenant SaaS):
+Tests: `pnpm --filter @eos/web-portal-cms test` (Vitest, jsdom, Testing Library).
 
-```
-Prospect signs up on Public Site
-   ↓
-Selects Academy Type (GET /api/v1/tenancy/academy-types)
-   ↓
-Submits Org & Admin Account (POST /api/v1/tenancy/register)
-   • Org created in 'pending_verification' status on Trial Plan
-   • Verification token generated & email notification sent
-   ↓
-Admin verifies email (POST /api/v1/tenancy/register/verify)
-   • Org status transitions to 'pending_approval'
-   • Sign-in refused with 401 until platform approval
-   ↓
-Super Admin Review Queue (GET /api/v1/tenancy/admin/organisations?status=pending_approval)
-   ├── APPROVE (POST /api/v1/tenancy/admin/organisations/{id}/approve)
-   │     • Org status becomes 'active'
-   │     • Events published: tenancy.organisation.approved, tenancy.organisation.activated
-   │     • Automated approval email sent to admin with sign-in link
-   │     • Admin can now sign in and lands on Organisation Admin dashboard
-   │
-   └── REJECT (POST /api/v1/tenancy/admin/organisations/{id}/reject)
-         • Org status updated to 'suspended' with reason
-         • Rejection email sent to admin explaining the decision
-```
+## Public surface
+- API: [contracts/openapi.yaml](contracts/openapi.yaml)
+- Events: [contracts/events.yaml](contracts/events.yaml)
+- Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
----
+## Dependencies
+See `module.yaml`. This module must not import code from any other module under `modules/`.
 
-## Email Notifications
-
-All email triggers during the sign-up and approval flow pass through the platform notification service (`eos_core.notify.send_email`):
-- **Verification Email:** Sent immediately upon registration with the 48-hour activation token.
-- **Approval Email:** Sent to the administrator when the Super Admin approves the organization, confirming the academic package and linking to sign-in.
-- **Rejection Email:** Sent to the applicant if the registration is rejected by the Super Admin, including the specific reason provided.
-
----
-
-## Data Model & Isolation
-
-- **No dedicated database tables:** As a client-facing feature module that composes core services, `web-portal-cms` maintains no database tables of its own (`module.yaml` has no `db/` schema).
-- **Tenant Isolation:** All underlying tenancy records (`tenancy_organisation`, `tenancy_registration_token`, `tenancy_organisation_module`) are platform-scoped in the `tenancy` schema and protected by platform role-based access control.
-
----
-
-## Testing & Verification
-
-1. **Frontend Typechecks & Unit Tests:**
-   - Typechecks pass cleanly across the package:
-     ```powershell
-     pnpm --filter @eos/web-portal-cms typecheck
-     ```
-2. **Backend Integration & Email Notification Tests:**
-   - Verified in `apps/backend/tests/test_approval.py`:
-     ```powershell
-     .\.venv\Scripts\pytest.exe apps/backend/tests/test_approval.py -v
-     ```
-   - Covers token registration, verification, 401 protection while pending, Super Admin approval, approval email verification, rejection handling, and rejection email verification.
-3. **End-to-End Onboarding Specification:**
-   - Verified via Playwright in `tests/e2e/onboarding/register-approve-signin.spec.ts`.
-
----
-
-## Directory Layout
-
+## Layout
 | Path | Purpose |
 |---|---|
 | `docs/` | PRD, features reference, user stories, screens |

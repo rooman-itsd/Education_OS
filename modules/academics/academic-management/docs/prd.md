@@ -106,7 +106,7 @@ itself lives in `practice/field-training`.
 - FR-15 A faculty member may read the rosters of offerings they are assigned to. Department-admins may read every roster in their department.
 
 ### 5.7 Audit
-- FR-16 Every create, update, state change and assignment is written to `platform/audit` through `packages/sdk`. How the module integrates with audit until the SDK supports it is pending (issue #100, question to Himanshu).
+- FR-16 Every create, update, state change and assignment is written to `platform/audit` through `packages/sdk`. Until the SDK exists, each one writes a row to `academic_management_audit_entry` in the same transaction, shaped like platform/audit's `Record` contract (`client_token`, `action`, `entity_type`, `entity_id`, `summary`, changed-fields-only `before`/`after`, actor, time; plus the reason for an offering status change). When the SDK ships, the rows are backfilled to `POST /records` with their `client_token`, which makes the backfill idempotent, and new changes go through the SDK. This interim table is implemented but awaits confirmation (section 13).
 
 ## 6. Dashboard widgets served
 
@@ -231,7 +231,9 @@ Default module roles map to profile roles as in section 3.
 | Dependency | Who | Effect until then |
 |---|---|---|
 | Outbox `version` column in `packages/core` | Faizan | Events are published without the envelope version |
-| Audit SDK (`packages/sdk`) | Himanshu | The outbox row of each change is the only record; FR-16 is not met |
+| Audit SDK (`packages/sdk`) | Himanshu | Changes are recorded in the module's own `audit_entry` table, not the platform audit trail; moving to the SDK is a follow-up |
+| Confirmation of the interim audit table. It is not a recorded decision: it follows the pattern of hostel and helpdesk (and fees-accounts #263, open) to meet the definition of done in `docs/team/RULES.md`, and replaces the earlier outbox-only recommendation on issue #100. Its columns follow platform/audit's `Record` contract, as the audit owner (Himanshu) asked. `docs/architecture/ARCHITECTURE.md` and `module-standard.md` call for `platform/audit` through the SDK, so the architecture lead's confirmation is still pending | Faizan (architecture) | `academic_management_audit_entry` is written by `application/service.py` (`_audit`) and `application/roster.py`; if it is not confirmed, the table and revision `am_0002` are withdrawn |
+| Audit contract details the module cannot settle: how a module request supplies `client_token` (the API has no idempotency key, so each change gets its own token); where a caller's reason belongs (kept in a module-only `reason` column); whether a creation's `after` may list its initial fields; action names that are statuses (`offering.open`) rather than past-tense verbs | Himanshu (audit) | Implemented as described; adjusted when the contract answers |
 | Shared error-response format (ADR and handler) | Faizan, Srujan | Errors keep the repository's `{"detail": {code, message}}` shape |
 | Trusted department claim for a HoD | Faizan | No department-level authorisation; `department_id` filters only |
 | Identity lookup of faculty names | Faizan | `GET /faculty-load` answers 503 `faculty_directory_unavailable` when names are needed |

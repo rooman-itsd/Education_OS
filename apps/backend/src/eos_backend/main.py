@@ -9,21 +9,13 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .gateway import EntitlementGate
+from .modules import enabled, router_for
 
 log = logging.getLogger("eos.api")
 
-# Platform services this host mounts. Feature modules are added from config/modules.enabled.yaml as they ship.
-PLATFORM_ROUTERS = {
-    "identity": "eos_identity.api.router",
-    "tenancy": "eos_tenancy.api.router",
-    "billing": "eos_billing.api.router",
-}
-
-
-def _import_router(dotted: str) -> APIRouter:
-    import importlib
-
-    return importlib.import_module(dotted).router
+# The platform services' routers as create_app mounts them, from the YAML's `platform` list
+# (tests/test_platform_permissions.py checks every route of these).
+PLATFORM_ROUTERS = {e.name: f"{e.package}.api.router" for e in enabled() if e.kind == "platform"}
 
 
 @asynccontextmanager
@@ -48,6 +40,11 @@ async def lifespan(app: FastAPI):
 
 
 def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
+    """Mount everything config/modules.enabled.yaml lists (platform services, feature modules, integrations),
+    plus `extra_routers` (tests). Fails before serving anything if a listed entry is not installed."""
+    entries = enabled()
+    routers = {e.name: router_for(e) for e in entries}
+    mounted = sorted(e.name for e in entries if e.kind != "platform")
     app = FastAPI(title="Education OS API", version="0.1.0", lifespan=lifespan)
     app.add_middleware(EntitlementGate)
     app.add_middleware(
@@ -64,10 +61,11 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
             "status": "ok",
             "database": "postgres" if settings.is_postgres else "sqlite",
             "dev_mode": settings.dev_mode,
+            "modules": mounted,
         }
 
-    for name, dotted in PLATFORM_ROUTERS.items():
-        app.include_router(_import_router(dotted), prefix=f"/api/v1/{name}")
+    for name, router in routers.items():
+        app.include_router(router, prefix=f"/api/v1/{name}")
     for name, router in (extra_routers or {}).items():
         app.include_router(router, prefix=f"/api/v1/{name}")
     return app
