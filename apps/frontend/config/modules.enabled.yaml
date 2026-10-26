@@ -11,4 +11,8 @@ modules:
   - academics/examinations
   - campus-life/hostel
   - support/helpdesk
-platform: []
+platform:
+  - billing
+  - tenancy
+  - identity
+  - audit

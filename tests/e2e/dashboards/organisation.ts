@@ -60,3 +60,23 @@ export async function organisationWithUser(
     token: await login(request, user.email, user.password),
   };
 }
+
+/** Register, verify and approve an organisation and return its admin (the `org-admin` role) signed in. */
+export async function organisationAdmin(request: APIRequestContext, { academyType }: { academyType: string }): Promise<DashboardUser> {
+  const run = Date.now().toString(36);
+  const admin = { name: "E2E Admin", email: `admin@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
+  const org = await ok<{ id: string; name: string; slug: string; verification_token: string }>(
+    await request.post("/api/v1/tenancy/register", {
+      data: { organisation_name: `E2E org-admin ${run}`, slug: `e2e-${run}`, academy_type: academyType, admin, accepted_terms: true },
+    }),
+  );
+  await ok(await request.post("/api/v1/tenancy/register/verify", { data: { token: org.verification_token } }));
+  const root = { Authorization: `Bearer ${await login(request, SUPER_ADMIN.email, SUPER_ADMIN.password)}` };
+  await ok(await request.post(`/api/v1/tenancy/admin/organisations/${org.id}/approve`, { headers: root, data: { reason: "e2e" } }));
+  return {
+    organisation: { id: org.id, name: org.name, slug: org.slug },
+    email: admin.email,
+    password: admin.password,
+    token: await login(request, admin.email, admin.password),
+  };
+}
