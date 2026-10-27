@@ -14,7 +14,9 @@ One file decides what this host serves:
 
 ```yaml
 modules:                    # feature modules, <domain>/<module>
+  - academics/academic-management
   - campus-life/hostel
+  - support/helpdesk
 integrations: []            # adapters under integrations/, e.g. payment-sbiepay
 platform: [identity, tenancy, billing]
 ```
@@ -32,12 +34,15 @@ every enabled chain before restarting.
 
 **Enabling a module's backend** is a one-line PR adding its entry here (block style, alphabetical),
 reviewed by the app owner, once the module has `api/router.py` and its migrations. The frontend has its
-own list, `apps/frontend/config/modules.enabled.yaml`, with the same entry format; the two need not match.
+own list, `apps/frontend/config/modules.enabled.yaml`, with the same entry format. Every frontend-enabled
+module whose backend has `api/router.py` must be enabled here too (`tests/test_module_loader.py` checks),
+otherwise the dashboard shows widgets whose requests 404; a module with an API and no widgets is listed
+only here.
 
 | Mounted today | From |
 |---|---|
 | `/api/v1/identity`, `/tenancy`, `/billing` | `platform:` |
-| `/api/v1/hostel` | `modules:` (`modules/campus-life/hostel`) |
+| `/api/v1/academic-management`, `/hostel`, `/helpdesk` | `modules:` (`modules/<domain>/<module>`) |
 | `/api/v1/health` | this host |
 
 ## Run locally
