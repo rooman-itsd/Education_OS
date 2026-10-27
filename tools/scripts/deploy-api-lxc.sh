@@ -84,6 +84,7 @@ if ! in_ct "[ -f $APP/infra/docker/.env.api ]"; then
   : "${EOS_SUPER_ADMIN_PASSWORD:?first run: set EOS_SUPER_ADMIN_PASSWORD}"
   cat > "$TMP/.env.api" <<EOF
 EOS_DB_PASSWORD=$(openssl rand -hex 24)
+EOS_APP_DB_PASSWORD=$(openssl rand -hex 24)
 EOS_JWT_SECRET=$(openssl rand -hex 32)
 EOS_SUPER_ADMIN_EMAIL=$EOS_SUPER_ADMIN_EMAIL
 EOS_SUPER_ADMIN_PASSWORD=$EOS_SUPER_ADMIN_PASSWORD
@@ -95,18 +96,17 @@ EOF
   scp -q "$TMP/.env.api" "$PVE:/tmp/eos.env.api"
   pve "pct push $CTID /tmp/eos.env.api $APP/infra/docker/.env.api --perms 600 && rm -f /tmp/eos.env.api"
 fi
+# An .env.api from before the eos_app role: give the API its own database password, generated in the container.
+in_ct "grep -q '^EOS_APP_DB_PASSWORD=.' $APP/infra/docker/.env.api || printf '\nEOS_APP_DB_PASSWORD=%s\n' \"\$(openssl rand -hex 24)\" >> $APP/infra/docker/.env.api"
 
 # ---------- 4. build and start ----------
-echo "==> building and starting the API (first build takes a few minutes)"
+# `up` runs the migrate service first (eos_app role, migration chains; infra/docker/migrate.sh) and starts the
+# API only when it succeeded.
+echo "==> building, migrating and starting the API (first build takes a few minutes)"
 in_ct "cd $APP && $COMPOSE up -d --build --quiet-pull 2>&1 | tail -3"
 in_ct 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:8000/api/v1/health && exit 0; sleep 3; done; echo "API did not become healthy" >&2; exit 1'
 echo
-in_ct "cd $APP && $COMPOSE ps --format 'table {{.Service}}\t{{.Status}}'"
-
-# The API created the schema from its models at first start (init_db). Record that in each platform
-# service's Alembic chain once, so the auto-deploy can run `alembic upgrade head` for later revisions.
-echo "==> recording the schema version in the migration chains (first time only)"
-in_ct "cd $APP && $COMPOSE run --rm --no-deps -T -v $APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py api python /repo/stamp-chains.py"
+in_ct "cd $APP && $COMPOSE ps --all --format 'table {{.Service}}\t{{.Status}}'"
 
 # ---------- 5. auto-deploy timer inside the container ----------
 echo "==> installing the API auto-deploy timer"

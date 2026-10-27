@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (backend and widget built and tested; `apps/frontend` and `apps/backend` registration to come)
+**Status:** in-progress (backend and widget built and tested; registered in `apps/frontend` and `apps/backend`)
 
 Ticketing for all user roles with categories and routing.
 
@@ -57,9 +57,14 @@ noted in `application/service.py` where they are decided.
 
 ### Needs from the host repo
 - `packages/core` (`eos_core`); for tests, `packages/testing` (`eos_testing`).
-- Mount `eos_helpdesk.api.router:router` under `/api/v1/helpdesk` in `apps/backend` (owned by the apps owner).
-- Users need the module roles (`helpdesk-requester`, `-agent`, `-lead`, `-admin`, `-viewer`) in their token roles, or
-  an identity mapping from profile roles to them.
+- `support/helpdesk` in `apps/backend/config/modules.enabled.yaml`. From that list the module loader (#258) mounts
+  `eos_helpdesk.api.router:router` at `/api/v1/helpdesk` behind the entitlement gate (`/api/v1/health` lists it);
+  `tools/scripts/py-setup.sh` and the API image install the package; the API auto-deploy runs the Alembic chain in
+  `db/` (after `infra/docker/stamp-chains.py`); and CI runs `backend/tests` and checks the chain's upgrade,
+  row-level-security policies and downgrade on Postgres. If the package is not installed, the API does not start.
+- Permissions come from the roles in the token. The profile roles `support-staff`, `org-admin` and `management` get
+  the grants of `helpdesk-agent`, `helpdesk-admin` and `helpdesk-viewer` (contract 0.2.0); other profile roles, such
+  as students raising their own tickets, get none yet (open question 13 in `docs/user-stories.md`).
 - A daily call of `application.jobs.run_auto_close`, until `platform/scheduler` delivers `scheduler.job.due`.
 
 ## Frontend
@@ -72,9 +77,10 @@ one row per priority, urgent first, with unassigned, assigned-to-you and on-hold
 `frontend/src/api/client.ts` is a small typed client matching the contract's `OpenByPriority`, until the repo has a
 generated client. Tests are in `frontend/tests/` (Vitest and Testing Library).
 
-Not built yet: links from each row to a filtered ticket list (that helpdesk page does not exist), the lead's
-`scope=all` view (no dashboard layout for a support lead exists; the widget uses the default `my_queues`), and the
-registration in `apps/backend` and `apps/frontend`.
+The Support Staff dashboard shows the widget because `apps/frontend/config/modules.enabled.yaml` lists
+`support/helpdesk`. Not built yet: links from each row to a filtered ticket list (that helpdesk page does not exist)
+and the lead's `scope=all` view (no dashboard layout for a support lead exists; the widget uses the default
+`my_queues`).
 
 ## Run the checks
 ```

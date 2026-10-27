@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs every two minutes in the education-os API container (systemd timer). When the code it follows has
-# moved, checks it out, runs the platform migration chains, and rebuilds and restarts the API with Docker
-# Compose. Postgres keeps its volume; .env.api is untracked and survives `git reset --hard`.
+# moved, checks it out, rebuilds, runs the migrate service and restarts the API with Docker Compose.
+# Postgres keeps its volume; .env.api is untracked and survives `git reset --hard`.
 #
 # What it follows, from EOS_DEPLOY_REF in /etc/eos/api-autodeploy.env (optional):
 #   main (default)  staging: every merge to main
@@ -50,14 +50,20 @@ if [ "$want" = "$have" ] && [ "${FORCE:-}" != "1" ]; then
 fi
 git reset -q --hard "$target"
 
+# The API connects as eos_app (infra/docker/db-roles.py). An .env.api from before that gets its password here.
+env_file="$APP/infra/docker/.env.api"
+grep -q '^EOS_APP_DB_PASSWORD=.' "$env_file" || printf '\nEOS_APP_DB_PASSWORD=%s\n' "$(openssl rand -hex 24)" >> "$env_file"
+
 $COMPOSE build --quiet api
-# Schema first, against the running database: every Alembic chain apps/backend/config/modules.enabled.yaml
-# enables (platform services, then modules and integrations). stamp-chains.py first records chains whose
-# tables the API already created at start-up, so a module enabled since the last deploy is upgraded, not
-# created twice.
-$COMPOSE run --rm --no-deps -T -v "$APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py" api sh -c \
-  'python /repo/stamp-chains.py && for d in $(python tools/scripts/enabled-modules.py chains); do (cd "$d" && alembic upgrade head) || exit 1; done' \
-  || logger -t eos-api-autodeploy "migrations failed at $want; API not restarted"
+# Schema first, against the running database, through the one migration path: the migrate service
+# (infra/docker/migrate.sh: eos_app role, stamp for a database that predates migrations, every chain
+# apps/backend/config/modules.enabled.yaml enables). If it fails, the running API is left alone and the
+# checkout goes back, so the next run tries again.
+if ! $COMPOSE run --rm -T migrate; then
+  git reset -q --hard "$have"
+  logger -t eos-api-autodeploy "migrations failed at $want; API not restarted, staying on $have"
+  exit 1
+fi
 $COMPOSE up -d --quiet-pull
 docker image prune -f >/dev/null
 logger -t eos-api-autodeploy "deployed $label $want (was $have)"
