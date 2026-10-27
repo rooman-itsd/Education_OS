@@ -18,3 +18,23 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract (decisions on #129): purchase order approval checks the order total against its line (422
   `insufficient_budget`, 503 `budget_check_unavailable`); an expired quote is not awarded (409 `quote_expired`);
   business dates are Indian (Asia/Kolkata). Also documents 409 `vendor_blacklisted` and 422 `tender_required` on edit.
+- Backend (#129):
+  - vendors: registration, approval, suspension and blacklisting with a reason; only the last four digits of a bank
+    account are kept;
+  - indents: raise, edit, submit; approval by someone other than the requester checks budget-grants `GET /availability`
+    with the approver's token and sets the purchase method from the configured limits;
+  - quotation requests and tenders: create from approved indents on one line, publish, record quotes until closing,
+    compare lowest first, award (a justification for other than the lowest), which drafts the order;
+  - purchase orders: direct from a direct-purchase indent or from an award, approved by someone other than the
+    preparer, which issues them; cancel or close the undelivered remainder;
+  - goods receipts per item, accepted or rejected, never above what is outstanding;
+  - vendor invoices matched with the order and accepted receipts, approved by someone other than the recorder, and
+    marked paid;
+  - the purchase-orders-pending report;
+  - every event of `events.yaml`, with exactly its payload.
+- Alembic chain `procurement_0001`: 10 tables, each with `organisation_id` and the `tenant_isolation` policy on Postgres.
+- Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
+  until the audit SDK exists, as in hostel, helpdesk and budget-grants.
+- `config/env.example` lists every key; `module.yaml` status is `in-progress`.
+- Tests: 49, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+  drift (operations, permissions, enums, event payloads) and the audit trail.
