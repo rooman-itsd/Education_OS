@@ -2,7 +2,7 @@
 
 **Domain:** facilities
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress
 
 Fixed asset register of the organisation: every long-lived, valuable thing it owns, where it is, who holds it, what it cost, what it is worth now and when it was last physically checked.
 

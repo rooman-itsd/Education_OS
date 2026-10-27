@@ -14,9 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from eos_core.settings import settings
 from fastapi import APIRouter
 
-CONFIG = Path(__file__).resolve().parents[2] / "config" / "modules.enabled.yaml"
+# Resolved through the repo root like the profiles, plans and permission catalogues (EOS_REPO_ROOT, or the
+# checkout the process runs in), so a non-editable install finds it too. EOS_MODULES_FILE overrides it.
+CONFIG = settings.repo_root / "apps" / "backend" / "config" / "modules.enabled.yaml"
 _NAME = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 _FORMS = {
     "platform": re.compile(rf"^{_NAME}$"),
@@ -49,6 +52,10 @@ def enabled(path: Path | None = None) -> list[Entry]:
     """Entries in order: platform services first, then modules, then integrations.
     EOS_MODULES_FILE overrides the file (tests)."""
     path = path or Path(os.environ.get("EOS_MODULES_FILE") or CONFIG)
+    if not path.is_file():
+        raise RuntimeError(
+            f"{path} not found: set EOS_REPO_ROOT to the repository root, or EOS_MODULES_FILE to the file to use"
+        )
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     entries: list[Entry] = []
     for kind in ("platform", "modules", "integrations"):

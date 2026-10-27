@@ -10,6 +10,7 @@ modules:
   - academics/academic-management
   - academics/examinations
   - campus-life/hostel
+  - finance-operations/budget-grants
   - finance-operations/fees-accounts
   - support/helpdesk
 platform:
