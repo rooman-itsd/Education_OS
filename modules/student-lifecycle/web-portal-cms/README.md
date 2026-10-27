@@ -1,10 +1,13 @@
 # web-portal-cms
 
-**Domain:** student-lifecycle
-**Kind:** feature
-**Status:** in progress
+**Domain:** student-lifecycle  
+**Kind:** feature  
+**Status:** implemented (M1 Foundation)  
+**Owner:** Praveen (@praveen-rooman)
 
-Public website, CMS pages, announcements, news and notices.
+Public website, CMS marketing pages, announcements, and the organisation sign-up & approval experience.
+
+---
 
 ## Scope
 The organisation's public website: CMS pages, announcements/notices, and the organisation
@@ -62,14 +65,14 @@ See `module.yaml`. This module must not import code from any other module under 
 ## Layout
 | Path | Purpose |
 |---|---|
-| `docs/` | PRD, user stories, data model, screen list |
-| `contracts/` | OpenAPI, event schemas, permission catalogue |
-| `backend/` | Domain, application, infrastructure, API layers + unit tests |
-| `frontend/` | Pages, components, API client + tests |
-| `mobile/` | Mobile screens (optional) |
-| `db/` | Migrations and seed data, own schema only |
-| `config/` | `env.example`, feature flags |
-| `tests/e2e` | End-to-end tests runnable in isolation |
+| `docs/` | PRD, features reference, user stories, screens |
+| `contracts/` | OpenAPI specs, events, permissions |
+| `frontend/src/public/` | Public site shell (`PublicSite.tsx`), pages (`HomePage`, `FeaturesPage`, `SignUpPage`), components, and styles (`public.css`) |
+| `frontend/src/api/` | Public API client fetching billing plans and institution types |
+| `backend/` | Backend scaffold (business logic delegated to core platform services) |
+
+---
 
 ## Porting this module to another repo
+
 Follow [docs/architecture/module-standard.md](../../../docs/architecture/module-standard.md#portability-checklist).

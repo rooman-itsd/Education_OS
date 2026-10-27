@@ -59,6 +59,10 @@ class Approve(BaseModel):
     reason: str = ""
 
 
+class Reject(BaseModel):
+    reason: str = ""
+
+
 class Impersonate(BaseModel):
     user_id: str
     reason: str
@@ -148,6 +152,20 @@ def admin_approve(
     """Approve the organisation's academic package (registration or a requested change)."""
     try:
         return service.approve(db, org_id, approved_by=p.user_id, reason=body.reason).to_dict()
+    except TenancyError as e:
+        raise _err(e) from e
+
+
+@router.post("/admin/organisations/{org_id}/reject")
+def admin_reject(
+    org_id: str,
+    body: Reject,
+    p: Principal = Depends(require("platform:organisations:manage")),
+    db: Session = Depends(get_db),
+):
+    """Reject an organisation's registration awaiting approval: it is archived and the admin is emailed the reason."""
+    try:
+        return service.reject(db, org_id, rejected_by=p.user_id, reason=body.reason).to_dict()
     except TenancyError as e:
         raise _err(e) from e
 
