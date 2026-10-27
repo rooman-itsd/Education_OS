@@ -137,8 +137,11 @@ class TransferIn(Strict):
 
     @model_validator(mode="after")
     def at_least_one(self):
-        if not ({"location", "org_unit_id", "custodian_id"} & self.model_fields_set):
+        given = {"location", "org_unit_id", "custodian_id"} & self.model_fields_set
+        if not given:
             raise ValueError("give at least one of location, org_unit_id or custodian_id")
+        if any(getattr(self, k) is None for k in given):
+            raise ValueError("location, org_unit_id and custodian_id cannot be null; leave them out instead")
         return self
 
 

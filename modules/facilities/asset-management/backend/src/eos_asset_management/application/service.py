@@ -422,10 +422,15 @@ def _category(db: Session, category_id: str) -> Category:
     return c
 
 
-def _acquisition(data: dict, settings: ModuleSettings) -> tuple[dict, Decimal]:
-    """Split the contract Acquisition into the stored details and the decimal cost."""
-    acq = dict(data.get("acquisition") or {})
-    cost = _amount(acq.pop("cost", None), settings) or ZERO
+def _acquisition(
+    data: dict, settings: ModuleSettings, current: dict | None = None, current_cost: Decimal | None = None
+) -> tuple[dict, Decimal]:
+    """Split the contract Acquisition into the stored details and the decimal cost. On an update the fields the
+    caller leaves out keep their current values: a patch to the supplier never resets the cost to zero."""
+    acq = {**(current or {}), **(data.get("acquisition") or {})}
+    given = acq.pop("cost", None)
+    cost = _amount(given, settings) if given is not None else current_cost
+    cost = ZERO if cost is None else cost
     if isinstance(acq.get("date"), date):
         acq["date"] = acq["date"].isoformat()  # stored as JSON
     return acq, cost
@@ -507,8 +512,13 @@ def update_asset(db: Session, actor: Actor, asset_id: str, data: dict) -> dict:
     if "category_id" in data:
         a.category_id = _category(db, data.pop("category_id")).id
     if "acquisition" in data:
-        acq, cost = _acquisition(data, settings)
+        acq, cost = _acquisition(data, settings, a.acquisition, Decimal(a.cost))
         data.pop("acquisition")
+        taken = Decimal(a.accumulated_depreciation)
+        if cost < taken:
+            raise AssetError(
+                422, "cost_below_depreciation", f"cost cannot be below the {fmt(taken)} already depreciated"
+            )
         a.acquisition, a.cost = acq, cost
     for key, value in data.items():
         setattr(a, key, value)
@@ -858,6 +868,8 @@ def _delete_run(db: Session, r: DepreciationRun) -> None:
 def calculate_run(db: Session, actor: Actor, period_end: date, category_ids: list[str] | None) -> dict:
     """Calculate a draft for the period, replacing an existing draft for the same period (rule 5)."""
     settings = load_settings()
+    if period_end > month_end(today()):
+        raise AssetError(422, "period_in_future", "period_end cannot be after the current month")
     try:
         period_start = run_period(period_end, repo.last_posted_end(db))
     except RuleViolationError as v:
@@ -1107,6 +1119,8 @@ def complete_disposal(db: Session, actor: Actor, disposal_id: str, data: dict) -
     disposed_on: date = data["disposed_on"]
     if disposed_on < a.in_service_date:
         raise AssetError(422, "invalid_date", "disposed_on is before the asset went into service")
+    if disposed_on > today():
+        raise AssetError(422, "invalid_date", "disposed_on cannot be in the future")
     if a.depreciated_to and disposed_on <= a.depreciated_to:
         raise AssetError(422, "invalid_date", f"depreciation is already posted up to {iso(a.depreciated_to)}")
     proceeds = _amount(data.get("proceeds"), settings) or ZERO

@@ -192,6 +192,21 @@ def monthly_charge(d: Depreciation, cost: Decimal, book_value: Decimal) -> Decim
     return min(cents(amount), room)
 
 
+def months_between(start: date, end: date) -> int:
+    """Months from the month of start to the month of end, inclusive."""
+    return (end.year - start.year) * 12 + end.month - start.month + 1
+
+
+def straight_line_charge(d: Depreciation, cost: Decimal, book_value: Decimal, n: int) -> Decimal:
+    """The n-th month's straight-line charge: the cumulative target after n months less what is already taken, so
+    per-month rounding never drifts and the schedule ends exactly at the end of useful life."""
+    residual = residual_value(cost, d)
+    depreciable = cost - residual
+    life = d.useful_life_months or 1
+    target = depreciable if n >= life else cents(depreciable * n / life)
+    return max(min(target - (cost - book_value), book_value - residual), ZERO)
+
+
 def first_charge_month(in_service: date) -> date:
     """Pro-rated by month: the month the asset went into service is the first month charged."""
     return month_end(in_service)
@@ -207,7 +222,10 @@ def depreciate(
     for m in months:
         if m < start:
             continue
-        amount = monthly_charge(d, cost, book_value)
+        if d.method == "straight_line":
+            amount = straight_line_charge(d, cost, book_value, months_between(start, m))
+        else:
+            amount = monthly_charge(d, cost, book_value)
         if amount <= 0:
             break
         book_value -= amount

@@ -232,7 +232,7 @@ def test_verification_due_cycle_and_overdue_sweep(client, org):
 # ---------------------------------------------------------------- depreciation
 
 
-def test_depreciation_runs_draft_post_and_lock(client, org):
+def test_depreciation_runs_draft_post_and_lock(client, org, monkeypatch):
     _, mgr = org.user(MANAGER)
     _, fin = org.user(FINANCE)
     cat = category(client, mgr, depreciation=STRAIGHT_LINE)
@@ -271,7 +271,11 @@ def test_depreciation_runs_draft_post_and_lock(client, org):
     }
     assert schedule["projected"][-1]["book_value_after"] == inr("3000.00")
 
+    assert post(client, fin, "/depreciation-runs", {"period_end": "2026-11-30"}, 422)["detail"]["code"] == (
+        "period_in_future"
+    )
     october = post(client, fin, "/depreciation-runs", {"period_end": "2026-10-31"}, 202)
+    monkeypatch.setattr(service, "clock", lambda: NOW + timedelta(days=50))  # December: November may be drafted
     november = post(client, fin, "/depreciation-runs", {"period_end": "2026-11-30"}, 202)
     assert october["period_start"] == "2026-10-01" and october["total"] == inr("950.00")
     assert (
@@ -337,13 +341,13 @@ def test_disposal_request_decide_and_complete(client, org, monkeypatch):
         client,
         mgr,
         f"/disposals/{final['id']}/complete",
-        {"disposed_on": "2026-10-15", "proceeds": inr("50000.00"), "recipient": "Staff sale"},
+        {"disposed_on": "2026-10-10", "proceeds": inr("50000.00"), "recipient": "Staff sale"},
     )
     assert done["status"] == "completed"
     assert done["book_value_at_disposal"] == inr("57150.00")  # October taken on disposal
     assert done["gain_or_loss"] == inr("-7150.00")
     gone = client.get(f"{BASE}/assets/{a['id']}", headers=mgr).json()
-    assert gone["status"] == "disposed" and gone["disposed_on"] == "2026-10-15"
+    assert gone["status"] == "disposed" and gone["disposed_on"] == "2026-10-10"
     assert gone["next_verification_due"] is None
     assert client.patch(f"{BASE}/assets/{a['id']}", json={"make": "x"}, headers=mgr).status_code == 409
     assert (
