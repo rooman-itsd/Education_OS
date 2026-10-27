@@ -41,3 +41,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   client and Vitest tests; the frontend `test` script, Vitest globals and `vitest.config.ts`.
 - The widget says "Helpdesk data is not available yet." when the API answers 404, 502 or 503 or cannot be reached,
   instead of asking the user to check their connection, as the examinations widgets do; 401 and 403 offer no retry.
+- Registered in both hosts: `apps/frontend/config/modules.enabled.yaml` lists `support/helpdesk` (#248), so the
+  Support Staff dashboard shows the widget, and `apps/backend/config/modules.enabled.yaml` lists it too, so the
+  module loader (#258) mounts the API at `/api/v1/helpdesk`, installs the package, runs the `db/` chain on deploy
+  and runs the module's tests and its Postgres migration check in CI.
