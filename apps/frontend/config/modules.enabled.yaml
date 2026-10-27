@@ -12,6 +12,7 @@ modules:
   - campus-life/hostel
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
+  - finance-operations/procurement
   - support/helpdesk
 platform:
   - billing

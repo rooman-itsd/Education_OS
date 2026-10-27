@@ -11,6 +11,7 @@ modules:
   - academics/academic-management
   - campus-life/hostel
   - finance-operations/fees-accounts
+  - finance-operations/procurement
   - student-lifecycle/student-information
   - support/helpdesk
   - finance-operations/budget-grants

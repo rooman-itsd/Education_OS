@@ -56,3 +56,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     the report's dates, with tests on both sides of IST midnight;
   - an expired quote is not awarded (409 `quote_expired`); a quote is valid through its `valid_until` date, and the
     lowest valid quote sets whether a justification is needed.
+- Widget `purchase-orders-pending` (Finance Staff), with loading, empty and error-with-retry states; 18 tests. Frontend
+  test dependencies came in their own PR.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/procurement`) and
+  `apps/frontend/config/modules.enabled.yaml`; the README documents the widget.
