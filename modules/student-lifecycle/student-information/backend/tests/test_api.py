@@ -10,7 +10,7 @@ Tests:
 7. Documents: attach, list, delete (204), 404 for missing.
 8. ID Cards: issuance (IdentityCardInput with expires_at only), 409 active_card_exists, revoke, 409 card_not_active.
 9. Tenant Isolation: complete cross-tenant invisibility (404s, list scoping, duplicate identity_number allowed across orgs).
-10. Transactional Outbox: verify event generation boundary and email omission withholding.
+10. Transactional Outbox: verify event generation boundary; a person without an email is still announced.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import jwt
+from conftest import ADMISSIONS, NO_ACCESS, READ_ONLY, REGISTRAR
 from eos_core.db import SessionLocal, utcnow
 from eos_core.events import OutboxEvent
 from eos_core.settings import settings
@@ -39,7 +40,6 @@ def mint_token(
     user_id: str = "test-user-1",
     organisation_id: str | None = "org-alpha-1234",
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> str:
@@ -52,8 +52,6 @@ def mint_token(
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
     }
-    if perms is not None:
-        payload["perms"] = list(perms)
     return jwt.encode(payload, secret or settings.jwt_secret, algorithm="HS256")
 
 
@@ -62,7 +60,6 @@ def make_auth_headers(
     user_id: str = "test-user-1",
     organisation_id: str | None = "org-alpha-1234",
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> dict[str, str]:
@@ -70,7 +67,6 @@ def make_auth_headers(
         user_id=user_id,
         organisation_id=organisation_id,
         roles=roles,
-        perms=perms,
         sa=sa,
         secret=secret,
     )
@@ -124,8 +120,8 @@ def test_auth_missing_organisation_claim(client):
 
 
 def test_permission_person_read_enforced(client):
-    # User has write permission but lacks person:read
-    headers = make_auth_headers(perms=[PERM_PERSON_WRITE])
+    # A user whose roles carry no student-information key
+    headers = make_auth_headers(roles=[NO_ACCESS])
     res = client.get(f"{BASE_PATH}/people", headers=headers)
     assert res.status_code == 403
     assert PERM_PERSON_READ in res.json()["detail"]
@@ -133,7 +129,7 @@ def test_permission_person_read_enforced(client):
 
 def test_permission_person_write_enforced(client):
     # User has read-only permission but tries to create a person
-    headers = make_auth_headers(perms=[PERM_PERSON_READ])
+    headers = make_auth_headers(roles=[READ_ONLY])
     res = client.post(
         f"{BASE_PATH}/people",
         headers=headers,
@@ -144,7 +140,7 @@ def test_permission_person_write_enforced(client):
 
 
 def test_permission_status_manage_enforced(client, headers_a):
-    # First create a person with full perms
+    # First create a person as the registrar
     create_res = client.post(
         f"{BASE_PATH}/people",
         headers=headers_a,
@@ -153,7 +149,7 @@ def test_permission_status_manage_enforced(client, headers_a):
     person_id = create_res.json()["id"]
 
     # Try changing status with read/write only (lacking status:manage)
-    no_status_perm = make_auth_headers(perms=[PERM_PERSON_READ, PERM_PERSON_WRITE])
+    no_status_perm = make_auth_headers(roles=[ADMISSIONS])
     res = client.put(
         f"{BASE_PATH}/people/{person_id}/status",
         headers=no_status_perm,
@@ -171,7 +167,7 @@ def test_permission_document_manage_enforced(client, headers_a):
     )
     person_id = create_res.json()["id"]
 
-    no_doc_perm = make_auth_headers(perms=[PERM_PERSON_READ])
+    no_doc_perm = make_auth_headers(roles=[READ_ONLY])
     res = client.post(
         f"{BASE_PATH}/people/{person_id}/documents",
         headers=no_doc_perm,
@@ -189,7 +185,7 @@ def test_permission_id_card_manage_enforced(client, headers_a):
     )
     person_id = create_res.json()["id"]
 
-    no_card_perm = make_auth_headers(perms=[PERM_PERSON_READ])
+    no_card_perm = make_auth_headers(roles=[READ_ONLY])
     res = client.post(
         f"{BASE_PATH}/people/{person_id}/id-cards",
         headers=no_card_perm,
@@ -442,8 +438,14 @@ def test_document_lifecycle(client, headers_a):
     assert len(list_res.json()) == 1
 
     # Delete document (204 No Content)
-    del_res = client.delete(
+    # The path takes the PersonDocument reference id, not the platform document id
+    del_by_platform_id = client.delete(
         f"{BASE_PATH}/people/{person_id}/documents/platform-doc-uuid-99",
+        headers=headers_a,
+    )
+    assert del_by_platform_id.status_code == 404
+    del_res = client.delete(
+        f"{BASE_PATH}/people/{person_id}/documents/{doc_obj.id}",
         headers=headers_a,
     )
     assert del_res.status_code == 204
@@ -610,19 +612,14 @@ def test_multi_tenant_isolation(client, headers_a, headers_b):
 # =====================================================================
 
 
-def test_transactional_outbox_events_and_email_withholding(client):
+def test_transactional_outbox_events(client):
     from eos_core.db import new_id
 
     org_id = f"org-events-{new_id()[:8]}"
     headers = make_auth_headers(
         user_id="user-staff-events",
         organisation_id=org_id,
-        perms={
-            PERM_PERSON_READ,
-            PERM_PERSON_WRITE,
-            PERM_STATUS_MANAGE,
-            PERM_ID_CARD_MANAGE,
-        },
+        roles=[REGISTRAR],
     )
 
     # 1. Person created with contact email -> event is published
@@ -642,7 +639,7 @@ def test_transactional_outbox_events_and_email_withholding(client):
     assert len(matching) == 1
     assert matching[0]["email"] == "event.tester@example.com"
 
-    # 2. Person created WITHOUT contact email -> event is withheld per flagged contract decision
+    # 2. Person created WITHOUT contact email -> event is still published, email null (contracts/events.yaml)
     res_no_email = client.post(
         f"{BASE_PATH}/people",
         headers=headers,
@@ -656,7 +653,8 @@ def test_transactional_outbox_events_and_email_withholding(client):
 
     events_after = _get_outbox_events(org_id, "student-information.person.created")
     matching_no_email = [e for e in events_after if e.get("person_id") == person_no_email_id]
-    assert len(matching_no_email) == 0  # Crucial: email discrepancy preserved; no empty string emitted
+    assert len(matching_no_email) == 1
+    assert matching_no_email[0]["email"] is None
 
     # 3. Status changed event
     client.put(

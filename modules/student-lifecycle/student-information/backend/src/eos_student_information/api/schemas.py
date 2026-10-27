@@ -54,8 +54,8 @@ class PersonInput(Strict):
 
 
 class PersonUpdate(Strict):
-    first_name: str | None = Field(default=None, max_length=120)
-    last_name: str | None = Field(default=None, max_length=120)
+    first_name: str | None = Field(default=None, min_length=1, max_length=120)
+    last_name: str | None = Field(default=None, min_length=1, max_length=120)
     preferred_name: str | None = Field(default=None, max_length=120)
     date_of_birth: date | None = None
     gender: str | None = None

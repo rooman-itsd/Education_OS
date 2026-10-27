@@ -3,7 +3,7 @@
 Tests:
 - All five contracted event types and exact payload shapes
 - Outbox transactional boundary (events committed with entities, rolled back on error)
-- Email presence withholding (preserves the unresolved contract discrepancy)
+- A person without an email is still announced, with email null
 """
 
 from __future__ import annotations
@@ -66,8 +66,8 @@ def test_person_created_event_payload(db):
     assert payload["source"] == {"module": "admissions", "entity": "application", "id": "app-rome-01"}
 
 
-def test_person_created_without_email_withholds_event(db):
-    """Flagged discrepancy verification: no empty string is emitted if email is missing."""
+def test_person_created_without_email_is_still_announced(db):
+    """contracts/events.yaml: every created person is announced; a missing email is null, never ''."""
     org_id = f"org-evt-noemail-{new_id()[:8]}"
     actor = Actor(user_id="user-evt-2", organisation_id=org_id, permissions=ALL_PERMISSIONS)
 
@@ -81,7 +81,8 @@ def test_person_created_without_email_withholds_event(db):
     db.commit()
 
     events = _outbox_events(db, org_id, "student-information.person.created")
-    assert len(events) == 0
+    assert len(events) == 1
+    assert events[0]["email"] is None
 
 
 def test_person_updated_event_payload(db):
@@ -106,7 +107,7 @@ def test_person_updated_event_payload(db):
     assert payload["email"] == "new@edu.com"
 
 
-def test_person_updated_without_email_withholds_event(db):
+def test_person_updated_without_email_is_still_announced(db):
     org_id = f"org-evt-up-noemail-{new_id()[:8]}"
     actor = Actor(user_id="user-evt-up-noemail", organisation_id=org_id, permissions=ALL_PERMISSIONS)
 
@@ -117,7 +118,8 @@ def test_person_updated_without_email_withholds_event(db):
     db.commit()
 
     events = _outbox_events(db, org_id, "student-information.person.updated")
-    assert len(events) == 0
+    assert len(events) == 1
+    assert events[0]["email"] is None and events[0]["person_id"] == person.id
 
 
 def test_person_status_changed_event_payload(db):

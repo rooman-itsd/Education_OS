@@ -21,6 +21,7 @@ from ..domain.enums import IdCardStatus, PersonStatus
 PREFIX = "student_information_"
 
 IDENTITY_NOT_NULL = sa.text("identity_number IS NOT NULL")
+USER_NOT_NULL = sa.text("identity_user_id IS NOT NULL")
 ACTIVE_CARD = sa.text("status = 'issued'")
 
 
@@ -53,6 +54,15 @@ class Person(Base, TenantMixin, TimestampMixin):
             unique=True,
             sqlite_where=IDENTITY_NOT_NULL,
             postgresql_where=IDENTITY_NOT_NULL,
+        ),
+        # One Person per sign-in account: other modules key on the identity user id until they map it to a person
+        Index(
+            "uq_student_info_person_user",
+            "organisation_id",
+            "identity_user_id",
+            unique=True,
+            sqlite_where=USER_NOT_NULL,
+            postgresql_where=USER_NOT_NULL,
         ),
     )
 

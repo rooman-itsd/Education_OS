@@ -45,8 +45,6 @@ def current_actor(
     is_super_admin = bool(claims.get("sa"))
 
     permissions = permissions_for(roles, is_super_admin)
-    if "perms" in claims and isinstance(claims["perms"], (list, set)):
-        permissions = permissions | set(claims["perms"])
 
     actor = Actor(
         user_id=user_id,

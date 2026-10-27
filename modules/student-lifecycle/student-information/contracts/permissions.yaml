@@ -15,6 +15,32 @@ permissions:
     description: Attach or remove documents on a person's record.
   - key: student-information:id-card:manage
     description: Issue or revoke a person's ID card.
-# Role-to-permission composition is profile data owned by the Architecture lead
-# (platform/identity/config/profiles/*.yaml), not this file. See ADR-0004.
-roles: []
+# Roles are granted here because platform/identity composes permissions only from the roles listed in
+# every contracts/permissions.yaml (eos_core.config.permissions_for); profiles name roles but hold no grants.
+# `registrar` is the module's own role; `org-admin`, `management` and `admissions-staff` are catalogue roles.
+roles:
+  - name: registrar
+    description: Registrar / student-information staff. Creates and maintains records, changes status, issues ID cards.
+    grants:
+      - student-information:person:read
+      - student-information:person:write
+      - student-information:status:manage
+      - student-information:document:manage
+      - student-information:id-card:manage
+  - name: org-admin
+    description: Organisation admin. Full access to the organisation's people records.
+    grants:
+      - student-information:person:read
+      - student-information:person:write
+      - student-information:status:manage
+      - student-information:document:manage
+      - student-information:id-card:manage
+  - name: management
+    description: Management oversight, read only.
+    grants:
+      - student-information:person:read
+  - name: admissions-staff
+    description: Admissions staff converting an accepted applicant into a Person record (docs/prd.md section 6).
+    grants:
+      - student-information:person:read
+      - student-information:person:write

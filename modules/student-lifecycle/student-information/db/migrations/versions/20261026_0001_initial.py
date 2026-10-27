@@ -26,6 +26,7 @@ TABLES = [
 ]
 
 IDENTITY_NOT_NULL = sa.text("identity_number IS NOT NULL")
+USER_NOT_NULL = sa.text("identity_user_id IS NOT NULL")
 ACTIVE_CARD = sa.text("status = 'issued'")
 
 
@@ -151,6 +152,14 @@ def upgrade() -> None:
         unique=True,
         sqlite_where=IDENTITY_NOT_NULL,
         postgresql_where=IDENTITY_NOT_NULL,
+    )
+    op.create_index(
+        "uq_student_info_person_user",
+        "student_information_person",
+        ["organisation_id", "identity_user_id"],
+        unique=True,
+        sqlite_where=USER_NOT_NULL,
+        postgresql_where=USER_NOT_NULL,
     )
     op.create_index(
         "uq_student_info_active_card",

@@ -31,7 +31,6 @@ def mint_token(
     user_id: str = "test-user-1",
     organisation_id: str | None = None,
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> str:
@@ -44,8 +43,6 @@ def mint_token(
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
     }
-    if perms is not None:
-        payload["perms"] = list(perms)
     return jwt.encode(payload, secret or settings.jwt_secret, algorithm="HS256")
 
 
@@ -54,7 +51,6 @@ def make_auth_headers(
     user_id: str = "test-user-1",
     organisation_id: str | None = None,
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> dict[str, str]:
@@ -62,7 +58,6 @@ def make_auth_headers(
         user_id=user_id,
         organisation_id=organisation_id,
         roles=roles,
-        perms=perms,
         sa=sa,
         secret=secret,
     )
@@ -73,12 +68,12 @@ def _seed_org(client, org_id: str) -> dict:
     headers = make_auth_headers(
         user_id=f"user-{org_id[:8]}",
         organisation_id=org_id,
-        perms=ALL_PERMISSIONS,
+        roles=["registrar"],
     )
     token = mint_token(
         user_id=f"user-{org_id[:8]}",
         organisation_id=org_id,
-        perms=ALL_PERMISSIONS,
+        roles=["registrar"],
     )
 
     # Create a person
@@ -233,8 +228,8 @@ def test_identity_number_uniqueness_strictly_scoped_by_tenant(client):
     org_a = f"org-iso-a-{new_id()[:8]}"
     org_b = f"org-iso-b-{new_id()[:8]}"
 
-    headers_a = make_auth_headers(organisation_id=org_a, perms=ALL_PERMISSIONS)
-    headers_b = make_auth_headers(organisation_id=org_b, perms=ALL_PERMISSIONS)
+    headers_a = make_auth_headers(organisation_id=org_a, roles=["registrar"])
+    headers_b = make_auth_headers(organisation_id=org_b, roles=["registrar"])
 
     # Org A creates person with shared_identity
     res_a1 = client.post(

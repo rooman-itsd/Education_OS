@@ -88,6 +88,13 @@ ALL_PERMISSIONS = {
 
 BASE_PATH = "/api/v1/student-information"
 
+# Roles from contracts/permissions.yaml: tokens carry roles, as identity issues them; permissions come from
+# the catalogue (eos_core.config.permissions_for), never from a claim.
+REGISTRAR = "registrar"  # every student-information key
+READ_ONLY = "management"  # person:read only
+ADMISSIONS = "admissions-staff"  # person:read and person:write
+NO_ACCESS = "student"  # no student-information key
+
 
 @pytest.fixture(scope="session")
 def app():
@@ -112,7 +119,6 @@ def mint_token(
     user_id: str = "test-user-1",
     organisation_id: str | None = None,
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> str:
@@ -131,8 +137,6 @@ def mint_token(
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(hours=1)).timestamp()),
     }
-    if perms is not None:
-        payload["perms"] = list(perms)
     return jwt.encode(payload, secret or settings.jwt_secret, algorithm="HS256")
 
 
@@ -141,7 +145,6 @@ def make_auth_headers(
     user_id: str = "test-user-1",
     organisation_id: str | None = None,
     roles: list[str] | None = None,
-    perms: list[str] | set[str] | None = None,
     sa: bool = False,
     secret: str | None = None,
 ) -> dict[str, str]:
@@ -149,7 +152,6 @@ def make_auth_headers(
         user_id=user_id,
         organisation_id=organisation_id,
         roles=roles,
-        perms=perms,
         sa=sa,
         secret=secret,
     )
@@ -163,7 +165,7 @@ def headers_a():
     return make_auth_headers(
         user_id="user-staff-a",
         organisation_id=f"org-a-{new_id()[:8]}",
-        perms=ALL_PERMISSIONS,
+        roles=[REGISTRAR],
     )
 
 
@@ -174,5 +176,5 @@ def headers_b():
     return make_auth_headers(
         user_id="user-staff-b",
         organisation_id=f"org-b-{new_id()[:8]}",
-        perms=ALL_PERMISSIONS,
+        roles=[REGISTRAR],
     )

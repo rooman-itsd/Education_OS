@@ -110,7 +110,13 @@ def test_error_schemas_contract_shapes(openapi):
     schemas = openapi["components"]["schemas"]
 
     conflict_codes = schemas["ConflictError"]["properties"]["code"]["enum"]
-    assert set(conflict_codes) == {"duplicate_identity_number", "active_card_exists", "card_not_active"}
+    assert set(conflict_codes) == {
+        "duplicate_identity_number",
+        "duplicate_identity_user",
+        "active_card_exists",
+        "card_not_active",
+        "conflict",
+    }
 
     rule_codes = schemas["RuleError"]["properties"]["code"]["enum"]
     assert set(rule_codes) == {"status_unchanged"}

@@ -10,7 +10,6 @@ Implements all core use cases:
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
@@ -23,8 +22,6 @@ from sqlalchemy.orm import Session
 from ..domain.enums import DOCUMENT_TYPES, IdCardStatus, PersonStatus
 from ..domain.rules import RuleViolationError, generate_card_number, validate_status_change
 from ..infrastructure.models import IdentityCard, Person, PersonDocument, StatusHistoryEntry, iso
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,6 +48,32 @@ class ServiceError(Exception):
 
     def to_dict(self) -> dict[str, str]:
         return {"code": self.code, "message": self.message}
+
+
+def _clean_identity_number(value: Any) -> str | None:
+    """Trim whitespace; an empty value is "not provided" (None), never '' (which the partial unique
+    index would treat as a real number and reject on the second person)."""
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def _assert_user_unlinked(db: Session, org_id: str, identity_user_id: str | None, except_person: str | None) -> None:
+    """A sign-in account maps to at most one person in an organisation (uq_student_info_person_user)."""
+    if not identity_user_id:
+        return
+    q = db.query(Person.id).filter(Person.organisation_id == org_id, Person.identity_user_id == identity_user_id)
+    if except_person:
+        q = q.filter(Person.id != except_person)
+    if q.first():
+        raise _conflict("duplicate_identity_user", "This identity user is already linked to another person")
+
+
+def _like(term: str) -> str:
+    """A contains-pattern for ilike with the user's % _ \\ taken literally."""
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def _not_found(message: str) -> ServiceError:
@@ -83,7 +106,7 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
     org_id = actor.organisation_id
 
     # Check duplicate identity_number within the organisation
-    identity_num = data.get("identity_number")
+    identity_num = _clean_identity_number(data.get("identity_number"))
     if identity_num:
         existing = (
             db.query(Person.id).filter(Person.organisation_id == org_id, Person.identity_number == identity_num).first()
@@ -93,6 +116,7 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
                 "duplicate_identity_number",
                 f"An identity document number '{identity_num}' already in use in this organisation",
             )
+    _assert_user_unlinked(db, org_id, data.get("identity_user_id"), None)
 
     person = Person(
         id=new_id(),
@@ -126,30 +150,23 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
     )
     db.add(initial_history)
 
-    # Publish student-information.person.created event if email is present
+    # Every created person is announced (contracts/events.yaml); email is null when not provided.
     contact = data.get("contact") or {}
     email = contact.get("email") if isinstance(contact, dict) else None
-    if email:
-        _publish(
-            db,
-            actor,
-            "student-information.person.created",
-            org_id,
-            {
-                "person_id": person.id,
-                "first_name": person.first_name,
-                "last_name": person.last_name,
-                "email": email,
-                "status": person.status,
-                "source": person.source,
-            },
-        )
-    else:
-        logger.info(
-            "Event student-information.person.created withheld for person %s: "
-            "contact.email is absent and empty string fallback is suppressed pending contract resolution.",
-            person.id,
-        )
+    _publish(
+        db,
+        actor,
+        "student-information.person.created",
+        org_id,
+        {
+            "person_id": person.id,
+            "first_name": person.first_name,
+            "last_name": person.last_name,
+            "email": email or None,
+            "status": person.status,
+            "source": person.source,
+        },
+    )
 
     db.flush()
     return person
@@ -169,6 +186,7 @@ def list_people(
     *,
     q: str | None = None,
     identity_number: str | None = None,
+    identity_user_id: str | None = None,
     status: list[str] | str | None = None,
     page: int = 1,
     page_size: int = 50,
@@ -181,6 +199,8 @@ def list_people(
 
     if identity_number:
         query = query.filter(Person.identity_number == identity_number)
+    if identity_user_id:
+        query = query.filter(Person.identity_user_id == identity_user_id)
 
     if status:
         if isinstance(status, str):
@@ -191,13 +211,14 @@ def list_people(
             query = query.filter(Person.status.in_(statuses))
 
     if q and q.strip():
-        term = f"%{q.strip()}%"
-        # Search case-insensitively across first_name, last_name, and string-cast contact
+        term = _like(q.strip())
+        # Case-insensitive contains on first name, last name and the contact email (the contract's q), not on
+        # the rest of the contact record
         query = query.filter(
             sa.or_(
-                Person.first_name.ilike(term),
-                Person.last_name.ilike(term),
-                sa.cast(Person.contact, sa.String).ilike(term),
+                Person.first_name.ilike(term, escape="\\"),
+                Person.last_name.ilike(term, escape="\\"),
+                Person.contact["email"].as_string().ilike(term, escape="\\"),
             )
         )
 
@@ -223,6 +244,8 @@ def update_person(db: Session, actor: Actor, person_id: str, updates: dict[str, 
         raise _rule_error("status_immutable", "Cannot update status directly; use /people/{id}/status")
 
     # If identity_number changed, verify duplicate constraint
+    if "identity_number" in updates:
+        updates = {**updates, "identity_number": _clean_identity_number(updates["identity_number"])}
     new_identity = updates.get("identity_number")
     if new_identity is not None and new_identity != person.identity_number:
         existing = (
@@ -239,6 +262,8 @@ def update_person(db: Session, actor: Actor, person_id: str, updates: dict[str, 
                 "duplicate_identity_number",
                 f"An identity document number '{new_identity}' already in use in this organisation",
             )
+    if updates.get("identity_user_id") and updates["identity_user_id"] != person.identity_user_id:
+        _assert_user_unlinked(db, actor.organisation_id, updates["identity_user_id"], person_id)
 
     # Apply permitted fields
     for field_name in (
@@ -257,28 +282,20 @@ def update_person(db: Session, actor: Actor, person_id: str, updates: dict[str, 
 
     person.updated_at = utcnow()
 
-    # Publish updated event if email is present
     contact = person.contact or {}
     email = contact.get("email") if isinstance(contact, dict) else None
-    if email:
-        _publish(
-            db,
-            actor,
-            "student-information.person.updated",
-            actor.organisation_id,
-            {
-                "person_id": person.id,
-                "first_name": person.first_name,
-                "last_name": person.last_name,
-                "email": email,
-            },
-        )
-    else:
-        logger.info(
-            "Event student-information.person.updated withheld for person %s: "
-            "contact.email is absent and empty string fallback is suppressed pending contract resolution.",
-            person.id,
-        )
+    _publish(
+        db,
+        actor,
+        "student-information.person.updated",
+        actor.organisation_id,
+        {
+            "person_id": person.id,
+            "first_name": person.first_name,
+            "last_name": person.last_name,
+            "email": email or None,
+        },
+    )
 
     db.flush()
     return person
@@ -400,13 +417,13 @@ def delete_document(db: Session, actor: Actor, person_id: str, document_id: str)
     """Removes a document reference from a person's record."""
     get_person(db, actor, person_id)
 
-    # Match by document_id or row id
+    # The path id is the PersonDocument reference id (contract), not the platform document id
     doc = (
         db.query(PersonDocument)
         .filter(
             PersonDocument.organisation_id == actor.organisation_id,
             PersonDocument.person_id == person_id,
-            sa.or_(PersonDocument.document_id == document_id, PersonDocument.id == document_id),
+            PersonDocument.id == document_id,
         )
         .first()
     )

@@ -10,6 +10,7 @@ from typing import Any
 
 from eos_core.db import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..application import service as svc
@@ -58,6 +59,11 @@ def _run(fn, *args: Any, **kwargs: Any) -> Any:
         return res
     except ServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+    except IntegrityError as exc:
+        # Two requests passed the duplicate check at once; the unique index decided
+        raise HTTPException(
+            status_code=409, detail={"code": "conflict", "message": "a record with the same unique value exists"}
+        ) from exc
 
 
 # ---------------------------------------------------------------- Person CRUD & Search
@@ -67,6 +73,7 @@ def _run(fn, *args: Any, **kwargs: Any) -> Any:
 def list_people(
     q: str | None = None,
     identity_number: str | None = None,
+    identity_user_id: str | None = None,
     status: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -81,6 +88,7 @@ def list_people(
         actor,
         q=q,
         identity_number=identity_number,
+        identity_user_id=identity_user_id,
         status=parsed_status,
         page=page,
         page_size=page_size,

@@ -2,7 +2,7 @@
 
 Tests:
 - Person creation with duplicate detection and event publishing
-- Event email withholding for missing emails (contract blocker protection)
+- A person without an email is still announced, with email null
 - Strict tenant scoping (no leakage between orgs)
 - Search, filter (status list/comma-separated, identity_number), and pagination
 - Person update with duplicate protection and direct status mutation prevention
@@ -75,7 +75,7 @@ def test_create_person_and_event(db, actor_a: Actor):
     assert event.payload["source"]["module"] == "admissions"
 
 
-def test_create_person_without_email_withholds_event(db, actor_a: Actor):
+def test_create_person_without_email_publishes_event_with_null_email(db, actor_a: Actor):
     # Person with no email provided
     data = {
         "first_name": "Bob",
@@ -90,7 +90,7 @@ def test_create_person_without_email_withholds_event(db, actor_a: Actor):
     assert person.id is not None
     events_after = db.query(OutboxEvent).count()
 
-    # No dummy "" emitted; event emission is withheld pending contract decision
+    # Every created person is announced (contracts/events.yaml); the email is null, never ""
     created_events = (
         db.query(OutboxEvent)
         .filter(
@@ -99,8 +99,9 @@ def test_create_person_without_email_withholds_event(db, actor_a: Actor):
         )
         .all()
     )
-    assert len(created_events) == 0
-    assert events_after == events_before
+    assert len(created_events) == 1
+    assert created_events[0].payload["email"] is None
+    assert events_after == events_before + 1
 
 
 def test_duplicate_identity_number_enforced_within_org(db, actor_a: Actor, actor_b: Actor):
