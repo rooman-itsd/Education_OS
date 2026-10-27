@@ -2,8 +2,8 @@
 
 **Domain:** campus-life
 **Kind:** feature
-**Status:** in-progress (contract 0.2.0 reviewed; backend, migrations, tests and the `hostel.notices` widget built;
-not yet mounted in `apps/`)
+**Status:** in-progress (contract 0.2.0 reviewed; backend, migrations, tests and the `hostel.notices` widget merged;
+registered in `apps/frontend` (#233); the API mounts it through the module loader (#258))
 
 Room allocation, mess, visitors, discipline and fee linkage.
 
@@ -34,7 +34,9 @@ What it needs from the host repo:
 - `packages/ui-kit` for the widget. No platform service is called directly yet: events go to the outbox, and
   the overdue-leave job (`backend/src/eos_hostel/application/jobs.py`, `flag_overdue_leave`) waits for
   `platform/scheduler` to call it daily.
-- The API router is `eos_hostel.api.router:router`, to be mounted under `/api/v1/hostel`.
+- The API router is `eos_hostel.api.router:router`, mounted under `/api/v1/hostel` by the module loader from
+  `apps/backend/config/modules.enabled.yaml` (#258). The widgets are registered from
+  `apps/frontend/config/modules.enabled.yaml` (#233).
 
 ## Run the checks
 ```

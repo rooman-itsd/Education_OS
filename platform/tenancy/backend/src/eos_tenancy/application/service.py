@@ -125,6 +125,16 @@ def verify(db: Session, token: str) -> Organisation:
         return org
 
 
+def _admin_email(db: Session, organisation_id: str) -> str | None:
+    """The address that registered the organisation: every registration leaves a token row with it."""
+    with platform_scope():
+        return db.scalar(
+            select(RegistrationToken.email)
+            .where(RegistrationToken.organisation_id == organisation_id)
+            .order_by(RegistrationToken.expires_at.desc())
+        )
+
+
 def _activate(db: Session, org: Organisation, *, approved_by: str | None, reason: str) -> None:
     org.status, org.status_reason = "active", reason
     events.publish(
@@ -135,6 +145,16 @@ def _activate(db: Session, org: Organisation, *, approved_by: str | None, reason
         actor=approved_by,
     )
     events.publish(db, "tenancy.organisation.activated", org.id, {"organisation_id": org.id})
+    email = _admin_email(db, org.id)
+    if email:
+        notify.send_email(
+            email,
+            f"Your Education OS organisation {org.name} has been approved",
+            f"Congratulations! Your organisation {org.name} has been approved on the {org.academy_type} package. You can now sign in to your administrator dashboard.",
+            organisation_id=org.id,
+            academy_type=org.academy_type,
+            status="active",
+        )
 
 
 def approve(db: Session, organisation_id: str, *, approved_by: str, reason: str = "") -> Organisation:
@@ -152,6 +172,15 @@ def approve(db: Session, organisation_id: str, *, approved_by: str, reason: str 
                 actor=approved_by,
             )
             _changed(db, org.id)
+            email = _admin_email(db, org.id)
+            if email:
+                notify.send_email(
+                    email,
+                    f"Academic package approved for {org.name}",
+                    f"Your request to change academic package to {org.academy_type} has been approved.",
+                    organisation_id=org.id,
+                    academy_type=org.academy_type,
+                )
             if org.status == "active":
                 db.commit()
                 return org
@@ -278,11 +307,49 @@ def set_status(db: Session, organisation_id: str, status: str, reason: str) -> O
         raise TenancyError(f"status must be one of {STATUSES}")
     org = get_organisation(db, organisation_id)
     with platform_scope():
+        prev_status = org.status
         org.status, org.status_reason = status, reason
         name = {"active": "activated", "suspended": "suspended", "archived": "archived"}.get(status, "status_changed")
         events.publish(db, f"tenancy.organisation.{name}", org.id, {"organisation_id": org.id, "reason": reason})
+        email = _admin_email(db, org.id)
+        rejected = prev_status in ("pending_verification", "pending_approval") and status in ("archived", "suspended")
+        if email and rejected:
+            notify.send_email(
+                email,
+                f"Your Education OS registration for {org.name} was not approved",
+                f"Your registration for {org.name} was not approved. Reason: {reason}",
+                organisation_id=org.id,
+                status=status,
+                reason=reason,
+            )
+        elif email and status in ("suspended", "archived") and prev_status == "active":
+            notify.send_email(
+                email,
+                f"Your Education OS organisation {org.name} has been {status}",
+                f"Your organisation {org.name} status was updated to {status}. Reason: {reason}",
+                organisation_id=org.id,
+                status=status,
+                reason=reason,
+            )
+        elif email and status == "active" and prev_status != "active":
+            notify.send_email(
+                email,
+                f"Your Education OS organisation {org.name} has been activated",
+                f"Your organisation {org.name} is now active.",
+                organisation_id=org.id,
+                status=status,
+            )
         db.commit()
     return org
+
+
+def reject(db: Session, organisation_id: str, *, rejected_by: str, reason: str = "") -> Organisation:  # noqa: ARG001
+    """Super admin refuses a registration awaiting approval: the organisation is archived (closed for good,
+    as the admin console's approval queue does through PUT /status) and the registering address is told why."""
+    org = get_organisation(db, organisation_id)
+    if org.status != "pending_approval":
+        raise TenancyError(f"organisation is {org.status}, nothing to reject", 409)
+    return set_status(db, organisation_id, "archived", reason=reason or "registration rejected")
 
 
 def set_overrides(db: Session, organisation_id: str, grant: list[str], revoke: list[str], reason: str) -> dict:

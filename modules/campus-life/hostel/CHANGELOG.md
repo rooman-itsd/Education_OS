@@ -20,3 +20,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: domain rules, every user-story area, the gate pass, real `student` tokens, the cross-tenant leak test,
   and the migration against the models.
 - Widget `hostel.notices` for the Student dashboard, built on `@eos/ui-kit`, with tests.
+- Registered in the apps: `campus-life/hostel` in `apps/frontend/config/modules.enabled.yaml` (#233); the API mounts
+  it through the module loader driven by `apps/backend/config/modules.enabled.yaml` (#258).
