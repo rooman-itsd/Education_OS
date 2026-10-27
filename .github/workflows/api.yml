@@ -56,7 +56,17 @@ jobs:
           print("tenant_isolation forced on", sorted(want))
           PY
           for d in $(echo "$chains" | tac); do (cd "$d" && "$GITHUB_WORKSPACE/.venv/bin/alembic" downgrade base); done
-      - name: Tests on Postgres with row-level security
+      # The deploy's migration path, as the owner `eos`: the eos_app role, then every chain (infra/docker/migrate.sh).
+      - name: Migrate as the owner (infra/docker/migrate.sh)
         env:
           EOS_DATABASE_URL: postgresql+psycopg://eos:eos@localhost:5432/eos
+          EOS_APP_DB_PASSWORD: eos_app
+          EOS_REPO_ROOT: ${{ github.workspace }}
+        run: PATH="$GITHUB_WORKSPACE/.venv/bin:$PATH" sh infra/docker/migrate.sh
+      # As the API runs in Compose: eos_app (no superuser, no BYPASSRLS), so every tenant_isolation policy
+      # applies; apps/backend/tests/test_rls_role.py fails if this role could skip them.
+      - name: Tests on Postgres with row-level security, as eos_app
+        env:
+          EOS_DATABASE_URL: postgresql+psycopg://eos_app:eos_app@localhost:5432/eos
+          EOS_DB_MANAGE_SCHEMA: "false"
         run: .venv/bin/python -m pytest apps/backend -q
