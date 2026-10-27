@@ -8,5 +8,6 @@
 # here); its router is eos_<name>.api.router:router and its Alembic chain, if any, is <entry>/db.
 modules:
   - campus-life/hostel
+  - student-lifecycle/student-information
 integrations: []
 platform: [identity, tenancy, billing]
