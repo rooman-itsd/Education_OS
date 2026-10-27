@@ -12,5 +12,6 @@ modules:
   - campus-life/hostel
   - finance-operations/fees-accounts
   - support/helpdesk
+  - finance-operations/budget-grants
 integrations: []
 platform: [identity, tenancy, billing]
