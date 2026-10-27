@@ -7,7 +7,8 @@ Suite E, Finance & operations · tier `common`
 
 Buying goods and services from request to payment: vendors, indents (purchase requests), quotation requests
 and tenders, purchase orders, goods receipts and vendor invoices. Every purchase is charged to a budget or grant
-line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permissions.yaml`.
+line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permissions.yaml`. Stories:
+[user-stories.md](user-stories.md).
 
 ## Users
 
@@ -40,7 +41,8 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 - Preparer and approver are different people for indents, orders and invoices.
 - Only approved vendors receive tenders and orders.
 - Nothing is deleted: indents are rejected, orders cancelled, invoices rejected, each with a reason.
-- Bank account numbers are stored encrypted and returned masked.
+- Bank account numbers are returned masked. No encryption library is on the approved stack yet, so only the last four
+  digits and the IFSC are kept; the full number is never stored (decided on #129).
 - Every table carries `organisation_id` with row-level security; every event carries `organisation_id`.
 - Every state change writes an audit record through `packages/sdk`.
 - Money is exact decimal; no floating point.
@@ -49,7 +51,7 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 
 | Direction | With | How |
 |---|---|---|
-| Calls | budget-grants | `GET /lines`, `GET /availability` (proposed in the budget-grants contract) |
+| Calls | budget-grants | `GET /lines`, `GET /availability` (budget-grants contract 0.2.0), with the caller's token; management has `budget-grants:availability:read` for indent approval |
 | Publishes | budget-grants | `purchase-order.issued`, `purchase-order.cancelled`, `vendor-invoice.paid` |
 | Publishes | inventory-equipment, asset-management | `goods-receipt.recorded` |
 | Publishes | notification | indent, tender and order events |
@@ -64,6 +66,7 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 ## Open questions (for review)
 
 1. Purchase limits per method differ by institution and funding source. They are configuration with no default; to be
-   confirmed with each institution.
+   confirmed with each institution. Decided on #129: until both limits are set, indent approval is refused with 422
+   `purchase_limits_not_configured`; no method is guessed.
 2. Should facilities consume `goods-receipt.recorded` to add stock or assets? To agree with the facilities owner (Ashritha).
 3. TDS on vendor payments is recorded as an amount; it is not computed.

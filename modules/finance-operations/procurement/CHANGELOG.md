@@ -10,3 +10,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - PRD (`docs/prd.md`).
 - Contracts: `procurement.indent.approved` no longer says budget-grants may reserve the amount; the commitment
   starts at `procurement.purchase-order.issued`, as the budget-grants PRD sets out.
+- Contract 0.2.0: vendors, indents, tenders, purchase orders, goods receipts and vendor invoices carry
+  `organisation_id` (additive), as the shared cross-tenant leak test needs. Indent approval documents its errors:
+  422 `insufficient_budget` or `purchase_limits_not_configured`, 503 `budget_check_unavailable`. Only the last four
+  digits of a vendor's bank account are kept.
+- `docs/user-stories.md`; the PRD records the decisions on purchase limits and bank account numbers (#129).

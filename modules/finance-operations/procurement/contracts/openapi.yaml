@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: procurement API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Vendors, indents (purchase requests), quotations and tenders, purchase orders, goods receipts and vendor invoices.
     Each indent is charged to one budget or grant line from budget-grants; availability is checked through the
@@ -84,7 +84,8 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Indent" } } } }
         "409": { description: Indent is not submitted }
-        "422": { description: Budget line cannot cover the estimated cost }
+        "422": { description: "Budget line cannot cover the estimated cost or is not open (insufficient_budget), or the purchase limits are not configured (purchase_limits_not_configured)" }
+        "503": { description: "budget-grants could not be reached or refused the check (budget_check_unavailable); nothing is decided" }
   /me/indents:
     get:
       summary: The caller's indents and their progress to order and delivery. Permission procurement:indent:create.
@@ -264,7 +265,7 @@ components:
           type: object
           nullable: true
           properties:
-            account_number: { type: string, writeOnly: true }
+            account_number: { type: string, writeOnly: true, description: "Never stored or returned in full: only the last four digits are kept (account_last4)" }
             account_last4: { type: string, readOnly: true }
             ifsc: { type: string }
     Vendor:
@@ -273,6 +274,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             status: { $ref: "#/components/schemas/VendorStatus" }
             status_reason: { type: string, nullable: true }
             orders_count: { type: integer }
@@ -311,6 +313,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             number: { type: string }
             status: { $ref: "#/components/schemas/IndentStatus" }
             purchase_method: { type: string, nullable: true, enum: [direct, quotation, tender], description: "Set at approval from the estimated value" }
@@ -354,6 +357,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             number: { type: string }
             status: { $ref: "#/components/schemas/TenderStatus" }
             line_id: { type: string, format: uuid }
@@ -384,6 +388,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             number: { type: string }
             status: { $ref: "#/components/schemas/PurchaseOrderStatus" }
             vendor_name: { type: string }
@@ -417,7 +422,13 @@ components:
     GoodsReceipt:
       allOf:
         - { $ref: "#/components/schemas/GoodsReceiptInput" }
-        - { type: object, properties: { id: { type: string, format: uuid }, number: { type: string }, purchase_order_id: { type: string, format: uuid }, recorded_by: { type: string, format: uuid } } }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
+            number: { type: string }
+            purchase_order_id: { type: string, format: uuid }
+            recorded_by: { type: string, format: uuid }
     VendorInvoiceStatus: { type: string, enum: [recorded, approved, rejected, paid] }
     VendorInvoiceInput:
       type: object
@@ -435,6 +446,7 @@ components:
         - type: object
           properties:
             id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
             vendor_id: { type: string, format: uuid }
             vendor_name: { type: string }
             status: { $ref: "#/components/schemas/VendorInvoiceStatus" }
