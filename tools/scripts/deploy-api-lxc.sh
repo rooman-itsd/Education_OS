@@ -103,8 +103,9 @@ in_ct 'for i in $(seq 1 60); do curl -fs http://127.0.0.1:8000/api/v1/health && 
 echo
 in_ct "cd $APP && $COMPOSE ps --format 'table {{.Service}}\t{{.Status}}'"
 
-# The API created the schema from its models at first start (init_db). Record that in each platform
-# service's Alembic chain once, so the auto-deploy can run `alembic upgrade head` for later revisions.
+# The API created the schema from its models at first start (init_db). Record that once in the Alembic
+# chain of every entry apps/backend/config/modules.enabled.yaml enables (platform services, modules,
+# integrations), so the auto-deploy can run `alembic upgrade head` for later revisions.
 echo "==> recording the schema version in the migration chains (first time only)"
 in_ct "cd $APP && $COMPOSE run --rm --no-deps -T -v $APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py api python /repo/stamp-chains.py"
 

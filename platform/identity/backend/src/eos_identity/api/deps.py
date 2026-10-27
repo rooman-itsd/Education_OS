@@ -45,12 +45,18 @@ def current_principal(authorization: str | None = Header(default=None), db: Sess
     user = get_user(db, claims["sub"])
     if user is None or user.status != "active":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user disabled")
+    user_id = user.id
+    # The lookup above ran in platform scope, and on Postgres `app.bypass_rls=on` is set for the whole
+    # transaction it began. End that transaction here (nothing was written), so the request's own queries
+    # start a new one carrying the caller's organisation with bypass off: row-level security then applies to
+    # the request, not only the Python filters.
+    db.rollback()
     roles = list(claims.get("roles") or [])
     # Every organisation user also holds the implicit `member` role (see platform/tenancy/contracts/permissions.yaml):
     # the grants every member needs to open the shell, such as reading their own organisation and entitlement.
     effective = roles + [MEMBER_ROLE] if claims.get("org") else roles
     p = Principal(
-        user_id=user.id,
+        user_id=user_id,
         organisation_id=claims.get("org"),
         roles=roles,
         super_admin=bool(claims.get("sa")),
