@@ -18,6 +18,7 @@ paths:
       parameters:
         - { name: q, in: query, description: "Search in first name, last name and email", schema: { type: string } }
         - { name: identity_number, in: query, description: "Exact match on identity document number, to check for a duplicate", schema: { type: string } }
+        - { name: identity_user_id, in: query, description: "Exact match on the linked platform/identity user, for modules that hold a user id and need the person", schema: { type: string, format: uuid } }
         - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/PersonStatus" } } }
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/PageSize" }
@@ -181,7 +182,7 @@ components:
         identity_number: { type: string, description: "National ID / passport number. Unique within the organisation if provided." }
         contact: { $ref: "#/components/schemas/ContactDetails" }
         guardians: { type: array, items: { $ref: "#/components/schemas/Guardian" } }
-        identity_user_id: { type: string, format: uuid, nullable: true, description: "Linked platform/identity user account, if sign-in access has been granted" }
+        identity_user_id: { type: string, format: uuid, nullable: true, description: "Linked platform/identity user account, if sign-in access has been granted. One person per user within the organisation." }
         source: { $ref: "#/components/schemas/Source" }
     PersonUpdate:
       type: object
@@ -281,7 +282,7 @@ components:
     ConflictError:
       type: object
       properties:
-        code: { type: string, enum: [duplicate_identity_number, active_card_exists, card_not_active] }
+        code: { type: string, enum: [duplicate_identity_number, duplicate_identity_user, active_card_exists, card_not_active, conflict] }
         message: { type: string }
     RuleError:
       type: object

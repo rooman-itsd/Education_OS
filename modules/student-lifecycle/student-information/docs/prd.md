@@ -132,8 +132,11 @@ also returns `409` if an identity document number already exists in the organisa
 See `contracts/permissions.yaml` for the full catalogue. Summary:
 `student-information:person:read`, `student-information:person:write`,
 `student-information:status:manage`, `student-information:document:manage`,
-`student-information:id-card:manage`. No roles are mapped here — role-to-permission composition
-is profile data owned by the Architecture lead (ADR-0004).
+`student-information:id-card:manage`. Roles are granted in the same file, as every module does: the
+platform composes a user's permissions only from the roles listed in each `contracts/permissions.yaml`
+(`eos_core.config.permissions_for`); profiles name roles but hold no grants. `registrar` is the module's own
+role (every key); the catalogue roles `org-admin` (every key), `management` (read) and `admissions-staff`
+(read and write, for converting an accepted applicant) are granted here too.
 
 ## 9. Audit / state changes
 
@@ -161,7 +164,7 @@ updated, status changed, document attached/removed, ID card issued/revoked.
 - [ ] `contracts/events.yaml` lists every event in §9 with a payload shape, following the
       `<module>.<entity>.<past-verb>` naming convention.
 - [ ] `contracts/permissions.yaml` lists every permission key in §8, following the
-      `<module>:<resource>:<action>` convention, with no invented role mappings.
+      `<module>:<resource>:<action>` convention, and grants them to the roles in §8.
 - [ ] No cross-module code dependency is introduced; `module.yaml`'s `depends_on` and
       `consumes_events` remain limited to what this module actually needs this week.
 - [ ] No endpoint, schema or business rule assumes a person is created through public sign-up.
