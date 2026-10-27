@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from eos_core.db import SessionLocal, init_db
@@ -20,7 +21,10 @@ PLATFORM_ROUTERS = {e.name: f"{e.package}.api.router" for e in enabled() if e.ki
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    # The Compose stack and CI's Postgres step migrate as the owner first (infra/docker/migrate.sh) and run the
+    # API as eos_app, which may not change the schema; SQLite, local dev and tests create it here.
+    if os.environ.get("EOS_DB_MANAGE_SCHEMA", "true").lower() == "true":
+        init_db()
     from eos_billing.application.service import seed_plans
     from eos_identity.application import service as identity
     from eos_tenancy.application import service as tenancy
