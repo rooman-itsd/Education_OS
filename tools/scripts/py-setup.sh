@@ -9,8 +9,8 @@ cd "$ROOT"
 . .venv/bin/activate
 pip install -q --upgrade pip
 pip install -q ruff pyyaml
-# shellcheck disable=SC2046  # one -e argument per enabled package
-pip install -q -e packages/core -e packages/testing \
-  $(python tools/scripts/enabled-modules.py install --pip --extras test) \
-  -e "apps/backend[test]"
+# Assigned in its own statement so a failing script stops the setup (set -e ignores a `$(...)` used as an argument).
+enabled="$(python tools/scripts/enabled-modules.py install --pip --extras test)"
+# shellcheck disable=SC2086  # one -e argument per enabled package
+pip install -q -e packages/core -e packages/testing $enabled -e "apps/backend[test]"
 echo "ok: $(python --version), packages installed into .venv"

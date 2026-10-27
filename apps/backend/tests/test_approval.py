@@ -43,6 +43,16 @@ def test_package_needs_super_admin_approval(client, manual_approval):
         headers=sa,
     )
     assert a.status_code == 200 and a.json()["status"] == "active"
+    from eos_core import notify
+
+    approval_emails = [
+        m for m in notify.sent if m["to"] == "admin@pending.example.com" and "approved" in m["subject"].lower()
+    ]
+    assert len(approval_emails) == 1
+    assert approval_emails[0]["organisation_id"] == v.json()["id"]
+    assert "Pending College" in approval_emails[0]["subject"]
+    assert "law-college" in approval_emails[0]["body"]
+
     assert (
         client.post(
             "/api/v1/identity/auth/login", json={"email": "admin@pending.example.com", "password": "Passw0rd!x"}
@@ -52,6 +62,56 @@ def test_package_needs_super_admin_approval(client, manual_approval):
     # approving twice is a no-op error, not a silent success
     assert (
         client.post(f"/api/v1/tenancy/admin/organisations/{v.json()['id']}/approve", json={}, headers=sa).status_code
+        == 409
+    )
+
+
+def test_package_rejection_sends_email(client, manual_approval):
+    from eos_core import notify
+
+    r = client.post(
+        "/api/v1/tenancy/register",
+        json={
+            "organisation_name": "Rejected College",
+            "slug": "rejected-college",
+            "academy_type": "sports-college",
+            "admin": {"name": "R", "email": "admin@rejected.example.com", "password": "Passw0rd!x"},
+            "accepted_terms": True,
+        },
+    )
+    assert r.status_code == 201
+    token = r.json()["verification_token"]
+    v = client.post("/api/v1/tenancy/register/verify", json={"token": token})
+    assert v.status_code == 200 and v.json()["status"] == "pending_approval"
+
+    sa = auth(client.post("/api/v1/identity/auth/login", json={"email": SA[0], "password": SA[1]}).json()["token"])
+    rej = client.post(
+        f"/api/v1/tenancy/admin/organisations/{v.json()['id']}/reject",
+        json={"reason": "Incomplete documentation"},
+        headers=sa,
+    )
+    assert rej.status_code == 200 and rej.json()["status"] == "archived"
+
+    # cannot sign in
+    r = client.post(
+        "/api/v1/identity/auth/login", json={"email": "admin@rejected.example.com", "password": "Passw0rd!x"}
+    )
+    assert r.status_code == 401 and "archived" in r.json()["detail"]
+
+    # rejection email was sent
+    rejection_emails = [
+        m for m in notify.sent if m["to"] == "admin@rejected.example.com" and "not approved" in m["subject"].lower()
+    ]
+    assert len(rejection_emails) == 1
+    assert "Incomplete documentation" in rejection_emails[0]["body"]
+
+    # rejecting again fails with 409
+    assert (
+        client.post(
+            f"/api/v1/tenancy/admin/organisations/{v.json()['id']}/reject",
+            json={"reason": "again"},
+            headers=sa,
+        ).status_code
         == 409
     )
 
