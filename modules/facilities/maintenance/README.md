@@ -2,7 +2,7 @@
 
 **Domain:** facilities
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress
 
 Keeps buildings, spaces and equipment working. Anyone reports a fault; maintenance staff triage it, assign it to a technician or vendor, track it against response and resolution targets and record the cost. Preventive schedules raise tickets on their own.
 
