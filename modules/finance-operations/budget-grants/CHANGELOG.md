@@ -36,7 +36,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - manual spend and certificate periods stay inside the budget year or grant period;
   - code races answer 409;
   - the daily job starts on a fresh transaction.
-- Tests: 44, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.
+- Tests: 47, including the cross-tenant leak test, the migration test, contract drift checks and regression tests from review.
 - Audit trail: `budget_grants_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel and helpdesk.
 - A grant with open commitments can't be closed (`open_commitments`), and amounts larger than the column holds are refused.
@@ -47,3 +47,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     `9999-00` are 422 `invalid_financial_year`;
   - a purchase order delivered after one of its invoices was paid commits only what is not yet paid (nothing when
     paid in full), so an out-of-order delivery never counts the money twice.
+- Widgets (#267): `budget-vs-spend` (Finance Staff; Research Office with `scope=grants`) and `my-grants` (Research
+  Scholar), with loading, empty and error-with-retry states; 22 tests. Frontend test dependencies came in #266.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/budget-grants`) and
+  `apps/frontend/config/modules.enabled.yaml`; the README documents the widgets.

@@ -2,7 +2,7 @@
 
 **Domain:** finance-operations
 **Kind:** feature
-**Status:** in-progress (backend built; widgets next)
+**Status:** in-progress (backend and widgets built; enabled in `apps/backend` and `apps/frontend`)
 
 Annual budgets per budget head and cost centre, reappropriation, commitments and actual spend, externally funded
 research grants with their own lines, funds received and utilisation certificates. Requirements:
@@ -60,8 +60,9 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting:** mount `eos_budget_grants.api.router:router` under `/api/v1/budget-grants` and add the package to `apps/backend`.
-- **CI:** add the backend to `tools/scripts/py-setup.sh` and to the pytest line in `.github/workflows/api.yml`.
+- **Mounting, install and CI:** the `finance-operations/budget-grants` entry in `apps/backend/config/modules.enabled.yaml`
+  mounts the router at `/api/v1/budget-grants`; `py-setup.sh`, the API image, CI and the auto-deploy install it, run its
+  tests and upgrade its chain from that entry.
 - **Events:** until the event bus exists, relay the events in `consumes_events` to `application.consumers.handle(db, name, payload)`.
   Deliver one purchase order's events in order (issued, then paid or cancelled). If a paid invoice arrives before its
   order anyway, the spend is recorded and the late order commits only what is not yet paid, so nothing is counted twice.
@@ -72,6 +73,26 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 - **Investigator names:** `name` is empty until identity names are available.
 - **Certificate PDFs:** an approved certificate has no `document_id` until the documents SDK exists.
 - **Payroll:** `net_total` is charged to one institution-wide salary head (PRD open question 3).
+
+## Frontend
+
+`frontend/src/widgets/index.ts` exports the two dashboard widgets. The role layouts in
+`platform/identity/config/dashboards/` place them, and `apps/frontend/config/modules.enabled.yaml` registers the module.
+
+| Widget | Dashboard | Endpoint | Permission |
+|---|---|---|---|
+| `budget-grants.budget-vs-spend` | Finance Staff, Research Office | `GET /reports/budget-vs-spend` | `budget-grants:report:read` |
+| `budget-grants.my-grants` | Research Scholar | `GET /me/grants` | `budget-grants:self:read` |
+
+- **Budget vs spend:** allocated, committed, spent and available for the financial year, the share used with its 80% and
+  100% thresholds, the heads closest to their limit, grant totals and certificates due in 30 days. On the Research
+  Office dashboard it asks for `scope=grants`.
+- **My grants:** each grant with funder, code, the user's role, sanctioned, spent and balance, and the next utilisation
+  certificate, flagged when it is due within 30 days or overdue.
+- **Data:** each widget reads through `src/api/client.ts`, a hand-written typed client that the generated client will replace.
+- **States:** each widget shows loading, empty, and error with a retry when trying again can help. Until the backend
+  answers, the error reads "Budget data is not available yet".
+- **Tests:** `cd modules/finance-operations/budget-grants/frontend && pnpm test` (vitest and Testing Library).
 
 ## Layout
 | Path | Purpose |
