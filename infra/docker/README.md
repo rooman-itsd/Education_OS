@@ -108,6 +108,7 @@ apt-get update && apt-get install -y ca-certificates curl git openssl nano
 git clone https://github.com/rooman-itsd/Education_OS.git /opt/education-os && cd /opt/education-os
 cd infra/docker && cp .env.api.example .env.api && chmod 600 .env.api
 sed -i "s|^EOS_DB_PASSWORD=.*|EOS_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
+sed -i "s|^EOS_APP_DB_PASSWORD=.*|EOS_APP_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
 sed -i "s|^EOS_JWT_SECRET=.*|EOS_JWT_SECRET=$(openssl rand -hex 32)|" .env.api
 nano .env.api   # set EOS_SUPER_ADMIN_EMAIL (a real address with a dot after @) and EOS_SUPER_ADMIN_PASSWORD
 cd /opt/education-os
@@ -131,19 +132,30 @@ If the first line prints nothing, the live vhost has no `/api/` location yet: co
 `location /api/` block from `nginx.public-vhost.conf` into the server block for
 `educationos.futureacad.ae` and run the rest.
 
-Schema changes ship as Alembic chains, one per service, under `platform/<service>/db`. The auto-deploy
-runs them before restarting the API; the API also runs `init_db()` at startup as a safety net. By hand:
+**Two database logins.** Postgres is owned by `eos` (`EOS_DB_PASSWORD`), which only the `migrate`
+service uses. The API connects as `eos_app` (`EOS_APP_DB_PASSWORD`): it can read and write rows but not
+change the schema, and it is neither a superuser nor `BYPASSRLS`, so every `tenant_isolation` policy
+applies to it (a superuser would skip them all). `up` runs `migrate` first and starts the API only when it
+succeeded; it does, in order (`migrate.sh`):
+
+1. `db-roles.py`: creates or updates `eos_app`, with row access on every table and on tables `eos` creates later
+2. `stamp-chains.py`: only for a database whose tables the API created before migrations existed
+3. `alembic upgrade head` for every chain `apps/backend/config/modules.enabled.yaml` enables
+4. `init_db()` for `outbox_event`, the one table without a chain yet
+
+The auto-deploy runs the same service. By hand:
 
 ```
-docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm api \
-  sh -c 'for s in identity tenancy billing; do (cd platform/$s/db && alembic upgrade head); done'
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm migrate
 ```
 
 **Settings applied only once.** Editing `.env.api` and running `up -d` changes most settings
 (`EOS_DEV_MODE`, `EOS_JWT_SECRET`, which signs everyone out). Two do not:
 
 - `EOS_DB_PASSWORD` is read by Postgres only when it first creates its volume. Changing it later
-  locks the API out; change the password inside Postgres (`ALTER USER eos PASSWORD ...`) first.
+  locks `migrate` out; change the password inside Postgres (`ALTER USER eos PASSWORD ...`) first.
+  `EOS_APP_DB_PASSWORD` is different: `migrate` sets it on `eos_app` at every run, so a new value
+  applies on the next `up -d`.
 - The super admin is created at the first start and never updated: a new `EOS_SUPER_ADMIN_PASSWORD`
   is ignored, and a new `EOS_SUPER_ADMIN_EMAIL` adds a second super admin beside the first.
 
