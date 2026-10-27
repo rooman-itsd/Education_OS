@@ -55,9 +55,14 @@ $COMPOSE build --quiet api
 # enables (platform services, then modules and integrations). stamp-chains.py first records chains whose
 # tables the API already created at start-up, so a module enabled since the last deploy is upgraded, not
 # created twice.
-$COMPOSE run --rm --no-deps -T -v "$APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py" api sh -c \
-  'python /repo/stamp-chains.py && for d in $(python tools/scripts/enabled-modules.py chains); do (cd "$d" && alembic upgrade head) || exit 1; done' \
-  || logger -t eos-api-autodeploy "migrations failed at $want; API not restarted"
-$COMPOSE up -d --quiet-pull
-docker image prune -f >/dev/null
-logger -t eos-api-autodeploy "deployed $label $want (was $have)"
+# The API is restarted only when every chain is at head: a half-migrated database must not meet new code.
+if $COMPOSE run --rm --no-deps -T -v "$APP/infra/docker/stamp-chains.py:/repo/stamp-chains.py" api sh -c \
+  'python /repo/stamp-chains.py && for d in $(python tools/scripts/enabled-modules.py chains); do (cd "$d" && alembic upgrade head) || exit 1; done'
+then
+  $COMPOSE up -d --quiet-pull
+  docker image prune -f >/dev/null
+  logger -t eos-api-autodeploy "deployed $label $want (was $have)"
+else
+  logger -t eos-api-autodeploy "migrations failed at $want; API not restarted, still on $have"
+  exit 1
+fi
