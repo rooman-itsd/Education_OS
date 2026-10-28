@@ -6,8 +6,8 @@ domain: student-lifecycle
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
 status: planned           # planned | in-progress | stable | deprecated
-description: "Programme enrolment, semester registration, section and elective allocation."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+description: "Programme enrolment with roll numbers, term registration windows, course registration and section allocation."
+owners: [praveen-rooman]  # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
@@ -21,7 +21,14 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - academic-management.term.created
+  - academic-management.term.activated
+  - academic-management.offering.created
+  - academic-management.offering.updated
+  - academic-management.offering.status-changed
+  - academic-management.section.created
+  - academic-management.section.updated
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

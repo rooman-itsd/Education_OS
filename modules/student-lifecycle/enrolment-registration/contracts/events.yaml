@@ -1,9 +1,44 @@
 # Domain events published by enrolment-registration.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# The envelope (id, name, version, organisation_id, actor, occurred_at) is defined once, in
+# platform/event-bus/contracts/events.yaml. Payloads below never repeat envelope fields.
+#
+# The three course-registration events are consumed by academic-management's roster
+# (application/roster.py), whose code requires: registration_id, person_id, course_offering_id and, per event,
+# section_id or from_section_id/to_section_id. Every other field is optional for it.
 module: enrolment-registration
 version: 1
-events: []
-#  - name: enrolment-registration.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: enrolment-registration.programme-enrolment.created
+    description: A person was enrolled in a programme and given a roll number.
+    version: 1
+    consumers: []
+    payload: { programme_enrolment_id: uuid, person_id: uuid, programme_id: uuid, roll_number: string, start_academic_period_id: uuid, student_name: string, enrolled_at: datetime }
+
+  - name: enrolment-registration.programme-enrolment.withdrawn
+    description: >-
+      A programme enrolment was withdrawn. Each confirmed course registration under it was withdrawn first, with
+      its own course-registration.withdrawn event.
+    version: 1
+    consumers: []
+    payload: { programme_enrolment_id: uuid, person_id: uuid, programme_id: uuid, reason: string, withdrawn_at: datetime }
+
+  - name: enrolment-registration.course-registration.confirmed
+    description: >-
+      An enrolled student was registered for a course offering, in a section. registration_id stays the same for
+      the life of the registration.
+    version: 1
+    consumers: [academic-management, examinations, lms, timetable-attendance]
+    payload: { registration_id: uuid, person_id: uuid, course_offering_id: uuid, section_id: uuid, academic_period_id: uuid, registration_type: string, student_name: string, roll_number: string, confirmed_at: datetime }
+
+  - name: enrolment-registration.course-registration.withdrawn
+    description: A course registration was withdrawn. It is kept, never deleted.
+    version: 1
+    consumers: [academic-management, examinations, lms, timetable-attendance]
+    payload: { registration_id: uuid, person_id: uuid, course_offering_id: uuid, section_id: uuid, reason: string, withdrawn_at: datetime }
+
+  - name: enrolment-registration.section-allocation.changed
+    description: A registration moved to another section of the same offering, from effective_on.
+    version: 1
+    consumers: [academic-management, lms, timetable-attendance]
+    payload: { registration_id: uuid, person_id: uuid, course_offering_id: uuid, from_section_id: uuid, to_section_id: uuid, effective_on: date, student_name: string }

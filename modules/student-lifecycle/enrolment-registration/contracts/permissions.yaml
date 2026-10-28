@@ -1,11 +1,28 @@
 # Permission catalogue for enrolment-registration. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: enrolment-registration
-permissions: []
-#  - key: enrolment-registration:record:read
-#    description: ...
-#  - key: enrolment-registration:record:write
-#    description: ...
-roles: []
-#  - name: enrolment-registration-admin
-#    grants: [enrolment-registration:record:read, enrolment-registration:record:write]
+permissions:
+  - key: enrolment-registration:enrolment:read
+    description: List and read programme enrolments and roll numbers.
+  - key: enrolment-registration:enrolment:manage
+    description: Enrol a person in a programme; withdraw or complete an enrolment.
+  - key: enrolment-registration:registration:read
+    description: List and read course registrations and registration windows; read the registered-candidates report.
+  - key: enrolment-registration:registration:manage
+    description: Set registration windows; register, withdraw and move course registrations.
+roles:
+  - name: registration-staff
+    description: Academic office staff who enrol students and run course registration.
+    grants: [enrolment-registration:enrolment:read, enrolment-registration:enrolment:manage, enrolment-registration:registration:read, enrolment-registration:registration:manage]
+  - name: org-admin
+    description: Read-only visibility into enrolments and registrations.
+    grants: [enrolment-registration:enrolment:read, enrolment-registration:registration:read]
+  - name: management
+    description: VC and Registrar. Read-only visibility into enrolments and registrations.
+    grants: [enrolment-registration:enrolment:read, enrolment-registration:registration:read]
+  - name: department-admin
+    description: Reads enrolments and registrations.
+    grants: [enrolment-registration:enrolment:read, enrolment-registration:registration:read]
+  - name: examination-staff
+    description: Sees who is registered, to plan exams (registered-candidates widget).
+    grants: [enrolment-registration:registration:read]

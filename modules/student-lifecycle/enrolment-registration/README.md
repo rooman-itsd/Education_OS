@@ -4,10 +4,17 @@
 **Kind:** feature
 **Status:** planned
 
-Programme enrolment, semester registration, section and elective allocation.
+Programme enrolment with roll numbers, term registration windows, course registration and section allocation.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+The source of truth for who is enrolled in which programme and who is registered for which course offering and
+section in each term. academic-management (roster), examinations (candidates), lms (course members) and
+timetable-attendance (section members) build their own copies from this module's events.
+
+Not this module: persons (`student-information`), terms, programmes, offerings, sections and capacity
+(`academics/academic-management`), exam eligibility (`academics/examinations`), fees (`fees-accounts`). Electives,
+registration holds and student self-service are out of scope for this release. See [docs/prd.md](docs/prd.md),
+including the decisions in section 11.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
