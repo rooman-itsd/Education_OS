@@ -1,8 +1,10 @@
 # admissions — data model
 
-One schema (`admissions`), owned entirely by this module. No cross-schema foreign keys
-(module-standard rule 2); references to other modules' entities (`programme_id`,
-`selection_process_round_id`, `portfolio_item_id`) are ids only, never joined.
+Tables owned entirely by this module, every one named `admissions_*` (the repo's convention for
+a module's own schema; its Alembic version table is `admissions_alembic_version`). No foreign keys
+to another module's tables (module-standard rule 2); references to other modules' entities
+(`programme_id`, `selection_process_round_id`, `portfolio_item_id`) are ids only, never joined.
+Every table carries `organisation_id` with the `tenant_isolation` row-level-security policy.
 
 ## Entities
 
@@ -38,17 +40,27 @@ The aggregate root.
 ### MeritList / MeritListEntry
 | Field | Notes |
 |---|---|
-| MeritList.id, organisation_id, programme_id, academic_year, title, status (draft/published), published_at | |
-| MeritListEntry: application_id, rank, score | 1:many under a MeritList |
+| MeritList.id, organisation_id, programme_id, academic_year, title, status (draft/published), published_at, created_by, created_at | |
+| MeritListEntry: application_id, rank, score (nullable) | 1:many under a MeritList; an application once per list, a rank once per list |
 
 ### Offer
 | Field | Notes |
 |---|---|
 | id | uuid |
-| application_id | 1:1 with the application that currently holds it (an application has at most one open offer at a time) |
-| status | open, accepted, declined, expired |
+| application_id | an application has at most one open offer at a time (enforced by a partial unique index) |
+| status | open, accepted, declined, expired, withdrawn |
+| note, expires_at | nullable |
 | offered_by, offered_at | |
 | decided_at, decline_reason | nullable |
+
+### AuditEntry
+| Field | Notes |
+|---|---|
+| id, organisation_id | |
+| actor | user id for staff actions; the application id for applicant actions |
+| action, entity, entity_id | e.g. `status_changed`, `application`, the application id |
+| detail | JSON, e.g. previous and new status, reason |
+| occurred_at | |
 
 ## Relationships
 
@@ -56,6 +68,7 @@ The aggregate root.
 Application (1) ──< ApplicationDocument (many)
 Application (1) ──< Offer (0..1 open at a time, history kept)
 MeritList (1) ──< MeritListEntry (many) ──> Application (by id, not a join)
+AuditEntry ──> any of the above (by entity + entity_id, not a join)
 ```
 
 ## Ownership boundaries
