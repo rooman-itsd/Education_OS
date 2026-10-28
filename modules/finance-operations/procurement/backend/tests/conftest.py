@@ -30,13 +30,18 @@ def client():
 
 
 class BudgetGrants:
-    """budget-grants GET /availability as procurement sees it. Every line can cover any amount unless `available`
-    says otherwise; lines in `missing` are not open (404); `status` forces an answer; `down` refuses connections."""
+    """budget-grants as procurement sees it. GET /availability: every line can cover any amount unless `available`
+    says otherwise; lines in `missing` are not open (404). GET /expenditures?kind=commitment lists a procurement
+    commitment for each order id in `recorded`, `page_size` per page. `status` forces an answer to every request,
+    `expenditures_status` only to the listing; `down` refuses connections."""
 
     def __init__(self):
         self.available: dict[str, Decimal] = {}
         self.missing: set[str] = set()
+        self.recorded: set[str] = set()
+        self.page_size = 200
         self.status: int | None = None
+        self.expenditures_status: int | None = None
         self.down = False
         self.requests: list[httpx.Request] = []
 
@@ -46,11 +51,28 @@ class BudgetGrants:
             raise httpx.ConnectError("refused", request=request)
         if self.status is not None:
             return httpx.Response(self.status, json={"detail": {"code": "forced"}})
+        if request.url.path.endswith("/expenditures"):
+            return self._expenditures(request)
         line, amount = request.url.params["line_id"], Decimal(request.url.params["amount"])
         if line in self.missing:
             return httpx.Response(404, json={"detail": {"code": "not_found"}})
         left = self.available.get(line, Decimal("1000000000"))
         return httpx.Response(200, json={"line_id": line, "available": f"{left:.2f}", "sufficient": amount <= left})
+
+    def _expenditures(self, request: httpx.Request) -> httpx.Response:
+        if self.expenditures_status is not None:
+            return httpx.Response(self.expenditures_status, json={"detail": {"code": "forced"}})
+        assert request.url.params["kind"] == "commitment"
+        rows = [
+            {"source": {"module": "procurement", "reference": ref}, "kind": "commitment"}
+            for ref in sorted(self.recorded)
+        ]
+        rows.append({"source": {"module": "manual", "reference": ""}, "kind": "commitment"})
+        start = int(request.url.params.get("cursor") or 0)
+        end = start + self.page_size
+        return httpx.Response(
+            200, json={"items": rows[start:end], "next_cursor": str(end) if end < len(rows) else None}
+        )
 
 
 @pytest.fixture(autouse=True)

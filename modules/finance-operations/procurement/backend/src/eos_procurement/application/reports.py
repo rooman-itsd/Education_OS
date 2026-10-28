@@ -18,9 +18,9 @@ def _count_value(rows: list, amount) -> dict:
 
 
 def _since(po: PurchaseOrder):
-    """When an order started waiting: submitted for approval, or issued for delivery."""
+    """The Indian business date an order started waiting: submitted for approval, or issued for delivery."""
     moment = po.submitted_at if po.status == "submitted" else po.issued_at
-    return (moment or po.created_at).date()
+    return service.business_date(moment or po.created_at)
 
 
 def purchase_orders_pending(db: Session) -> dict:

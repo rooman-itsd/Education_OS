@@ -36,7 +36,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel, helpdesk and budget-grants.
 - `config/env.example` lists every key; `module.yaml` status is `in-progress`.
-- Tests: 58, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+- Tests: 71, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
   drift (operations, permissions, enums, event payloads) and the audit trail.
 - Fixes from an independent review, each with a regression test:
   - one indent could be put on two orders by two requests at once: the indents are now locked while checked;
@@ -48,3 +48,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - an unreadable answer from budget-grants read as "insufficient budget": now 503 `budget_check_unavailable`;
   - a 422 on a vendor body echoed the bank account number back: no longer;
   - reopening indents after a cancelled order was audited as `indent.approved`: now `indent.reopened`.
+- Decisions on #129, each with tests:
+  - a purchase order is issued only if its line covers its total: `GET /availability` for the total, less this
+    organisation's issued orders budget-grants has not recorded yet (`GET /expenditures`), under a per-line Postgres
+    advisory lock; otherwise 422 `insufficient_budget` (or 503) and the order stays submitted;
+  - business dates follow Asia/Kolkata (IST): future-date checks, overdue, quote expiry, the drafted delivery date and
+    the report's dates, with tests on both sides of IST midnight;
+  - an expired quote is not awarded (409 `quote_expired`); a quote is valid through its `valid_until` date, and the
+    lowest valid quote sets whether a justification is needed.

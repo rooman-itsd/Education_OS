@@ -43,6 +43,14 @@ Rules the code keeps:
   with the approver's token. A line that can't cover it, or isn't open, is 422 `insufficient_budget`. If budget-grants
   can't be reached, refuses the check or gives an unreadable answer, the answer is 503 `budget_check_unavailable` and
   nothing is decided. Nothing is reserved: the commitment starts when the order is issued (#221).
+- **An order is issued only if its line covers its total** (decided on #129). Approving a purchase order asks
+  budget-grants `GET /availability` for the order total and `GET /expenditures` (commitments) for the line, with the
+  approver's token, so the approver needs `budget-grants:availability:read` and `budget-grants:budget:read`.
+  budget-grants records a commitment only when `procurement.purchase-order.issued` reaches it, so the totals of this
+  organisation's issued orders on the line that budget-grants has not recorded yet are taken off what it reports.
+  Approvals on one line are serialised by a Postgres transaction-level advisory lock, so two approvals cannot spend
+  the same balance. A line that can't cover the total is 422 `insufficient_budget`; budget-grants unreachable or
+  refusing is 503 `budget_check_unavailable`. Either way the order stays submitted and nothing is published.
 - **The purchase method follows the value.** Up to `PROCUREMENT_DIRECT_PURCHASE_LIMIT` a direct purchase, up to
   `PROCUREMENT_QUOTATION_LIMIT` quotations, above it a tender. The limits have no default: until both are set, approval
   is 422 `purchase_limits_not_configured` (decided on #129). A tender may use a stricter method than its indents need,
@@ -55,8 +63,13 @@ Rules the code keeps:
   closing date, or one that closed without a quote) lets its indents go; the contract has no way to cancel a tender.
 - **Blacklisting is final** (409 `vendor_blacklisted`), as `procurement.vendor.blacklisted` says.
 - **Only approved vendors** are invited, quote, are awarded and are issued orders. Quotes are recorded while a tender
-  is published and before it closes. It is awarded after it closes; an award other than the lowest quote needs a
-  justification, and drafts the order from the quote's priced items.
+  is published and before it closes. It is awarded after it closes; an award other than the lowest valid quote needs
+  a justification, and drafts the order from the quote's priced items. A quote is valid through its `valid_until`
+  date (IST) and expired from the next day: an expired quote is 409 `quote_expired` (decided on #129).
+- **Business dates are Indian** (decided on #129). "Today" is the date in Asia/Kolkata (UTC+05:30, a fixed offset:
+  India has no daylight saving, and tzdata is not on the approved stack). It decides receipt, invoice and payment
+  dates that can't be in the future, when an order becomes overdue, quote expiry, the delivery date drafted at award
+  and the date an order started waiting in the report. Timestamps are stored in UTC.
 - **Receipts never exceed what is outstanding** on an item. Rejected quantities need a reason and can be delivered
   again. The order becomes `partially_received` or `received`; a received order closes its indents.
 - **Cancelling releases what was not delivered.** An issued order with nothing accepted is `cancelled` and releases its
@@ -94,8 +107,12 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 - **Mounting, install and CI:** an entry `finance-operations/procurement` in `apps/backend/config/modules.enabled.yaml`
   (a separate PR) mounts the router at `/api/v1/procurement`; `py-setup.sh`, the API image, CI and the auto-deploy then
   install it, run its tests and upgrade its chain.
-- **budget-grants:** set `PROCUREMENT_BUDGET_GRANTS_URL`. Management approves indents, so management needs
-  `budget-grants:availability:read` (a separate budget-grants PR); department admins already have it.
+- **budget-grants:** set `PROCUREMENT_BUDGET_GRANTS_URL`. Management approves indents and orders, so management needs
+  `budget-grants:availability:read` (a separate budget-grants PR) and `budget-grants:budget:read` (it has it); department
+  admins already have availability.
+- **Overspend outside procurement:** the per-line lock serialises procurement's own approvals. Manual spend and
+  payroll recorded in budget-grants at the same moment are not covered by it; budget-grants records them as real spend
+  and alerts at 80% and 100%.
 - **Events:** budget-grants applies `purchase-order.issued`, `purchase-order.cancelled` and `vendor-invoice.paid`
   through its `consumers.handle`, but until the event bus exists nothing delivers them. A relay must read the outbox and
   call it. Until then, commitments and spend do not reach budget-grants on a server. The same holds for notification.

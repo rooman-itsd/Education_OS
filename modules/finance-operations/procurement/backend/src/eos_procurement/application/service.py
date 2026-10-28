@@ -5,15 +5,16 @@ requester never decides an indent, the preparer never approves an order, the rec
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from functools import wraps
 
 import httpx
 from eos_core import events
 from eos_core.db import scoped, utcnow
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,19 @@ def clock() -> datetime:
     return utcnow()
 
 
-def today() -> date:
-    return clock().date()
+# Business dates follow the Indian business calendar (decided on #129). Asia/Kolkata has kept UTC+05:30 without daylight
+# saving since 1945, so a fixed offset is exact and needs no time-zone database (tzdata is not on the approved stack).
+BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
+
+
+def business_date(moment: datetime) -> date:
+    """The Indian calendar date of a moment; timestamps themselves stay UTC."""
+    return _aware(moment).astimezone(BUSINESS_TZ).date()
+
+
+def business_today() -> date:
+    """Today in Asia/Kolkata: the date "in the future", "overdue" and "expired" are judged against."""
+    return business_date(clock())
 
 
 def _publish(db: Session, name: str, organisation_id: str, payload: dict, actor: str | None = None) -> None:
@@ -473,25 +485,75 @@ def submit_indent(db: Session, actor: Actor, indent_id: str) -> dict:
     return indent_dict(i)
 
 
-def _check_budget(actor: Actor, line_id: str, amount: Decimal) -> None:
-    """budget-grants GET /availability with the approver's token. Nothing is reserved (decided in #221)."""
+def _unavailable(message: str) -> ProcurementError:
+    return ProcurementError(503, "budget_check_unavailable", message)
+
+
+def _availability(actor: Actor, line_id: str, amount: Decimal) -> tuple[Decimal, bool]:
+    """budget-grants GET /availability with the caller's token: (available, sufficient). Nothing is reserved (#221)."""
     try:
         r = budget_grants.availability(load_settings().budget_grants_url, actor.token, line_id, money(amount))
     except budget_grants.BudgetGrantsNotConfiguredError as e:
-        raise ProcurementError(503, "budget_check_unavailable", str(e)) from e
+        raise _unavailable(str(e)) from e
     except httpx.HTTPError as e:
-        raise ProcurementError(503, "budget_check_unavailable", "budget-grants could not be reached") from e
+        raise _unavailable("budget-grants could not be reached") from e
     if r.status == 404:
         raise invalid("insufficient_budget", "the line is not in an approved budget or active grant", "line_id")
     if r.status != 200:
-        raise ProcurementError(
-            503, "budget_check_unavailable", f"budget-grants refused the availability check ({r.status})"
+        raise _unavailable(f"budget-grants refused the availability check ({r.status})")
+    try:
+        available = parse_money(r.body["available"], "available", positive=False)
+        sufficient = r.body["sufficient"]
+    except (KeyError, RuleError) as e:
+        raise _unavailable("budget-grants gave an unreadable availability answer") from e
+    if not isinstance(sufficient, bool):
+        raise _unavailable("budget-grants gave an unreadable availability answer")
+    return available, sufficient
+
+
+def _check_budget(actor: Actor, line_id: str, amount: Decimal) -> None:
+    """Indent approval: the line can cover the estimated cost."""
+    available, sufficient = _availability(actor, line_id, amount)
+    if not sufficient:
+        raise invalid(
+            "insufficient_budget", f"the line has {money(available)} available, less than {money(amount)}", "line_id"
         )
-    if not isinstance(r.body.get("sufficient"), bool):
-        raise ProcurementError(503, "budget_check_unavailable", "budget-grants gave an unreadable availability answer")
-    if r.body["sufficient"] is not True:
-        left = r.body.get("available") or "0.00"
-        raise invalid("insufficient_budget", f"the line has {left} available, less than {money(amount)}", "line_id")
+
+
+def _lock_line(db: Session, organisation_id: str, line_id: str) -> None:
+    """Serialise purchase order approvals on one line until the transaction ends, so two approvals never spend the same
+    balance. A transaction-level advisory lock on Postgres; SQLite (tests, local) has a single writer anyway."""
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    digest = hashlib.sha256(f"procurement.line:{organisation_id}:{line_id}".encode()).digest()
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": int.from_bytes(digest[:8], "big", signed=True)})
+
+
+def _check_order_budget(db: Session, actor: Actor, po: PurchaseOrder) -> None:
+    """The order total is covered by its line (decided on #129). budget-grants records a commitment only when it receives
+    procurement.purchase-order.issued, which may not have arrived yet, so the orders this organisation issued on the line
+    that budget-grants has no commitment for are taken off what it reports as available. Runs under _lock_line."""
+    total = Decimal(po.total)
+    available, _ = _availability(actor, po.line_id, total)
+    try:
+        recorded = budget_grants.procurement_commitments(load_settings().budget_grants_url, actor.token, po.line_id)
+    except budget_grants.BudgetGrantsRefusedError as e:
+        raise _unavailable(f"budget-grants refused the commitments listing ({e.status})") from e
+    except httpx.HTTPError as e:
+        raise _unavailable("budget-grants could not be reached") from e
+    q = _q(db, PurchaseOrder).where(
+        PurchaseOrder.line_id == po.line_id, PurchaseOrder.status.in_(ISSUED_EVER), PurchaseOrder.id != po.id
+    )
+    pending = sum((Decimal(o.total) for o in db.scalars(q) if o.id not in recorded), ZERO)
+    left = available - pending
+    if total > left:
+        held = f" ({money(pending)} of it held by issued orders budget-grants has not recorded yet)" if pending else ""
+        raise invalid(
+            "insufficient_budget",
+            f"the line has {money(available)} available{held}, so {money(left)} is left, less than the order total "
+            f"{money(total)}",
+            "line_id",
+        )
 
 
 def decide_indent(db: Session, actor: Actor, indent_id: str, decision: str, note: str | None) -> dict:
@@ -617,6 +679,11 @@ def _tender_indent_ids(db: Session, tender_id: str) -> list[str]:
 def _quotes(db: Session, tender_id: str) -> list[Quote]:
     rows = list(db.scalars(_q(db, Quote).where(Quote.tender_id == tender_id)))
     return sorted(rows, key=lambda x: (Decimal(x.total), _aware(x.created_at), x.id))
+
+
+def _expired(quote: Quote) -> bool:
+    """A quote is valid through its valid_until date (IST) and expired from the next day (decided on #129)."""
+    return quote.valid_until is not None and quote.valid_until < business_today()
 
 
 def tender_dict(db: Session, t: Tender) -> dict:
@@ -788,8 +855,11 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
     quote = next((x for x in quotes if x.id == quote_id), None)
     if quote is None:
         raise not_found("quote of this tender")
+    if _expired(quote):
+        raise conflict("quote_expired", f"the quote was valid until {_iso(quote.valid_until)}")
+    valid = [x for x in quotes if not _expired(x)]
     justification = _text(justification)
-    if Decimal(quote.total) > Decimal(quotes[0].total) and not justification:
+    if Decimal(quote.total) > Decimal(valid[0].total) and not justification:
         raise invalid(
             "justification_required", "awarding other than the lowest quote needs a justification", "justification"
         )
@@ -805,7 +875,7 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
         tender_id=t.id,
         line_id=t.line_id,
         items=items,
-        delivery_by=today() + timedelta(days=quote.delivery_days or 0),
+        delivery_by=business_today() + timedelta(days=quote.delivery_days or 0),
         delivery_address="",
         terms=t.terms,
         status="draft",
@@ -849,7 +919,7 @@ def _invoices_of(db: Session, po_id: str) -> list[VendorInvoice]:
 
 
 def _overdue(po: PurchaseOrder) -> bool:
-    return po.status in rules.OPEN_ORDER_STATUSES and today() > po.delivery_by
+    return po.status in rules.OPEN_ORDER_STATUSES and business_today() > po.delivery_by
 
 
 def po_dict(db: Session, po: PurchaseOrder) -> dict:
@@ -1005,6 +1075,12 @@ def decide_order(db: Session, actor: Actor, po_id: str, decision: str, note: str
         po.status = "returned"
     else:
         _approved_vendor(db, po.vendor_id, status=409)
+        _lock_line(db, po.organisation_id, po.line_id)
+        try:
+            _check_order_budget(db, actor, po)
+        except ProcurementError:
+            db.rollback()  # the order stays submitted, nothing is published, and the line lock is released
+            raise
         po.status, po.approved_by, po.issued_at = "issued", actor.user_id, clock()
         _set_indent_status(db, actor.user_id, indent_ids, "ordered")
         _publish(
@@ -1093,7 +1169,7 @@ def record_receipt(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
     po = _get(db, PurchaseOrder, po_id, "purchase order", lock=True)
     if po.status not in rules.OPEN_ORDER_STATUSES:
         raise conflict("order_not_open", f"goods are received against an issued order; it is {po.status}")
-    if body["received_on"] > today():
+    if body["received_on"] > business_today():
         raise invalid("invalid_date", "received_on cannot be in the future", "received_on")
     accepted_so_far = _accepted(db, po.id)
     seen: set[int] = set()
@@ -1238,7 +1314,7 @@ def record_invoice(db: Session, actor: Actor, body: dict) -> dict:
     q = _q(db, VendorInvoice).where(VendorInvoice.vendor_id == po.vendor_id, VendorInvoice.invoice_number == number_)
     if db.scalar(q) is not None:
         raise conflict("invoice_exists", f"invoice {number_} of this vendor is already recorded")
-    if body["invoice_date"] > today():
+    if body["invoice_date"] > business_today():
         raise invalid("invalid_date", "invoice_date cannot be in the future", "invoice_date")
     amount = _rule(parse_money, body["amount"], "amount")
     tax = _rule(parse_money, body.get("tax_amount") or "0", "tax_amount", positive=False)
@@ -1304,7 +1380,7 @@ def mark_paid(db: Session, actor: Actor, invoice_id: str, body: dict) -> dict:
     if inv.status != "approved":
         raise conflict("not_approved", f"the invoice is {inv.status}, not approved")
     paid_on = body["paid_on"]
-    if paid_on > today() or paid_on < inv.invoice_date:
+    if paid_on > business_today() or paid_on < inv.invoice_date:
         raise invalid("invalid_date", "paid_on must be between the invoice date and today", "paid_on")
     reference = _text(body["payment_reference"])
     if not reference:
