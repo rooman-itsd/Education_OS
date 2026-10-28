@@ -16,3 +16,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Widget `maintenance.tickets` (GET /tickets?scope=managed&open=true, GET /summary) with loading, empty and
   error states; typed API client in `frontend/src/api/client.ts`; vitest widget tests.
 - `docs/user-stories.md`.
+- Contract: the `facility-staff` profile role gets the grants of `maintenance-manager`, so the Facility / Inventory
+  Staff dashboard (#6) can read this module's data.

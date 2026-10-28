@@ -24,3 +24,8 @@ roles:
   - name: maintenance-manager
     description: Facility / Inventory Staff, equipment manager, lab in-charge. Triage, assignment and planning.
     grants: [maintenance:ticket:create, maintenance:ticket:read, maintenance:ticket:read-all, maintenance:ticket:work, maintenance:ticket:manage, maintenance:schedule:manage]
+  # Profile role (platform/identity/config/profiles). A token carries this, not the module roles above, so the
+  # Facility / Inventory Staff dashboard (issue #6) needs it granted here: the same grants as maintenance-manager.
+  - name: facility-staff
+    description: The Facility / Inventory Staff profile role. Same grants as maintenance-manager.
+    grants: [maintenance:ticket:create, maintenance:ticket:read, maintenance:ticket:read-all, maintenance:ticket:work, maintenance:ticket:manage, maintenance:schedule:manage]
