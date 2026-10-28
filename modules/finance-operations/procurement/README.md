@@ -41,14 +41,19 @@ Rules the code keeps:
   submitted an order prepared it and can't approve it. Whoever recorded an invoice can't approve it.
 - **Approval checks the budget.** Approving an indent calls budget-grants `GET /availability` for the estimated cost,
   with the approver's token. A line that can't cover it, or isn't open, is 422 `insufficient_budget`. If budget-grants
-  can't be reached or refuses the check, the answer is 503 `budget_check_unavailable` and nothing is decided. Nothing is
-  reserved: the commitment starts when the order is issued (#221).
+  can't be reached, refuses the check or gives an unreadable answer, the answer is 503 `budget_check_unavailable` and
+  nothing is decided. Nothing is reserved: the commitment starts when the order is issued (#221).
 - **The purchase method follows the value.** Up to `PROCUREMENT_DIRECT_PURCHASE_LIMIT` a direct purchase, up to
   `PROCUREMENT_QUOTATION_LIMIT` quotations, above it a tender. The limits have no default: until both are set, approval
   is 422 `purchase_limits_not_configured` (decided on #129). A tender may use a stricter method than its indents need,
-  never a looser one, judged on their combined value too. Only a direct-purchase indent becomes an order directly.
+  never a looser one, judged on their combined value too. Only direct-purchase indents become an order directly, and
+  only while their combined estimate and the order's own total stay within the direct limit (422 `tender_required`), so
+  a purchase can't be split into direct orders or priced above what was approved.
 - **An indent belongs to one open tender or order at a time.** Indents combined into one tender or order share one line.
-  When an order is cancelled with nothing received, its indents can be ordered again.
+  The indents are locked while checked, so two requests for the same indent take turns. When an order is cancelled
+  with nothing received, its indents can be ordered again. A tender that can no longer be awarded (a draft past its
+  closing date, or one that closed without a quote) lets its indents go; the contract has no way to cancel a tender.
+- **Blacklisting is final** (409 `vendor_blacklisted`), as `procurement.vendor.blacklisted` says.
 - **Only approved vendors** are invited, quote, are awarded and are issued orders. Quotes are recorded while a tender
   is published and before it closes. It is awarded after it closes; an award other than the lowest quote needs a
   justification, and drafts the order from the quote's priced items.
@@ -60,7 +65,11 @@ Rules the code keeps:
   receipts plus `PROCUREMENT_INVOICE_MATCH_TOLERANCE_PERCENT`. A mismatch is approved only with a note. Payment is
   recorded with its date, reference and TDS deducted (an amount, not computed).
 - **Bank account numbers are never stored.** Only the last four digits and the IFSC are kept, because no encryption
-  library is on the approved stack yet (decided on #129).
+  library is on the approved stack yet (decided on #129). Vendor bodies are validated in the module, so a 422 never
+  echoes the request (and the account number) back. Payment itself happens outside Education OS.
+- **A value taken concurrently is 409, never 500:** running numbers, GSTIN and PAN, one quote per vendor and a
+  vendor's invoice number, whether the database refuses it at a flush or at the commit. Ids are length-checked, so an
+  over-long value is 422 before it reaches the database.
 - **Nothing is deleted, and every change is audited.** An `audit_entry` row (actor, action, entity, id) is written in
   the same transaction, until the audit SDK exists. Changes the contract defines events for also publish them to the
   outbox, with exactly the payloads of `events.yaml`.

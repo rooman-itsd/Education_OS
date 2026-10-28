@@ -58,7 +58,7 @@ class VendorStatusInput(Strict):
 class IndentInput(Strict):
     title: str = Field(min_length=1, max_length=300)
     justification: str | None = None
-    department_id: str | None = None
+    department_id: str | None = Field(default=None, max_length=36)
     line_id: str = Field(min_length=1, max_length=36)
     items: list[Item] = Field(min_length=1)
     estimated_cost: str = Field(pattern=MONEY)
@@ -88,7 +88,7 @@ class QuoteInput(Strict):
     total: str = Field(pattern=MONEY)
     delivery_days: int | None = Field(default=None, ge=0)
     valid_until: date | None = None
-    document_id: str | None = None
+    document_id: str | None = Field(default=None, max_length=100)
 
 
 class AwardInput(Strict):
@@ -121,7 +121,7 @@ class GoodsReceiptInput(Strict):
     received_on: date
     delivery_note: str | None = None
     items: list[ReceiptItem] = Field(min_length=1)
-    document_id: str | None = None
+    document_id: str | None = Field(default=None, max_length=100)
 
 
 class VendorInvoiceInput(Strict):
@@ -130,7 +130,7 @@ class VendorInvoiceInput(Strict):
     invoice_date: date
     amount: str = Field(pattern=MONEY)
     tax_amount: str | None = Field(default=None, pattern=MONEY)
-    document_id: str | None = None
+    document_id: str | None = Field(default=None, max_length=100)
 
 
 class MarkPaidInput(Strict):

@@ -3,8 +3,11 @@ HTTP to the application layer; errors render as {"detail": {"code", "message", "
 
 from __future__ import annotations
 
+from typing import Any
+
 from eos_core.db import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..application import access as p
@@ -33,6 +36,16 @@ def _run(fn, *args, **kwargs):
 Limit = Query(default=50, ge=1, le=200)
 
 
+def _vendor_body(raw: Any) -> dict:
+    """VendorInput, validated here rather than by FastAPI: a validation error never echoes the request back, so a bank
+    account number sent with an invalid body does not come back in the 422 (only its last four digits are kept)."""
+    try:
+        return s.dump(s.VendorInput.model_validate(raw))
+    except ValidationError as e:
+        errors = [{"type": x["type"], "loc": ["body", *x["loc"]], "msg": x["msg"]} for x in e.errors()]
+        raise HTTPException(422, errors) from e
+
+
 # ---------------------------------------------------------------- vendors
 
 
@@ -50,8 +63,8 @@ def list_vendors(
 
 
 @router.post("/vendors", status_code=201)
-def create_vendor(body: s.VendorInput, a: Actor = Depends(require(p.VENDOR_MANAGE)), db: Session = Depends(get_db)):
-    return _run(service.create_vendor, db, a, s.dump(body))
+def create_vendor(body: Any = Body(...), a: Actor = Depends(require(p.VENDOR_MANAGE)), db: Session = Depends(get_db)):
+    return _run(service.create_vendor, db, a, _vendor_body(body))
 
 
 @router.get("/vendors/{vendor_id}")
@@ -61,9 +74,9 @@ def get_vendor(vendor_id: str, a: Actor = Depends(require(p.VENDOR_READ)), db: S
 
 @router.put("/vendors/{vendor_id}")
 def update_vendor(
-    vendor_id: str, body: s.VendorInput, a: Actor = Depends(require(p.VENDOR_MANAGE)), db: Session = Depends(get_db)
+    vendor_id: str, body: Any = Body(...), a: Actor = Depends(require(p.VENDOR_MANAGE)), db: Session = Depends(get_db)
 ):
-    return _run(service.update_vendor, db, a, vendor_id, s.dump(body))
+    return _run(service.update_vendor, db, a, vendor_id, _vendor_body(body))
 
 
 @router.post("/vendors/{vendor_id}/status")

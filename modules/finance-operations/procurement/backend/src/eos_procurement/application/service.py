@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from functools import wraps
 
 import httpx
 from eos_core import events
@@ -121,13 +122,23 @@ def _page(rows: list, cursor: str | None, limit: int, render) -> dict:
     }
 
 
-def _commit(db: Session, code: str, message: str) -> None:
-    """Commit; a unique constraint that a concurrent request took first answers 409 like the check before it."""
-    try:
-        db.commit()
-    except IntegrityError as e:
-        db.rollback()
-        raise conflict(code, message) from e
+def _duplicate_is_409(code: str, message: str):
+    """A write that takes a unique value (a running number, a GSTIN or PAN, a quote per vendor, a vendor's invoice
+    number). When a concurrent request took the same value after the checks, the database refuses it at a flush or at
+    the commit; either way the answer is 409, like the check before it, and nothing is kept."""
+
+    def wrap(fn):
+        @wraps(fn)
+        def run(db: Session, *args, **kwargs):
+            try:
+                return fn(db, *args, **kwargs)
+            except IntegrityError as e:
+                db.rollback()
+                raise conflict(code, message) from e
+
+        return run
+
+    return wrap
 
 
 def _next_number(db: Session, model, prefix: str) -> str:
@@ -284,20 +295,22 @@ def _vendor_values(db: Session, v: Vendor, body: dict) -> None:
         raise invalid("invalid_name", "name is required", "name")
 
 
+@_duplicate_is_409("vendor_exists", "a vendor with this GSTIN or PAN exists")
 def create_vendor(db: Session, actor: Actor, body: dict) -> dict:
     v = Vendor(organisation_id=actor.organisation_id, status="pending")
     _vendor_values(db, v, body)
     db.add(v)
     _audit(db, actor.user_id, "vendor.registered", "vendor", v)
-    _commit(db, "vendor_exists", "a vendor with this GSTIN or PAN exists")
+    db.commit()
     return vendor_dict(v)
 
 
+@_duplicate_is_409("vendor_exists", "a vendor with this GSTIN or PAN exists")
 def update_vendor(db: Session, actor: Actor, vendor_id: str, body: dict) -> dict:
     v = _get(db, Vendor, vendor_id, "vendor", lock=True)
     _vendor_values(db, v, body)
     _audit(db, actor.user_id, "vendor.updated", "vendor", v)
-    _commit(db, "vendor_exists", "a vendor with this GSTIN or PAN exists")
+    db.commit()
     return get_vendor(db, v.id)
 
 
@@ -306,6 +319,8 @@ def set_vendor_status(db: Session, actor: Actor, vendor_id: str, status: str, re
     if not reason:
         raise invalid("reason_required", "a status change needs a reason", "reason")
     v = _get(db, Vendor, vendor_id, "vendor", lock=True)
+    if v.status == "blacklisted":
+        raise conflict("vendor_blacklisted", "a blacklisted vendor can no longer be approved or suspended")
     if v.status == status:
         raise conflict("status_unchanged", f"the vendor is already {status}")
     v.status, v.status_reason = status, reason
@@ -405,6 +420,7 @@ def _indent_values(i: Indent, body: dict) -> None:
     i.document_ids = [d for d in body.get("document_ids") or [] if d]
 
 
+@_duplicate_is_409("number_taken", "another request took the same number; try again")
 def create_indent(db: Session, actor: Actor, body: dict) -> dict:
     i = Indent(
         organisation_id=actor.organisation_id,
@@ -415,7 +431,7 @@ def create_indent(db: Session, actor: Actor, body: dict) -> dict:
     _indent_values(i, body)
     db.add(i)
     _audit(db, actor.user_id, "indent.created", "indent", i)
-    _commit(db, "number_taken", "another indent took this number; try again")
+    db.commit()
     return indent_dict(i)
 
 
@@ -471,7 +487,9 @@ def _check_budget(actor: Actor, line_id: str, amount: Decimal) -> None:
         raise ProcurementError(
             503, "budget_check_unavailable", f"budget-grants refused the availability check ({r.status})"
         )
-    if r.body.get("sufficient") is not True:
+    if not isinstance(r.body.get("sufficient"), bool):
+        raise ProcurementError(503, "budget_check_unavailable", "budget-grants gave an unreadable availability answer")
+    if r.body["sufficient"] is not True:
         left = r.body.get("available") or "0.00"
         raise invalid("insufficient_budget", f"the line has {left} available, less than {money(amount)}", "line_id")
 
@@ -526,17 +544,18 @@ def decide_indent(db: Session, actor: Actor, indent_id: str, decision: str, note
 def _indent_in_use(
     db: Session, indent_id: str, *, except_order: str | None = None, except_tender: str | None = None
 ) -> bool:
-    """An indent belongs to at most one open tender or order: a draft or published tender, or an order that is not
-    cancelled. An awarded tender's indents are held by the order the award drafted."""
+    """An indent belongs to at most one open tender or order: a tender that can still lead to an award, or an order
+    that is not cancelled. An awarded tender's indents are held by the order the award drafted. The contract has no
+    way to cancel a tender, so one that can no longer be awarded (a draft past its closing date, or a tender that
+    closed without a quote) lets its indents go."""
     tq = (
-        select(TenderIndent.id)
-        .join(Tender, Tender.id == TenderIndent.tender_id)
+        select(Tender)
+        .join(TenderIndent, TenderIndent.tender_id == Tender.id)
         .where(TenderIndent.indent_id == indent_id, Tender.status.in_(("draft", "published")))
     )
-    if except_tender:
-        tq = tq.where(Tender.id != except_tender)
-    if db.scalar(scoped(db, tq, TenderIndent)) is not None:
-        return True
+    for t in db.scalars(scoped(db, tq, Tender)):
+        if t.id != except_tender and _tender_can_be_awarded(db, t):
+            return True
     oq = (
         select(OrderIndent.id)
         .join(PurchaseOrder, PurchaseOrder.id == OrderIndent.purchase_order_id)
@@ -548,9 +567,10 @@ def _indent_in_use(
 
 
 def _usable_indents(db: Session, indent_ids: list[str], **excepts) -> list[Indent]:
-    """Approved indents on one line, none already held by another open tender or order."""
-    ids = list(dict.fromkeys(indent_ids))
-    indents = [_get(db, Indent, x, "indent") for x in ids]
+    """Approved indents on one line, none already held by another open tender or order. The indents are locked, in a
+    fixed order, so two requests for the same indent take turns and the second sees the first one's tender or order."""
+    ids = sorted(set(indent_ids))
+    indents = [_get(db, Indent, x, "indent", lock=True) for x in ids]
     for i in indents:
         if i.status != "approved":
             raise conflict("indent_not_approved", f"indent {i.number} is {i.status}, not approved")
@@ -561,15 +581,26 @@ def _usable_indents(db: Session, indent_ids: list[str], **excepts) -> list[Inden
     return indents
 
 
-def _set_indent_status(db: Session, actor_id: str | None, indent_ids: list[str], status: str) -> None:
+def _set_indent_status(
+    db: Session, actor_id: str | None, indent_ids: list[str], status: str, action: str | None = None
+) -> None:
     for indent_id in indent_ids:
         i = db.scalar(_q(db, Indent).where(Indent.id == indent_id))
         if i is not None and i.status != status:
             i.status = status
-            _audit(db, actor_id, f"indent.{status}", "indent", i)
+            _audit(db, actor_id, action or f"indent.{status}", "indent", i)
 
 
 # ---------------------------------------------------------------- tenders
+
+
+def _tender_can_be_awarded(db: Session, t: Tender) -> bool:
+    """A draft that can still be published, a tender open for quotes, or a closed one with a quote to award."""
+    if t.status not in ("draft", "published"):
+        return False
+    if _aware(t.closes_at) > clock():
+        return True
+    return t.status == "published" and db.scalar(_q(db, Quote).where(Quote.tender_id == t.id)) is not None
 
 
 def _tender_status(t: Tender) -> str:
@@ -635,6 +666,7 @@ def get_tender(db: Session, tender_id: str) -> dict:
     return tender_dict(db, _get(db, Tender, tender_id, "tender"))
 
 
+@_duplicate_is_409("number_taken", "another request took the same number; try again")
 def create_tender(db: Session, actor: Actor, body: dict) -> dict:
     indents = _usable_indents(db, body["indent_ids"])
     settings = load_settings()
@@ -675,7 +707,7 @@ def create_tender(db: Session, actor: Actor, body: dict) -> dict:
     for i in indents:
         db.add(TenderIndent(organisation_id=actor.organisation_id, tender_id=t.id, indent_id=i.id))
     _audit(db, actor.user_id, "tender.created", "tender", t)
-    _commit(db, "number_taken", "another tender took this number; try again")
+    db.commit()
     return tender_dict(db, t)
 
 
@@ -716,6 +748,7 @@ def publish_tender(db: Session, actor: Actor, tender_id: str) -> dict:
     return tender_dict(db, t)
 
 
+@_duplicate_is_409("quote_exists", "a quote from this vendor is already recorded")
 def record_quote(db: Session, actor: Actor, tender_id: str, body: dict) -> dict:
     t = _get(db, Tender, tender_id, "tender", lock=True)
     if _tender_status(t) != "published":
@@ -741,10 +774,11 @@ def record_quote(db: Session, actor: Actor, tender_id: str, body: dict) -> dict:
     )
     db.add(q)
     _audit(db, actor.user_id, "quote.recorded", "quote", q)
-    _commit(db, "quote_exists", f"a quote from {v.name} is already recorded")
+    db.commit()
     return tender_dict(db, t)
 
 
+@_duplicate_is_409("number_taken", "another request took the same number; try again")
 def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justification: str | None) -> dict:
     t = _get(db, Tender, tender_id, "tender", lock=True)
     status = _tender_status(t)
@@ -794,7 +828,7 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
     )
     _audit(db, actor.user_id, "tender.awarded", "tender", t)
     _audit(db, actor.user_id, "purchase_order.created", "purchase_order", po)
-    _commit(db, "number_taken", "another order took this number; try again")
+    db.commit()
     return po_dict(db, po)
 
 
@@ -872,6 +906,21 @@ def _order_values(db: Session, po: PurchaseOrder, body: dict) -> list[Indent]:
     vendor = _approved_vendor(db, body["vendor_id"])
     items = _items(body["items"], priced=True)
     po.subtotal, po.tax_total, po.total = _rule(rules.order_totals, items)
+    settings = load_settings()
+    estimate = sum((Decimal(i.estimated_cost) for i in indents), ZERO)
+    needed = _rule(
+        rules.purchase_method,
+        max(estimate, Decimal(po.total)),
+        settings.direct_purchase_limit,
+        settings.quotation_limit,
+    )
+    if needed != "direct":
+        raise invalid(
+            "tender_required",
+            f"the indents together ({money(estimate)}) or the order total ({money(po.total)}) are above the direct "
+            f"purchase limit; buy through a {needed}",
+            "indent_ids",
+        )
     po.vendor_id, po.line_id, po.items = vendor.id, indents[0].line_id, items
     po.delivery_by = body["delivery_by"]
     po.delivery_address = _text(body.get("delivery_address"))
@@ -887,6 +936,7 @@ def _link_indents(db: Session, po: PurchaseOrder, indent_ids: list[str]) -> None
         db.add(OrderIndent(organisation_id=po.organisation_id, purchase_order_id=po.id, indent_id=indent_id))
 
 
+@_duplicate_is_409("number_taken", "another request took the same number; try again")
 def create_order(db: Session, actor: Actor, body: dict) -> dict:
     po = PurchaseOrder(
         organisation_id=actor.organisation_id,
@@ -899,7 +949,7 @@ def create_order(db: Session, actor: Actor, body: dict) -> dict:
     db.flush()
     _link_indents(db, po, [i.id for i in indents])
     _audit(db, actor.user_id, "purchase_order.created", "purchase_order", po)
-    _commit(db, "number_taken", "another order took this number; try again")
+    db.commit()
     return po_dict(db, po)
 
 
@@ -992,7 +1042,7 @@ def cancel_order(db: Session, actor: Actor, po_id: str, reason: str) -> dict:
         _set_indent_status(db, actor.user_id, indent_ids, "closed")
     else:
         po.status = "cancelled"  # nothing received: the indents can be ordered again
-        _set_indent_status(db, actor.user_id, indent_ids, "approved")
+        _set_indent_status(db, actor.user_id, indent_ids, "approved", "indent.reopened")
     po.cancel_reason = reason
     released = max(Decimal(po.total) - delivered, ZERO)
     _publish(
@@ -1038,6 +1088,7 @@ def list_receipts(db: Session, po_id: str) -> list[dict]:
     return [receipt_dict(x) for x in db.scalars(q.order_by(GoodsReceipt.received_on, GoodsReceipt.number))]
 
 
+@_duplicate_is_409("number_taken", "another request took the same number; try again")
 def record_receipt(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
     po = _get(db, PurchaseOrder, po_id, "purchase order", lock=True)
     if po.status not in rules.OPEN_ORDER_STATUSES:
@@ -1118,7 +1169,7 @@ def record_receipt(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
     )
     _audit(db, actor.user_id, "goods_receipt.recorded", "goods_receipt", gr)
     _audit(db, actor.user_id, f"purchase_order.{po.status}", "purchase_order", po)
-    _commit(db, "number_taken", "another receipt took this number; try again")
+    db.commit()
     return receipt_dict(gr)
 
 
@@ -1176,6 +1227,7 @@ def get_invoice(db: Session, invoice_id: str) -> dict:
     return invoice_dict(db, _get(db, VendorInvoice, invoice_id, "vendor invoice"))
 
 
+@_duplicate_is_409("invoice_exists", "this invoice number of the vendor is already recorded")
 def record_invoice(db: Session, actor: Actor, body: dict) -> dict:
     po = _get(db, PurchaseOrder, body["purchase_order_id"], "purchase order")
     if po.status not in rules.INVOICEABLE_ORDER_STATUSES:
@@ -1207,7 +1259,7 @@ def record_invoice(db: Session, actor: Actor, body: dict) -> dict:
     )
     db.add(inv)
     _audit(db, actor.user_id, "vendor_invoice.recorded", "vendor_invoice", inv)
-    _commit(db, "invoice_exists", f"invoice {number_} of this vendor is already recorded")
+    db.commit()
     return invoice_dict(db, inv, po)
 
 

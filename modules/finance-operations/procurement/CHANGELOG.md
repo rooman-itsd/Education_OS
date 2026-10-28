@@ -36,5 +36,15 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel, helpdesk and budget-grants.
 - `config/env.example` lists every key; `module.yaml` status is `in-progress`.
-- Tests: 49, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+- Tests: 58, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
   drift (operations, permissions, enums, event payloads) and the audit trail.
+- Fixes from an independent review, each with a regression test:
+  - one indent could be put on two orders by two requests at once: the indents are now locked while checked;
+  - direct-purchase indents could be combined, or priced, above the direct limit in one direct order: 422 `tender_required`;
+  - a value taken concurrently (a running number, GSTIN or PAN, a quote, an invoice number) answered 500: now 409;
+  - an over-long `department_id` or `document_id` answered 500 on Postgres: now 422;
+  - indents stayed held by a tender that could no longer be awarded: now released;
+  - a blacklisted vendor could be approved again: blacklisting is final;
+  - an unreadable answer from budget-grants read as "insufficient budget": now 503 `budget_check_unavailable`;
+  - a 422 on a vendor body echoed the bank account number back: no longer;
+  - reopening indents after a cancelled order was audited as `indent.approved`: now `indent.reopened`.
