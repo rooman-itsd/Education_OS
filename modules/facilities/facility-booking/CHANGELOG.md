@@ -12,3 +12,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Alembic chain `fb_0001`: six `facility_booking_*` tables with `organisation_id`, RLS policy on Postgres.
 - Tests: domain unit tests, API integration tests, cross-tenant leak test, migration test (29 passing).
 - `docs/user-stories.md`; `FACILITY_BOOKING_TIMEZONE` config key.
+- Contract: the `facility-staff` profile role gets the grants of `facility-booking-manager`, so the Facility / Inventory
+  Staff dashboard (#6) can read this module's data.
