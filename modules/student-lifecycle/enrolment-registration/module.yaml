@@ -5,7 +5,7 @@ kind: feature              # feature | platform | integration
 domain: student-lifecycle
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Programme enrolment with roll numbers, term registration windows, course registration and section allocation."
 owners: [praveen-rooman]  # GitHub handles. Keep in sync with CODEOWNERS.
 
