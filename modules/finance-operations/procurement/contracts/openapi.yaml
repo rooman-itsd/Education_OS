@@ -5,7 +5,10 @@ info:
   description: >-
     Vendors, indents (purchase requests), quotations and tenders, purchase orders, goods receipts and vendor invoices.
     Each indent is charged to one budget or grant line from budget-grants; availability is checked through the
-    budget-grants contract before approval. Amounts are decimal strings in rupees.
+    budget-grants contract before approval, and again for the order total before a purchase order is issued.
+    Amounts are decimal strings in rupees. Business dates (receipt, invoice and payment dates, delivery and quote
+    validity) follow the Indian business calendar: "today" is the current date in Asia/Kolkata (IST, UTC+05:30);
+    timestamps are UTC.
 servers:
   - url: /api/v1/procurement
 paths:
@@ -42,7 +45,9 @@ paths:
         Blacklisting publishes procurement.vendor.blacklisted. Permission procurement:vendor:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status, reason], properties: { status: { type: string, enum: [approved, suspended, blacklisted] }, reason: { type: string } } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Vendor" } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Vendor" } } } }
+        "409": { description: "The vendor already has this status (status_unchanged), or is blacklisted, which is final (vendor_blacklisted)" }
   /indents:
     get:
       summary: Indents. Permission procurement:indent:approve (all, or the approver's department).
@@ -120,11 +125,15 @@ paths:
   /tenders/{id}/award:
     post:
       summary: >-
-        Award to one quote. A quote other than the lowest needs a justification. Creates a draft purchase order and
-        publishes procurement.tender.awarded. Permission procurement:tender:manage.
+        Award to one quote, after the tender closes. A quote other than the lowest needs a justification. A quote whose
+        valid_until is before today (IST) has expired and cannot be awarded; it is still valid on its valid_until date.
+        Creates a draft purchase order and publishes procurement.tender.awarded. Permission procurement:tender:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [quote_id], properties: { quote_id: { type: string, format: uuid }, justification: { type: string } } } } } }
-      responses: { "200": { description: Awarded, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
+      responses:
+        "200": { description: Awarded, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
+        "409": { description: "The tender is not closed yet or already awarded (not_closed), the quote has expired (quote_expired), or the vendor is no longer approved (vendor_not_approved)" }
+        "422": { description: "Awarding other than the lowest quote without a justification (justification_required)" }
   /purchase-orders:
     get:
       summary: Purchase orders. Permission procurement:purchase-order:read.
@@ -149,7 +158,10 @@ paths:
       summary: Edit a draft or returned order. Permission procurement:purchase-order:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrderInput" } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
+        "409": { description: "Order is not a draft or returned (not_editable)" }
+        "422": { description: "A direct order whose indents together or whose total exceed the direct purchase limit (tender_required)" }
   /purchase-orders/{id}/submit:
     post:
       summary: Send a draft order for approval. Permission procurement:purchase-order:manage.
@@ -158,14 +170,21 @@ paths:
   /purchase-orders/{id}/decision:
     post:
       summary: >-
-        Approve or return an order. Approval issues it: the PDF is generated, the vendor is notified and
-        procurement.purchase-order.issued is published (budget-grants records the commitment). The preparer cannot
-        approve. Permission procurement:purchase-order:approve.
+        Approve or return an order. Approval first checks that the order total is covered by its line: budget-grants
+        GET /availability for the total, less the totals of this organisation's issued orders on the line that
+        budget-grants has not recorded as commitments yet (GET /expenditures, kind commitment), both with the approver's
+        token. Approvals on one line are serialised, so two approvals cannot spend the same balance. A failed check
+        leaves the order submitted and publishes nothing. Approval issues it: the PDF is generated, the vendor is
+        notified and procurement.purchase-order.issued is published (budget-grants records the commitment). The
+        preparer cannot approve. Permission procurement:purchase-order:approve; the approver also needs
+        budget-grants:availability:read and budget-grants:budget:read.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { $ref: "#/components/requestBodies/Decision" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
-        "409": { description: Order is not submitted }
+        "409": { description: "Order is not submitted (not_submitted), or its vendor is no longer approved (vendor_not_approved)" }
+        "422": { description: "The line cannot cover the order total, or is not open (insufficient_budget); a decision other than approved or returned (invalid_decision)" }
+        "503": { description: "budget-grants could not be reached or refused the check (budget_check_unavailable); the order stays submitted" }
   /purchase-orders/{id}/cancel:
     post:
       summary: >-

@@ -15,3 +15,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   422 `insufficient_budget` or `purchase_limits_not_configured`, 503 `budget_check_unavailable`. Only the last four
   digits of a vendor's bank account are kept.
 - `docs/user-stories.md`; the PRD records the decisions on purchase limits and bank account numbers (#129).
+- Contract (decisions on #129): purchase order approval checks the order total against its line (422
+  `insufficient_budget`, 503 `budget_check_unavailable`); an expired quote is not awarded (409 `quote_expired`);
+  business dates are Indian (Asia/Kolkata). Also documents 409 `vendor_blacklisted` and 422 `tender_required` on edit.

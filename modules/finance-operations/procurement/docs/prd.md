@@ -51,7 +51,7 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 
 | Direction | With | How |
 |---|---|---|
-| Calls | budget-grants | `GET /lines`, `GET /availability` (budget-grants contract 0.2.0), with the caller's token; management has `budget-grants:availability:read` for indent approval |
+| Calls | budget-grants | `GET /lines`; `GET /availability` at indent approval and, for the order total, at purchase order approval; `GET /expenditures` (commitments) at purchase order approval; all with the caller's token. Management has `budget-grants:availability:read` (#129) and `budget-grants:budget:read`. |
 | Publishes | budget-grants | `purchase-order.issued`, `purchase-order.cancelled`, `vendor-invoice.paid` |
 | Publishes | inventory-equipment, asset-management | `goods-receipt.recorded` |
 | Publishes | notification | indent, tender and order events |
@@ -70,3 +70,10 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
    `purchase_limits_not_configured`; no method is guessed.
 2. Should facilities consume `goods-receipt.recorded` to add stock or assets? To agree with the facilities owner (Ashritha).
 3. TDS on vendor payments is recorded as an amount; it is not computed.
+4. Decided on #129: a purchase order is issued only if its total is covered by its line. budget-grants reserves
+   nothing (#221), so procurement serialises approvals per line and also counts its issued orders that budget-grants
+   has not recorded yet. A failed check is 422 `insufficient_budget` and leaves the order submitted.
+5. Decided on #129: business dates follow the Indian business calendar; "today" is the date in Asia/Kolkata (IST).
+   Timestamps stay UTC.
+6. Decided on #129: a quote whose `valid_until` is before today (IST) has expired and is not awarded (409
+   `quote_expired`); it is still valid on its `valid_until` date.
