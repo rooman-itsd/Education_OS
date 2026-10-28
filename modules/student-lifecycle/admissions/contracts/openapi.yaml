@@ -411,8 +411,8 @@ components:
           type: object
           description: >-
             How many applications reached each stage. applied = all; eligible = eligible + offered +
-            accepted + declined; offered = offered + accepted + declined; accepted = accepted. Exact,
-            because an offer can only follow eligibility.
+            accepted + declined; offered = offered + accepted + declined; accepted = accepted. Counted
+            from current statuses, so an application withdrawn after eligibility counts only as applied.
           properties:
             applied: { type: integer }
             eligible: { type: integer }
