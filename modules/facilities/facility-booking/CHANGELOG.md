@@ -12,3 +12,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Alembic chain `fb_0001`: six `facility_booking_*` tables with `organisation_id`, RLS policy on Postgres.
 - Tests: domain unit tests, API integration tests, cross-tenant leak test, migration test (29 passing).
 - `docs/user-stories.md`; `FACILITY_BOOKING_TIMEZONE` config key.
+- Widget `facility-booking.bookings-today` (#6, Facility / Inventory Staff dashboard): today's bookings on the
+  resources the viewer manages or approves, earliest first, with a counts line (GET /bookings?scope=managed&date=today,
+  GET /summary); loading, empty and error states following the widget error convention; typed API client in
+  `frontend/src/api/client.ts`; vitest widget tests (8 passing).
