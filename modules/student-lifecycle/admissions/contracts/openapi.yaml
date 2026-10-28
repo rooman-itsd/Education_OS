@@ -67,8 +67,9 @@ paths:
     get:
       summary: >
         Documents across the organisation's applications, oldest upload first, filtered by
-        verification status (default pending). Backs the widget admissions.pending-documents.
-        Permission admissions:document:verify.
+        verification status (default pending). The pending queue leaves out applications that are
+        already closed (ineligible, rejected, withdrawn, accepted, declined). Backs the widget
+        admissions.pending-documents. Permission admissions:document:verify.
       parameters:
         - { name: verification_status, in: query, schema: { type: string, enum: [pending, verified, rejected], default: pending } }
         - { $ref: "#/components/parameters/Page" }

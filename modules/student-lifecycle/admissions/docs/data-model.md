@@ -67,7 +67,7 @@ The aggregate root.
 ```
 Application (1) ──< ApplicationDocument (many)
 Application (1) ──< Offer (0..1 open at a time, history kept)
-MeritList (1) ──< MeritListEntry (many) ──> Application (by id, not a join)
+MeritList (1) ──< MeritListEntry (many) ──> Application (foreign key; both are this module's tables)
 AuditEntry ──> any of the above (by entity + entity_id, not a join)
 ```
 

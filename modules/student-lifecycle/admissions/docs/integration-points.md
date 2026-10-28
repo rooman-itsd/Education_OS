@@ -28,7 +28,8 @@ module's event in this release.
 - **Public routes through the gateway.** `apps/backend`'s entitlement gate must let
   `/api/v1/admissions/public/{org_slug}/*` through without a token, after resolving the slug to an
   active organisation entitled to admissions (404 otherwise), and pass that organisation id to the
-  route. Every other admissions path keeps the normal token check.
+  route as `request.state.organisation_id`. Every other admissions path keeps the normal token check.
+  Without it the public routes answer 404 (the module never guesses an organisation).
 
 ## Cross-module API dependencies
 
