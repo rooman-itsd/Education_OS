@@ -78,3 +78,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - an awarded order keeps the quote's items and prices; only its delivery date, address and terms change
     (`awarded_order`);
   - running numbers take a per-organisation Postgres advisory lock before counting, as maintenance does.
+- Contract: one catalogue of every error code the API answers, by status, in the description; the order create, edit,
+  decision (403), cancel, receipt and award responses list the codes they can return. The PRD links the decisions on
+  #335.
