@@ -18,7 +18,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract (decisions recorded on #335): purchase order approval checks the order total against its line (422
   `insufficient_budget`, 503 `budget_check_unavailable`); an expired quote is not awarded (409 `quote_expired`);
   business dates are Indian (Asia/Kolkata). Also documents 409 `vendor_blacklisted` and 422 `tender_required` on edit.
-- Backend (#129):
 - PRD: vendor bank details are the last four digits and the IFSC only; the full account number is never stored,
   because payments are made outside Education OS. This replaces "stored encrypted" (#335).
 - Contract, after review (#294): cancelling a draft or returned order (409 `not_cancellable` otherwise); `invalid_date`
@@ -71,13 +70,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     was issued (422 `invalid_date`);
   - the README states that department scoping of indent approvers is not enforced until identity has a department
     claim.
-- PRD: vendor bank details are the last four digits and the IFSC only; the full account number is never stored,
-  because payments are made outside Education OS. This replaces "stored encrypted" (#335).
-- Contract, after review (#294): cancelling a draft or returned order (409 `not_cancellable` otherwise); `invalid_date`
-  on order create, edit and submit and on goods receipts; `quantity_exceeds_outstanding` and `order_not_open` on
-  receipts; quotes need priced items whose total matches (`price_required`, `quote_total_mismatch`); an awarded order
-  keeps its quote's items (`awarded_order`); a tender holds its indents only while it can still be awarded; department
-  scoping of indent approvers is stated as not enforced; story S2 covers the purchase order list and detail.
 - Third review (#295), each with a regression test:
   - a quote is priced item by item and its total must equal the items' total including tax (`quote_total_mismatch`),
     so a typed total can no longer win the ranking while the order is priced from different items;
