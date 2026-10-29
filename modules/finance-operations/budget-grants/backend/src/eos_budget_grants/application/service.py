@@ -52,7 +52,10 @@ BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
 def today() -> date:
     """Today in Asia/Kolkata: the date of spend recorded from events, the default financial year, reminder windows and
     the default submission date of a certificate."""
-    return clock().astimezone(BUSINESS_TZ).date()
+    now = clock()
+    if now.tzinfo is None:  # a naive stand-in is UTC by contract, never the machine's local time
+        now = now.replace(tzinfo=UTC)
+    return now.astimezone(BUSINESS_TZ).date()
 
 
 def _publish(db: Session, name: str, organisation_id: str, payload: dict, actor: str | None = None) -> None:

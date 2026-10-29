@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 from eos_core.db import SessionLocal, new_id
 from eos_core.events import OutboxEvent
@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 BASE = "/api/v1/budget-grants"
 NOW = datetime(2026, 10, 23, 9, 30, tzinfo=UTC)
-TODAY = NOW.date().isoformat()
+TODAY = NOW.astimezone(timezone(timedelta(hours=5, minutes=30))).date().isoformat()  # the business date (IST)
 YEAR = "2026-27"
 
 
