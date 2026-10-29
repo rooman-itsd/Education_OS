@@ -55,3 +55,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   default financial year, reminder windows and a certificate's default submission date use the date in India, so
   between 00:00 and 05:30 IST they no longer fall on the previous day. Timestamps stay UTC. Tests on both sides of
   IST midnight.
+- Permissions: management gets `budget-grants:availability:read`. Management approves procurement indents, and
+  procurement checks `GET /availability` with the approver's token before approving (#129). Additive; story M4.
