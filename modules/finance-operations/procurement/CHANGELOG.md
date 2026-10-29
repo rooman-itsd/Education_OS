@@ -18,3 +18,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract (decisions on #129): purchase order approval checks the order total against its line (422
   `insufficient_budget`, 503 `budget_check_unavailable`); an expired quote is not awarded (409 `quote_expired`);
   business dates are Indian (Asia/Kolkata). Also documents 409 `vendor_blacklisted` and 422 `tender_required` on edit.
+- PRD: vendor bank details are the last four digits and the IFSC only; the full account number is never stored,
+  because payments are made outside Education OS. This replaces "stored encrypted" (#335).
