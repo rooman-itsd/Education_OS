@@ -162,7 +162,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [quote_id], properties: { quote_id: { type: string, format: uuid }, justification: { type: string } } } } } }
       responses:
         "200": { description: Awarded, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
-        "409": { description: "The tender is not closed yet or already awarded (not_closed), the quote has expired (quote_expired), or the vendor is no longer approved (vendor_not_approved); a running number taken concurrently (number_taken)" }
+        "409": { description: "The tender is not closed yet or already awarded (not_closed), the quote has expired (quote_expired), or the vendor is no longer approved (vendor_not_approved); an indent of the tender was taken by another tender or order while none of its quotes could be awarded (indent_in_use), or is no longer approved (indent_not_approved); a running number taken concurrently (number_taken)" }
         "422": { description: "Awarding other than the lowest awardable quote without a justification (justification_required); a quote without priced items (price_required)" }
   /purchase-orders:
     get:
