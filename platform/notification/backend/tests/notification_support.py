@@ -32,7 +32,7 @@ class Org:
         # The inserts must run as this organisation: on PostgreSQL the tenant_isolation policy's WITH CHECK
         # refuses a row written with no tenant set. On SQLite this changes nothing.
         with organisation_scope(self.id):
-            self.admin = self.user(db, ["notification-admin"], "admin")
+            self.admin = self.user(db, ["org-admin"], "admin")
             self.member = self.user(db, ["member"], "member")
             self.sender = self.user(db, ["test-sender"], "sender")
 

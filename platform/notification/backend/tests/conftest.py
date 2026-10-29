@@ -15,11 +15,11 @@ os.environ.setdefault("EOS_DEV_MODE", "true")
 os.environ.setdefault("EOS_REPO_ROOT", str(Path(__file__).resolve().parents[4]))
 
 import pytest
-from eos_core import notify
 from eos_core.db import SessionLocal, init_db
 from eos_core.events import OutboxEvent
 from eos_core.tenant import organisation_scope, platform_scope
 from eos_notification.domain.models import Message, Preference, TemplateOverride
+from eos_notification.infrastructure import transport as transport_module
 from notification_support import Org
 from sqlalchemy import delete
 
@@ -65,9 +65,9 @@ def _env(monkeypatch):
     for key in list(os.environ):
         if key.startswith("NOTIFICATION_"):
             monkeypatch.delenv(key, raising=False)
-    notify.sent.clear()
+    transport_module.sent.clear()
     yield
-    notify.sent.clear()
+    transport_module.sent.clear()
 
 
 @pytest.fixture
