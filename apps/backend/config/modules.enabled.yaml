@@ -15,5 +15,9 @@ modules:
   - support/helpdesk
   - finance-operations/budget-grants
   - student-lifecycle/web-portal-cms
+  - facilities/asset-management
+  - facilities/facility-booking
+  - facilities/inventory-equipment
+  - facilities/maintenance
 integrations: []
 platform: [identity, tenancy, billing]

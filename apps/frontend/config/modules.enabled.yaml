@@ -10,6 +10,10 @@ modules:
   - academics/academic-management
   - academics/examinations
   - campus-life/hostel
+  - facilities/asset-management
+  - facilities/facility-booking
+  - facilities/inventory-equipment
+  - facilities/maintenance
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
   - student-lifecycle/web-portal-cms
