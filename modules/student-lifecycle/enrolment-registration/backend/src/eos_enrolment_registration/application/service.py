@@ -13,6 +13,7 @@ from datetime import date, datetime
 import sqlalchemy as sa
 from eos_core import events
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import enums as e
@@ -553,16 +554,20 @@ def register_bulk(
     results = []
     for enrolment_id in programme_enrolment_ids:
         try:
-            enrolment = _get_enrolment(db, actor.organisation_id, enrolment_id)
-            registration = _place(
-                db,
-                actor,
-                enrolment,
-                course_offering_id=course_offering_id,
-                section_id=section_id,
-                academic_period_id=academic_period_id,
-                registration_type=registration_type,
-            )
+            # One savepoint per student: a unique-index race on one row (a registration confirmed by another
+            # request between the check and the insert) refuses that student and never fails the batch.
+            with db.begin_nested():
+                enrolment = _get_enrolment(db, actor.organisation_id, enrolment_id)
+                registration = _place(
+                    db,
+                    actor,
+                    enrolment,
+                    course_offering_id=course_offering_id,
+                    section_id=section_id,
+                    academic_period_id=academic_period_id,
+                    registration_type=registration_type,
+                )
+                db.flush()
         except EnrolmentError as refusal:
             results.append(
                 {
@@ -571,6 +576,17 @@ def register_bulk(
                     "registration": None,
                     "code": refusal.code,
                     "message": refusal.message,
+                }
+            )
+            continue
+        except IntegrityError:
+            results.append(
+                {
+                    "programme_enrolment_id": enrolment_id,
+                    "outcome": "refused",
+                    "registration": None,
+                    "code": "already_registered",
+                    "message": "The student already has a confirmed registration for this offering",
                 }
             )
             continue
@@ -638,6 +654,11 @@ def change_section(db: Session, actor: Actor, registration_id: str, to_section_i
     from_section_id = registration.section_id
     registration.section_id = to_section_id
     registration.section_since = effective_on
+    # The flag describes the registration's current references: a move to a known section verifies it, a move to
+    # a section this module has no copy of yet does not.
+    registration.references_verified = rules.references_verified(
+        _offering(db, org, registration.course_offering_id), section
+    )
     enrolment = _get_enrolment(db, org, registration.programme_enrolment_id)
     _audit(
         db,

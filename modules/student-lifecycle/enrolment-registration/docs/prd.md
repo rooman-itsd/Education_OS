@@ -115,7 +115,7 @@ See `integration-points.md` for each consumer's open question and the answer thi
 | `enrolment-registration:registration:read` | list and read registrations, windows and the registered-candidates report |
 | `enrolment-registration:registration:manage` | set windows; register, withdraw and move registrations |
 
-Roles: `registration-staff` holds all four; `org-admin`, `management` and `department-admin` hold both read keys;
+Roles: `registration-staff` and `org-admin` hold all four; `management` and `department-admin` hold both read keys;
 `examination-staff` holds `registration:read`.
 
 ## 9. Audit / state changes

@@ -259,6 +259,22 @@ def test_change_section(db, staff):
     )
 
 
+def test_change_section_recomputes_references_verified(db, staff):
+    """A registration placed before academic-management's copies arrived is verified once moved to a known section;
+    one moved to a section with no local copy is no longer verified."""
+    org, term = staff.organisation_id, new_id()
+    add_window(db, org, term)
+    offering_id = new_id()
+    reg = register(db, staff, add_enrolment(db, org).id, offering_id, new_id(), term)
+    assert reg["references_verified"] is False
+    offering = add_offering(db, org, term, course_offering_id=offering_id)
+    known = add_section(db, offering)
+    moved = svc.change_section(db, staff, reg["id"], known.section_id, date(2026, 11, 2))
+    assert moved["references_verified"] is True
+    moved = svc.change_section(db, staff, reg["id"], new_id(), date(2026, 11, 3))
+    assert moved["references_verified"] is False
+
+
 def test_list_registrations_filters(db, staff, other_org):
     org, term = staff.organisation_id, new_id()
     add_window(db, org, term)
@@ -314,3 +330,28 @@ def test_report_without_any_known_term_counts_everything(db, staff):
     register(db, staff, add_enrolment(db, staff.organisation_id).id, new_id(), new_id(), new_id(), e.BACKLOG)
     report = svc.registered_candidates(db, staff)
     assert (report["academic_period_id"], report["total"]) == (None, 2)
+
+
+def test_bulk_survives_a_unique_index_race_on_one_student(db, staff, monkeypatch):
+    """A registration confirmed by another request between the duplicate check and the insert refuses that
+    student (already_registered) and leaves the rest of the batch confirmed."""
+    org, term = staff.organisation_id, new_id()
+    add_window(db, org, term)
+    offering = add_offering(db, org, term)
+    section = add_section(db, offering, capacity=5)
+    first, second = add_enrolment(db, org), add_enrolment(db, org)
+    register(db, staff, first.id, offering.course_offering_id, section.section_id, term)
+    monkeypatch.setattr(svc, "_registered", lambda *a, **k: False)  # the pre-check misses the existing row
+    result = svc.register_bulk(
+        db,
+        staff,
+        programme_enrolment_ids=[first.id, second.id],
+        course_offering_id=offering.course_offering_id,
+        section_id=section.section_id,
+        academic_period_id=term,
+    )
+    assert [(r["outcome"], r["code"]) for r in result["results"]] == [
+        ("refused", "already_registered"),
+        ("confirmed", None),
+    ]
+    assert (result["confirmed"], result["refused"]) == (1, 1)
