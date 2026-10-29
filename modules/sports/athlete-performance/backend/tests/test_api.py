@@ -2,6 +2,7 @@
 comparison, clearance and the squad summary, with the events and audit entries each change writes."""
 
 from conftest import ATHLETE, BASE, COACH, MEDICAL, VIEWER, outbox
+from eos_athlete_performance.application import service
 from eos_athlete_performance.infrastructure.models import AuditEntry
 from eos_core.db import SessionLocal
 from sqlalchemy import select
@@ -38,7 +39,12 @@ def test_catalogue_refusals(client, org):
     assert dup.status_code == 400 and dup.json()["detail"]["code"] == "duplicate_name"
     bad = client.post(
         f"{BASE}/metrics",
-        json={"name": "x", "unit": "s", "direction": "lower_is_better", "discipline_id": "nope"},
+        json={
+            "name": "x",
+            "unit": "s",
+            "direction": "lower_is_better",
+            "discipline_id": "99999999-9999-9999-9999-999999999999",
+        },
         headers=org.admin,
     )
     assert bad.status_code == 400 and bad.json()["detail"]["code"] == "unknown_discipline"
@@ -125,7 +131,7 @@ def test_athlete_filters_and_refusals(client, org):
     assert r.status_code == 400 and r.json()["detail"]["code"] == "in_future"
     r = client.post(
         f"{BASE}/athletes",
-        json={"full_name": "x", "primary_discipline_id": "nope", "status": "active"},
+        json={"full_name": "x", "primary_discipline_id": "99999999-9999-9999-9999-999999999999", "status": "active"},
         headers=org.admin,
     )
     assert r.json()["detail"]["code"] == "unknown_discipline"
@@ -237,7 +243,9 @@ def test_assessments(client, org):
     wrong = {**body, "measurements": [{"metric_id": sprint["id"], "value": 11}]}
     r = client.post(f"{BASE}/assessments", json=wrong, headers=medic)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "metric_not_in_test"
-    r = client.post(f"{BASE}/assessments", json={**body, "fitness_test_id": "nope"}, headers=medic)
+    r = client.post(
+        f"{BASE}/assessments", json={**body, "fitness_test_id": "99999999-9999-9999-9999-999999999999"}, headers=medic
+    )
     assert r.json()["detail"]["code"] == "unknown_fitness_test"
 
 
@@ -429,3 +437,85 @@ def test_an_athlete_sees_only_their_own_data(client, org):
     # an athlete user with no profile sees nothing
     _, stranger = org.user(ATHLETE)
     assert client.get(f"{BASE}/results", headers=stranger).json() == {"items": [], "total": 0}
+
+
+# ---------------------------------------------------------------- review fixes (#352)
+
+
+def test_an_expired_clearance_reads_as_not_cleared(client, org, monkeypatch):
+    from datetime import UTC, datetime
+
+    d = org.discipline()
+    a = org.athlete(d["id"])
+    medic_id, medic = org.user(MEDICAL)
+    _, viewer = org.user(VIEWER)
+    client.put(
+        f"{BASE}/athletes/{a['id']}/clearance", json={"status": "cleared", "valid_until": "2026-10-30"}, headers=medic
+    )
+    assert client.get(f"{BASE}/athletes/{a['id']}/clearance", headers=medic).json()["status"] == "cleared"
+
+    monkeypatch.setattr(service, "clock", lambda: datetime(2026, 10, 31, 9, 0, tzinfo=UTC))  # valid_until has passed
+    lapsed = client.get(f"{BASE}/athletes/{a['id']}/clearance", headers=medic).json()
+    assert lapsed["status"] == "not_cleared"
+    assert lapsed["valid_until"] == "2026-10-30" and lapsed["set_by"] == medic_id  # when it ran out stays visible
+    [row] = client.get(f"{BASE}/reports/squad-summary", headers=viewer).json()["items"]
+    assert row["clearance"] == "not_cleared"
+
+
+def test_ids_must_be_uuids(client, org):
+    d = org.discipline()
+    m = org.metric()
+    a = org.athlete(d["id"])
+    r = org.result(a["id"], m["id"], 12.0)
+    for path, body in (
+        (f"/results/{r['id']}", {"athlete_id": ""}),
+        (f"/results/{r['id']}", {"metric_id": "not-a-uuid"}),
+        (f"/athletes/{a['id']}", {"primary_discipline_id": ""}),
+        (f"/athletes/{a['id']}", {"discipline_ids": [""]}),
+        (f"/metrics/{m['id']}", {"discipline_id": ""}),
+    ):
+        assert client.patch(f"{BASE}{path}", json=body, headers=org.admin).status_code == 422, (path, body)
+    bench = {"metric_id": "", "level": "state", "target_value": 1}
+    assert client.post(f"{BASE}/benchmarks", json=bench, headers=org.admin).status_code == 422
+    test = {"name": "t", "metric_ids": [m["id"], ""]}
+    assert client.post(f"{BASE}/fitness-tests", json=test, headers=org.admin).status_code == 422
+    # the result is untouched
+    assert client.get(f"{BASE}/results/{r['id']}", headers=org.admin).json()["athlete_id"] == a["id"]
+
+
+def test_same_day_assessments_keep_the_order_they_were_recorded(client, org, monkeypatch):
+    from datetime import UTC, datetime
+
+    d = org.discipline()
+    m = org.metric()
+    a = org.athlete(d["id"])
+    t = org.post("/fitness-tests", {"name": "Speed", "metric_ids": [m["id"]]})
+    ids = []
+    for minute, value in ((0, 12.4), (5, 12.1), (10, 11.8)):
+        monkeypatch.setattr(service, "clock", lambda minute=minute: datetime(2026, 10, 29, 9, minute, tzinfo=UTC))
+        body = {
+            "athlete_id": a["id"],
+            "fitness_test_id": t["id"],
+            "assessed_on": "2026-10-29",
+            "measurements": [{"metric_id": m["id"], "value": value}],
+        }
+        ids.append(org.post("/assessments", body)["id"])
+    h = client.get(f"{BASE}/athletes/{a['id']}/history?metric_id={m['id']}", headers=org.admin).json()
+    assert [p["value"] for p in h["points"]] == [12.4, 12.1, 11.8]
+    listed = client.get(f"{BASE}/assessments?athlete_id={a['id']}", headers=org.admin).json()["items"]
+    assert [x["id"] for x in listed] == ids[::-1]  # newest first
+
+
+def test_a_date_one_day_ahead_of_utc_is_accepted(client, org):
+    d = org.discipline()
+    m = org.metric()
+    a = org.athlete(d["id"])
+    t = org.post("/fitness-tests", {"name": "Speed", "metric_ids": [m["id"]]})
+    body = {"athlete_id": a["id"], "fitness_test_id": t["id"], "measurements": [{"metric_id": m["id"], "value": 12}]}
+    # the clock says 29 Oct 09:00 UTC; 30 Oct is already "today" east of UTC near midnight, 31 Oct is not
+    assert (
+        client.post(f"{BASE}/assessments", json={**body, "assessed_on": "2026-10-30"}, headers=org.admin).status_code
+        == 201
+    )
+    late = client.post(f"{BASE}/assessments", json={**body, "assessed_on": "2026-10-31"}, headers=org.admin)
+    assert late.status_code == 400 and late.json()["detail"]["code"] == "in_future"

@@ -12,8 +12,9 @@ NOW = datetime(2026, 10, 29, 9, 0, tzinfo=UTC)
 def test_not_in_future_accepts_now_and_refuses_later():
     rules.not_in_future(NOW, NOW, "recorded_at")
     rules.not_in_future(date(2026, 10, 29), NOW, "assessed_on")
+    rules.not_in_future(date(2026, 10, 30), NOW, "assessed_on")  # already the 30th east of UTC
     with pytest.raises(RuleViolationError) as e:
-        rules.not_in_future(date(2026, 10, 30), NOW, "assessed_on")
+        rules.not_in_future(date(2026, 10, 31), NOW, "assessed_on")
     assert e.value.code == "in_future"
 
 

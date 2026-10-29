@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 HIGHER = "higher_is_better"
 LOWER = "lower_is_better"
@@ -22,7 +22,8 @@ class RuleViolationError(Exception):
 
 
 def not_in_future(value: date | datetime, now: datetime, what: str) -> None:
-    later = value > now if isinstance(value, datetime) else value > now.date()
+    """A date may be one day ahead of today in UTC: it is already that day in timezones east of UTC (IST until 05:30)."""
+    later = value > now if isinstance(value, datetime) else value > (now + timedelta(days=1)).date()
     if later:
         raise RuleViolationError("in_future", f"{what} cannot be in the future")
 

@@ -50,7 +50,7 @@ def results_of(db: Session, athlete_ids: Iterable[str], metric_id: str | None = 
 
 def assessments_of(db: Session, athlete_ids: Iterable[str]) -> list[Assessment]:
     q = query(db, Assessment).where(Assessment.athlete_id.in_(set(athlete_ids)))
-    return list(db.scalars(q.order_by(Assessment.assessed_on, Assessment.id)))
+    return list(db.scalars(q.order_by(Assessment.assessed_on, Assessment.created_at, Assessment.id)))
 
 
 def benchmarks_for(db: Session, metric_ids: Iterable[str] | None = None) -> list[Benchmark]:

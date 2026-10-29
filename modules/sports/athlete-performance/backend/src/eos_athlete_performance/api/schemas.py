@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 from datetime import date
-from typing import ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 Category = Literal["individual", "team"]
 Direction = Literal["higher_is_better", "lower_is_better"]
@@ -15,7 +15,10 @@ BenchmarkGender = Literal["female", "male", "any"]
 AthleteStatus = Literal["active", "inactive", "alumni"]
 Context = Literal["training", "trial", "competition"]
 ClearanceStatus = Literal["cleared", "restricted", "not_cleared"]
-Id = Field(min_length=1, max_length=36)
+# Ids are UUIDs (contracts/openapi.yaml `format: uuid`), kept as strings; "" or any other text is refused (422).
+Uuid = Annotated[
+    str, StringConstraints(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+]
 
 
 class Strict(BaseModel):
@@ -61,7 +64,7 @@ class MetricIn(Strict):
     name: str = Field(min_length=1, max_length=120)
     unit: str = Field(min_length=1, max_length=30)
     direction: Direction
-    discipline_id: str | None = None
+    discipline_id: Uuid | None = None
     description: str | None = None
 
 
@@ -70,40 +73,40 @@ class MetricPatch(Patch):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     unit: str | None = Field(default=None, min_length=1, max_length=30)
     direction: Direction | None = None
-    discipline_id: str | None = None
+    discipline_id: Uuid | None = None
     description: str | None = None
 
 
 class AthleteIn(Strict):
-    user_id: str | None = None
-    student_id: str | None = None
+    user_id: Uuid | None = None
+    student_id: Uuid | None = None
     full_name: str = Field(min_length=1, max_length=200)
     date_of_birth: date | None = None
     gender: Gender | None = None
-    primary_discipline_id: str = Id
-    discipline_ids: list[str] | None = None
-    coach_id: str | None = None
+    primary_discipline_id: Uuid
+    discipline_ids: list[Uuid] | None = None
+    coach_id: Uuid | None = None
     squad: str | None = Field(default=None, max_length=120)
     status: AthleteStatus
 
 
 class AthletePatch(Patch):
     NULLABLE = frozenset({"user_id", "student_id", "date_of_birth", "gender", "coach_id", "squad"})
-    user_id: str | None = None
-    student_id: str | None = None
+    user_id: Uuid | None = None
+    student_id: Uuid | None = None
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
     date_of_birth: date | None = None
     gender: Gender | None = None
-    primary_discipline_id: str | None = None
-    discipline_ids: list[str] | None = None
-    coach_id: str | None = None
+    primary_discipline_id: Uuid | None = None
+    discipline_ids: list[Uuid] | None = None
+    coach_id: Uuid | None = None
     squad: str | None = Field(default=None, max_length=120)
     status: AthleteStatus | None = None
 
 
 class ResultIn(Strict):
-    athlete_id: str = Id
-    metric_id: str = Id
+    athlete_id: Uuid
+    metric_id: Uuid
     value: float
     recorded_at: AwareDatetime
     context: Context
@@ -114,8 +117,8 @@ class ResultIn(Strict):
 
 class ResultPatch(Patch):
     NULLABLE = frozenset({"notes"})
-    athlete_id: str | None = None
-    metric_id: str | None = None
+    athlete_id: Uuid | None = None
+    metric_id: Uuid | None = None
     value: float | None = None
     recorded_at: AwareDatetime | None = None
     context: Context | None = None
@@ -127,36 +130,36 @@ class ResultPatch(Patch):
 class FitnessTestIn(Strict):
     name: str = Field(min_length=1, max_length=120)
     description: str | None = None
-    metric_ids: list[str]
-    discipline_id: str | None = None
+    metric_ids: list[Uuid]
+    discipline_id: Uuid | None = None
 
 
 class FitnessTestPatch(Patch):
     NULLABLE = frozenset({"description", "discipline_id"})
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = None
-    metric_ids: list[str] | None = None
-    discipline_id: str | None = None
+    metric_ids: list[Uuid] | None = None
+    discipline_id: Uuid | None = None
 
 
 class MeasurementIn(Strict):
-    metric_id: str = Id
+    metric_id: Uuid
     value: float
 
     _value = field_validator("value")(_finite)
 
 
 class AssessmentIn(Strict):
-    athlete_id: str = Id
-    fitness_test_id: str = Id
+    athlete_id: Uuid
+    fitness_test_id: Uuid
     assessed_on: date
     measurements: list[MeasurementIn]
     notes: str | None = None
 
 
 class BenchmarkIn(Strict):
-    metric_id: str = Id
-    discipline_id: str | None = None
+    metric_id: Uuid
+    discipline_id: Uuid | None = None
     level: str = Field(min_length=1, max_length=60)
     gender: BenchmarkGender | None = None
     age_group: str | None = Field(default=None, max_length=30)
@@ -168,8 +171,8 @@ class BenchmarkIn(Strict):
 
 class BenchmarkPatch(Patch):
     NULLABLE = frozenset({"discipline_id", "gender", "age_group", "source"})
-    metric_id: str | None = None
-    discipline_id: str | None = None
+    metric_id: Uuid | None = None
+    discipline_id: Uuid | None = None
     level: str | None = Field(default=None, min_length=1, max_length=60)
     gender: BenchmarkGender | None = None
     age_group: str | None = Field(default=None, max_length=30)

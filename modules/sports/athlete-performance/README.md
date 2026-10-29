@@ -19,6 +19,14 @@ foreign keys.
 Athletes see only their own profile, results, assessments, history and clearance; coaches, medical staff and
 administrators see their organisation's athletes (`application/service.py`).
 
+How benchmarks are matched (history, comparison): a benchmark applies when its discipline, if set, is one of the
+athlete's and its gender, if set, is theirs or `any`. The most specific one wins (discipline over none, a gender over
+`any`); among equals, the newest. The age group is shown but not matched, so benchmarks that differ only by age group
+resolve to the newest. A comparison without `level` may pick different levels for different metrics; each row's
+`benchmark_id` says which one was used, and `?level=` fixes it.
+
+A clearance reads `not_cleared` when none was recorded or once its `valid_until` has passed.
+
 Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data-model.md).
 
 ## Public surface

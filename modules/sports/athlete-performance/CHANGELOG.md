@@ -14,3 +14,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `management` and `org-admin` granted the same keys as the matching module roles (non-breaking).
 - Config: `ATHLETE_PERFORMANCE_TREND_STEADY_PERCENT`.
 - Tests: domain, API, athlete self-scope, cross-tenant leak, migration and contract-drift tests.
+- Review (#352): a lapsed clearance reads `not_cleared`; ids in request bodies must be UUIDs; same-day assessments
+  keep the order they were recorded; dates may be one day ahead of UTC; benchmark matching documented in the README.

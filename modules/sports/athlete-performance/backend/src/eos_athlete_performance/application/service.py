@@ -168,7 +168,7 @@ def _get(db: Session, model, row_id: str | None, what: str):
 
 def _known(db: Session, model, ids, what: str) -> None:
     """Every referenced id exists in the caller's organisation; another organisation's ids are unknown here."""
-    ids = {i for i in ids if i}
+    ids = {i for i in ids if i is not None}
     missing = ids - repo.ids_present(db, model, ids)
     if missing:
         raise _invalid(
@@ -343,14 +343,21 @@ def benchmark_out(b: Benchmark) -> dict:
     )
 
 
-def clearance_out(athlete_id: str, c: Clearance | None) -> dict:
-    """Without a recorded clearance the athlete is not cleared: medical staff have not assessed them yet."""
+def clearance_status(c: Clearance | None, today: date) -> str:
+    """Without a recorded clearance, or once it has lapsed (valid_until before today), the athlete is not cleared."""
+    if c is None or (c.valid_until is not None and c.valid_until < today):
+        return "not_cleared"
+    return c.status
+
+
+def clearance_out(athlete_id: str, c: Clearance | None, today: date) -> dict:
+    """A lapsed clearance keeps its valid_until, set_by and set_at so readers can see when it ran out."""
     if c is None:
         return {"athlete_id": athlete_id, "status": "not_cleared"}
     return _clean(
         {
             "athlete_id": athlete_id,
-            "status": c.status,
+            "status": clearance_status(c, today),
             "valid_until": iso(c.valid_until),
             "restrictions": c.restrictions,
             "set_by": c.set_by,
@@ -646,7 +653,8 @@ def list_assessments(db: Session, actor: Actor, filters: dict, limit: int, offse
         q = q.where(Assessment.assessed_on >= filters["from"])
     if filters.get("to"):
         q = q.where(Assessment.assessed_on <= filters["to"])
-    rows, total = repo.page(db, q, (Assessment.assessed_on.desc(), Assessment.id), limit, offset)
+    order = (Assessment.assessed_on.desc(), Assessment.created_at.desc(), Assessment.id)
+    rows, total = repo.page(db, q, order, limit, offset)
     return _page([assessment_out(a) for a in rows], total)
 
 
@@ -660,7 +668,8 @@ def record_assessment(db: Session, actor: Actor, data: dict) -> dict:
         rules.not_in_future(data["assessed_on"], clock(), "assessed_on")
     except RuleViolationError as v:
         raise _rule(v) from v
-    a = Assessment(organisation_id=actor.organisation_id, assessor_id=actor.user_id, **data)
+    # created_at orders assessments taken the same day, so it comes from the same clock as everything else here
+    a = Assessment(organisation_id=actor.organisation_id, assessor_id=actor.user_id, created_at=clock(), **data)
     db.add(a)
     _audit(db, actor, "recorded", "assessment", a, after={k: v for k, v in data.items() if k != "measurements"})
     _publish(
@@ -827,7 +836,7 @@ def compare_with_benchmarks(db: Session, actor: Actor, athlete_id: str, level: s
 
 def get_clearance(db: Session, actor: Actor, athlete_id: str) -> dict:
     athlete = _visible_athlete(db, actor, athlete_id)
-    return clearance_out(athlete.id, repo.first_by(db, Clearance, athlete_id=athlete.id))
+    return clearance_out(athlete.id, repo.first_by(db, Clearance, athlete_id=athlete.id), clock().date())
 
 
 def set_clearance(db: Session, actor: Actor, athlete_id: str, data: dict) -> dict:
@@ -850,14 +859,14 @@ def set_clearance(db: Session, actor: Actor, athlete_id: str, data: dict) -> dic
     else:
         before, after = _apply(c, values)
         if not after:
-            return clearance_out(athlete.id, c)
+            return clearance_out(athlete.id, c, now.date())
         c.set_by, c.set_at = actor.user_id, now
     _audit(db, actor, "set", "clearance", c, before=before, after=after)
     if before is None or {"status", "valid_until"} & set(after):
         payload = {"athlete_id": athlete.id, "status": c.status, "valid_until": iso(c.valid_until)}
         _publish(db, actor, "clearance.changed", _clean(payload))
     _commit(db, "conflict", "the clearance was set by someone else at the same time; try again")
-    return clearance_out(athlete.id, c)
+    return clearance_out(athlete.id, c, now.date())
 
 
 # ---------------------------------------------------------------- reports
@@ -880,6 +889,7 @@ def squad_summary(db: Session, actor: Actor, filters: dict) -> dict:
     metric_ids = {m for (_, m) in points}
     metrics = {m.id: m for m in db.scalars(repo.query(db, Metric).where(Metric.id.in_(list(metric_ids))))}
     steady = load_settings().trend_steady_percent
+    today = clock().date()
     items = []
     for a in athletes:
         rows = []
@@ -892,12 +902,11 @@ def squad_summary(db: Session, actor: Actor, filters: dict) -> dict:
                     "trend": rules.trend(values, metrics[metric_id].direction, steady),
                 }
             )
-        c = clearances.get(a.id)
         items.append(
             {
                 "athlete_id": a.id,
                 "full_name": a.full_name,
-                "clearance": c.status if c else "not_cleared",
+                "clearance": clearance_status(clearances.get(a.id), today),
                 "metrics": rows,
             }
         )
