@@ -143,7 +143,7 @@ paths:
       responses:
         "200": { description: Awarded, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
         "409": { description: "The tender is not closed yet or already awarded (not_closed), the quote has expired (quote_expired), or the vendor is no longer approved (vendor_not_approved)" }
-        "422": { description: "Awarding other than the lowest quote without a justification (justification_required)" }
+        "422": { description: "Awarding other than the lowest awardable quote without a justification (justification_required); a quote without priced items (price_required)" }
   /purchase-orders:
     get:
       summary: Purchase orders. Permission procurement:purchase-order:read.
@@ -158,7 +158,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrderInput" } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
-        "422": { description: "Indent's purchase method requires a tender, or the indents together or the order total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date)" }
+        "422": { description: "Indent's purchase method requires a tender, or the indents together or the order total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date); a tender_id given (awarded_order: an order for a tender comes only from its award)" }
   /purchase-orders/{id}:
     get:
       summary: One purchase order with receipts and invoices. Permission procurement:purchase-order:read.
