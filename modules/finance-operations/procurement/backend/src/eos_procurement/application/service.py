@@ -897,6 +897,9 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
         raise invalid(
             "justification_required", "awarding other than the lowest quote needs a justification", "justification"
         )
+    # While none of its quotes could be awarded (a vendor suspended, say), the tender let its indents go, and another
+    # tender or order may have taken them since; a suspension can be lifted. Lock and check them again before ordering.
+    indent_ids = [i.id for i in _usable_indents(db, _tender_indent_ids(db, t.id), except_tender=t.id)]
     items = quote.items
     subtotal, tax_total, total = _rule(rules.order_totals, items)
     po = PurchaseOrder(
@@ -917,7 +920,7 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
     )
     db.add(po)
     db.flush()
-    for indent_id in _tender_indent_ids(db, t.id):
+    for indent_id in indent_ids:
         db.add(OrderIndent(organisation_id=t.organisation_id, purchase_order_id=po.id, indent_id=indent_id))
     t.status, t.awarded_quote_id, t.award_justification = "awarded", quote.id, justification or None
     _publish(

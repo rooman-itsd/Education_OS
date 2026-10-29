@@ -323,6 +323,42 @@ def test_an_awarded_order_keeps_the_quotes_items_and_prices(client, org, monkeyp
     assert r.json()["total"] == "50000.00" and r.json()["delivery_by"] == "2026-12-15" and r.json()["terms"] == "Net 30"
 
 
+# ---------------------------------------------------------------- fourth review (#295)
+
+
+def test_a_tender_cannot_award_indents_another_order_took_while_its_vendor_was_suspended(client, org, monkeypatch):
+    """The reviewer's steps: T1 closes with V's quote; V is suspended, so T1 lets its indent go; T2 for the same
+    indent is awarded (PO-00001); V is approved again, which made T1 awardable, and its award drafted PO-00002 for the
+    same indent. The award now locks and checks the tender's indents."""
+    v, w = vendor(client, org), vendor(client, org)
+    ind, t1 = _published(client, org)
+    q1 = _quote(client, org, t1, v, "50000", [item(1, "50000.00")]).json()["quotes"][0]
+    _later(monkeypatch)  # T1 closed
+    status = f"{BASE}/vendors/{v['id']}/status"
+    assert client.post(status, json={"status": "suspended", "reason": "audit"}, headers=org.staff).status_code == 200
+    t2 = _tender(client, org, ind, (NOW + timedelta(days=10)).isoformat())
+    assert t2.status_code == 201, t2.text
+    t2 = t2.json()
+    assert client.post(f"{BASE}/tenders/{t2['id']}/publish", headers=org.staff).status_code == 200
+    q2 = _quote(client, org, t2, w, "48000", [item(1, "48000.00")]).json()["quotes"][0]
+    _later(monkeypatch, days=12)  # T2 closed
+    award = f"{BASE}/tenders/{{}}/award"
+    po1 = client.post(award.format(t2["id"]), json={"quote_id": q2["id"]}, headers=org.staff)
+    assert po1.status_code == 200, po1.text
+    assert client.post(status, json={"status": "approved", "reason": "cleared"}, headers=org.staff).status_code == 200
+    r = client.post(award.format(t1["id"]), json={"quote_id": q1["id"]}, headers=org.staff)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "indent_in_use", r.text
+    orders = client.get(f"{BASE}/purchase-orders", headers=org.staff).json()["items"]
+    assert [o["id"] for o in orders if ind["id"] in o["indent_ids"]] == [po1.json()["id"]]  # one order per indent
+    assert client.get(f"{BASE}/tenders/{t1['id']}", headers=org.staff).json()["status"] == "closed"  # not awarded
+    # Once the other order is cancelled the indent is free, and T1 can be awarded after all.
+    cancel = client.post(
+        f"{BASE}/purchase-orders/{po1.json()['id']}/cancel", json={"reason": "wrong tender"}, headers=org.manager
+    )
+    assert cancel.status_code == 200, cancel.text
+    assert client.post(award.format(t1["id"]), json={"quote_id": q1["id"]}, headers=org.staff).status_code == 200
+
+
 def test_running_numbers_take_a_per_organisation_lock_on_postgres(client, org, monkeypatch):
     """_next_number locks per organisation and table before counting (as maintenance does), so two creates take turns.
     SQLite has a single writer, so the statement and its order are checked here with a stand-in Postgres session; the

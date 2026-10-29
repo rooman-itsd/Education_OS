@@ -61,7 +61,9 @@ Rules the code keeps:
   The indents are locked while checked, so two requests for the same indent take turns. When an order is cancelled
   with nothing received, its indents can be ordered again. A tender that can no longer be awarded lets its indents
   go: a draft past its closing date, or a closed tender none of whose quotes can be awarded (each expired, unpriced or
-  from a vendor no longer approved); the contract has no way to cancel a tender.
+  from a vendor no longer approved); the contract has no way to cancel a tender. A suspension can be lifted, so such a
+  tender may become awardable again: its award locks and checks its indents first, and answers 409 `indent_in_use`
+  when another tender or order took them meanwhile.
 - **An order that was never issued can be cancelled.** A draft or returned order is cancelled with a reason, without an
   event (nothing was committed), and its indents can be ordered again; a submitted order is decided first (409
   `not_cancellable` otherwise).

@@ -43,7 +43,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel, helpdesk and budget-grants.
 - `config/env.example` lists every key; `module.yaml` status is `in-progress`.
-- Tests: 79, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+- Tests: 80, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
   drift (operations, permissions, enums, event payloads) and the audit trail.
 - Fixes from an independent review, each with a regression test:
   - one indent could be put on two orders by two requests at once: the indents are now locked while checked;
@@ -84,3 +84,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: a contract-drift test fails if the backend raises an error code the contract doesn't list; the running-number
   lock has a test of its statement (the race itself was run on PostgreSQL 16). The README states the unawardable-tender
   rule fully, cancelling an unissued order, and the order date rules.
+- Fourth review (#295), with a regression test: a tender that let its indents go while its only vendor was suspended
+  could, once the vendor was approved again, be awarded for indents another order had taken (two orders for one
+  indent). The award now locks and checks the tender's indents (409 `indent_in_use`); the contract's award response
+  lists it.
