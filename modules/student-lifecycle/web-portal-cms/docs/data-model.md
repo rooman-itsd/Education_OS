@@ -1,9 +1,9 @@
 # web-portal-cms — data model
 
-One schema (`web_portal_cms`), owned entirely by this module. No cross-schema foreign keys
-(module-standard rule 2). This module stores no copy of `Organisation`, `Plan`, `Person` or
-`Application` — those remain exclusively owned by `platform/tenancy`, `platform/billing`,
-`student-information` and `admissions` respectively.
+Tables owned entirely by this module, named `web_portal_cms_*` (the repo's convention for a module's own schema; the
+Alembic version table is `web_portal_cms_alembic_version`). Every table carries `organisation_id` (not null) with
+the forced `tenant_isolation` row-level-security policy. No foreign key to another module's tables; this module
+stores no copy of `Organisation`, `Plan`, `Person` or `Application`.
 
 ## Entities
 
@@ -11,47 +11,44 @@ One schema (`web_portal_cms`), owned entirely by this module. No cross-schema fo
 | Field | Notes |
 |---|---|
 | id | uuid |
-| organisation_id | **nullable** — see the module-standard rule 11 exception below |
-| slug | unique within its scope (per organisation, or among `public`-scope pages) |
-| title, body, seo_description | |
-| type | standard, landing, signup_marketing, terms |
-| published, published_at | |
-| created_at, updated_at | |
+| organisation_id | required |
+| slug | `^[a-z0-9-]{1,120}$`; unique within the organisation; fixed after creation |
+| title | at most 200 |
+| type | `standard`, `landing`, `terms` |
+| body | plain text, at most 20,000 |
+| seo_description | optional, at most 300 |
+| published, published_at | `published_at` is the last time it was published |
+| created_by, updated_by, created_at, updated_at | |
 
 ### Announcement
 | Field | Notes |
 |---|---|
 | id | uuid |
-| organisation_id | required — announcements always belong to an organisation that already exists |
-| title, body | |
-| starts_at, ends_at | nullable display window |
+| organisation_id | required |
+| title | at most 200 |
+| body | plain text, at most 5,000 |
+| starts_at, ends_at | optional display window; `ends_at` after `starts_at` |
 | published, published_at | |
-| created_at, updated_at | |
+| created_by, updated_by, created_at, updated_at | |
 
-## The `organisation_id` exception on Page
+### AuditEntry
+| Field | Notes |
+|---|---|
+| id, organisation_id | |
+| actor | user id |
+| action, entity, entity_id | e.g. `published`, `announcement`, the announcement id |
+| detail | JSON (title, slug) |
+| occurred_at | |
 
-Module-standard rule 11 requires `organisation_id` and row-level security on every table. `Page`
-is the one deliberate, narrow exception: a `scope=public` page (the sign-up page's own marketing
-copy, terms of service) is read by a visitor who has no organisation yet, so it cannot carry an
-`organisation_id`. This mirrors `platform/tenancy`'s own `organisation` table, which the
-architecture already documents as "the one schema whose tables are not themselves tenant-scoped,
-because they define the tenants." Here, `public`-scope pages are content that exists *before* any
-tenant does. Every other `Page` row (type `standard`/`landing`, scope `organisation`) and every
-`Announcement` row carries `organisation_id` with RLS as normal.
+Deleting a page or announcement removes its row; its audit rows stay.
 
 ## Relationships
 
-None — both entities are standalone within this module's schema. Neither references
-`platform/tenancy`'s `Organisation`, `platform/billing`'s `Plan`, `student-information`'s
-`Person`, or `admissions`' `Application` by id or otherwise; this module has no relationship to
-any of them in its data model.
+None between the two entities, and none to another module's data.
 
 ## Ownership boundaries
 
-- **This module owns:** CMS pages and announcements, including the sign-up page's own marketing
-  content.
-- **This module does not own:** the organisation record, the admin account, plans, subscriptions
-  (all `platform/tenancy` + `platform/billing`), or any Person/Application data. Nothing in this
-  schema references those entities even by id — the sign-up flow is a client-side composition of
-  three independent public APIs (this module's content, billing's plans, tenancy's registration),
-  not a server-side join or shared record.
+- **Owns:** each organisation's CMS pages and announcements.
+- **Does not own:** organisations, admin accounts, plans, subscriptions (`platform/tenancy`, `platform/billing`),
+  Person or Application data. The marketing site and registration pages hold no data of their own: their copy is
+  in `frontend/src/public/content.ts` and they call tenancy and billing directly.
