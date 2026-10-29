@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
 import {
-  clock,
   describeFailure,
   getSummary,
   listBookingsToday,
@@ -9,6 +8,7 @@ import {
   type BookingStatus,
   type Failure,
   type Summary,
+  timeWindow,
 } from "../api/client";
 
 type State =
@@ -72,14 +72,6 @@ export function BookingsTodayWidget(_props: WidgetProps) {
       </ErrorState>
     );
   }
-  if (state.total === 0) {
-    return (
-      <EmptyState icon={<Icons.CalendarCheck2 />} title="No bookings today">
-        Bookings on the spaces and equipment you look after appear here.
-      </EmptyState>
-    );
-  }
-
   const { summary } = state;
   const counts = [
     `${summary.bookings_today} today`,
@@ -87,6 +79,23 @@ export function BookingsTodayWidget(_props: WidgetProps) {
     `${summary.checked_in_now} in use now`,
     ...(summary.resources_out_of_service ? [`${summary.resources_out_of_service} out of service`] : []),
   ].join(" · ");
+
+  if (state.total === 0) {
+    // Nothing booked today can still leave requests to approve or resources out of service: keep those in sight.
+    const attention = summary.pending_approval > 0 || summary.resources_out_of_service > 0;
+    return (
+      <>
+        {attention && (
+          <p className="eos-row__meta" aria-label="Booking counts">
+            {counts}
+          </p>
+        )}
+        <EmptyState icon={<Icons.CalendarCheck2 />} title="No bookings today">
+          Bookings on the spaces and equipment you look after appear here.
+        </EmptyState>
+      </>
+    );
+  }
 
   return (
     <>
@@ -103,7 +112,7 @@ export function BookingsTodayWidget(_props: WidgetProps) {
               index={i}
               icon={b.status === "pending" ? Icons.Clock : Icons.CalendarCheck2}
               tone={tone}
-              title={`${clock(b.start_at)}–${clock(b.end_at)}`}
+              title={timeWindow(b.start_at, b.end_at)}
               meta={what}
               trailing={<Badge tone={tone}>{LABEL[b.status] ?? String(b.status)}</Badge>}
             />

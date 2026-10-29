@@ -93,6 +93,21 @@ export function clock(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * A booking's time window, "09:00–10:30". A start or end on another day (an overnight booking that overlaps today)
+ * carries its date, "28 Oct 22:00–02:00", so the row cannot be read as a window within today.
+ */
+export function timeWindow(startIso: string | null | undefined, endIso: string | null | undefined, now = new Date()): string {
+  const part = (iso: string | null | undefined) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const sameDay = d.toDateString() === now.toDateString();
+    return sameDay ? clock(iso) : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${clock(iso)}`;
+  };
+  return `${part(startIso)}–${part(endIso)}`;
+}
+
 export interface Failure {
   title: string;
   detail?: string;

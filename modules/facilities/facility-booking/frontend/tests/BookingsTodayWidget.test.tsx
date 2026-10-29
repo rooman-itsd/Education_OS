@@ -1,6 +1,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clock, type Booking, type BookingPage, type Summary } from "../src/api/client";
+
+/** A local time today (or `days` away), as the API sends it; the widget compares dates in the viewer's time. */
+const at = (hour: number, minute = 0, days = 0): string => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+};
 import { widgets } from "../src/widgets";
 import { BookingsTodayWidget } from "../src/widgets/BookingsTodayWidget";
 
@@ -8,8 +16,8 @@ const booking = (over: Partial<Booking>): Booking => ({
   id: "b-1",
   resource_id: "r-1",
   resource_name: "Seminar hall",
-  start_at: "2026-10-28T09:00:00+05:30",
-  end_at: "2026-10-28T10:30:00+05:30",
+  start_at: at(9),
+  end_at: at(10, 30),
   status: "confirmed",
   title: "Guest lecture",
   ...over,
@@ -59,7 +67,7 @@ describe("facility-booking.bookings-today widget", () => {
   it("lists today's bookings earliest first, with counts and status in words", async () => {
     const fetchMock = api(
       page([
-        booking({ id: "b-2", start_at: "2026-10-28T14:00:00+05:30", end_at: "2026-10-28T15:00:00+05:30", status: "pending", resource_name: "Music room 2", title: null }),
+        booking({ id: "b-2", start_at: at(14), end_at: at(15), status: "pending", resource_name: "Music room 2", title: null }),
         booking({}),
       ]),
       summary(),
@@ -73,7 +81,7 @@ describe("facility-booking.bookings-today widget", () => {
     expect(rows[0]?.textContent).toContain("Confirmed");
     expect(rows[1]?.textContent).toContain("Music room 2");
     expect(rows[1]?.textContent).toContain("Awaiting approval");
-    expect(screen.getByText(`${clock("2026-10-28T09:00:00+05:30")}–${clock("2026-10-28T10:30:00+05:30")}`)).toBeTruthy();
+    expect(screen.getByText(`${clock(at(9))}–${clock(at(10, 30))}`)).toBeTruthy();
     expect(screen.getByLabelText("Booking counts").textContent).toBe("2 today · 1 awaiting approval · 0 in use now");
     const urls = fetchMock.mock.calls.map((c) => c[0] as string).sort();
     expect(urls).toEqual([
@@ -100,10 +108,26 @@ describe("facility-booking.bookings-today widget", () => {
     expect(screen.getByText("Resource · Guest lecture")).toBeTruthy();
   });
 
+  it("dates a start or end on another day, so an overnight booking is not read as a window within today", async () => {
+    const overnight = booking({ id: "b-9", start_at: at(22, 0, -1), end_at: at(2), resource_name: "Lab 3", title: "Overnight run" });
+    vi.stubGlobal("fetch", api(page([overnight]), summary({ bookings_today: 1, pending_approval: 0 })));
+    render(<BookingsTodayWidget role="facility-staff" />);
+    const day = new Date(at(22, 0, -1)).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    expect(await screen.findByText(`${day} ${clock(at(22, 0, -1))}–${clock(at(2))}`)).toBeTruthy();
+  });
+
+  it("keeps the counts in sight when nothing is booked today but requests wait for approval", async () => {
+    vi.stubGlobal("fetch", api(page([]), summary({ bookings_today: 0, pending_approval: 3, resources_out_of_service: 1 })));
+    render(<BookingsTodayWidget role="facility-staff" />);
+    expect(await screen.findByText("No bookings today")).toBeTruthy();
+    expect(screen.getByLabelText("Booking counts").textContent).toBe("0 today · 3 awaiting approval · 0 in use now · 1 out of service");
+  });
+
   it("shows an empty state when nothing is booked today", async () => {
     vi.stubGlobal("fetch", api(page([]), summary({ bookings_today: 0, pending_approval: 0 })));
     render(<BookingsTodayWidget role="facility-staff" />);
     expect(await screen.findByText("No bookings today")).toBeTruthy();
+    expect(screen.queryByLabelText("Booking counts")).toBeNull(); // nothing needs attention
   });
 
   it("says the service is not available yet when it is missing or down, and retries", async () => {

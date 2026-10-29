@@ -15,4 +15,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Widget `facility-booking.bookings-today` (#6, Facility / Inventory Staff dashboard): today's bookings on the
   resources the viewer manages or approves, earliest first, with a counts line (GET /bookings?scope=managed&date=today,
   GET /summary); loading, empty and error states following the widget error convention; typed API client in
-  `frontend/src/api/client.ts`; vitest widget tests (8 passing).
+  `frontend/src/api/client.ts`; an overnight booking that overlaps today shows its date, and with nothing booked the
+  counts stay visible while requests await approval or resources are out of service; vitest widget tests (10 passing).
