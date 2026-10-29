@@ -15,6 +15,19 @@ class AuthError(Exception):
     pass
 
 
+# Roles that name something other than a person. identity_user holds people only (domain/models.py: "A person who
+# can sign in"), so no user may carry one. `service` exists so notification:message:send has a holder in the
+# catalogue; the modules that send do it in-process through notification's application service, with no
+# principal at all, so no person ever needs it. Refused here, where every role assignment passes (the users
+# route, organisation registration in tenancy, the super-admin seed), and ignored again in current_principal
+# for any token or row that predates this check.
+NOT_A_PERSON_ROLES = frozenset({"service"})
+
+
+class RoleNotAssignableError(Exception):
+    """A role no person may hold. Raised before anything is written."""
+
+
 class OrganisationHooks:
     """How identity learns about organisations without importing tenancy (module standard rule 1).
     apps/backend replaces these at startup with tenancy's implementations."""
@@ -39,6 +52,9 @@ def create_user(
     roles: list[str],
     is_super_admin: bool = False,
 ) -> User:
+    refused = NOT_A_PERSON_ROLES.intersection(roles or [])
+    if refused:
+        raise RoleNotAssignableError(f"{', '.join(sorted(refused))} is not a role a person can hold")
     user = User(
         organisation_id=organisation_id,
         email=email.lower(),
@@ -84,10 +100,18 @@ def authenticate(db: Session, *, email: str, password: str, organisation_slug: s
     token = create_token(
         user_id=user.id,
         organisation_id=user.organisation_id,
-        roles=list(user.roles or []),
+        roles=person_roles(user.roles),
         super_admin=user.is_super_admin,
     )
     return user, token
+
+
+def person_roles(roles: list[str] | None) -> list[str]:
+    """The roles a token may carry for a person: a stored row that predates the create_user refusal still lists
+    `service`, and feature modules compute permissions from the token's roles claim directly (their api/deps.py
+    call eos_core.config.permissions_for on it, never current_principal), so the claim itself must not carry a
+    role no person may hold. Used by every token minted for a user (login here, impersonation in tenancy)."""
+    return [r for r in (roles or []) if r not in NOT_A_PERSON_ROLES]
 
 
 def seed_super_admin(db: Session) -> None:
