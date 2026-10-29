@@ -2,7 +2,7 @@
 
 **Domain:** student-lifecycle
 **Kind:** feature
-**Status:** planned
+**Status:** in progress (backend, widgets and Track page built; see "What the host must provide")
 
 Online application, document verification, merit lists, counselling and offers.
 
@@ -24,8 +24,35 @@ module's `accepted` event instead), or running portfolio/selection rounds themse
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+| Widget | Kind | Permission | Data |
+|---|---|---|---|
+| `admissions.funnel` | chart | `admissions:report:read` | `GET /reports/funnel` |
+| `admissions.application-status` | list | `admissions:application:read` | `GET /applications` |
+| `admissions.pending-documents` | list | `admissions:document:verify` | `GET /documents?verification_status=pending` |
+
+The frontend also exports `TrackApplicationPage` (`<TrackApplicationPage orgSlug="..." />`), the applicant's public
+view of their application by reference number and email.
+
 ## Dependencies
-See `module.yaml`. This module must not import code from any other module under `modules/`.
+See `module.yaml`. This module must not import code from any other module under `modules/`. It uses
+`packages/core` (database, tenant scoping, outbox events, row-level-security policy) and, in tests,
+`packages/testing`.
+
+## What the host must provide
+- **Public routes through the gateway.** `apps/backend`'s entitlement gate must let
+  `/api/v1/admissions/public/{org_slug}/*` through without a token, after resolving the slug to an active
+  organisation entitled to admissions (404 otherwise), and set `request.state.organisation_id`. Until it does,
+  the five public routes answer 401 behind the gateway. See [docs/integration-points.md](docs/integration-points.md).
+- **A public page for tracking.** `apps/frontend` mounts `TrackApplicationPage` on the public site (for example
+  `#/apply/{org_slug}/track`).
+
+## Run and test
+```
+.venv\Scripts\python.exe -m pytest modules/student-lifecycle/admissions/backend/tests
+pnpm --filter @eos/admissions test
+pnpm --filter @eos/admissions typecheck
+cd modules/student-lifecycle/admissions/db && alembic upgrade head    # uses EOS_DATABASE_URL
+```
 
 ## Layout
 | Path | Purpose |

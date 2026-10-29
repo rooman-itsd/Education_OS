@@ -1,7 +1,7 @@
 # Module ownership
 
 Ten people. Every module has exactly one owner and at least one backup. Owners approve
-PRs to their module and maintain its contracts and docs. Fill in handles, then mirror in `.github/CODEOWNERS`.
+PRs to their module and maintain its contracts and docs. Mirrored in `.github/CODEOWNERS`: the backup approves the owner's PRs, so no PR waits for the lead. Sprint plan: [sprint-v1.0.md](sprint-v1.0.md).
 
 ## Suggested split (edit freely)
 
@@ -11,16 +11,16 @@ per-widget checklist: the "Dashboard Assignment Plan" doc.
 
 | # | Area | Owner | Backup | Modules | Widgets |
 |---|---|---|---|---|---|
-| 1 | Architecture & platform lead | Faizan (@faizanrooman) | | `platform/identity`, `api-gateway`, `tenancy`, `billing`, `packages/*` | 10 |
-| 2 | Platform services & integrations | Himanshu (@himanshu-rooman) | | `platform/event-bus`, `notification`, `documents`, `workflow`, `audit`, `search`, `scheduler`, `reporting`, `integration-hub`, `modules/practice/productions`, `integrations/*` except payment | 10 |
-| 3 | Student lifecycle | Praveen (@praveen-rooman) | | `modules/student-lifecycle/*`, `modules/practice/portfolio`, `modules/practice/selection-process` | 11 |
-| 4 | Academics | Shivani (@shivanisinghrooman-09) | | `modules/academics/*` | 15 |
-| 5 | Sports | Akshata (@akshatatrathodrooman) | | `modules/sports/*`, `modules/facilities/sports-facilities`, `modules/practice/skill-progress` | 17 |
-| 6 | Facilities | Ashritha (@Ashritharooman) | | `modules/facilities/*` except sports-facilities | 8 |
-| 7 | Finance & operations | Gokula Lakshmi (@gokulalakshmirooman-source) | | `modules/finance-operations/*`, `integrations/payment-sbiepay` | 13 |
-| 8 | Campus life | Tejaswini (@tejaswini-rooman) | | `modules/campus-life/*`, `modules/practice/field-training`, `modules/practice/projects` | 15 |
-| 9 | Governance & support | Madhumita (@madhumitha-rooman) | | `modules/governance/*`, `modules/support/*` | 11 |
-| 10 | Apps, infra & QA | Srujan (@srujanrooman) | | `apps/*` (web incl. admin screens, api, mobile), `infra/*`, `packages/testing`, CI | 0 |
+| 1 | Architecture & platform lead | Faizan (@faizanrooman) | Srujan, Himanshu | `platform/identity`, `api-gateway`, `tenancy`, `billing`, `packages/*` | 10 |
+| 2 | Platform services & integrations | Himanshu (@himanshu-rooman) | Faizan, Srujan | `platform/event-bus`, `notification`, `documents`, `workflow`, `audit`, `search`, `scheduler`, `reporting`, `integration-hub`, `modules/practice/productions`, `integrations/*` except payment | 10 |
+| 3 | Student lifecycle | Praveen (@praveen-rooman) | Shivani | `modules/student-lifecycle/*`, `modules/practice/portfolio`, `modules/practice/selection-process` | 11 |
+| 4 | Academics | Shivani (@shivanisinghrooman-09) | Praveen | `modules/academics/*` | 15 |
+| 5 | Sports | Akshata (@akshatatrathodrooman) | Himanshu, Ashritha | `modules/sports/*`, `modules/practice/skill-progress` | 17 |
+| 6 | Facilities | Ashritha (@Ashritharooman) | Gokula Lakshmi | `modules/facilities/*` (sports-facilities since 29 Oct 2026) | 8 |
+| 7 | Finance & operations | Gokula Lakshmi (@gokulalakshmirooman-source) | Ashritha | `modules/finance-operations/*`, `integrations/payment-sbiepay`, `modules/campus-life/placement-career`, `modules/campus-life/alumni` (since 29 Oct 2026) | 13 |
+| 8 | Campus life | Tejaswini (@tejaswini-rooman) | Madhumita | `modules/campus-life/*` except placement-career and alumni, `modules/practice/field-training`, `modules/practice/projects` | 15 |
+| 9 | Governance & support | Madhumita (@madhumitha-rooman) | Tejaswini | `modules/governance/*`, `modules/support/*` | 11 |
+| 10 | Apps, infra & QA | Srujan (@srujanrooman) | Faizan | `apps/*` (web incl. admin screens, api, mobile), `infra/*`, `packages/testing`, CI | 0 |
 
 Institution profiles (`platform/identity/config/profiles/`) and dashboard layouts belong to the Architecture & platform lead.
 A specialized suite for a new field gets its own owner row when the field has a customer.
@@ -46,74 +46,76 @@ names were given and can be swapped before kickoff; GitHub handles still need fi
 | Tejaswini (Campus life) | Student | Medical college |
 | Madhumita (Governance & support) | Support Staff | Law college |
 | Srujan (Apps, infra & QA) | Super Admin | Engineering college |
-| pool (first to finish) | Governance, Management, HR Staff | Film / media, Dance, Design / fashion, Agriculture, Hospitality |
+| pool, assigned 29 Oct 2026 | Governance: Madhumita · Management: Faizan · HR Staff: Gokula Lakshmi | Film: Himanshu · Dance and Hospitality: Ashritha · Design: Praveen · Agriculture: Tejaswini |
 
 Per-person week 1 tasks: [kickoff-tasks.md](kickoff-tasks.md).
-
 ## Full module list
+
+Status on 29 Oct 2026. The widgets of a module are built by its owner for every dashboard that shows them.
 
 | Module | Owner | Backup | Status |
 |---|---|---|---|
-| `integrations/digilocker` | | | planned |
-| `integrations/external-university-portals` | | | planned |
-| `integrations/government-portals` | | | planned |
-| `integrations/messaging-providers` | | | planned |
-| `integrations/nad` | | | planned |
-| `integrations/payment-sbiepay` | | | planned |
-| `integrations/video-conferencing` | | | planned |
-| `integrations/wearables` | | | planned |
-| `modules/academics/academic-management` | | | planned |
-| `modules/academics/examinations` | | | planned |
-| `modules/academics/lms` | | | planned |
-| `modules/academics/timetable-attendance` | | | planned |
-| `modules/campus-life/alumni` | | | planned |
-| `modules/campus-life/hostel` | | | planned |
-| `modules/campus-life/library` | | | planned |
-| `modules/campus-life/placement-career` | | | planned |
-| `modules/campus-life/transport` | | | planned |
-| `modules/facilities/asset-management` | | | planned |
-| `modules/facilities/facility-booking` | | | planned |
-| `modules/facilities/inventory-equipment` | | | planned |
-| `modules/facilities/maintenance` | | | planned |
-| `modules/facilities/sports-facilities` | | | planned |
-| `modules/finance-operations/budget-grants` | | | planned |
-| `modules/finance-operations/e-office` | | | planned |
-| `modules/finance-operations/fees-accounts` | | | planned |
-| `modules/finance-operations/hr-payroll` | | | planned |
-| `modules/finance-operations/procurement` | | | planned |
-| `modules/governance/grievance` | | | planned |
-| `modules/practice/portfolio` | | | planned |
-| `modules/practice/projects` | | | planned |
-| `modules/practice/selection-process` | | | planned |
-| `modules/practice/productions` | | | planned |
-| `modules/practice/field-training` | | | planned |
-| `modules/practice/skill-progress` | | | planned |
-| `modules/governance/iqac-accreditation` | | | planned |
-| `modules/governance/regulatory-reports` | | | planned |
-| `modules/governance/rti` | | | planned |
-| `modules/sports/athlete-performance` | | | planned |
-| `modules/sports/sports-nutrition-health` | | | planned |
-| `modules/sports/tournament-events` | | | planned |
-| `modules/sports/training-video-analysis` | | | planned |
-| `modules/student-lifecycle/admissions` | | | planned |
-| `modules/student-lifecycle/enrolment-registration` | | | planned |
-| `modules/student-lifecycle/student-information` | | | planned |
-| `modules/student-lifecycle/web-portal-cms` | | | planned |
-| `modules/support/amc-vendor-support` | | | planned |
-| `modules/support/helpdesk` | | | planned |
-| `modules/support/incident-management` | | | planned |
-| `modules/support/knowledge-base` | | | planned |
-| `modules/support/sla-management` | | | planned |
-| `platform/api-gateway` | | | planned |
-| `platform/tenancy` | | | planned |
-| `platform/billing` | | | planned |
-| `platform/audit` | | | planned |
-| `platform/documents` | | | planned |
-| `platform/event-bus` | | | planned |
-| `platform/identity` | | | planned |
-| `platform/integration-hub` | | | planned |
-| `platform/notification` | | | planned |
-| `platform/reporting` | | | planned |
-| `platform/scheduler` | | | planned |
-| `platform/search` | | | planned |
-| `platform/workflow` | | | planned |
+| `modules/academics/academic-management` | Shivani | Praveen | backend merged |
+| `modules/academics/examinations` | Shivani | Praveen | sprint v1.0 |
+| `modules/academics/lms` | Shivani | Praveen | sprint v1.0 |
+| `modules/academics/timetable-attendance` | Shivani | Praveen | sprint v1.0 |
+| `modules/campus-life/alumni` | Gokula Lakshmi | Tejaswini | sprint v1.0 |
+| `modules/campus-life/hostel` | Tejaswini | Madhumita | backend merged |
+| `modules/campus-life/library` | Tejaswini | Madhumita | sprint v1.0 |
+| `modules/campus-life/placement-career` | Gokula Lakshmi | Tejaswini | sprint v1.0 |
+| `modules/campus-life/transport` | Tejaswini | Madhumita | sprint v1.0 |
+| `modules/facilities/asset-management` | Ashritha | Gokula Lakshmi | backend merged |
+| `modules/facilities/facility-booking` | Ashritha | Gokula Lakshmi | backend merged |
+| `modules/facilities/inventory-equipment` | Ashritha | Gokula Lakshmi | backend merged |
+| `modules/facilities/maintenance` | Ashritha | Gokula Lakshmi | backend merged |
+| `modules/facilities/sports-facilities` | Ashritha | Akshata | sprint v1.0 |
+| `modules/finance-operations/budget-grants` | Gokula Lakshmi | Ashritha | backend merged |
+| `modules/finance-operations/e-office` | Gokula Lakshmi | Ashritha | sprint v1.0 |
+| `modules/finance-operations/fees-accounts` | Gokula Lakshmi | Ashritha | backend merged |
+| `modules/finance-operations/hr-payroll` | Gokula Lakshmi | Ashritha | sprint v1.0 |
+| `modules/finance-operations/procurement` | Gokula Lakshmi | Ashritha | in PR #294-#298 |
+| `modules/governance/grievance` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/governance/iqac-accreditation` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/governance/regulatory-reports` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/governance/rti` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/practice/field-training` | Tejaswini | Madhumita | sprint v1.0 |
+| `modules/practice/portfolio` | Praveen | Shivani | sprint v1.0 |
+| `modules/practice/productions` | Himanshu | Akshata | sprint v1.0 |
+| `modules/practice/projects` | Tejaswini | Madhumita | sprint v1.0 |
+| `modules/practice/selection-process` | Praveen | Shivani | sprint v1.0 |
+| `modules/practice/skill-progress` | Akshata | Himanshu, Ashritha | sprint v1.0 |
+| `modules/sports/athlete-performance` | Akshata | Himanshu, Ashritha | sprint v1.0 |
+| `modules/sports/sports-nutrition-health` | Akshata | Himanshu, Ashritha | sprint v1.0 |
+| `modules/sports/tournament-events` | Akshata | Himanshu, Ashritha | sprint v1.0 |
+| `modules/sports/training-video-analysis` | Akshata | Himanshu, Ashritha | sprint v1.0 |
+| `modules/student-lifecycle/admissions` | Praveen | Shivani | in PR #290 |
+| `modules/student-lifecycle/enrolment-registration` | Praveen | Shivani | in PR #291 |
+| `modules/student-lifecycle/student-information` | Praveen | Shivani | backend merged |
+| `modules/student-lifecycle/web-portal-cms` | Praveen | Shivani | frontend merged |
+| `modules/support/amc-vendor-support` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/support/helpdesk` | Madhumita | Tejaswini | backend merged |
+| `modules/support/incident-management` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/support/knowledge-base` | Madhumita | Tejaswini | sprint v1.0 |
+| `modules/support/sla-management` | Madhumita | Tejaswini | sprint v1.0 |
+| `integrations/README.md` | Himanshu | Faizan, Akshata | sprint v1.0 |
+| `integrations/digilocker` | Himanshu | Faizan, Akshata | after launch |
+| `integrations/external-university-portals` | Himanshu | Faizan, Akshata | after launch |
+| `integrations/government-portals` | Himanshu | Faizan, Akshata | after launch |
+| `integrations/messaging-providers` | Himanshu | Faizan, Akshata | sprint v1.0 |
+| `integrations/nad` | Himanshu | Faizan, Akshata | after launch |
+| `integrations/payment-sbiepay` | Gokula Lakshmi | Ashritha, Faizan | adapter merged |
+| `integrations/video-conferencing` | Himanshu | Faizan, Akshata | after launch |
+| `integrations/wearables` | Himanshu | Faizan, Akshata | after launch |
+| `platform/api-gateway` | Faizan | Himanshu, Srujan | sprint v1.0 |
+| `platform/audit` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/billing` | Faizan | Himanshu, Srujan | backend merged |
+| `platform/documents` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/event-bus` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/identity` | Faizan | Himanshu, Srujan | backend merged |
+| `platform/integration-hub` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/notification` | Himanshu | Faizan, Srujan | backend merged |
+| `platform/reporting` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/scheduler` | Himanshu | Faizan, Srujan | sprint v1.0 |
+| `platform/search` | Himanshu | Faizan, Srujan | after launch |
+| `platform/tenancy` | Faizan | Himanshu, Srujan | backend merged |
+| `platform/workflow` | Himanshu | Faizan, Srujan | sprint v1.0 |

@@ -3,7 +3,6 @@ import logging
 import uuid
 
 import pytest
-from eos_core import notify
 from eos_core.events import OutboxEvent
 from eos_core.tenant import platform_scope
 from eos_notification.application import messages, preferences
@@ -25,7 +24,7 @@ def test_verification_mail_is_sent_through_the_memory_transport(db, org, as_org)
     message, created = send(db, org, as_org, **verify_request())
     assert created and message.status == "sent"
     assert message.provider_message_id == f"memory:{message.id}" and message.attempts == 1
-    (mail,) = notify.sent  # the shape eos_testing reads from the old stub
+    (mail,) = transport_module.sent  # the record shape the legacy eos_core.notify stub used
     assert mail["to"] == "admin@college.example.com" and mail["token"] == SECRET and SECRET in mail["body"]
     assert outbox_names(db, org.id) == ["notification.message.sent"]
 
@@ -57,7 +56,7 @@ def test_retry_with_the_same_token_and_issuance_returns_the_original_and_sends_o
     request = verify_request()
     first, created1 = send(db, org, as_org, **request)
     second, created2 = send(db, org, as_org, **request)
-    assert created1 and not created2 and first.id == second.id and len(notify.sent) == 1
+    assert created1 and not created2 and first.id == second.id and len(transport_module.sent) == 1
 
 
 def test_reusing_a_client_token_for_a_new_issuance_is_refused_not_silently_dropped(db, org, as_org):
@@ -66,13 +65,13 @@ def test_reusing_a_client_token_for_a_new_issuance_is_refused_not_silently_dropp
     changed = verify_request(client_token=request["client_token"])  # new token_id, new secret, same client_token
     with pytest.raises(NotificationError) as e:
         send(db, org, as_org, **changed)
-    assert e.value.status == 422 and len(notify.sent) == 1
+    assert e.value.status == 422 and len(transport_module.sent) == 1
 
 
 def test_a_new_issuance_with_a_new_client_token_is_sent(db, org, as_org):
     send(db, org, as_org, **verify_request())
     send(db, org, as_org, **verify_request())
-    assert len(notify.sent) == 2
+    assert len(transport_module.sent) == 2
 
 
 def test_documented_limit_same_issuance_id_with_a_different_secret_cannot_be_detected(db, org, as_org):
@@ -82,7 +81,7 @@ def test_documented_limit_same_issuance_id_with_a_different_secret_cannot_be_det
     send(db, org, as_org, **request)
     other = {**request, "variables": {**request["variables"], "token": "a-different-secret"}}
     _, created = send(db, org, as_org, **other)
-    assert not created and len(notify.sent) == 1
+    assert not created and len(transport_module.sent) == 1
 
 
 def test_client_token_idempotency_is_per_organisation(db, org, other_org, as_org):
@@ -151,7 +150,7 @@ def test_invalid_requests_are_a_422_and_queue_nothing(db, org, as_org, mutate):
     mutate(request)
     with pytest.raises(NotificationError) as e:
         send(db, org, as_org, **request)
-    assert e.value.status == 422 and not notify.sent
+    assert e.value.status == 422 and not transport_module.sent
     with as_org(org):
         assert db.scalars(select(Message).where(Message.organisation_id == org.id)).first() is None
 
@@ -174,14 +173,14 @@ def test_a_user_recipient_gets_the_identity_address_not_a_caller_supplied_one(db
     request = reminder_request(user_id=org.member.id)
     request["recipient"]["address"] = "attacker@evil.example"
     message, _ = send(db, org, as_org, **request)
-    assert message.recipient_address == org.member.email and notify.sent[-1]["to"] == org.member.email
+    assert message.recipient_address == org.member.email and transport_module.sent[-1]["to"] == org.member.email
 
 
 def test_preferences_suppress_non_transactional_mail_and_send_nothing(db, org, as_org):
     with as_org(org):
         preferences.set_preferences(db, org.member.id, channels={"reminder": []})
     message, _ = send(db, org, as_org, **reminder_request(user_id=org.member.id))
-    assert message.status == "suppressed" and not notify.sent
+    assert message.status == "suppressed" and not transport_module.sent
     assert "notification.message.sent" not in outbox_names(db, org.id)
 
 
@@ -192,12 +191,12 @@ def test_transactional_mail_ignores_preferences(db, org, as_org):
         )
     request = verify_request(recipient={"user_id": org.member.id})
     message, _ = send(db, org, as_org, **request)
-    assert message.status == "sent" and len(notify.sent) == 1
+    assert message.status == "sent" and len(transport_module.sent) == 1
 
 
 def test_in_app_message_is_delivered_without_a_provider_and_keeps_its_body(db, org, as_org):
     message, _ = send(db, org, as_org, **reminder_request(user_id=org.member.id, channel="in_app"))
-    assert message.status == "delivered" and message.sent_at and message.body and not notify.sent
+    assert message.status == "delivered" and message.sent_at and message.body and not transport_module.sent
 
 
 def test_memory_transport_is_refused_outside_dev_mode_and_nothing_is_queued(db, org, as_org, monkeypatch):
@@ -224,7 +223,7 @@ def test_other_transports_fail_closed_instead_of_falling_back_to_memory(db, org,
         monkeypatch.setenv(key, value)
     with pytest.raises(NotificationError) as e:
         send(db, org, as_org, **reminder_request())
-    assert e.value.status == 503 and not notify.sent
+    assert e.value.status == 503 and not transport_module.sent
 
 
 def test_no_organisation_context_fails_closed(db):
@@ -246,7 +245,7 @@ def test_scripted_transport_is_used_when_given(db, org, as_org):
     t = ScriptedTransport()
     with as_org(org):
         messages.send_message(db, transport=t, now=NOW, **reminder_request())
-    assert len(t.sent) == 1 and not notify.sent
+    assert len(t.sent) == 1 and not transport_module.sent
 
 
 # --- one idempotency contract: client_token is the only key (docs/idempotency.md) ---------------------------
