@@ -13,7 +13,7 @@ Everything on the board ships in nine days. One page, read it once.
 
 ## How work is organised
 
-- Every person has **one sprint issue** (`[S01]` to `[S10]`) and its **batches** (`[S01.1]`, `[S01.2]`, …), each batch merging three to six of the old issues. The old issues are closed with a pointer to their batch; nothing was dropped. The board (https://github.com/users/faizanrooman/projects/1) lists the sprint issues first; each shows its batches' progress.
+- Every person has **one sprint issue** (`[S01]` to `[S10]`) and its **batches** (`[S01.1]`, `[S01.2]`, …), each batch merging three to six of the old issues. Only the current batch is assigned to you; when it closes (`Closes #batch` in the last PR), the next one is assigned to you automatically within a minute. The old issues are closed with a pointer to their batch; nothing was dropped. The board (https://github.com/users/faizanrooman/projects/1) lists the sprint issues first; each shows its batches' progress.
 - A batch is done when every box is ticked, the last PR says `Closes #batch`, and the result is visible on https://educationos.futureacad.ae.
 - **Widgets are built by the module's owner** for every dashboard that shows them (one backend, one widget, many layouts). A dashboard owner wires the layout, checks the data and writes the Playwright journey.
 - Tier 1 first, always. A tier 2 PR waits in the queue behind any tier 1 PR.
