@@ -21,3 +21,9 @@ roles:
       not for an organisation admin.
     grants:
       - messaging-providers:provider:read
+  # A super admin is handed only the platform: keys that some role grants (eos_core.config.permissions_for), so
+  # without this the admin key would be held by nobody. Same pattern as platform/billing's super-admin role.
+  - name: super-admin
+    grants:
+      - messaging-providers:provider:read
+      - platform:messaging-providers:admin
