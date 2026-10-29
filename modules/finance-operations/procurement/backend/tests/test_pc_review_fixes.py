@@ -173,10 +173,12 @@ def test_reopening_indents_after_a_cancelled_order_is_audited_as_such(client, or
 
 def test_an_earlier_preparer_cannot_approve_after_someone_else_submits(client, org):
     """A creates the order, B submits it (prepared_by becomes B): A still may not approve it."""
+    from eos_core.db import new_id
     from eos_core.security import create_token
     from pc_support import TODAY, approved_indent, auth, item, vendor
 
-    dual = auth(create_token(user_id="dual-" + org.id, organisation_id=org.id, roles=["finance-staff", "management"]))
+    # a real user id: identity issues UUIDs, and every user column is String(36) (Postgres refuses longer ones)
+    dual = auth(create_token(user_id=new_id(), organisation_id=org.id, roles=["finance-staff", "management"]))
     i = approved_indent(client, org)
     v = vendor(client, org)
     body = {"vendor_id": v["id"], "indent_ids": [i["id"]], "items": [item()], "delivery_by": TODAY}
