@@ -70,7 +70,7 @@ verification token in the register response so the flow can be driven without em
 
 ```
 pytest apps/backend packages/core platform/identity/backend
-for t in $(python tools/scripts/enabled-modules.py tests); do pytest "$t"; done   # enabled modules' own suites
+for t in $(python tools/scripts/enabled-modules.py tests); do pytest "$t"; done   # enabled platform services' and modules' own suites
 ```
 
 `apps/backend/tests/test_module_loader.py` covers the mounting rules above. `apps/backend/tests/test_foundation.py` is the phase 1 gate: register, verify, sign in, trial entitlement
