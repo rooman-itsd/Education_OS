@@ -25,3 +25,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   receipts; quotes need priced items whose total matches (`price_required`, `quote_total_mismatch`); an awarded order
   keeps its quote's items (`awarded_order`); a tender holds its indents only while it can still be awarded; department
   scoping of indent approvers is stated as not enforced; story S2 covers the purchase order list and detail.
+- Contract: one catalogue of every error code the API answers, by status, in the description; the order create, edit,
+  decision (403), cancel, receipt and award responses list the codes they can return. The PRD links the decisions on
+  #335.
