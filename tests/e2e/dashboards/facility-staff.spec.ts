@@ -170,12 +170,15 @@ test.describe("with facilities data", () => {
 
   test("facility-booking.bookings-today lists a booking made for later today", async ({ page, request }) => {
     test.skip(!ready("facility-booking"), "facility-booking is not live for the facility-staff role yet");
-    // The default slot grid is 30 minutes and "today" is the organisation's date (FACILITY_BOOKING_TIMEZONE, UTC
-    // by default): book the next free half hour, unless that runs past midnight UTC.
+    // The default slot grid is 30 minutes and "today" is the organisation's date in FACILITY_BOOKING_TIMEZONE
+    // (UTC by default; the API inherits this process's environment): book the next free half hour, unless that
+    // runs past midnight in that zone.
+    const zone = process.env.FACILITY_BOOKING_TIMEZONE || "UTC";
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone }); // YYYY-MM-DD
     const slot = 30 * 60_000;
     const start = new Date(Math.ceil((Date.now() + 5 * 60_000) / slot) * slot);
     const end = new Date(start.getTime() + slot);
-    test.skip(end.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10), "too close to midnight UTC");
+    test.skip(day(end) !== day(new Date()), `too close to midnight in ${zone}`);
     const type = await created<{ id: string }>(request, "/facility-booking/resource-types", { name: "Hall" });
     const resource = await created<{ id: string }>(request, "/facility-booking/resources", {
       name: "Seminar hall",
