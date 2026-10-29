@@ -50,7 +50,10 @@ paths:
         "409": { description: "The vendor already has this status (status_unchanged), or is blacklisted, which is final (vendor_blacklisted)" }
   /indents:
     get:
-      summary: Indents. Permission procurement:indent:approve (all, or the approver's department).
+      summary: >-
+        Indents. Permission procurement:indent:approve. Limiting an approver to their own department is not
+        enforced yet: identity issues no department claim, so an approver sees every indent of the organisation.
+        department_id only filters the list.
       parameters:
         - { name: status, in: query, schema: { $ref: "#/components/schemas/IndentStatus" } }
         - { name: department_id, in: query, schema: { type: string, format: uuid } }
@@ -116,24 +119,31 @@ paths:
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Tender" } } } } }
   /tenders/{id}/quotes:
     post:
-      summary: Record a vendor's quote received before the closing date, with the document. Permission procurement:tender:manage.
+      summary: >-
+        Record a vendor's quote received before the closing date, with the document. Every item carries its
+        unit_price, and total must equal the items' total including tax, so the ranking, the lowest-quote check
+        and the drafted order all use the same amount. Permission procurement:tender:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QuoteInput" } } } }
       responses:
         "201": { description: Recorded, content: { application/json: { schema: { $ref: "#/components/schemas/Tender" } } } }
-        "409": { description: Tender is closed or the vendor is not approved }
+        "409": { description: "Tender is not open for quotes (tender_closed), the vendor is not approved (vendor_not_approved) or not invited (vendor_not_invited), or already quoted (quote_exists)" }
+        "422": { description: "An item without unit_price (price_required), or total different from the items' total including tax (quote_total_mismatch)" }
   /tenders/{id}/award:
     post:
       summary: >-
         Award to one quote, after the tender closes. A quote other than the lowest needs a justification. A quote whose
         valid_until is before today (IST) has expired and cannot be awarded; it is still valid on its valid_until date.
-        Creates a draft purchase order and publishes procurement.tender.awarded. Permission procurement:tender:manage.
+        Creates a draft purchase order and publishes procurement.tender.awarded. A tender holds its indents only while
+        it can still lead to an award (a draft before its closing date, an open tender, or a closed one with a quote
+        that is unexpired, priced and from an approved vendor); otherwise its indents can be put in a new tender or
+        order. Permission procurement:tender:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [quote_id], properties: { quote_id: { type: string, format: uuid }, justification: { type: string } } } } } }
       responses:
         "200": { description: Awarded, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
         "409": { description: "The tender is not closed yet or already awarded (not_closed), the quote has expired (quote_expired), or the vendor is no longer approved (vendor_not_approved)" }
-        "422": { description: "Awarding other than the lowest quote without a justification (justification_required)" }
+        "422": { description: "Awarding other than the lowest awardable quote without a justification (justification_required); a quote without priced items (price_required)" }
   /purchase-orders:
     get:
       summary: Purchase orders. Permission procurement:purchase-order:read.
@@ -148,25 +158,31 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrderInput" } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
-        "422": { description: "Indent's purchase method requires a tender (tender_required); delivery_by before today (invalid_date)" }
+        "422": { description: "Indent's purchase method requires a tender, or the indents together or the order total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date); a tender_id given (awarded_order: an order for a tender comes only from its award)" }
   /purchase-orders/{id}:
     get:
       summary: One purchase order with receipts and invoices. Permission procurement:purchase-order:read.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
     put:
-      summary: Edit a draft or returned order. Permission procurement:purchase-order:manage.
+      summary: >-
+        Edit a draft or returned order. An order drafted from an award keeps its tender, vendor, indents and the
+        awarded quote's items and prices; only delivery_by, delivery_address and terms change. Permission
+        procurement:purchase-order:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrderInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
         "409": { description: "Order is not a draft or returned (not_editable)" }
-        "422": { description: "A direct order whose indents together or whose total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date)" }
+        "422": { description: "A direct order whose indents together or whose total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date); an awarded order whose tender, vendor, indents or items change (awarded_order)" }
   /purchase-orders/{id}/submit:
     post:
-      summary: Send a draft order for approval. Permission procurement:purchase-order:manage.
+      summary: Send a draft or returned order for approval. Permission procurement:purchase-order:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
+        "409": { description: "Order is not a draft or returned (not_editable)" }
+        "422": { description: "delivery_by has passed; correct it before sending (invalid_date)" }
   /purchase-orders/{id}/decision:
     post:
       summary: >-
@@ -190,11 +206,13 @@ paths:
       summary: >-
         Cancel an issued order with nothing received, or close the remainder of a part-received one; both publish
         procurement.purchase-order.cancelled with the amount released. A draft or returned order is also cancelled,
-        without an event (nothing was committed), and its indents can be ordered again. 409 (not_cancellable) for any
-        other status. Permission procurement:purchase-order:approve.
+        without an event (nothing was committed), and its indents can be ordered again. A submitted order is decided
+        first. Permission procurement:purchase-order:approve.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
+        "409": { description: "The order is submitted, received, closed or cancelled (not_cancellable)" }
   /purchase-orders/{id}/goods-receipts:
     get:
       summary: Goods receipts against an order. Permission procurement:purchase-order:read.
@@ -208,6 +226,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GoodsReceiptInput" } } } }
       responses:
         "201": { description: Recorded, content: { application/json: { schema: { $ref: "#/components/schemas/GoodsReceipt" } } } }
+        "409": { description: "The order is not issued or part-received (order_not_open)" }
         "422": { description: "Quantity exceeds what is outstanding on the order (quantity_exceeds_outstanding); received_on in the future or before the order was issued (invalid_date)" }
   /vendor-invoices:
     get:
@@ -367,8 +386,8 @@ components:
       required: [vendor_id, items, total]
       properties:
         vendor_id: { type: string, format: uuid }
-        items: { type: array, items: { $ref: "#/components/schemas/Item" } }
-        total: { $ref: "#/components/schemas/Money" }
+        items: { type: array, minItems: 1, items: { $ref: "#/components/schemas/Item" }, description: "Every item needs unit_price" }
+        total: { $ref: "#/components/schemas/Money", description: "Must equal the items' total including tax" }
         delivery_days: { type: integer, minimum: 0 }
         valid_until: { type: string, format: date }
         document_id: { type: string, nullable: true }
