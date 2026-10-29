@@ -1,6 +1,7 @@
 """The cross-tenant leak test, reads and writes across organisations, the Alembic chain, drift between code and contract,
 event payloads against events.yaml, and the audit trail."""
 
+import re
 import tempfile
 from pathlib import Path
 
@@ -173,6 +174,20 @@ def test_every_contract_operation_is_served_with_its_permission():
         # the permission the contract names for the operation; one indent is also readable by its requester
         named = set(perms) - ({"procurement:indent:create"} if key == ("GET", "/indents/{id}") else set())
         assert named and all(perm in contract[key] for perm in named), (key, perms)
+
+
+def test_every_error_code_the_backend_raises_is_in_the_contract():
+    """Reviewers read the contract for the codes a client must handle; a new code must be documented with it."""
+    src = MODULE / "backend" / "src" / "eos_procurement"
+    service = (src / "application" / "service.py").read_text(encoding="utf-8")
+    domain = (src / "domain" / "rules.py").read_text(encoding="utf-8")
+    codes = set(re.findall(r'(?:invalid|conflict)\(\s*"([a-z_]+)"', service))
+    codes |= set(re.findall(r'ProcurementError\(\s*\d+,\s*"([a-z_]+)"', service))
+    codes |= set(re.findall(r'_duplicate_is_409\(\s*"([a-z_]+)"', service))
+    codes |= set(re.findall(r'RuleError\(\s*"([a-z_]+)"', domain))
+    assert len(codes) > 40  # the patterns still find the codes
+    contract = (MODULE / "contracts" / "openapi.yaml").read_text(encoding="utf-8")
+    assert sorted(c for c in codes if f"`{c}`" not in contract and f"({c})" not in contract) == []
 
 
 def test_enums_match_the_contract():

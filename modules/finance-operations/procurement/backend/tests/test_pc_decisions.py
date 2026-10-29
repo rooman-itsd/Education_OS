@@ -1,4 +1,4 @@
-"""The decisions taken on #129: the order total is checked against its line before an order is issued; business dates
+"""The decisions recorded on #335: the order total is checked against its line before an order is issued; business dates
 follow Asia/Kolkata (IST); an expired quote is not awarded."""
 
 from datetime import UTC, datetime, timedelta

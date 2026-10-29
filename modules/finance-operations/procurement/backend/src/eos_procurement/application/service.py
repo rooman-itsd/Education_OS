@@ -46,7 +46,7 @@ def clock() -> datetime:
     return utcnow()
 
 
-# Business dates follow the Indian business calendar (decided on #129). Asia/Kolkata has kept UTC+05:30 without daylight
+# Business dates follow the Indian business calendar (decided by the owner; see #335). Asia/Kolkata has kept UTC+05:30 without daylight
 # saving since 1945, so a fixed offset is exact and needs no time-zone database (tzdata is not on the approved stack).
 BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
 
@@ -536,7 +536,7 @@ def _lock_line(db: Session, organisation_id: str, line_id: str) -> None:
 
 
 def _check_order_budget(db: Session, actor: Actor, po: PurchaseOrder) -> None:
-    """The order total is covered by its line (decided on #129). budget-grants records a commitment only when it receives
+    """The order total is covered by its line (decided by the owner; see #335). budget-grants records a commitment only when it receives
     procurement.purchase-order.issued, which may not have arrived yet, so the orders this organisation issued on the line
     that budget-grants has no commitment for are taken off what it reports as available. Runs under _lock_line."""
     total = Decimal(po.total)
@@ -702,7 +702,7 @@ def _quotes(db: Session, tender_id: str) -> list[Quote]:
 
 
 def _expired(quote: Quote) -> bool:
-    """A quote is valid through its valid_until date (IST) and expired from the next day (decided on #129)."""
+    """A quote is valid through its valid_until date (IST) and expired from the next day (decided by the owner; see #335)."""
     return quote.valid_until is not None and quote.valid_until < business_today()
 
 

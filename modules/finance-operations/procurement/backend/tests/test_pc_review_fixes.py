@@ -1,4 +1,4 @@
-"""Regression tests for the defects an independent review of the backend found (#129)."""
+"""Regression tests for the defects an independent review of the backend found (#335)."""
 
 from datetime import timedelta
 
@@ -321,3 +321,43 @@ def test_an_awarded_order_keeps_the_quotes_items_and_prices(client, org, monkeyp
     r = client.put(f"{BASE}/purchase-orders/{po['id']}", json=body, headers=org.staff)
     assert r.status_code == 200, r.text
     assert r.json()["total"] == "50000.00" and r.json()["delivery_by"] == "2026-12-15" and r.json()["terms"] == "Net 30"
+
+
+def test_running_numbers_take_a_per_organisation_lock_on_postgres(client, org, monkeypatch):
+    """_next_number locks per organisation and table before counting (as maintenance does), so two creates take turns.
+    SQLite has a single writer, so the statement and its order are checked here with a stand-in Postgres session; the
+    race itself was run on PostgreSQL 16 (both creates got a number; without the lock the second answered 409)."""
+    from eos_core.db import SessionLocal
+    from eos_procurement.application import service
+    from eos_procurement.infrastructure.models import Indent
+
+    calls = []
+
+    class PostgresSession:
+        """Delegates to a real session; reports the Postgres dialect and records what runs, in order."""
+
+        def __init__(self, real):
+            self.real, self.info = real, real.info
+
+        def get_bind(self, *a, **k):
+            return type("Bind", (), {"dialect": type("Dialect", (), {"name": "postgresql"})()})()
+
+        def execute(self, stmt, params=None, **k):
+            calls.append(("lock", str(stmt), params))
+
+        def scalar(self, stmt, *a, **k):
+            calls.append(("count",))
+            return self.real.scalar(stmt, *a, **k)
+
+    with SessionLocal() as real:
+        real.info["organisation_id"] = org.id
+        number = service._next_number(PostgresSession(real), Indent, "IND")
+    assert number == "IND-00001"  # a fresh organisation
+    assert calls == [
+        (
+            "lock",
+            "SELECT pg_advisory_xact_lock(hashtext(:key))",
+            {"key": f"procurement:number:procurement_indent:{org.id}"},
+        ),
+        ("count",),
+    ]

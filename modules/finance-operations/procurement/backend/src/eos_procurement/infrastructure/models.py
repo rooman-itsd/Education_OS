@@ -17,7 +17,7 @@ MONEY = Numeric(14, 2)
 
 
 class Vendor(Base, TenantMixin, TimestampMixin):
-    """A supplier. Only the last four digits of its bank account are kept (decided on #129)."""
+    """A supplier. Only the last four digits of its bank account are kept (decided by the owner; see #335)."""
 
     __tablename__ = f"{PREFIX}vendor"
     __table_args__ = (

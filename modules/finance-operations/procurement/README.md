@@ -59,8 +59,15 @@ Rules the code keeps:
   a purchase can't be split into direct orders or priced above what was approved.
 - **An indent belongs to one open tender or order at a time.** Indents combined into one tender or order share one line.
   The indents are locked while checked, so two requests for the same indent take turns. When an order is cancelled
-  with nothing received, its indents can be ordered again. A tender that can no longer be awarded (a draft past its
-  closing date, or one that closed without a quote) lets its indents go; the contract has no way to cancel a tender.
+  with nothing received, its indents can be ordered again. A tender that can no longer be awarded lets its indents
+  go: a draft past its closing date, or a closed tender none of whose quotes can be awarded (each expired, unpriced or
+  from a vendor no longer approved); the contract has no way to cancel a tender.
+- **An order that was never issued can be cancelled.** A draft or returned order is cancelled with a reason, without an
+  event (nothing was committed), and its indents can be ordered again; a submitted order is decided first (409
+  `not_cancellable` otherwise).
+- **Order dates follow the order.** `delivery_by` can't be before today (on create, edit and submit, so a draft left
+  past its date is corrected before it goes out), and `received_on` can't be before the order was issued or after
+  today (422 `invalid_date`).
 - **Blacklisting is final** (409 `vendor_blacklisted`), as `procurement.vendor.blacklisted` says.
 - **Only approved vendors** are invited, quote, are awarded and are issued orders. Quotes are recorded while a tender
   is published and before it closes, priced item by item, and its total must equal the items' total including tax
@@ -112,7 +119,7 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   (a separate PR) mounts the router at `/api/v1/procurement`; `py-setup.sh`, the API image, CI and the auto-deploy then
   install it, run its tests and upgrade its chain.
 - **budget-grants:** set `PROCUREMENT_BUDGET_GRANTS_URL`. Management approves indents and orders, so management needs
-  `budget-grants:availability:read` (a separate budget-grants PR) and `budget-grants:budget:read` (it has it); department
+  `budget-grants:availability:read` (granted in #292) and `budget-grants:budget:read` (it has it); department
   admins already have availability.
 - **Overspend outside procurement:** the per-line lock serialises procurement's own approvals. Manual spend and
   payroll recorded in budget-grants at the same moment are not covered by it; budget-grants records them as real spend
