@@ -63,4 +63,8 @@ events:
       reason: string          # overlap | disabled
       window_at: datetime
 
-consumes: []
+# The owning module reports a run's outcome by publishing <module>.job.finished with
+# payload { run_id: uuid, outcome: succeeded | failed, detail: string }. Scheduler consumes it
+# from every module that declares a job, and closes the run only if that module owns the job.
+consumes:
+  - "<module>.job.finished"
