@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 from datetime import timedelta
@@ -13,10 +14,14 @@ from eos_core.security import create_token
 from eos_core.settings import settings
 from eos_core.tenant import organisation_scope, platform_scope
 from eos_identity.application import service as identity
+from eos_notification.application import messages
+from eos_notification.domain.errors import NotificationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..domain.models import Organisation, OrganisationModule, RegistrationToken
+
+log = logging.getLogger("eos.tenancy")
 
 AUTO_APPROVE = settings.auto_approve  # module-level so tests can flip it
 SLUG_RE = re.compile(r"^[a-z0-9-]{3,40}$")
@@ -75,14 +80,14 @@ def register(
             roles=["org-admin"],
         )
         token = secrets.token_urlsafe(32)
-        db.add(
-            RegistrationToken(
-                organisation_id=org.id,
-                token=token,
-                email=admin["email"].lower(),
-                expires_at=utcnow() + timedelta(hours=48),
-            )
+        issued = RegistrationToken(
+            organisation_id=org.id,
+            token=token,
+            email=admin["email"].lower(),
+            expires_at=utcnow() + timedelta(hours=48),
         )
+        db.add(issued)
+        db.flush()
         billing.start_trial(db, organisation_id=org.id)
         events.publish(
             db,
@@ -90,15 +95,39 @@ def register(
             org.id,
             {"organisation_id": org.id, "slug": slug, "academy_type": academy_type, "admin_email": admin["email"]},
         )
-    notify.send_email(
-        admin["email"],
-        "Verify your Education OS organisation",
-        f"Welcome to {organisation_name}. Verify with token {token}",
-        token=token,
-        organisation_id=org.id,
-    )
+        # Recorded in this transaction, sent only after it commits. The token is passed in memory only:
+        # notification never stores, logs or publishes it.
+        try:
+            accepted = messages.accept_in_transaction(
+                db,
+                template="tenancy.organisation.verify",
+                recipient={"address": admin["email"]},
+                variables={"organisation_name": organisation_name, "token": token, "token_id": issued.id},
+                client_token=f"tenancy:verify:{issued.id}",
+            )
+        except NotificationError as e:
+            # Refused before anything was written (503 when no transport is configured). Without the mail the
+            # admin cannot verify, so the registration is not kept.
+            db.rollback()
+            raise TenancyError(f"verification email cannot be sent: {e.detail}", e.status) from e
     db.commit()
+    _deliver_verification(accepted)
     return org, token
+
+
+def _deliver_verification(accepted: messages.Accepted) -> None:
+    """Send the verification mail now that the registration is committed. A delivery problem does not fail the
+    request: the organisation exists, and a retry would only meet "slug already in use". The message's own status
+    records the outcome. If the process stops before this runs, the mail is never sent (its token is gone):
+    durable dispatch is the outbox relay's job (#83)."""
+    try:
+        message = messages.deliver_accepted(accepted)
+    except Exception as e:
+        # The id and the exception type only: the address and the token must not reach the log.
+        log.warning("verification mail %s not delivered: %s", accepted.message.id, type(e).__name__)
+        return
+    if message.status not in ("sent", "delivered"):
+        log.warning("verification mail %s is %s, not sent", message.id, message.status)
 
 
 def verify(db: Session, token: str) -> Organisation:
