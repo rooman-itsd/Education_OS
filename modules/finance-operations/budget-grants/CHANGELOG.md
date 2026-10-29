@@ -51,3 +51,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   Scholar), with loading, empty and error-with-retry states; 22 tests. Frontend test dependencies came in #266.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/budget-grants`) and
   `apps/frontend/config/modules.enabled.yaml`; the README documents the widgets.
+- Permissions: management gets `budget-grants:availability:read`. Management approves procurement indents, and
+  procurement checks `GET /availability` with the approver's token before approving (#129). Additive; story M4.

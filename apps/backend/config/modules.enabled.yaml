@@ -10,9 +10,15 @@
 modules:
   - academics/academic-management
   - campus-life/hostel
-  - finance-operations/fees-accounts
-  - student-lifecycle/student-information
-  - support/helpdesk
+  - facilities/asset-management
+  - facilities/facility-booking
+  - facilities/inventory-equipment
+  - facilities/maintenance
   - finance-operations/budget-grants
+  - finance-operations/fees-accounts
+  - student-lifecycle/admissions
+  - student-lifecycle/student-information
+  - student-lifecycle/web-portal-cms
+  - support/helpdesk
 integrations: []
-platform: [identity, tenancy, billing]
+platform: [identity, tenancy, billing, notification]

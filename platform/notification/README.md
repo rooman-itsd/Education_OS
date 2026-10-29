@@ -66,8 +66,9 @@ All four are covered end to end by `tests/test_required_templates.py`: each send
 value, refuses a missing variable by name, drops undeclared variables, refuses an oversized or non-scalar
 value, and cannot have a newline injected into its subject through a variable. A subject override containing
 CR or LF is refused when the template is saved, and a rendered subject is folded to one line whether the break
-came from a value or from the override's own text. **Nothing yet calls three of the four** — see the
-limitations below.
+came from a value or from the override's own text. **Nothing calls any of the four through this module yet**:
+verification still goes out through the `eos_core.notify` stub until the tenancy patch lands, and approval, trial
+reminder and invoice have no caller at all — see the limitations below.
 
 ## What this release provides
 
@@ -99,11 +100,13 @@ Do not read this module as a finished notification workflow. Missing, and blocki
 3. **No events consumed.** There is no event consumer mechanism or relay (#83). `accept_message(...,
    source_event_id=..., channel=...)` is the dedupe-safe entry a future handler can call; nothing calls it yet.
    The single-key contract that says how an event-linked send derives its key **is implemented** here, with
-   tests, and is documented in [docs/idempotency.md](docs/idempotency.md) — but it is **not yet approved** by
-   Faizan, so it may still change. Nothing consumes events regardless.
-4. **No tenancy integration.** `platform/tenancy` still calls `eos_core.notify.send_email` before its
-   commit (service.py:93 vs :100). Replacing that call, and issuing `client_token` + `secret_ref`, is
-   Faizan's change. There is also no route to re-issue an expired verification token.
+   tests, and is documented in [docs/idempotency.md](docs/idempotency.md), which the contract owner has
+   approved as written. Nothing consumes events regardless.
+4. **Tenancy does not call notification yet.** `platform/tenancy` still calls `eos_core.notify.send_email`
+   before its commit (service.py:93 vs :100). The in-process entry it will use exists:
+   `messages.accept_in_transaction()` inside tenancy's transaction, then `messages.deliver_accepted()` after its
+   commit (see "Sending from another module" below). The tenancy patch itself is to be prepared here and reviewed
+   by tenancy's owner. There is also no route to re-issue an expired verification token.
 5. **No audit.** `platform/audit` has no backend. Structured logs (ids only) are **not** durable audit
    records. For that reason **`POST /messages/{id}/resend` is not implemented**: the contract promises
    it is audited.
@@ -113,15 +116,20 @@ Do not read this module as a finished notification workflow. Missing, and blocki
    webhooks and the consumer are unbuilt), and a hard bounce does not suppress an address yet.
 8. **Email and in-app only; no attachments.** SMS, WhatsApp and push are contracted but not
    implemented, and attachments are not supported. All are rejected (422) rather than silently dropped.
-9. **No router mounted.** Mounting `eos_notification.api.router` in `apps/backend` is Srujan's change.
-10. **Would fail the route-coverage test in PR #214 once mounted.** That test needs every route to name a
-    catalogue key that some role grants. `GET/PUT /preferences/{user_id}`, `GET /inbox` and
-    `POST /inbox/{id}/read` have no key yet, and no role grants `notification:message:send`. The keys and
-    least-privilege grants are proposed in the contract draft, pending Faizan's approval.
-11. **Unresolved shared tenant-isolation dependency.** On PostgreSQL, database-level row-level security
-    is not currently effective for authenticated requests. A separate, unresolved tenant-isolation dependency exists in shared identity/`eos_core` code. It is outside this module, is not fixed here, and requires restricted coordination with that code's owner.
-    **This module does not rely on RLS alone** — every query is filtered by `organisation_id` in code,
-    and that filtering is verified on PostgreSQL with row-level security enforced.
+9. **Enabled in the host, not yet on staging.** `apps/backend/config/modules.enabled.yaml` lists
+   `notification`, so the host installs it, mounts the router at `/api/v1/notification` and runs this chain
+   (`platform/notification/db`) in CI and deployment. Staging still needs a working transport: see
+   "Configuration". **CI does not run this module's tests yet**: `tools/scripts/enabled-modules.py tests` and
+   `prefixes` list feature modules only, and `.github/workflows/api.yml`'s fixed list omits notification, so CI
+   neither runs `platform/notification/backend/tests` nor checks the policies on the `notification_` tables.
+10. **Every route names a catalogue key.** The four own-resource routes use `notification:self:read` and
+    `notification:self:manage`, granted to the implicit `member` role; administrative keys go to `org-admin`;
+    `notification:message:send` to a `service` block that no person holds. This is the contract owner's
+    permission scheme, so the host's route-coverage check sees every route guarded.
+11. **Row-level security applies to authenticated requests.** A shared identity dependency that kept it from
+    applying was fixed outside this module (#274); `apps/backend/tests/test_request_scope.py` checks it on
+    PostgreSQL in CI. **This module does not rely on RLS alone** — every query is also filtered by
+    `organisation_id` in code, and that filtering is verified on PostgreSQL with row-level security enforced.
 
 ### Delivery guarantees (what is and is not claimed)
 
@@ -245,14 +253,86 @@ fields are mapped one by one and the message object is never serialised whole.
   (`api/schemas.py: EXPOSE_SENT_STATUS`).
 - Events: [contracts/events.yaml](contracts/events.yaml). Published here: `notification.message.sent|failed`,
   `notification.preferences.changed`. `bounced` is not published (no receipts).
-- Permissions: [contracts/permissions.yaml](contracts/permissions.yaml). No role in the merged catalogue holds
-  `notification:message:send`, so no person can call `POST /messages` until a grant is approved.
+- Permissions: [contracts/permissions.yaml](contracts/permissions.yaml). Blocks are named with platform role ids
+  (`member`, `org-admin`, `super-admin`, `service`), because grants are looked up by block name and tokens carry
+  profile role ids. `notification:message:send` is held only by `service`, which no person holds: other modules
+  send in-process through the application service, not over HTTP.
+
+## Sending from another module
+
+A module that already has a transaction open (tenancy recording a registration) must not call `send_message`:
+that commits whatever the session holds, and on a replayed `client_token` rolls it back. It uses two steps:
+
+```python
+from eos_core.tenant import organisation_scope
+from eos_notification.application import messages
+
+with organisation_scope(org_id):
+    accepted = messages.accept_in_transaction(
+        db,
+        template="tenancy.organisation.verify",
+        recipient={"address": admin_email},
+        variables={"organisation_name": name, "token": token, "token_id": token_id},
+        client_token=f"tenancy:verify:{token_id}",
+    )  # writes the row in YOUR transaction; never commits, never rolls back
+db.commit()  # your work and the message row commit together
+message = messages.deliver_accepted(accepted)  # only now is anything sent; check message.status
+```
+
+- Every refusal is raised before the row is written, including **503 when no transport can be resolved** (the
+  memory transport outside dev mode, or no adapter installed). Your pending work is untouched; you decide
+  whether to roll back.
+- `deliver_accepted` uses its own session in the message's organisation. Called before your commit, or after a
+  rollback, it finds no message, raises 404 and sends nothing; it can never commit your work.
+- A replayed `client_token` returns the original (`created=False`) and sends nothing again.
+- **Accepted is not delivered.** `accepted.message` is `queued`. What `deliver_accepted` returns says what
+  happened: `sent` (the API shows it as `sending`) means the provider accepted it, not that it arrived, since
+  receipts are not built. `queued` with `next_attempt_at` means it will be retried. `failed` and `suppressed`
+  are final.
+- Never put the secret in an event payload.
+
+### If the process stops between your commit and `deliver_accepted`
+
+The message is committed as `queued` and nothing is sending it. What happens next depends on whether it
+carries a secret (the `token`, which lives only in `accepted`, never in the database):
+
+| Message | What happens | Why |
+|---|---|---|
+| No secret | Sent by the next `recover_stuck()` sweep, once it has been `queued` longer than `NOTIFICATION_SENDING_LEASE_S`. **Nothing runs that sweep automatically yet** (the scheduler is #82), so until then it waits. | The row has everything needed to render and send it again. |
+| With a secret (verification) | **Never sent.** The next dispatch or sweep marks it `failed` with `secret_unavailable`. Issue a new secret under a new `client_token`. | `secret_unavailable` means exactly this: a message carrying a secret that never reached a provider, now dispatched by something other than the call that held the secret. If it had reached `sending`, the code is `outcome_unknown` instead, since the provider may have it. |
+
+Delivery that survives a crash without depending on the request process is the outbox relay's job (#83),
+not this module's: see "Known dependencies and limitations" below.
 
 ## Configuration
 
 See [config/env.example](config/env.example). `NOTIFICATION_TRANSPORT=memory` is refused unless
 `EOS_DEV_MODE` is true, and `EOS_DEV_MODE` defaults to true when unset, so production must set it to
 false explicitly.
+
+### Sending real email (staging, production)
+
+The API image sets `EOS_DEV_MODE=false` (`infra/docker/api.Dockerfile`), and so does the compose default
+(`infra/docker/docker-compose.api.yml`). Neither sets any `NOTIFICATION_*` or `MESSAGING_PROVIDERS_*` value. As
+deployed today, notification therefore uses the default `memory` transport, which is refused outside dev mode.
+
+**Startup is not affected.** No transport is checked when the app starts. The first email send fails instead:
+503 from `POST /messages`, or `NotificationError(503)` to an in-process caller, raised before any row is written.
+`in_app` messages need no transport and still work.
+
+To send real email, the deployment needs all of these. Values are the staging owner's; none are set here.
+
+| Setting or step | Why |
+|---|---|
+| `NOTIFICATION_TRANSPORT=adapter` | `memory` is refused when `EOS_DEV_MODE=false`. |
+| `NOTIFICATION_ADAPTER=messaging-providers` | Already the default; set it explicitly. The adapter is found by this entry-point name. |
+| `messaging-providers` listed under `integrations:` in `apps/backend/config/modules.enabled.yaml` | The host installs only what is listed, and entry points exist only once installed. Needs #80 merged first, since listing it also mounts its router. |
+| `MESSAGING_PROVIDERS_SMTP_HOST`, `_PORT`, `_USE_TLS`, `_USERNAME`, `_PASSWORD`, `_TIMEOUT_S` | The relay itself (see `integrations/messaging-providers/config/env.example`). Credentials come from the environment only. |
+| `NOTIFICATION_DEFAULT_FROM_EMAIL` and `NOTIFICATION_DEFAULT_FROM_NAME` | **The sender the relay sees.** Notification always passes it (`messages.py`), so the adapter's own `MESSAGING_PROVIDERS_FROM_*` is never used for these sends. The default `no-reply@example.invalid` will be refused or rewritten by a real relay: it must be an address that relay accepts. |
+| `NOTIFICATION_SENDING_LEASE_S` above about ten times `MESSAGING_PROVIDERS_SMTP_TIMEOUT_S` | Otherwise a send still in flight can be recovered and sent twice. See below. |
+
+Alternatively, `EOS_DEV_MODE=true` on staging keeps the memory transport: nothing is delivered, but nothing
+fails either. That is the staging owner's decision, not this module's.
 
 ### Retry-delay bounds
 
@@ -329,7 +409,9 @@ These run on SQLite by default and import only `eos_core`, `eos_identity` (a dec
 `eos_testing` and this module. They pass on Python 3.13 and 3.12. On SQLite alone they **are not evidence of
 row-level security, of real concurrency, or of transaction rollback**: with the SQLite driver's default
 settings (`eos_core.db`), a savepoint opened after only a read is not inside a transaction and its release
-commits, so code here never relies on a rollback to undo a write (the transport check runs before the insert).
+commits. `accept_in_transaction` therefore begins the transaction itself on SQLite before its savepoint, so the
+caller's rollback removes the message on both databases (`tests/test_notification_activation.py`); every
+refusal, including the transport check, still runs before the insert.
 
 ### The same suite on PostgreSQL
 
@@ -366,14 +448,14 @@ vacuously. The admin URL is used only for that setup; every assertion runs as `e
 
 What the file covers, and what it does not: it verifies what the **database** guarantees (schema, policies,
 cross-tenant reads and writes, the bypass, per-tenant uniqueness, two-connection races, column lengths,
-savepoint rollback) through real connections and real SQL — all of that now **passes**. It does **not**
-exercise the service layer against PostgreSQL; that needs the application bound to a PostgreSQL engine and is
-still outstanding, as is the same check driven through HTTP.
+savepoint rollback) through real connections and real SQL — all of that now **passes**. The service layer and
+the HTTP routes are exercised on PostgreSQL by the whole suite instead ("The same suite on PostgreSQL" above).
 
-#### Unresolved: shared tenant-isolation dependency
+#### Shared tenant-isolation dependency (fixed in #274)
 
-Database-level row-level security is not currently effective for authenticated requests on PostgreSQL.
-A separate, unresolved tenant-isolation dependency exists in shared identity/`eos_core` code. It is outside this module, is not fixed here, and requires restricted coordination with that code's owner. Details are deliberately not reproduced here. The original list:
+A shared identity dependency kept database-level row-level security from applying to authenticated requests
+on PostgreSQL. It was fixed outside this module (#274) and is checked in CI by
+`apps/backend/tests/test_request_scope.py`. The original list:
 
 - RLS enabled and forced, `tenant_isolation` policy present on all three tables.
 - Cross-tenant read and write, including `WITH CHECK` and an `UPDATE` that tries to change `organisation_id`.
@@ -397,14 +479,13 @@ What #79 cannot finish inside this module, with the owner and the smallest chang
 | Blocker | Owner | Smallest change | #79 criterion affected |
 |---|---|---|---|
 | **No outbox relay.** `packages/core` writes `outbox_event` rows and nothing anywhere sets `published = true`; `platform/event-bus/` has **0 Python files**. So no event can *trigger* a notification, and approval, trial-reminder and invoice mails have no caller. | Himanshu, **issue #83** | the relay itself — a separate issue, deliberately not built here | **outbox-driven**, "visible on staging" |
-| **No scheduler**, so nothing calls `recover_stuck()` and nothing emits trial reminders. `platform/scheduler/` has 0 Python files. | Himanshu, **issue #82** | the scheduler itself | retries in practice |
-| **Adapter not installed in the deployed app.** Entry points register at *install* time. `apps/backend/pyproject.toml` lists neither `eos-notification` nor `eos-messaging-providers`, and `py-setup.sh` installs neither — so in CI and staging the group is empty and the adapter transport is a 503. | **Srujan** | add both to `apps/backend` dependencies and `py-setup.sh` | delivery, staging |
-| **Router not mounted.** `PLATFORM_ROUTERS` in `apps/backend/src/eos_backend/main.py` lists identity, tenancy, billing only. | **Srujan** | add notification, **after** `alembic upgrade head` | staging |
-| **No migration runs** in CI or any deploy script. | **Srujan** | `cd platform/notification/db && alembic upgrade head` before start | staging |
-| **Tenancy still calls the stub.** `platform/tenancy/.../service.py:93` calls `eos_core.notify.send_email`, before its own commit at line 100. | **Faizan** | replace with a notification send carrying `client_token` and `token_id` | **replace `eos_core.notify`** |
-| **`eos_testing` reads `notify.sent`.** `packages/testing/.../tenancy.py:31` pulls the verification token out of the stub, so the stub cannot be deleted without breaking every module's `register_and_login`. | **Srujan** | read the token from the notification inbox or the API instead | **replace `eos_core.notify`** |
-| **No role grants any notification permission.** Real users receive only `org-admin` or `super-admin`; `permissions_for(["org-admin"])` returns no notification keys, and `notification:message:send` is granted by no role at all. The six administrative routes are unreachable. | **Faizan** (B3) | grant the keys to `org-admin`; give `message:send` a service-only holder | tested/usable |
-| **Unresolved shared tenant-isolation dependency** (outside this module; requires restricted coordination with that code's owner). | **Faizan** | shared-code fix | tenant isolation |
+| **No scheduler**, so nothing calls `recover_stuck()` and nothing emits trial reminders. `platform/scheduler/` has 0 Python files. | Himanshu, **issue #82** | the scheduler itself; add the reminder event it emits to `consumes:` in `contracts/events.yaml` | retries in practice, trial reminders |
+| **No invoice event.** Billing writes `billing_invoice` rows but publishes no event for them, so even with a relay nothing would trigger `billing.invoice.issued`. | **Faizan** (billing); no issue tracks it yet | publish an invoice event; add it to `consumes:` | invoices |
+| **CI does not run these tests** or check the `notification_` policies (see item 9 above). | **Faizan/Srujan** (`tools/`, `.github/`) | include enabled platform services in `enabled-modules.py tests` and `prefixes` | "tested" |
+| **Adapter not installed in the deployed app.** Entry points register at *install* time, and the host installs only what `apps/backend/config/modules.enabled.yaml` lists. `messaging-providers` can be listed under `integrations:` only once #80 has merged, because listing it also mounts its router. Until then the adapter transport is a 503 everywhere. | Himanshu, **issue #80** | merge #80, then list `messaging-providers` | delivery, staging |
+| **No real email on staging yet.** Staging runs with `EOS_DEV_MODE=true`, so the memory transport records mail and registration is not refused. Real email needs the adapter (#80) and `NOTIFICATION_TRANSPORT`, `NOTIFICATION_ADAPTER` and `MESSAGING_PROVIDERS_SMTP_*` passed by the compose file; production needs it before go-live. | **Srujan** (staging), **#89** | an infra change passing those settings, after #80 | real email |
+| **Tenancy still calls the stub.** `platform/tenancy/.../service.py:93` calls `eos_core.notify.send_email`, before its own commit at line 100. | Himanshu prepares, **Faizan** reviews and merges | `accept_in_transaction` + `deliver_accepted` with `client_token="tenancy:verify:<token_id>"` | **replace `eos_core.notify`** |
+| **`eos_testing` reads `notify.sent`.** `packages/testing/.../tenancy.py:31` falls back to the stub for the verification token, and `stubs.py` reads it for sent emails. | in the tenancy patch | `register_and_login` reads `verification_token` from the register response (tests run in dev mode); `stubs.py` must change too; then delete `eos_core.notify` | **replace `eos_core.notify`** |
 | **`check-boundaries.py` ignores `depends_on.integrations`.** Worked around by entry-point discovery; blocks any module that imports an integration directly. | **Srujan/Faizan** | read that manifest key too | — |
 
 Also incomplete by decision, not blockage: channels beyond email and in-app are contracted but not
