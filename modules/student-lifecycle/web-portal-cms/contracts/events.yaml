@@ -1,23 +1,33 @@
 # Domain events published by web-portal-cms.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# The envelope (id, name, version, organisation_id, actor, occurred_at) is defined once, in
+# platform/event-bus/contracts/events.yaml. Payloads below never repeat envelope fields, and never carry a body.
 #
-# No event here duplicates organisation lifecycle facts: tenancy.organisation.registered/verified/
-# approved and billing.subscription.started already cover sign-up (platform/tenancy,
-# platform/billing's own contracts, unmodified by this module). web-portal-cms only publishes
-# events about its own CMS content.
+# No event here duplicates organisation lifecycle facts: tenancy.organisation.* and billing.subscription.* cover
+# sign-up. web-portal-cms only publishes events about its own CMS content.
 module: web-portal-cms
 version: 1
 events:
   - name: web-portal-cms.page.published
-    description: A page became publicly visible.
-    payload: { organisation_id: uuid, page_id: uuid, slug: string, type: string }
+    description: A page became visible to the organisation's members.
+    version: 1
+    consumers: []
+    payload: { page_id: uuid, slug: string, type: string, title: string }
+
   - name: web-portal-cms.page.unpublished
-    description: A page was taken down from public view; the record is kept.
-    payload: { organisation_id: uuid, page_id: uuid, slug: string }
+    description: A page was taken down (unpublished, or deleted while published); the record may be kept.
+    version: 1
+    consumers: []
+    payload: { page_id: uuid, slug: string }
+
   - name: web-portal-cms.announcement.published
-    description: An announcement became publicly visible.
-    payload: { organisation_id: uuid, announcement_id: uuid, title: string }
+    description: An announcement was published; it is visible within its display window.
+    version: 1
+    consumers: []
+    payload: { announcement_id: uuid, title: string, starts_at: "datetime?", ends_at: "datetime?" }
+
   - name: web-portal-cms.announcement.unpublished
-    description: An announcement was taken down from public view.
-    payload: { organisation_id: uuid, announcement_id: uuid }
+    description: An announcement was taken down (unpublished, or deleted while published).
+    version: 1
+    consumers: []
+    payload: { announcement_id: uuid }

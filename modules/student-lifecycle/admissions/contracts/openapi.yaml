@@ -5,15 +5,19 @@ info:
   description: >-
     Online application, document verification, merit lists, counselling and offers. Submission,
     status tracking, document upload and offer decisions are public/anonymous, verified by
-    reference_number + email — no applicant account is created by this module. See docs/prd.md.
+    reference_number + email — no applicant account is created by this module. Public paths live
+    under /public/{org_slug}/ so every anonymous request names its organisation; the host gateway
+    resolves the slug, checks the organisation is active and entitled to admissions, and answers
+    404 otherwise. Staff paths take the organisation from the caller's session. See docs/prd.md.
 servers:
   - url: /api/v1/admissions
 paths:
+  # ---------------------------------------------------------------- staff (authenticated)
   /applications:
     get:
       summary: >
-        Find applications in the caller's organisation. Staff only. Permission
-        admissions:application:read.
+        Find applications in the caller's organisation, newest first. Staff only. Permission
+        admissions:application:read. Backs the widget admissions.application-status.
       parameters:
         - { name: programme_id, in: query, schema: { type: string, format: uuid } }
         - { name: academic_year, in: query, schema: { type: string } }
@@ -23,32 +27,6 @@ paths:
         - { $ref: "#/components/parameters/PageSize" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationPage" } } } }
-    post:
-      summary: >
-        Submit a new application. Public: no account or session required. Returns a
-        reference_number the applicant must keep to track the application; this module issues no
-        login of any kind.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/ApplicationInput" }
-      responses:
-        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
-
-  /applications/track:
-    get:
-      summary: >
-        Track an application by reference_number and email. Public. Both must match, so a
-        guessed reference number alone cannot reveal another applicant's status.
-      security: []
-      parameters:
-        - { name: reference_number, in: query, required: true, schema: { type: string } }
-        - { name: email, in: query, required: true, schema: { type: string, format: email } }
-      responses:
-        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
-        "404": { description: No application matches that reference number and email }
 
   /applications/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -64,27 +42,14 @@ paths:
       summary: >
         Staff-driven status transition (under_review, eligible, ineligible, rejected, or
         staff-initiated withdrawn). Does not cover offer or offer-decision transitions, which have
-        their own endpoints. Permission admissions:application:manage.
+        their own endpoints. Withdrawing an offered application closes its open offer. Permission
+        admissions:application:manage.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/StatusChangeInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: "Application is in a terminal status and cannot transition", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
-
-  /applications/{reference_number}/documents:
-    parameters: [{ name: reference_number, in: path, required: true, schema: { type: string } }]
-    post:
-      summary: >
-        Attach a document already stored by platform/documents to an application. Public, verified
-        by email in the body (same as tracking). Only allowed while the application is submitted
-        or under_review.
-      security: []
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationDocumentInput" } } } }
-      responses:
-        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationDocument" } } } }
-        "403": { description: Email does not match this application }
-        "404": { description: No application matches that reference number }
-        "409": { description: Application is no longer accepting documents }
+        "422": { description: "Target status not allowed from the current one, or reason missing", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
 
   /applications/{id}/documents/{document_id}/verify:
     parameters:
@@ -98,6 +63,33 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationDocument" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /documents:
+    get:
+      summary: >
+        Documents across the organisation's applications, oldest upload first, filtered by
+        verification status (default pending). The pending queue leaves out applications that are
+        already closed (ineligible, rejected, withdrawn, accepted, declined). Backs the widget
+        admissions.pending-documents. Permission admissions:document:verify.
+      parameters:
+        - { name: verification_status, in: query, schema: { type: string, enum: [pending, verified, rejected], default: pending } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DocumentQueuePage" } } } }
+
+  /applications/{id}/offer:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: >
+        Staff extends an offer on an eligible application, or a new one on an offered application
+        whose offer has expired (the lapsed offer is recorded as expired). Permission
+        admissions:offer:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/OfferInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "Application is not eligible, or already has an offer", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
   /merit-lists:
     get:
       summary: List merit lists in the organisation. Permission admissions:merit-list:manage.
@@ -108,10 +100,14 @@ paths:
     post:
       summary: >
         Generate a merit list for a programme and academic year from the current eligible pool.
-        Created as a draft; use /merit-lists/{id}/publish to make it visible to applicants.
-        Permission admissions:merit-list:manage.
+        Ranked by score, highest first, ties broken by earliest submission; applications without a
+        score follow all scored ones, in submission order. Created as a draft; use
+        /merit-lists/{id}/publish to make it visible to applicants. Permission
+        admissions:merit-list:manage.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/MeritListInput" } } } }
-      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/MeritList" } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/MeritList" } } } }
+        "422": { description: "A score names an application that is not eligible for this programme and academic year", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
 
   /merit-lists/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -128,63 +124,122 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MeritList" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: Merit list already published }
+        "409": { description: Merit list already published, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
 
-  /applications/{id}/offer:
-    parameters: [{ $ref: "#/components/parameters/Id" }]
+  /reports/funnel:
+    get:
+      summary: >
+        Admissions funnel counts for the organisation. Counts only, no applicant personal data.
+        Backs the Management widget admissions.funnel. Permission admissions:report:read.
+      parameters:
+        - { name: programme_id, in: query, schema: { type: string, format: uuid } }
+        - { name: academic_year, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FunnelReport" } } } }
+
+  # ---------------------------------------------------------------- public (anonymous, per organisation)
+  /public/{org_slug}/applications:
+    parameters: [{ $ref: "#/components/parameters/OrgSlug" }]
     post:
       summary: >
-        Staff extends an offer on an eligible application. Permission admissions:offer:manage.
-      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/OfferInput" } } } }
+        Submit a new application. Public: no account or session required. Returns a
+        reference_number the applicant must keep to track the application; this module issues no
+        login of any kind.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApplicationInput" }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
-        "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: "Application is not eligible, or already has an offer", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+        "404": { $ref: "#/components/responses/UnknownOrganisation" }
 
-  /applications/{reference_number}/offer/accept:
-    parameters: [{ name: reference_number, in: path, required: true, schema: { type: string } }]
+  /public/{org_slug}/applications/track:
+    parameters: [{ $ref: "#/components/parameters/OrgSlug" }]
+    get:
+      summary: >
+        Track an application by reference_number and email. Public. Both must match, so a
+        guessed reference number alone cannot reveal another applicant's status.
+      security: []
+      parameters:
+        - { name: reference_number, in: query, required: true, schema: { type: string } }
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "404": { description: "Unknown organisation, or no application matches that reference number and email" }
+
+  /public/{org_slug}/applications/{reference_number}/documents:
+    parameters:
+      - { $ref: "#/components/parameters/OrgSlug" }
+      - { $ref: "#/components/parameters/ReferenceNumber" }
+    post:
+      summary: >
+        Attach a document already stored by platform/documents to an application. Public, verified
+        by email in the body (same as tracking). Only allowed while the application is submitted
+        or under_review.
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationDocumentInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationDocument" } } } }
+        "403": { description: Email does not match this application }
+        "404": { description: "Unknown organisation, or no application matches that reference number" }
+        "409": { description: Application is no longer accepting documents, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /public/{org_slug}/applications/{reference_number}/offer/accept:
+    parameters:
+      - { $ref: "#/components/parameters/OrgSlug" }
+      - { $ref: "#/components/parameters/ReferenceNumber" }
     post:
       summary: >
         Applicant accepts their offer. Public, verified by email in the body (same as tracking).
         Raises admissions.application.accepted, which fees-accounts consumes to invoice the
-        confirmation fee.
+        confirmation fee. An offer past its expires_at is expired, not accepted.
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/OfferAcceptInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
         "403": { description: Email does not match this application }
-        "404": { description: No application matches that reference number }
-        "409": { description: No open offer on this application }
+        "404": { description: "Unknown organisation, or no application matches that reference number" }
+        "409": { description: No open offer on this application, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
 
-  /applications/{reference_number}/offer/decline:
-    parameters: [{ name: reference_number, in: path, required: true, schema: { type: string } }]
+  /public/{org_slug}/applications/{reference_number}/offer/decline:
+    parameters:
+      - { $ref: "#/components/parameters/OrgSlug" }
+      - { $ref: "#/components/parameters/ReferenceNumber" }
     post:
       summary: Applicant declines their offer. Public, verified by email in the body.
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string, format: email }, reason: { type: string } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/OfferDeclineInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
         "403": { description: Email does not match this application }
-        "404": { description: No application matches that reference number }
-        "409": { description: No open offer on this application }
+        "404": { description: "Unknown organisation, or no application matches that reference number" }
+        "409": { description: No open offer on this application, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
 
 components:
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrgSlug: { name: org_slug, in: path, required: true, description: "The organisation's public slug", schema: { type: string } }
+    ReferenceNumber: { name: reference_number, in: path, required: true, schema: { type: string } }
     Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
     PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
 
   responses:
     NotFound: { description: Not found in the caller's organisation }
+    UnknownOrganisation: { description: "No active organisation with that slug is entitled to admissions" }
 
   schemas:
     ApplicationStatus:
       type: string
       enum: [submitted, under_review, eligible, ineligible, offered, accepted, declined, rejected, withdrawn]
       description: >-
-        eligible/ineligible/rejected/withdrawn/declined are terminal except that under_review may
-        cycle while documents are requested and resupplied. accepted is the terminal positive
-        outcome and raises admissions.application.accepted.
+        One-directional. Staff move submitted → under_review → eligible/ineligible, and may
+        reject or withdraw before a decision; under_review may repeat while documents are
+        requested and resupplied. An offer moves eligible → offered; the applicant then moves
+        offered → accepted or declined, and staff may still withdraw an offered application.
+        ineligible, rejected, withdrawn, accepted and declined are terminal. accepted raises
+        admissions.application.accepted.
 
     ApplicantDetails:
       type: object
@@ -262,6 +317,20 @@ components:
         verified_by: { type: string, format: uuid, nullable: true }
         verified_at: { type: string, format: date-time, nullable: true }
         uploaded_at: { type: string, format: date-time }
+    DocumentQueueItem:
+      allOf:
+        - $ref: "#/components/schemas/ApplicationDocument"
+        - type: object
+          properties:
+            reference_number: { type: string }
+            applicant_name: { type: string, description: "first_name last_name, so the queue needs no second call" }
+    DocumentQueuePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DocumentQueueItem" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
     DocumentVerificationInput:
       type: object
       required: [verification_status]
@@ -269,6 +338,12 @@ components:
         verification_status: { type: string, enum: [verified, rejected] }
         verification_note: { type: string }
 
+    MeritScore:
+      type: object
+      required: [application_id, score]
+      properties:
+        application_id: { type: string, format: uuid }
+        score: { type: number }
     MeritListInput:
       type: object
       required: [programme_id, academic_year]
@@ -276,6 +351,10 @@ components:
         programme_id: { type: string, format: uuid }
         academic_year: { type: string }
         title: { type: string }
+        scores:
+          type: array
+          items: { $ref: "#/components/schemas/MeritScore" }
+          description: "Optional. Each application at most once; every application named must be eligible for this programme and academic year."
     MeritListEntry:
       type: object
       properties:
@@ -284,16 +363,17 @@ components:
         rank: { type: integer, minimum: 1 }
         score: { type: number, nullable: true }
     MeritList:
-      allOf:
-        - $ref: "#/components/schemas/MeritListInput"
-        - type: object
-          properties:
-            id: { type: string, format: uuid }
-            organisation_id: { type: string, format: uuid }
-            status: { type: string, enum: [draft, published] }
-            entries: { type: array, items: { $ref: "#/components/schemas/MeritListEntry" } }
-            published_at: { type: string, format: date-time, nullable: true }
-            created_at: { type: string, format: date-time }
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        programme_id: { type: string, format: uuid }
+        academic_year: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [draft, published] }
+        entries: { type: array, items: { $ref: "#/components/schemas/MeritListEntry" } }
+        published_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
 
     OfferInput:
       type: object
@@ -307,14 +387,52 @@ components:
           properties:
             id: { type: string, format: uuid }
             application_id: { type: string, format: uuid }
-            status: { type: string, enum: [open, accepted, declined, expired] }
+            status: { type: string, enum: [open, accepted, declined, expired, withdrawn] }
             offered_by: { type: string, format: uuid }
             offered_at: { type: string, format: date-time }
             decided_at: { type: string, format: date-time, nullable: true }
             decline_reason: { type: string, nullable: true }
+    OfferAcceptInput:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    OfferDeclineInput:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        reason: { type: string }
+
+    FunnelReport:
+      type: object
+      properties:
+        programme_id: { type: string, format: uuid, nullable: true }
+        academic_year: { type: string, nullable: true }
+        total: { type: integer }
+        stages:
+          type: object
+          description: >-
+            How many applications reached each stage. applied = all; eligible = eligible + offered +
+            accepted + declined; offered = offered + accepted + declined; accepted = accepted. Counted
+            from current statuses, so an application withdrawn after eligibility counts only as applied.
+          properties:
+            applied: { type: integer }
+            eligible: { type: integer }
+            offered: { type: integer }
+            accepted: { type: integer }
+        by_status:
+          type: object
+          description: Current count per ApplicationStatus; every status is present, zero when none.
+          additionalProperties: { type: integer }
 
     ConflictError:
       type: object
       properties:
         code: { type: string, enum: [terminal_status, not_eligible, offer_already_exists, no_open_offer, documents_closed, merit_list_already_published] }
+        message: { type: string }
+    RuleError:
+      type: object
+      properties:
+        code: { type: string, enum: [invalid_transition, reason_required, score_for_ineligible_application, duplicate_score] }
         message: { type: string }
