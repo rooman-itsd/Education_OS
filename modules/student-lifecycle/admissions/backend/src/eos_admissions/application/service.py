@@ -322,13 +322,26 @@ def make_offer(
     db: Session, actor: Actor, application_id: str, note: str | None = None, expires_at: datetime | None = None
 ) -> dict:
     app = _get_application(db, actor.organisation_id, application_id)
-    _check(rules.check_can_offer, app.status, _open_offer(db, app) is not None)
+    now = utcnow()
+    current = _open_offer(db, app)
+    lapsed = (
+        current is not None
+        and rules.effective_offer_status(current.status, as_utc(current.expires_at), now) == e.OFFER_EXPIRED
+    )
+    if lapsed:
+        # Write the expiry down: the slot the unique open-offer index guards is free again, and an offered
+        # application whose offer lapsed is back where an eligible one is, so staff can offer again.
+        current.status = e.OFFER_EXPIRED
+        current.decided_at = now
+        db.flush()
+        _audit(db, app.organisation_id, actor.user_id, "offer_expired", "offer", current.id, {"application_id": app.id})
+    _check(rules.check_can_offer, e.ELIGIBLE if lapsed else app.status, current is not None and not lapsed)
     offer = Offer(
         organisation_id=app.organisation_id,
         application_id=app.id,
         status=e.OFFER_OPEN,
         note=note,
-        expires_at=expires_at,
+        expires_at=as_utc(expires_at),  # SQLite stores the wall-clock fields and drops the offset; keep every row UTC
         offered_by=actor.user_id,
     )
     db.add(offer)

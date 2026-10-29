@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, timedelta, timezone
 
 import pytest
 from conftest import add_application, add_document, add_offer, make_actor
@@ -145,6 +145,31 @@ def test_make_offer_refusals(db, staff, org):
     svc.make_offer(db, staff, offered.id)
     assert refused(svc.make_offer, db, staff, offered.id) == (409, "offer_already_exists")
     assert db.query(Offer).filter(Offer.application_id == offered.id).count() == 1
+
+
+def test_make_offer_again_after_the_previous_one_expired(db, staff, org):
+    app = add_application(db, org, status=e.ELIGIBLE)
+    svc.make_offer(db, staff, app.id, expires_at=utcnow() - timedelta(minutes=1))
+    assert svc.get_application(db, staff, app.id)["offer"]["status"] == e.OFFER_EXPIRED
+    view = svc.make_offer(db, staff, app.id, "Second chance", utcnow() + timedelta(days=7))
+    assert view["status"] == e.OFFERED
+    assert view["offer"]["status"] == e.OFFER_OPEN
+    assert view["offer"]["note"] == "Second chance"
+    statuses = sorted(o.status for o in db.query(Offer).filter(Offer.application_id == app.id))
+    assert statuses == [e.OFFER_EXPIRED, e.OFFER_OPEN]
+    # still at most one open offer, and a live one still blocks
+    assert refused(svc.make_offer, db, staff, app.id) == (409, "offer_already_exists")
+
+
+def test_expires_at_is_stored_as_utc_whatever_offset_the_caller_sent(db, staff, org):
+    app = add_application(db, org, status=e.ELIGIBLE)
+    an_hour_ahead = (utcnow() + timedelta(hours=1)).astimezone(timezone(timedelta(hours=-8)))
+    svc.make_offer(db, staff, app.id, expires_at=an_hour_ahead)
+    db.flush()
+    db.expire_all()  # read the row back from the database, not from memory
+    view = svc.get_application(db, staff, app.id)
+    assert view["offer"]["status"] == e.OFFER_OPEN
+    assert view["offer"]["expires_at"] == an_hour_ahead.astimezone(UTC).isoformat()
 
 
 # ---------------------------------------------------------------- merit lists

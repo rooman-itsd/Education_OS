@@ -81,7 +81,9 @@ paths:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     post:
       summary: >
-        Staff extends an offer on an eligible application. Permission admissions:offer:manage.
+        Staff extends an offer on an eligible application, or a new one on an offered application
+        whose offer has expired (the lapsed offer is recorded as expired). Permission
+        admissions:offer:manage.
       requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/OfferInput" } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }

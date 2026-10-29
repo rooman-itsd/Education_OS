@@ -144,7 +144,8 @@ by an authorised higher-level role.
   `ineligible`, `rejected`, `withdrawn`, `accepted` and `declined` are terminal. Every staff
   transition needs a reason.
 - An application holds at most one open offer. An offer with an `expires_at` in the past is
-  expired the moment anyone acts on it; it can no longer be accepted.
+  expired the moment anyone acts on it; it can no longer be accepted. Staff may then extend a new offer;
+  the lapsed one is recorded as expired.
 - A merit list is generated as a draft and published once; a published list cannot be published
   again. Scores may only be given for applications eligible for that programme and academic year,
   each at most once.
