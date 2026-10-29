@@ -15,4 +15,4 @@ modules:
   - support/helpdesk
   - finance-operations/budget-grants
 integrations: []
-platform: [identity, tenancy, billing]
+platform: [identity, tenancy, billing, notification]
