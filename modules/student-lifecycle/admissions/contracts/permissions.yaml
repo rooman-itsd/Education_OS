@@ -14,16 +14,21 @@ permissions:
     description: Generate and publish merit lists.
   - key: admissions:offer:manage
     description: Extend an offer on an eligible application.
+  - key: admissions:report:read
+    description: Read admissions funnel counts. Counts only, no applicant personal data.
 roles:
   - name: admissions-reviewer
     description: Reviews documents and eligibility but does not decide offers or merit lists.
     grants: [admissions:application:read, admissions:document:verify]
   - name: admissions-staff
     description: Runs the full admissions funnel for the organisation.
-    grants: [admissions:application:read, admissions:application:manage, admissions:document:verify, admissions:merit-list:manage, admissions:offer:manage]
+    grants: [admissions:application:read, admissions:application:manage, admissions:document:verify, admissions:merit-list:manage, admissions:offer:manage, admissions:report:read]
   - name: department-admin
     description: Reviews applications and merit lists for their department's programmes.
-    grants: [admissions:application:read, admissions:merit-list:manage]
+    grants: [admissions:application:read, admissions:merit-list:manage, admissions:report:read]
+  - name: management
+    description: VC and Registrar. Sees the admissions funnel; no access to individual applications.
+    grants: [admissions:report:read]
   - name: org-admin
     description: Read-only visibility into the organisation's admissions activity.
-    grants: [admissions:application:read]
+    grants: [admissions:application:read, admissions:report:read]

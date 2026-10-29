@@ -36,7 +36,7 @@ roles:
   - name: research-office
     grants: [budget-grants:availability:read, budget-grants:grant:read, budget-grants:grant:manage, budget-grants:report:read]
   - name: management
-    grants: [budget-grants:budget:read, budget-grants:budget:approve, budget-grants:grant:read, budget-grants:utilisation:approve, budget-grants:report:read]
+    grants: [budget-grants:budget:read, budget-grants:budget:approve, budget-grants:availability:read, budget-grants:grant:read, budget-grants:utilisation:approve, budget-grants:report:read]
   - name: department-admin
     grants: [budget-grants:budget:read, budget-grants:availability:read, budget-grants:report:read, budget-grants:self:read]
   - name: org-admin

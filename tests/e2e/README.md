@@ -10,6 +10,7 @@ touches a dev server you have running, and stops them afterwards.
 | Smoke: the API answers through `/api/` and the site leaves preview mode (also runs against staging) | [smoke/site-is-live.spec.ts](smoke/site-is-live.spec.ts) |
 | Organisation Admin signs in; the six platform widgets show the organisation's plan, usage, modules, users and invoices; recent activity waits for platform/audit; the package change switches the plan and an invoice appears | [dashboards/org-admin.spec.ts](dashboards/org-admin.spec.ts) |
 | Examination Staff signs in to their dashboard; the examination widgets render and say when data is not available. Data journeys wait for the examinations backend (`fixme`) | [dashboards/examination-staff.spec.ts](dashboards/examination-staff.spec.ts) |
+| Facility / Inventory Staff signs in to their dashboard; the four facilities widgets render, show their empty state, then the ticket, low-stock item, overdue asset and booking created through the API. Each part skips until its module is enabled and granted | [dashboards/facility-staff.spec.ts](dashboards/facility-staff.spec.ts) |
 
 The approval step calls the API until the super admin approval queue exists in `apps/frontend`.
 

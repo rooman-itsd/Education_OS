@@ -4,7 +4,8 @@ module: notification
 permissions:
   - key: notification:message:send
     description: >-
-      Send a notification. Held by modules through packages/sdk, not by people.
+      Send a notification over HTTP. Not held by people: modules send in-process through the
+      application service, so only the `service` block below grants it.
   - key: notification:message:read
     description: >-
       Read this organisation's delivery history. Recipient addresses are masked and bodies are
@@ -22,12 +23,30 @@ permissions:
   - key: platform:notification:read
     description: >-
       Super admin only. Delivery health and failures across every organisation.
-
-roles:
-  - name: notification-admin
+  - key: notification:self:read
     description: >-
-      Manages an academy's templates and investigates delivery problems. Intended for an
-      organisation admin.
+      Read one's own in-app inbox and one's own notification preferences.
+  - key: notification:self:manage
+    description: >-
+      Mark one's own in-app messages read and change one's own notification preferences. Another
+      user's preferences still need notification:preference:manage.
+
+# Each block is named with a platform role id. eos_core.config.permissions_for looks grants up by block name,
+# and a token carries the profile role ids (platform/identity/config/profiles), so a block named after this
+# module would grant nothing to anyone. Same convention as hostel's `student` block and tenancy's catalogue.
+roles:
+  - name: member
+    description: >-
+      Implicit. Every active organisation user holds it beside their assigned roles
+      (platform/tenancy/contracts/permissions.yaml). Their own inbox and preferences.
+    grants:
+      - notification:self:read
+      - notification:self:manage
+
+  - name: org-admin
+    description: >-
+      Organisation administrator. Manages the organisation's templates, investigates delivery
+      problems and may change another user's preferences.
     grants:
       - notification:message:read
       - notification:message:resend
@@ -35,8 +54,14 @@ roles:
       - notification:template:write
       - notification:preference:manage
 
-  - name: notification-viewer
-    description: Read-only delivery history, for support staff diagnosing "I never got the email"
+  - name: super-admin
+    description: Platform operator. Delivery health across every organisation.
     grants:
-      - notification:message:read
-      - notification:template:read
+      - platform:notification:read
+
+  - name: service
+    description: >-
+      Not a person. Gives notification:message:send a holder, so the key is not orphaned. No
+      profile lists this role, and platform/identity is to refuse it on a user.
+    grants:
+      - notification:message:send

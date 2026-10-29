@@ -31,3 +31,52 @@ roles:
   - name: inventory-equipment-manager
     description: Store staff (Facility / Inventory Staff, equipment manager, lab in-charge). Runs the catalogue, stores and every loan.
     grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
+  # Profile role (platform/identity/config/profiles). A token carries this, not the module roles above, so the
+  # Facility / Inventory Staff dashboard (#331) needs it granted here: the same grants as inventory-equipment-manager.
+  - name: facility-staff
+    description: The Facility / Inventory Staff profile role. Same grants as inventory-equipment-manager.
+    grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards; follow-up
+  # to #288, part of #331). Each gets the grants of the module role its PRD names for it.
+  - name: actor
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: artist
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: dancer
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: filmmaker
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: hospitality-trainee
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: musician
+    description: "Profile role, learner and performer roles: borrow items and see their own loans (my-loans). Same grants as inventory-equipment-borrower."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request]
+  - name: equipment-manager
+    description: "Profile role, store staff named in the PRD: run the stores and every loan (low-stock, overdue-loans). Same grants as inventory-equipment-manager."
+    grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
+  - name: lab-in-charge
+    description: "Profile role, store staff named in the PRD: run the stores and every loan (low-stock, overdue-loans). Same grants as inventory-equipment-manager."
+    grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
+  - name: chef-instructor
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
+  - name: ensemble-director
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
+  - name: exhibition-manager
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
+  - name: farm-supervisor
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
+  - name: production-manager
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
+  - name: stage-manager
+    description: "Profile role, leads who look after a store (PRD widgets table): approve loans and read stock levels (low-stock); stock:read is added read-only, without managing stock. Same grants as inventory-equipment-approver plus inventory-equipment:stock:read."
+    grants: [inventory-equipment:item:read, inventory-equipment:loan:read, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:stock:read]
