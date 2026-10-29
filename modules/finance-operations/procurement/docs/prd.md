@@ -41,8 +41,10 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 - Preparer and approver are different people for indents, orders and invoices.
 - Only approved vendors receive tenders and orders.
 - Nothing is deleted: indents are rejected, orders cancelled, invoices rejected, each with a reason.
-- Bank account numbers are returned masked. No encryption library is on the approved stack yet, so only the last four
-  digits and the IFSC are kept; the full number is never stored (decided on #129).
+- Vendor bank details: only the last four digits of the account number and the IFSC are kept. The full account number
+  is never stored, logged, audited or returned. Payments to vendors are made outside Education OS (see Out of scope),
+  so the system does not need the full number. This replaces the earlier rule that account numbers are stored
+  encrypted (decided by the module owner on #335; this change needs the reviewer's approval).
 - Every table carries `organisation_id` with row-level security; every event carries `organisation_id`.
 - Every state change writes an audit record through `packages/sdk`.
 - Money is exact decimal; no floating point.
