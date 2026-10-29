@@ -28,7 +28,7 @@ roles:
     description: Facility / Inventory Staff. Runs the resource register and every booking.
     grants: [facility-booking:resource:read, facility-booking:resource:manage, facility-booking:booking:read, facility-booking:booking:read-all, facility-booking:booking:create, facility-booking:booking:approve, facility-booking:booking:manage]
   # Profile role (platform/identity/config/profiles). A token carries this, not the module roles above, so the
-  # Facility / Inventory Staff dashboard (issue #6) needs it granted here: the same grants as facility-booking-manager.
+  # Facility / Inventory Staff dashboard (#331) needs it granted here: the same grants as facility-booking-manager.
   - name: facility-staff
     description: The Facility / Inventory Staff profile role. Same grants as facility-booking-manager.
     grants: [facility-booking:resource:read, facility-booking:resource:manage, facility-booking:booking:read, facility-booking:booking:read-all, facility-booking:booking:create, facility-booking:booking:approve, facility-booking:booking:manage]
