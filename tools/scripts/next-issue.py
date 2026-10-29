@@ -164,13 +164,12 @@ def main() -> int:
         targets = [by_handle[handle]]
         reason = f"PR #{a.pr} ({pr['title']}) merged"
     elif a.event == "closed":
-        closed = json.loads(
-            gh("issue", "view", str(a.issue), "-R", REPO, "--json", "number,title,assignees,stateReason")
-        )
-        if closed.get("stateReason") == "NOT_PLANNED":
+        # REST, not `gh issue view --json stateReason`: older gh releases do not know that field
+        closed = json.loads(gh("api", f"repos/{REPO}/issues/{a.issue}"))
+        if closed.get("state_reason") == "not_planned":
             print(f"#{a.issue} closed as not planned; nothing assigned")
             return 0
-        handles = [x["login"] for x in closed["assignees"]] or []
+        handles = [x["login"] for x in closed.get("assignees") or []]
         if not handles:
             print(f"#{a.issue} had no assignee; nothing to hand on")
             return 0
