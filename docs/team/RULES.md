@@ -25,7 +25,9 @@ Bootstrap, jQuery, Django, Flask, requests.
 may bypass review in an emergency; nobody else can. Every PR needs
 
 - every required check green: `api / test`, `web / build`, `governance / rules`;
-- one approving review from a code owner of every file touched (`.github/CODEOWNERS`);
+- one approving review from a code owner of every file touched (`.github/CODEOWNERS`). Every path has an
+  owner and a backup; the backup approves the owner's PRs, so nobody waits for the lead. The lead is a
+  code owner only of platform core, `packages/`, `docs/architecture/` and `docs/team/`;
 - every review conversation resolved;
 - the PR template filled in: module, task link, time spent.
 
@@ -78,10 +80,12 @@ https://github.com/faizanrooman/Education_OS/blob/team-status/STATUS.md.
 - Link the issue in the PR (`Closes #123`) so it closes on merge. Unlinked PRs are sent back.
 - Put `Time spent: <hours>h` in the PR body. It feeds the team status report.
 
-## 7. Reviews within one working day
+## 7. Reviews within four working hours
 
-A code owner reviews within one working day or says when they will. The author addresses every
-comment or explains why not. Nobody merges their own PR without a review.
+A code owner (owner or backup, see `docs/team/ownership.md`) reviews within four working hours or
+says in the PR when they will. The author addresses every comment the same day or explains why not.
+Nobody merges their own PR; the reviewer merges. A contract change that another module consumes has
+the consumer's owner as a second reviewer; nothing else needs two approvals.
 
 ## 8. Definition of done, per task
 
@@ -117,3 +121,11 @@ the same rules automatically from `.claude/CLAUDE.md`, `.github/copilot-instruct
 `.cursor/rules/repository-rules.mdc`, and a Claude Code hook refuses to write files at the top level.
 Using any other assistant? Give it `docs/team/RULES.md` first. Each person's starter prompt for
 Claude Code, with their owned paths and conflict rules, is in [prompts/](prompts/).
+
+## 12. Sprint v1.0: 29 October to 6 November 2026
+
+The whole board ships on 6 November. The plan, the dates, the reviewer pairs and every person's
+batches are one page: [sprint-v1.0.md](sprint-v1.0.md). During the sprint: tier 1 (the 13 common
+dashboards and their modules) is done by Mon 3 Nov, tier 2 (every academy dashboard) by Wed 5 Nov,
+and Thu 6 Nov is release day with no new code. Standup at 10:00 on the board, every slice a PR
+before 17:00, reviews within four working hours, and nobody waits for the lead.

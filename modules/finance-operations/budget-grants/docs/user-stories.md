@@ -21,6 +21,7 @@ Roles come from `contracts/permissions.yaml`. Each story names the contract oper
 | M1 | As management I approve or return a budget someone else prepared. | `POST /budgets/{id}/decision` |
 | M2 | As management I approve or reject a reappropriation someone else requested. | `POST /reappropriations/{id}/decision` |
 | M3 | As management I certify a utilisation certificate someone else prepared. | `POST /utilisation-certificates/{id}/decision` |
+| M4 | As management I approve procurement indents, so I can check that the budget or grant line can cover the estimated cost. | `GET /availability` |
 
 ## Research office
 
