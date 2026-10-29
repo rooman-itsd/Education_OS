@@ -1,6 +1,6 @@
 # event-bus — PRD
 
-Owner: Himanshu (@himanshu-rooman) · Tier: core · Status: planned
+Owner: Himanshu (@himanshu-rooman) · Tier: core · Status: in progress
 
 ## What this is
 
