@@ -51,10 +51,33 @@ How an organisation goes live (ADR-0005; registration itself is `platform/tenanc
 4. **Sign in.** Only then can the organisation admin sign in at `/app`; before approval sign-in is
    refused. Each organisation has its own admin; there is one super admin for the whole platform.
 
-Not yet built (follow-ups): the approval email (`platform/notification` with the SMTP adapter in
-`integrations/messaging-providers`), and the CMS pages and announcements of this module's contract.
+Not yet built (follow-up): the approval email (`platform/notification` with the SMTP adapter in
+`integrations/messaging-providers`).
 
-Tests: `pnpm --filter @eos/web-portal-cms test` (Vitest, jsdom, Testing Library).
+## CMS: pages and announcements (issue #106)
+
+Each organisation's editors (`web-portal-cms-editor`, `org-admin`) write pages and announcements as drafts and
+publish them; every signed-in member of the organisation reads what is published (announcements only inside their
+display window) through the implicit `member` role. Drafts and out-of-window announcements answer 404 to readers.
+Bodies are plain text and are never rendered as HTML. The decisions behind this are in
+[docs/prd.md](docs/prd.md) §11.
+
+| Widget | Dashboard | Kind | Permission | Data |
+|---|---|---|---|---|
+| `web-portal-cms.announcements` | Applicant | list | `web-portal-cms:announcement:read` | `GET /announcements` |
+
+**What the host must provide:** registration in both `modules.enabled.yaml` files (done). Anonymous reading of an
+organisation's content needs the gateway to let `/api/v1/web-portal-cms/public/{org_slug}/*` through, the same
+change already requested for admissions; until then reading needs a signed-in member.
+
+## Run and test
+```
+.venv\Scripts\python.exe -m pytest modules/student-lifecycle/web-portal-cms/backend/tests
+pnpm --filter @eos/web-portal-cms test
+pnpm --filter @eos/web-portal-cms typecheck
+cd modules/student-lifecycle/web-portal-cms/db && alembic upgrade head    # uses EOS_DATABASE_URL
+pnpm --filter e2e exec playwright test dashboards/applicant.spec.ts      # the Applicant journey
+```
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
@@ -70,8 +93,10 @@ See `module.yaml`. This module must not import code from any other module under 
 | `docs/` | PRD, features reference, user stories, screens |
 | `contracts/` | OpenAPI specs, events, permissions |
 | `frontend/src/public/` | Public site shell (`PublicSite.tsx`), pages (`HomePage`, `FeaturesPage`, `SignUpPage`), components, and styles (`public.css`) |
-| `frontend/src/api/` | Public API client fetching billing plans and institution types |
-| `backend/` | Backend scaffold (business logic delegated to core platform services) |
+| `frontend/src/api/` | `public-client.ts` (billing plans, tenancy registration) and `client.ts` (the CMS, for widgets) |
+| `frontend/src/widgets/` | `web-portal-cms.announcements` |
+| `backend/` | The CMS: domain rules, models, service and routes (`eos_web_portal_cms`) with tests |
+| `db/` | Alembic chain (`web_portal_cms_alembic_version`): pages, announcements, audit, each with row-level security |
 
 ---
 

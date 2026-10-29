@@ -14,5 +14,6 @@ modules:
   - student-lifecycle/student-information
   - support/helpdesk
   - finance-operations/budget-grants
+  - student-lifecycle/web-portal-cms
 integrations: []
 platform: [identity, tenancy, billing]
