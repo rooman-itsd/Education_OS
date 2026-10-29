@@ -3,7 +3,7 @@
 The enforced rules are in [docs/team/RULES.md](../docs/team/RULES.md). This file is the how-to.
 
 ## Branches
-- `main` — always deployable. Protected. PR + 1 owner approval required.
+- `main` — always deployable. Protected. PR + 1 approval from a code owner of the files (owner or backup, `.github/CODEOWNERS`); the lead is needed only for platform core, packages and architecture docs.
 - `feat/<module>/<short-desc>` — feature work inside one module.
 - `platform/<service>/<short-desc>` — platform work.
 - `contract/<module>/<short-desc>` — contract changes. Reviewed by the owner of every consuming module.

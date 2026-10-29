@@ -7,6 +7,7 @@ again where every request's permissions are computed (api/deps.current_principal
 
 import uuid
 
+import jwt
 from eos_core import config as core_config
 from eos_core.db import SessionLocal
 from eos_core.security import create_token, hash_password
@@ -104,3 +105,29 @@ def test_a_service_role_already_on_a_row_or_in_a_token_grants_nothing(client, mo
     # /auth/me shows the stored row, which still lists the legacy role; what matters is that it grants nothing.
     assert "service" in me["roles"] and PROBE not in me["permissions"]
     assert client.post("/api/v1/identity/users", json=_new_user(["student"]), headers=token).status_code == 403
+
+
+def test_login_never_mints_a_token_carrying_the_service_role(client):
+    """Feature modules compute permissions from the token's roles claim (their api/deps.py call permissions_for
+    on it, not current_principal), so identity's request-time filter does not reach them. The claim itself must
+    be clean: a legacy row still listing `service` logs in with a token that does not carry it."""
+    a = register_and_login(client, slug="roles-token")
+    org = a["org"]["id"]
+    with organisation_scope(org), SessionLocal() as db:
+        db.add(
+            User(
+                organisation_id=org,
+                email="token@roles.example.com",
+                name="T",
+                password_hash=hash_password("Passw0rd!x"),
+                roles=["student", "service"],
+            )
+        )
+        db.commit()
+    r = client.post(
+        "/api/v1/identity/auth/login",
+        json={"email": "token@roles.example.com", "password": "Passw0rd!x", "organisation_slug": "roles-token"},
+    )
+    assert r.status_code == 200, r.text
+    claims = jwt.decode(r.json()["token"], options={"verify_signature": False})
+    assert claims["roles"] == ["student"]
