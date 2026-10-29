@@ -1,5 +1,7 @@
 # Kickoff tasks, by person
 
+> Superseded on 29 Oct 2026 by the v1.0 sprint: [sprint-v1.0.md](sprint-v1.0.md) has every person's batches, dates and reviewer. This page stays as the record of weeks 1 and 2.
+
 Kickoff 7 Oct 2026. Week 1 is 7 to 10 Oct. Your tasks are GitHub issues on the board
 (https://github.com/users/faizanrooman/projects/1): one "Week 1: <name>" issue and your dashboards. Everyone's week 1 ends with `docs/prd.md` and reviewed
 `contracts/*.yaml` for every module they own. Code starts in week 2. The live tracker with tick

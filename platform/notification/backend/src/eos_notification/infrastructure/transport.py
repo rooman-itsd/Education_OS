@@ -1,8 +1,8 @@
 """How a rendered message leaves the process.
 
-Two transports. `memory` sends nothing and is the test and dev transport (it appends to eos_core.notify.sent,
-which eos_testing reads); it is refused outside dev mode. `adapter` hands the message to an implementation of
-the OutboundMessaging port (integrations/messaging-providers/contracts/port.yaml).
+Two transports. `memory` sends nothing and is the test and dev transport (it appends to this module's `sent`
+list); it is refused outside dev mode. `adapter` hands the message to an implementation of the OutboundMessaging
+port (integrations/messaging-providers/contracts/port.yaml).
 
 This module NEVER imports an adapter package. The port is the contract, and which implementation serves it is
 configuration: an adapter advertises itself on the `eos.outbound_messaging` entry-point group and notification
@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from importlib import metadata
 from typing import Protocol
 
-from eos_core import notify
 from eos_core.settings import settings
 
 from ..domain.errors import NotificationError
@@ -46,8 +45,8 @@ ERROR_CODES = frozenset(
 @dataclass
 class OutboundMessage:
     """The OutboundMessaging port's `send` input. `metadata` is echoed back on provider receipts, so it must never
-    carry a secret. `dev_secrets` is NOT part of the port: only the in-process memory transport reads it (so
-    eos_testing can read a verification token); an adapter must never forward it. The body, address and
+    carry a secret. `dev_secrets` is NOT part of the port: only the in-process memory transport reads it (so a
+    dev or test reader can recover a verification token); an adapter must never forward it. The body, address and
     dev_secrets are kept out of repr() so a stray log line cannot leak them.
 
     AdapterTransport below maps these fields one by one and never serialises this object whole (asdict would
@@ -81,13 +80,20 @@ class Transport(Protocol):
     def send(self, message: OutboundMessage) -> SendResult: ...
 
 
+# What the memory transport "sent", newest last, in the same record shape the legacy eos_core.notify.sent used
+# (to, subject, body, organisation_id, message_id, plus metadata and any dev secret), so a dev-mode reader keeps
+# working. It lives here rather than in eos_core.notify so that legacy stub can be deleted. Mutated in place and
+# never rebound, so `from ...transport import sent` stays the live list.
+sent: list[dict] = []
+
+
 class MemoryTransport:
     """Keeps the message in process memory and sends nothing. The rendered body, including any secret, sits in
-    eos_core.notify.sent so eos_testing can read a verification token: acceptable only because this transport
-    is refused outside dev mode (see get_transport)."""
+    this module's `sent` list so a dev or test reader can recover a verification token: acceptable only because
+    this transport is refused outside dev mode (see get_transport)."""
 
     def send(self, message: OutboundMessage) -> SendResult:
-        notify.sent.append(
+        sent.append(
             {
                 "to": message.to,
                 "subject": message.subject,
@@ -98,8 +104,8 @@ class MemoryTransport:
                 **message.dev_secrets,
             }
         )
-        if len(notify.sent) > 200:
-            del notify.sent[:100]
+        if len(sent) > 200:
+            del sent[:100]
         log.info("memory transport: message %s kept in process, not delivered", message.message_id)
         return SendResult(accepted=True, provider_message_id=f"memory:{message.message_id}")
 
