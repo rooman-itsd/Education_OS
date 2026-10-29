@@ -32,7 +32,7 @@ roles:
     description: Store staff (Facility / Inventory Staff, equipment manager, lab in-charge). Runs the catalogue, stores and every loan.
     grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
   # Profile role (platform/identity/config/profiles). A token carries this, not the module roles above, so the
-  # Facility / Inventory Staff dashboard (issue #6) needs it granted here: the same grants as inventory-equipment-manager.
+  # Facility / Inventory Staff dashboard (#331) needs it granted here: the same grants as inventory-equipment-manager.
   - name: facility-staff
     description: The Facility / Inventory Staff profile role. Same grants as inventory-equipment-manager.
     grants: [inventory-equipment:item:read, inventory-equipment:item:manage, inventory-equipment:stock:read, inventory-equipment:stock:manage, inventory-equipment:loan:read, inventory-equipment:loan:read-all, inventory-equipment:loan:request, inventory-equipment:loan:approve, inventory-equipment:loan:manage]
