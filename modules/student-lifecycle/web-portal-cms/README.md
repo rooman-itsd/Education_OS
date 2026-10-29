@@ -2,7 +2,7 @@
 
 **Domain:** student-lifecycle  
 **Kind:** feature  
-**Status:** implemented (M1 Foundation)  
+**Status:** in progress (public site and registration built; CMS for issue #106)  
 **Owner:** Praveen (@praveen-rooman)
 
 Public website, CMS marketing pages, announcements, and the organisation sign-up & approval experience.
@@ -10,8 +10,10 @@ Public website, CMS marketing pages, announcements, and the organisation sign-up
 ---
 
 ## Scope
-The organisation's public website: CMS pages, announcements/notices, and the organisation
-sign-up page. The sign-up page composes `platform/billing`'s existing `GET /plans` and
+Two parts: the platform's public website with the organisation sign-up pages, and each organisation's CMS
+(pages and announcements written by its editors and read by its signed-in members; the Applicant dashboard's
+`web-portal-cms.announcements` widget). Reading the CMS needs a signed-in member of the organisation; anonymous
+reading is a later step (docs/prd.md §11, decision D1). The sign-up page composes `platform/billing`'s existing `GET /plans` and
 `platform/tenancy`'s existing `GET /academy-types` / `POST /register` / `POST /register/verify`
 directly — this module does not duplicate registration or plan logic, and never creates an
 organisation, a plan, a Person/Student record, or an admissions application.
