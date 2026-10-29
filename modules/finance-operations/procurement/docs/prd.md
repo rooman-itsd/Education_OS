@@ -16,7 +16,7 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 |---|---|---|
 | Finance staff | Manage vendors, run quotations and tenders, prepare orders, record and pay invoices | `procurement.purchase-orders-pending` (`GET /reports/purchase-orders-pending`) |
 | Management | Approve indents, orders and invoices | — |
-| Department admin / HoD | Approve their department's indents | — |
+| Department admin / HoD | Approve their department's indents (department scoping is not enforced until identity issues a department claim; until then they see and decide every indent) | — |
 | Facility / inventory staff | Raise indents, record goods received | — |
 | Faculty, research office | Raise indents against their budget or grant line and follow them | — |
 
@@ -53,7 +53,7 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 
 | Direction | With | How |
 |---|---|---|
-| Calls | budget-grants | `GET /lines`; `GET /availability` at indent approval and, for the order total, at purchase order approval; `GET /expenditures` (commitments) at purchase order approval; all with the caller's token. Management has `budget-grants:availability:read` (#129) and `budget-grants:budget:read`. |
+| Calls | budget-grants | `GET /lines`; `GET /availability` at indent approval and, for the order total, at purchase order approval; `GET /expenditures` (commitments) at purchase order approval; all with the caller's token. Management has `budget-grants:availability:read` (#292) and `budget-grants:budget:read`. |
 | Publishes | budget-grants | `purchase-order.issued`, `purchase-order.cancelled`, `vendor-invoice.paid` |
 | Publishes | inventory-equipment, asset-management | `goods-receipt.recorded` |
 | Publishes | notification | indent, tender and order events |
@@ -68,14 +68,14 @@ line in budget-grants. Contract: `contracts/openapi.yaml`, `events.yaml`, `permi
 ## Open questions (for review)
 
 1. Purchase limits per method differ by institution and funding source. They are configuration with no default; to be
-   confirmed with each institution. Decided on #129: until both limits are set, indent approval is refused with 422
+   confirmed with each institution. Decided (#335 (decisions comment)): until both limits are set, indent approval is refused with 422
    `purchase_limits_not_configured`; no method is guessed.
 2. Should facilities consume `goods-receipt.recorded` to add stock or assets? To agree with the facilities owner (Ashritha).
 3. TDS on vendor payments is recorded as an amount; it is not computed.
-4. Decided on #129: a purchase order is issued only if its total is covered by its line. budget-grants reserves
+4. Decided (#335 (decisions comment)): a purchase order is issued only if its total is covered by its line. budget-grants reserves
    nothing (#221), so procurement serialises approvals per line and also counts its issued orders that budget-grants
    has not recorded yet. A failed check is 422 `insufficient_budget` and leaves the order submitted.
-5. Decided on #129: business dates follow the Indian business calendar; "today" is the date in Asia/Kolkata (IST).
+5. Decided (#335 (decisions comment)): business dates follow the Indian business calendar; "today" is the date in Asia/Kolkata (IST).
    Timestamps stay UTC.
-6. Decided on #129: a quote whose `valid_until` is before today (IST) has expired and is not awarded (409
+6. Decided (#335 (decisions comment)): a quote whose `valid_until` is before today (IST) has expired and is not awarded (409
    `quote_expired`); it is still valid on its `valid_until` date.
