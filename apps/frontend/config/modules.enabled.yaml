@@ -17,6 +17,7 @@ modules:
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
   - student-lifecycle/admissions
+  - student-lifecycle/web-portal-cms
   - support/helpdesk
 platform:
   - billing

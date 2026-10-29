@@ -24,10 +24,10 @@ jobs:
           cache: pip
       - run: tools/scripts/py-setup.sh
       - name: Tests on SQLite
-        run: .venv/bin/python -m pytest apps/backend packages/core packages/testing platform/identity/backend platform/tenancy/backend platform/billing/backend -q
-      # Every module and integration apps/backend/config/modules.enabled.yaml enables, one suite at a time
-      # (each builds its own app and database).
-      - name: Enabled modules' tests on SQLite
+        run: .venv/bin/python -m pytest apps/backend packages/core packages/testing -q
+      # Every platform service, module and integration apps/backend/config/modules.enabled.yaml enables, one
+      # suite at a time (each builds its own app and database).
+      - name: Enabled entries' tests on SQLite
         run: |
           for t in $(.venv/bin/python tools/scripts/enabled-modules.py tests); do
             echo "::group::$t"; .venv/bin/python -m pytest "$t" -q; echo "::endgroup::"
