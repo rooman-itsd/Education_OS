@@ -96,7 +96,8 @@ def main(argv: list[str] | None = None) -> int:
     elif a.what == "chains":
         print("\n".join(rel(e.chain, a.root) for e in found if e.chain))
     elif a.what == "tests":
-        print("\n".join(rel(e.tests, a.root) for e in features if e.tests))
+        # every enabled entry with a suite, platform services included, so CI runs what the host mounts
+        print("\n".join(rel(e.tests, a.root) for e in found if e.tests))
     else:
         print("\n".join(e.prefix for e in features))
     return 0

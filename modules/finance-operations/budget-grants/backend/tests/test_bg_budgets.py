@@ -104,6 +104,14 @@ def test_availability_and_lines_for_procurement(client, org):
     assert client.get(f"{BASE}/lines", headers=org.scholar).status_code == 403
 
 
+def test_management_checks_availability_when_deciding_indents(client, org):
+    """procurement checks the line with the approver's token when management approves an indent (M4)."""
+    h = head(client, org, name="Equipment")
+    line = approved_budget(client, org, {h["id"]: "1000"})["lines"][0]["id"]
+    r = client.get(f"{BASE}/availability?line_id={line}&amount=1000", headers=org.manager)
+    assert r.status_code == 200 and r.json()["sufficient"] is True
+
+
 def test_draft_lines_are_not_open(client, org):
     h = head(client, org)
     b = client.post(

@@ -2,20 +2,20 @@
 
 One prompt per person. Paste yours as the first message in a new Claude Code chat (VS Code extension) opened on your clone of this repository. Claude also reads `.claude/CLAUDE.md` automatically.
 
-Before the first session: `gh auth login`, `pnpm install`, `tools/scripts/py-setup.sh`.
+Before the first session: `gh auth login`, `pnpm install`, `tools/scripts/py-setup.sh`. During the v1.0 sprint your one open issue is your `[Sxx]` sprint issue; work its batches in order (tier 1 first) and read [../sprint-v1.0.md](../sprint-v1.0.md).
 
-| Person | Prompt | First issue |
+| Person | Prompt | Sprint issue (29 Oct to 6 Nov 2026) |
 |---|---|---|
-| Faizan (@faizanrooman) | [faizan.md](faizan.md) | #60 |
-| Himanshu (@himanshu-rooman) | [himanshu.md](himanshu.md) | #61 |
-| Praveen (@praveen-rooman) | [praveen.md](praveen.md) | #62 |
-| Shivani (@shivanisinghrooman-09) | [shivani.md](shivani.md) | #63 |
-| Akshata (@akshatatrathodrooman) | [akshata.md](akshata.md) | #64 |
-| Ashritha (@Ashritharooman) | [ashritha.md](ashritha.md) | #65 |
-| Gokula Lakshmi (@gokulalakshmirooman-source) | [gokula-lakshmi.md](gokula-lakshmi.md) | #66 |
-| Tejaswini (@tejaswini-rooman) | [tejaswini.md](tejaswini.md) | #67 |
-| Madhumita (@madhumitha-rooman) | [madhumita.md](madhumita.md) | #68 |
-| Srujan (@srujanrooman) | [srujan.md](srujan.md) | #69 |
+| Faizan (@faizanrooman) | [faizan.md](faizan.md) | `[S01] Sprint v1.0: Faizan` |
+| Himanshu (@himanshu-rooman) | [himanshu.md](himanshu.md) | `[S02] Sprint v1.0: Himanshu` |
+| Praveen (@praveen-rooman) | [praveen.md](praveen.md) | `[S03] Sprint v1.0: Praveen` |
+| Shivani (@shivanisinghrooman-09) | [shivani.md](shivani.md) | `[S04] Sprint v1.0: Shivani` |
+| Akshata (@akshatatrathodrooman) | [akshata.md](akshata.md) | `[S05] Sprint v1.0: Akshata` |
+| Ashritha (@Ashritharooman) | [ashritha.md](ashritha.md) | `[S06] Sprint v1.0: Ashritha` |
+| Gokula Lakshmi (@gokulalakshmirooman-source) | [gokula-lakshmi.md](gokula-lakshmi.md) | `[S07] Sprint v1.0: Gokula Lakshmi` |
+| Tejaswini (@tejaswini-rooman) | [tejaswini.md](tejaswini.md) | `[S08] Sprint v1.0: Tejaswini` |
+| Madhumita (@madhumitha-rooman) | [madhumita.md](madhumita.md) | `[S09] Sprint v1.0: Madhumita` |
+| Srujan (@srujanrooman) | [srujan.md](srujan.md) | `[S10] Sprint v1.0: Srujan` |
 
 ## Resuming in a later session
 
