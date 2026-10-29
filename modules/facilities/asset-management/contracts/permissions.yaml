@@ -34,7 +34,7 @@ roles:
     description: Finance Staff. Depreciation and disposal decisions.
     grants: [asset-management:asset:read, asset-management:asset:read-all, asset-management:depreciation:read, asset-management:depreciation:manage, asset-management:disposal:approve]
   # Profile role (platform/identity/config/profiles). A token carries this, not the module roles above, so the
-  # Facility / Inventory Staff dashboard (issue #6) needs it granted here: the same grants as asset-management-manager.
+  # Facility / Inventory Staff dashboard (#331) needs it granted here: the same grants as asset-management-manager.
   - name: facility-staff
     description: The Facility / Inventory Staff profile role. Same grants as asset-management-manager.
     grants: [asset-management:asset:read, asset-management:asset:read-all, asset-management:asset:manage, asset-management:verification:perform, asset-management:verification:manage, asset-management:depreciation:read, asset-management:disposal:request]
