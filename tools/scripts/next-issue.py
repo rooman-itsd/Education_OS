@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-REPO = "faizanrooman/Education_OS"
+REPO = "rooman-itsd/Education_OS"
 # Queue order per person. Lower first. Within a rank, lowest issue number first (issues were created in dependency order).
 WAVE_ORDER = {
     "week-1": 0,
@@ -74,10 +74,22 @@ def open_issues() -> list[dict]:
 
 
 SEQ_RE = re.compile(r"^\[(\d+)\]")
+# Sprint issues: "[S03]" is a person's sprint issue (stays open for the whole sprint, never counts as busy),
+# "[S03.2]" its second batch. Batches are handed out one at a time, in order, when the previous one closes.
+SPRINT_RE = re.compile(r"^\[S(\d+)(?:\.(\d+))?\]")
+
+
+def is_sprint_parent(it: dict) -> bool:
+    m = SPRINT_RE.match(it["title"])
+    return bool(m) and m.group(2) is None
 
 
 def wave_rank(it: dict) -> tuple[int, int]:
-    """The global order from tools/scripts/order-issues.py ("[NNN]" title prefix) wins; labels are the fallback."""
+    """Sprint batches first, in batch order; then the global order from tools/scripts/order-issues.py ("[NNN]"
+    title prefix); labels are the fallback."""
+    sm = SPRINT_RE.match(it["title"])
+    if sm and sm.group(2):
+        return (-10_000 + int(sm.group(1)) * 100 + int(sm.group(2)), it["number"])
     m = SEQ_RE.match(it["title"])
     if m:
         return (int(m.group(1)), it["number"])
@@ -92,7 +104,8 @@ def queue_for(name: str, issues: list[dict]) -> list[dict]:
 
 
 def busy(handle: str, issues: list[dict]) -> list[dict]:
-    return [it for it in issues if handle in it["assignees"]]
+    """Open issues assigned to the person, except their sprint issue, which is the container for the batches."""
+    return [it for it in issues if handle in it["assignees"] and not is_sprint_parent(it)]
 
 
 def assign(it: dict, member: dict, reason: str, dry: bool) -> None:
@@ -151,13 +164,12 @@ def main() -> int:
         targets = [by_handle[handle]]
         reason = f"PR #{a.pr} ({pr['title']}) merged"
     elif a.event == "closed":
-        closed = json.loads(
-            gh("issue", "view", str(a.issue), "-R", REPO, "--json", "number,title,assignees,stateReason")
-        )
-        if closed.get("stateReason") == "NOT_PLANNED":
+        # REST, not `gh issue view --json stateReason`: older gh releases do not know that field
+        closed = json.loads(gh("api", f"repos/{REPO}/issues/{a.issue}"))
+        if closed.get("state_reason") == "not_planned":
             print(f"#{a.issue} closed as not planned; nothing assigned")
             return 0
-        handles = [x["login"] for x in closed["assignees"]] or []
+        handles = [x["login"] for x in closed.get("assignees") or []]
         if not handles:
             print(f"#{a.issue} had no assignee; nothing to hand on")
             return 0
