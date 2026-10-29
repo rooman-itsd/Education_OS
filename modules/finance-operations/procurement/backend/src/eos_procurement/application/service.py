@@ -1061,13 +1061,28 @@ def submit_order(db: Session, actor: Actor, po_id: str) -> dict:
     return po_dict(db, po)
 
 
+PREPARING_ACTIONS = ("purchase_order.created", "purchase_order.updated", "purchase_order.submitted")
+
+
+def _prepared_order(db: Session, po: PurchaseOrder, user_id: str) -> bool:
+    """Whether this user created, edited or submitted the order at any point (the audit trail), not only last:
+    whoever submits becomes prepared_by, which must not let an earlier preparer approve."""
+    q = _q(db, AuditEntry).where(
+        AuditEntry.entity == "purchase_order",
+        AuditEntry.entity_id == po.id,
+        AuditEntry.actor == user_id,
+        AuditEntry.action.in_(PREPARING_ACTIONS),
+    )
+    return db.scalar(q) is not None
+
+
 def decide_order(db: Session, actor: Actor, po_id: str, decision: str, note: str | None) -> dict:
     if decision not in ("approved", "returned"):
         raise invalid("invalid_decision", "an order is approved or returned", "decision")
     po = _get(db, PurchaseOrder, po_id, "purchase order", lock=True)
     if po.status != "submitted":
         raise conflict("not_submitted", "the order is not submitted")
-    if po.prepared_by == actor.user_id:
+    if po.prepared_by == actor.user_id or _prepared_order(db, po, actor.user_id):
         raise forbidden("you cannot approve an order you prepared")
     po.decision_note = _text(note) or None
     indent_ids = [x.indent_id for x in db.scalars(_q(db, OrderIndent).where(OrderIndent.purchase_order_id == po.id))]

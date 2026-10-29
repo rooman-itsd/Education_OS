@@ -169,3 +169,20 @@ def test_reopening_indents_after_a_cancelled_order_is_audited_as_such(client, or
         q = select(AuditEntry.action).where(AuditEntry.entity_id == indent_id).order_by(AuditEntry.occurred_at)
         actions = list(db.scalars(q))
     assert actions.count("indent.approved") == 1 and "indent.reopened" in actions
+
+
+def test_an_earlier_preparer_cannot_approve_after_someone_else_submits(client, org):
+    """A creates the order, B submits it (prepared_by becomes B): A still may not approve it."""
+    from eos_core.security import create_token
+    from pc_support import TODAY, approved_indent, auth, item, vendor
+
+    dual = auth(create_token(user_id="dual-" + org.id, organisation_id=org.id, roles=["finance-staff", "management"]))
+    i = approved_indent(client, org)
+    v = vendor(client, org)
+    body = {"vendor_id": v["id"], "indent_ids": [i["id"]], "items": [item()], "delivery_by": TODAY}
+    po = client.post(f"{BASE}/purchase-orders", json=body, headers=dual).json()
+    assert client.post(f"{BASE}/purchase-orders/{po['id']}/submit", headers=org.staff2).status_code == 200
+    r = client.post(f"{BASE}/purchase-orders/{po['id']}/decision", json={"decision": "approved"}, headers=dual)
+    assert r.status_code == 403, r.text
+    r = client.post(f"{BASE}/purchase-orders/{po['id']}/decision", json={"decision": "approved"}, headers=org.manager)
+    assert r.status_code == 200, r.text
