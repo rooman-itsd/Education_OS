@@ -32,3 +32,80 @@ roles:
   - name: facility-staff
     description: The Facility / Inventory Staff profile role. Same grants as facility-booking-manager.
     grants: [facility-booking:resource:read, facility-booking:resource:manage, facility-booking:booking:read, facility-booking:booking:read-all, facility-booking:booking:create, facility-booking:booking:approve, facility-booking:booking:manage]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards; follow-up
+  # to #288, part of #331). Each gets the grants of the module role its PRD names for it.
+  - name: actor
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: artist
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: dancer
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: designer
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: engineering-student
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: field-trainee
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: filmmaker
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: hospitality-trainee
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: medical-student
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: musician
+    description: "Profile role, learner and performer roles: book a resource and see their own bookings (my-bookings). Same grants as facility-booking-user."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create]
+  - name: chef-instructor
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: choreographer
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: clinical-supervisor
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: coach
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: director
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: equipment-manager
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: exhibition-manager
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: farm-supervisor
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: hospital-coordinator
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: lab-in-charge
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: medical-staff
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: music-teacher
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: production-manager
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: stage-manager
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
+  - name: studio-instructor
+    description: "Profile role, instructor and lead roles: approve bookings of the resources they look after (bookings-today, bookings). Same grants as facility-booking-approver."
+    grants: [facility-booking:resource:read, facility-booking:booking:read, facility-booking:booking:create, facility-booking:booking:approve]
