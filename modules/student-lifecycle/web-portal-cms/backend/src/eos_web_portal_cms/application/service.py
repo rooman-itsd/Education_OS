@@ -62,9 +62,9 @@ def _check(rule, *args):
         raise CmsError(v.code, v.message) from v
 
 
-def _status_allowed(actor: Actor, status: str, manage_key: str) -> None:
+def _status_allowed(actor: Actor, status: str, manage_key: str, *, windowed: bool = True) -> None:
     """Asking to list unpublished content without the manage key is a 403: the filter itself is not allowed."""
-    if rules.needs_manage(status) and not actor.can(manage_key):
+    if rules.needs_manage(status, windowed=windowed) and not actor.can(manage_key):
         raise CmsError("forbidden", f"status={status} needs {manage_key}")
 
 
@@ -108,7 +108,7 @@ def _get_page(db: Session, actor: Actor, slug: str) -> Page:
 def list_pages(
     db: Session, actor: Actor, *, type: str | None = None, status: str = e.VISIBLE, page: int = 1, page_size: int = 50
 ) -> dict:
-    _status_allowed(actor, status, PAGE_MANAGE)
+    _status_allowed(actor, status, PAGE_MANAGE, windowed=False)
     query = db.query(Page).filter(Page.organisation_id == actor.organisation_id)
     if status in (e.VISIBLE, e.PUBLISHED):
         query = query.filter(Page.published.is_(True))

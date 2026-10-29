@@ -109,9 +109,12 @@ def test_announcement_lists(db, editor):
 
 
 def test_readers_cannot_ask_for_unpublished_lists(db, reader):
-    for status in ("draft", "published", "all"):
+    for status in ("draft", "all"):
         assert refused(svc.list_pages, db, reader, status=status) == (403, "forbidden")
+    for status in ("draft", "published", "all"):
         assert refused(svc.list_announcements, db, reader, status=status) == (403, "forbidden")
+    # For pages, `published` is exactly what a reader sees by default (contract: GET /pages).
+    assert svc.list_pages(db, reader, status="published")["items"] == []
 
 
 def test_another_organisation_gets_not_found(db, editor, other_org):

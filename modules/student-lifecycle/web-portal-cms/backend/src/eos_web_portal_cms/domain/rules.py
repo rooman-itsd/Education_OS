@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from .enums import VISIBLE
+from .enums import ALL, DRAFT, VISIBLE
 
 
 class RuleViolationError(Exception):
@@ -38,6 +38,9 @@ def check_publish_change(published_now: bool, target: bool) -> None:
         raise RuleViolationError("not_published", "It is not published")
 
 
-def needs_manage(status: str) -> bool:
-    """Every status filter except `visible` shows unpublished or out-of-window items."""
-    return status != VISIBLE
+def needs_manage(status: str, *, windowed: bool = True) -> bool:
+    """Every status filter that shows unpublished or out-of-window items. For pages, `published` is what every
+    reader already sees, so only `draft` and `all` need the manage key (contract: GET /pages)."""
+    if windowed:
+        return status != VISIBLE
+    return status in (DRAFT, ALL)

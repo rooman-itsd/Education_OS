@@ -58,3 +58,5 @@ def test_publish_changes():
 def test_only_the_visible_filter_is_open_to_readers():
     assert needs_manage(e.VISIBLE) is False
     assert all(needs_manage(s) for s in (e.DRAFT, e.PUBLISHED, e.ALL))
+    assert needs_manage(e.PUBLISHED, windowed=False) is False
+    assert all(needs_manage(s, windowed=False) for s in (e.DRAFT, e.ALL))

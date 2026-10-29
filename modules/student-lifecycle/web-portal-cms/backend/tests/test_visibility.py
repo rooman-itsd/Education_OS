@@ -36,6 +36,14 @@ def test_readers_see_only_announcements_in_their_window(client, org):
         assert seen.status_code == 200 and seen.json()["visible"] is False
 
 
+def test_readers_may_ask_for_published_pages_but_not_published_announcements(client, org):
+    """For pages `published` is what readers see anyway (contract: only draft and all need the manage key); for
+    announcements it also shows scheduled and expired ones, so it needs the key."""
+    reader = headers(org, APPLICANT)
+    assert client.get(f"{BASE}/pages", params={"status": "published"}, headers=reader).status_code == 200
+    assert client.get(f"{BASE}/announcements", params={"status": "published"}, headers=reader).status_code == 403
+
+
 def test_readers_cannot_ask_for_drafts(client, org):
     reader = headers(org, APPLICANT)
     for path in ("/pages", "/announcements"):
