@@ -966,6 +966,13 @@ def get_order(db: Session, po_id: str) -> dict:
     return po_dict(db, _get(db, PurchaseOrder, po_id, "purchase order"))
 
 
+def _delivery_date(day: date) -> date:
+    """An order is not due before today (IST): a date in the past would make it overdue the moment it is issued."""
+    if day < business_today():
+        raise invalid("invalid_date", "delivery_by cannot be before today", "delivery_by")
+    return day
+
+
 def _order_values(db: Session, po: PurchaseOrder, body: dict) -> list[Indent]:
     if body.get("tender_id"):
         raise invalid("tender_order", "an order for a tender is drafted by awarding the tender", "tender_id")
@@ -992,7 +999,7 @@ def _order_values(db: Session, po: PurchaseOrder, body: dict) -> list[Indent]:
             "indent_ids",
         )
     po.vendor_id, po.line_id, po.items = vendor.id, indents[0].line_id, items
-    po.delivery_by = body["delivery_by"]
+    po.delivery_by = _delivery_date(body["delivery_by"])
     po.delivery_address = _text(body.get("delivery_address"))
     po.terms = _text(body.get("terms"))
     return indents
@@ -1042,7 +1049,7 @@ def update_order(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
         _approved_vendor(db, po.vendor_id)
         items = _items(body["items"], priced=True)
         po.subtotal, po.tax_total, po.total = _rule(rules.order_totals, items)
-        po.items, po.delivery_by = items, body["delivery_by"]
+        po.items, po.delivery_by = items, _delivery_date(body["delivery_by"])
         po.delivery_address, po.terms = _text(body.get("delivery_address")), _text(body.get("terms"))
     else:
         indents = _order_values(db, po, body)
@@ -1055,6 +1062,7 @@ def update_order(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
 
 def submit_order(db: Session, actor: Actor, po_id: str) -> dict:
     po = _editable_order(db, po_id)
+    _delivery_date(po.delivery_by)  # a draft left until after its delivery date is corrected before it is sent
     po.status, po.prepared_by, po.submitted_at = "submitted", actor.user_id, clock()
     _audit(db, actor.user_id, "purchase_order.submitted", "purchase_order", po)
     db.commit()
@@ -1123,8 +1131,17 @@ def cancel_order(db: Session, actor: Actor, po_id: str, reason: str) -> dict:
     if not reason:
         raise invalid("reason_required", "cancelling needs a reason", "reason")
     po = _get(db, PurchaseOrder, po_id, "purchase order", lock=True)
+    if po.status in rules.EDITABLE:
+        # Never issued: nothing was committed in budget-grants, so no event; its indents can be ordered again.
+        po.status, po.cancel_reason = "cancelled", reason
+        _audit(db, actor.user_id, "purchase_order.cancelled", "purchase_order", po)
+        db.commit()
+        return po_dict(db, po)
     if po.status not in rules.OPEN_ORDER_STATUSES:
-        raise conflict("not_cancellable", f"only an issued, undelivered order is cancelled; it is {po.status}")
+        raise conflict(
+            "not_cancellable",
+            f"a draft, returned or issued undelivered order is cancelled; this one is {po.status}",
+        )
     accepted = _accepted(db, po.id)
     delivered = rules.accepted_value(po.items, accepted)
     indent_ids = [x.indent_id for x in db.scalars(_q(db, OrderIndent).where(OrderIndent.purchase_order_id == po.id))]
@@ -1186,6 +1203,8 @@ def record_receipt(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
         raise conflict("order_not_open", f"goods are received against an issued order; it is {po.status}")
     if body["received_on"] > business_today():
         raise invalid("invalid_date", "received_on cannot be in the future", "received_on")
+    if po.issued_at is not None and body["received_on"] < business_date(po.issued_at):
+        raise invalid("invalid_date", "received_on cannot be before the order was issued", "received_on")
     accepted_so_far = _accepted(db, po.id)
     seen: set[int] = set()
     lines = []

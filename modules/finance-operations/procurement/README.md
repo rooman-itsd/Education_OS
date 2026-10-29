@@ -118,8 +118,10 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   call it. Until then, commitments and spend do not reach budget-grants on a server. The same holds for notification.
 
 ### Assumptions to revisit
-- **Departments:** an indent approver sees every indent of the organisation; departments are not available to
-  modules yet, so "one's department" can't be applied. `department_id` filters the list.
+- **Departments: not enforced.** The contract allows an indent approver to be limited to their department, but
+  identity issues no department claim yet, so procurement cannot apply it: anyone with `procurement:indent:approve`
+  sees and decides every indent of the organisation. `department_id` only filters the list. This is enforced once
+  identity provides the claim.
 - **Names:** `requested_by_name` is empty until identity names are available.
 - **Documents:** an issued order has no PDF (`document_id` is null) until the documents SDK exists.
 - **Delivery date of an award:** the drafted order is due `delivery_days` after the award (the award day when the

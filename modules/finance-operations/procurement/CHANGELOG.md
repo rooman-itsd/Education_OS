@@ -36,7 +36,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel, helpdesk and budget-grants.
 - `config/env.example` lists every key; `module.yaml` status is `in-progress`.
-- Tests: 71, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+- Tests: 74, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
   drift (operations, permissions, enums, event payloads) and the audit trail.
 - Fixes from an independent review, each with a regression test:
   - one indent could be put on two orders by two requests at once: the indents are now locked while checked;
@@ -56,3 +56,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     the report's dates, with tests on both sides of IST midnight;
   - an expired quote is not awarded (409 `quote_expired`); a quote is valid through its `valid_until` date, and the
     lowest valid quote sets whether a justification is needed.
+- Second review (#295), each with a regression test:
+  - whoever created, edited or submitted an order at any point cannot approve it (pushed by the reviewer);
+  - a draft or returned order can be cancelled, with no event, and its indents can be ordered again;
+  - `delivery_by` cannot be before today (on create, edit and submit), and `received_on` cannot be before the order
+    was issued (422 `invalid_date`);
+  - the README states that department scoping of indent approvers is not enforced until identity has a department
+    claim.

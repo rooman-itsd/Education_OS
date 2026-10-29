@@ -6,7 +6,7 @@ import httpx
 from eos_core.db import SessionLocal
 from eos_core.tenant import platform_scope
 from eos_procurement.infrastructure.models import AuditEntry
-from pc_support import BASE, LATER, NOW, approved_indent, issued_order, item, vendor
+from pc_support import BASE, LATER, NOW, TODAY, approved_indent, issued_order, item, receive, vendor
 from sqlalchemy import select
 
 
@@ -186,3 +186,53 @@ def test_an_earlier_preparer_cannot_approve_after_someone_else_submits(client, o
     assert r.status_code == 403, r.text
     r = client.post(f"{BASE}/purchase-orders/{po['id']}/decision", json={"decision": "approved"}, headers=org.manager)
     assert r.status_code == 200, r.text
+
+
+def test_a_draft_or_returned_order_can_be_cancelled_and_frees_its_indents(client, org):
+    """Second review: an order that was never issued could not be cancelled, so its indents stayed held."""
+    from pc_support import outbox
+
+    i = approved_indent(client, org)
+    draft = _order(client, org, [i], [item()]).json()
+    r = client.post(
+        f"{BASE}/purchase-orders/{draft['id']}/cancel", json={"reason": "wrong vendor"}, headers=org.manager
+    )
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    assert not [
+        e for e in outbox("procurement.purchase-order.cancelled", org.id) if e["purchase_order_id"] == draft["id"]
+    ]
+    assert client.get(f"{BASE}/indents/{i['id']}", headers=org.manager).json()["status"] == "approved"
+    again = _order(client, org, [i], [item()])  # the indent is free again
+    assert again.status_code == 201
+    po = again.json()
+    client.post(f"{BASE}/purchase-orders/{po['id']}/submit", headers=org.staff)
+    client.post(f"{BASE}/purchase-orders/{po['id']}/decision", json={"decision": "returned"}, headers=org.manager)
+    r = client.post(f"{BASE}/purchase-orders/{po['id']}/cancel", json={"reason": "not needed"}, headers=org.manager)
+    assert r.json()["status"] == "cancelled"
+    for status_po in (draft, po):  # a cancelled order is not cancelled twice
+        r = client.post(f"{BASE}/purchase-orders/{status_po['id']}/cancel", json={"reason": "x"}, headers=org.manager)
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "not_cancellable"
+    submitted = _order(client, org, [approved_indent(client, org)], [item()]).json()
+    client.post(f"{BASE}/purchase-orders/{submitted['id']}/submit", headers=org.staff)
+    r = client.post(f"{BASE}/purchase-orders/{submitted['id']}/cancel", json={"reason": "x"}, headers=org.manager)
+    assert r.status_code == 409  # a submitted order is decided first (returned, then cancelled)
+
+
+def test_order_and_receipt_dates_cannot_precede_the_order(client, org, monkeypatch):
+    """Second review: delivery_by and received_on accepted dates before the order."""
+    from eos_procurement.application import service
+
+    yesterday = (NOW - timedelta(days=1)).date().isoformat()
+    r = _order(client, org, [approved_indent(client, org)], [item()], delivery_by=yesterday)
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "invalid_date"
+    po = _order(client, org, [approved_indent(client, org)], [item()], delivery_by=TODAY).json()  # today is fine
+    edit = {"vendor_id": po["vendor_id"], "indent_ids": po["indent_ids"], "items": [item()], "delivery_by": yesterday}
+    assert client.put(f"{BASE}/purchase-orders/{po['id']}", json=edit, headers=org.staff).status_code == 422
+    _later(monkeypatch, days=2)  # the draft waited past its delivery date
+    r = client.post(f"{BASE}/purchase-orders/{po['id']}/submit", headers=org.staff)
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "invalid_date"
+    monkeypatch.setattr(service, "clock", lambda: NOW)
+    issued = issued_order(client, org)  # issued today (IST)
+    r = receive(client, org, issued, (0, 1, 1), received_on=yesterday)
+    assert r.status_code == 422 and "before the order was issued" in r.json()["detail"]["message"]
+    assert receive(client, org, issued, (0, 1, 1), received_on=TODAY).status_code == 201

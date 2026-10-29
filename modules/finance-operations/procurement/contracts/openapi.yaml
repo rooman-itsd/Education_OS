@@ -148,7 +148,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrderInput" } } } }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
-        "422": { description: Indent's purchase method requires a tender }
+        "422": { description: "Indent's purchase method requires a tender (tender_required); delivery_by before today (invalid_date)" }
   /purchase-orders/{id}:
     get:
       summary: One purchase order with receipts and invoices. Permission procurement:purchase-order:read.
@@ -161,7 +161,7 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } }
         "409": { description: "Order is not a draft or returned (not_editable)" }
-        "422": { description: "A direct order whose indents together or whose total exceed the direct purchase limit (tender_required)" }
+        "422": { description: "A direct order whose indents together or whose total exceed the direct purchase limit (tender_required); delivery_by before today (invalid_date)" }
   /purchase-orders/{id}/submit:
     post:
       summary: Send a draft order for approval. Permission procurement:purchase-order:manage.
@@ -188,8 +188,10 @@ paths:
   /purchase-orders/{id}/cancel:
     post:
       summary: >-
-        Cancel an issued order with nothing received, or close the remainder of a part-received one. Publishes
-        procurement.purchase-order.cancelled with the amount released. Permission procurement:purchase-order:approve.
+        Cancel an issued order with nothing received, or close the remainder of a part-received one; both publish
+        procurement.purchase-order.cancelled with the amount released. A draft or returned order is also cancelled,
+        without an event (nothing was committed), and its indents can be ordered again. 409 (not_cancellable) for any
+        other status. Permission procurement:purchase-order:approve.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseOrder" } } } } }
@@ -206,7 +208,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GoodsReceiptInput" } } } }
       responses:
         "201": { description: Recorded, content: { application/json: { schema: { $ref: "#/components/schemas/GoodsReceipt" } } } }
-        "422": { description: Quantity exceeds what is outstanding on the order }
+        "422": { description: "Quantity exceeds what is outstanding on the order (quantity_exceeds_outstanding); received_on in the future or before the order was issued (invalid_date)" }
   /vendor-invoices:
     get:
       summary: Vendor invoices. Permission procurement:vendor-invoice:manage.

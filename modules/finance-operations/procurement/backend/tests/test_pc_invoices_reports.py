@@ -119,11 +119,14 @@ def test_purchase_orders_pending_report(client, org, monkeypatch):
     awaiting = direct_order(client, org)
     client.post(f"{BASE}/purchase-orders/{awaiting['id']}/submit", headers=org.staff)
     on_time = issued_order(client, org)
-    late = issued_order(client, org, delivery_by=(NOW - timedelta(days=1)).date().isoformat())
+    late = issued_order(client, org, delivery_by=TODAY)  # due today; overdue from tomorrow
     received = issued_order(client, org)
     receive(client, org, received, (0, 10, 10))
     inv = invoice(client, org, received, "1180.00").json()
     decide(client, org, inv)
+    from eos_procurement.application import service
+
+    monkeypatch.setattr(service, "clock", lambda: NOW + timedelta(days=1))
     report = client.get(f"{BASE}/reports/purchase-orders-pending", headers=org.staff).json()
     assert report["awaiting_approval"] == {"count": 1, "value": "1180.00"}
     assert report["awaiting_delivery"] == {"count": 2, "value": "2360.00"}
