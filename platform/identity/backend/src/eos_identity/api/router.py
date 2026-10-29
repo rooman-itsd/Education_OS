@@ -59,13 +59,16 @@ def create_user(
 ):
     if any(r in ("super-admin",) for r in body.roles):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "platform roles are never grantable inside an organisation")
-    user = service.create_user(
-        db,
-        organisation_id=p.organisation_id,
-        email=body.email,
-        name=body.name,
-        password=body.password,
-        roles=body.roles,
-    )
+    try:
+        user = service.create_user(
+            db,
+            organisation_id=p.organisation_id,
+            email=body.email,
+            name=body.name,
+            password=body.password,
+            roles=body.roles,
+        )
+    except service.RoleNotAssignableError as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
     db.commit()
     return user.to_dict()

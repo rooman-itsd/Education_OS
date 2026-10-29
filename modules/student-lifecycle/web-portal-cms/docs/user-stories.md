@@ -1,30 +1,24 @@
 # web-portal-cms — user stories
 
-## Public visitor
-- As a visitor, I can read an organisation's published pages and announcements without an
-  account, so the public site works like any website.
-- As a prospective organisation, I can see the available plans (from `platform/billing`) and
-  academy types (from `platform/tenancy`) on the sign-up page, so I can choose before committing.
-- As a prospective organisation, I can submit my organisation's sign-up — organisation details,
-  academy type, chosen plan, and my own admin details — and have it go straight to
-  `platform/tenancy`'s registration, so one submission creates both the organisation and my
-  Organisation Admin account.
-- As a prospective organisation, I see a confirmation page telling me to verify my email, then a
-  "waiting for approval" page, so I know what happens next without needing to call anyone.
+## Public visitor (the platform's website, built)
+- As a prospective organisation, I can see the available plans (`platform/billing`) and academy types
+  (`platform/tenancy`), so I can choose before committing.
+- As a prospective organisation, I can register my organisation and its administrator in one submission to
+  `platform/tenancy`, then verify my email and wait for approval, so I know what happens next.
 
-## CMS editor (organisation staff)
-- As a CMS editor, I can create, edit and publish a page for my own organisation's public site, so
-  I can keep the site current without a deploy.
-- As a CMS editor, I can create and publish an announcement, so time-sensitive notices reach
-  visitors quickly.
-- As a CMS editor, I can unpublish a page or announcement without deleting it, so I can take
-  something down temporarily.
+## Member of an organisation (any signed-in user)
+- As an applicant, I see my organisation's current announcements on my dashboard, so I don't miss deadlines and
+  notices.
+- As a student, faculty or staff member, I can read my organisation's published pages and announcements, and never
+  another organisation's.
+
+## CMS editor (and organisation admin)
+- As a CMS editor, I can write a page or an announcement as a draft and publish it when ready, so nothing half
+  written reaches members.
+- As a CMS editor, I can give an announcement a display window, so it appears and disappears on its own.
+- As a CMS editor, I can unpublish without deleting, and I can see all my drafts in one list.
 
 ## Explicitly not a user story here
-- "As a student, I sign up on the public website" is **not** a story for this module. Organisation
-  sign-up never creates a student, a Person record, or an admissions application — those are
-  `student-information` (staff-created) and `admissions` (its own anonymous application flow),
-  entirely separate from this page.
-- "As a visitor, I register my organisation through a web-portal-cms API" is also not accurate:
-  the actual registration call goes to `platform/tenancy`'s existing `POST /register`, not to any
-  endpoint this module owns.
+- "As a student, I sign up on the public website": organisation sign-up never creates a student, a Person or an
+  admissions application.
+- "As an anonymous visitor, I read an organisation's announcements": not in this release (PRD §11 D1).
