@@ -100,10 +100,18 @@ def authenticate(db: Session, *, email: str, password: str, organisation_slug: s
     token = create_token(
         user_id=user.id,
         organisation_id=user.organisation_id,
-        roles=list(user.roles or []),
+        roles=person_roles(user.roles),
         super_admin=user.is_super_admin,
     )
     return user, token
+
+
+def person_roles(roles: list[str] | None) -> list[str]:
+    """The roles a token may carry for a person: a stored row that predates the create_user refusal still lists
+    `service`, and feature modules compute permissions from the token's roles claim directly (their api/deps.py
+    call eos_core.config.permissions_for on it, never current_principal), so the claim itself must not carry a
+    role no person may hold. Used by every token minted for a user (login here, impersonation in tenancy)."""
+    return [r for r in (roles or []) if r not in NOT_A_PERSON_ROLES]
 
 
 def seed_super_admin(db: Session) -> None:
