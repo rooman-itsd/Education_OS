@@ -4,7 +4,6 @@ import dataclasses
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from eos_core import notify
 from eos_notification.application import messages, preferences, templates
 from eos_notification.domain.errors import NotificationError
 from eos_notification.domain.models import Message
@@ -28,7 +27,7 @@ def test_retry_returns_the_original_after_the_user_changed_preferences(db, org, 
     with as_org(org):
         preferences.set_preferences(db, org.member.id, channels={"reminder": ["in_app"]})
     again, created = send(db, org, as_org, **request)
-    assert not created and again.id == first.id and again.channel == "email" and len(notify.sent) == 1
+    assert not created and again.id == first.id and again.channel == "email" and len(transport_module.sent) == 1
 
 
 def test_retry_returns_the_original_after_the_user_was_deactivated(db, org, as_org):
@@ -38,7 +37,7 @@ def test_retry_returns_the_original_after_the_user_was_deactivated(db, org, as_o
     db.add(org.member)
     db.commit()
     again, created = send(db, org, as_org, **request)
-    assert not created and again.id == first.id and len(notify.sent) == 1
+    assert not created and again.id == first.id and len(transport_module.sent) == 1
 
 
 @pytest.mark.parametrize(
@@ -57,7 +56,7 @@ def test_the_same_token_for_a_genuinely_different_request_is_still_refused(db, o
     change(other)
     with pytest.raises(NotificationError) as e:
         send(db, org, as_org, **other)
-    assert e.value.status == 422 and len(notify.sent) == 1
+    assert e.value.status == 422 and len(transport_module.sent) == 1
 
 
 # --- 2. one bad message cannot stop the recovery sweep -------------------------------------------------------
@@ -148,7 +147,7 @@ def test_provider_metadata_never_carries_a_secret_and_repr_hides_the_body(db, or
 
 def test_the_dev_transport_still_exposes_the_token_for_eos_testing(db, org, as_org):
     send(db, org, as_org, **verify_request())
-    assert notify.sent[-1]["token"] == SECRET
+    assert transport_module.sent[-1]["token"] == SECRET
 
 
 # --- 6. in-app needs no transport; wording is fixed at acceptance ---------------------------------------------
@@ -168,7 +167,7 @@ def test_a_message_is_sent_with_the_wording_it_was_accepted_with(db, org, as_org
             db, key="billing.trial.reminder", channel="email", locale="en", subject="EDITED", body="EDITED ${days_left}"
         )
         messages.dispatch(db, accepted.message.id, transport=None, now=NOW)
-    mail = notify.sent[-1]
+    mail = transport_module.sent[-1]
     assert mail["subject"].startswith("Your trial ends") and "EDITED" not in mail["body"]
 
 

@@ -1,19 +1,23 @@
 # Permission catalogue for web-portal-cms. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
-# Public read (pages, announcements, the sign-up page's own content) needs no permission key.
-# Organisation sign-up itself needs no web-portal-cms permission because it is not a
-# web-portal-cms endpoint — platform/tenancy's POST /register is already public by its own
-# contract, unmodified here.
+# The registration pages need no key: they call platform/tenancy's public endpoints, not this module's.
 module: web-portal-cms
 permissions:
+  - key: web-portal-cms:page:read
+    description: List and read the organisation's published pages.
   - key: web-portal-cms:page:manage
-    description: Create, edit, publish/unpublish and delete pages.
+    description: Create, edit, publish, unpublish and delete pages; see drafts.
+  - key: web-portal-cms:announcement:read
+    description: List and read the organisation's visible announcements (published and within their window).
   - key: web-portal-cms:announcement:manage
-    description: Create, edit, publish/unpublish and delete announcements.
+    description: Create, edit, publish, unpublish and delete announcements; see drafts and out-of-window ones.
 roles:
+  - name: member
+    description: Implicit. Every organisation user holds it (platform/tenancy/contracts/permissions.yaml); reads the CMS.
+    grants: [web-portal-cms:page:read, web-portal-cms:announcement:read]
   - name: web-portal-cms-editor
-    description: Organisation staff who maintain the public site.
-    grants: [web-portal-cms:page:manage, web-portal-cms:announcement:manage]
+    description: Organisation staff who maintain the organisation's pages and announcements.
+    grants: [web-portal-cms:page:read, web-portal-cms:page:manage, web-portal-cms:announcement:read, web-portal-cms:announcement:manage]
   - name: org-admin
-    description: Full control over their own organisation's public site.
-    grants: [web-portal-cms:page:manage, web-portal-cms:announcement:manage]
+    description: Full control over their own organisation's pages and announcements.
+    grants: [web-portal-cms:page:read, web-portal-cms:page:manage, web-portal-cms:announcement:read, web-portal-cms:announcement:manage]

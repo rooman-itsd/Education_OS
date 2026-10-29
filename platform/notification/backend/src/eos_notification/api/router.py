@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 from eos_core.db import get_db
-from eos_identity.api.deps import Principal, require, require_organisation
+from eos_identity.api.deps import Principal, require
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
@@ -145,8 +145,15 @@ def _own_or_manage(user_id: str, p: Principal) -> str:
     return uid
 
 
+# The four own-resource routes name a catalogue key like every other route, so the host's route-coverage check
+# sees them guarded. `member` grants both self keys to every organisation user (contracts/permissions.yaml), and
+# organisation=True keeps the old guarantee that a caller outside any organisation is refused.
+SELF_READ = require("notification:self:read", organisation=True)
+SELF_MANAGE = require("notification:self:manage", organisation=True)
+
+
 @router.get("/preferences/{user_id}")
-def get_preferences(user_id: str, p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def get_preferences(user_id: str, p: Principal = Depends(SELF_READ), db: Session = Depends(get_db)):
     uid = _own_or_manage(user_id, p)
     with _http_errors():
         return preferences.get_preferences(db, uid)
@@ -156,7 +163,7 @@ def get_preferences(user_id: str, p: Principal = Depends(require_organisation), 
 def set_preferences(
     user_id: str,
     body: PreferencesIn,
-    p: Principal = Depends(require_organisation),
+    p: Principal = Depends(SELF_MANAGE),
     db: Session = Depends(get_db),
 ):
     uid = _own_or_manage(user_id, p)
@@ -175,7 +182,7 @@ def set_preferences(
 def list_inbox(
     unread_only: bool = False,
     limit: int = Query(20, ge=1, le=100),
-    p: Principal = Depends(require_organisation),
+    p: Principal = Depends(SELF_READ),
     db: Session = Depends(get_db),
 ):
     with _http_errors():
@@ -184,7 +191,7 @@ def list_inbox(
 
 
 @router.post("/inbox/{message_id}/read", status_code=204)
-def mark_read(message_id: str, p: Principal = Depends(require_organisation), db: Session = Depends(get_db)):
+def mark_read(message_id: str, p: Principal = Depends(SELF_MANAGE), db: Session = Depends(get_db)):
     with _http_errors():
         messages.mark_read(db, p.user_id, message_id)
     return Response(status_code=204)
