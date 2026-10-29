@@ -6,7 +6,7 @@ the audit SDK exists. Preparer and approver are always different people."""
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from eos_core import events
@@ -43,8 +43,19 @@ def clock() -> datetime:
     return utcnow()
 
 
+# Business dates follow the Indian business calendar, as in procurement (decided on #129). Asia/Kolkata has kept
+# UTC+05:30 without daylight saving since 1945, so a fixed offset is exact and needs no time-zone database (tzdata is
+# not on the approved stack). Timestamps stay UTC.
+BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
+
+
 def today() -> date:
-    return clock().date()
+    """Today in Asia/Kolkata: the date of spend recorded from events, the default financial year, reminder windows and
+    the default submission date of a certificate."""
+    now = clock()
+    if now.tzinfo is None:  # a naive stand-in is UTC by contract, never the machine's local time
+        now = now.replace(tzinfo=UTC)
+    return now.astimezone(BUSINESS_TZ).date()
 
 
 def _publish(db: Session, name: str, organisation_id: str, payload: dict, actor: str | None = None) -> None:
