@@ -18,3 +18,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   each with loading, empty and error states; typed API client in `frontend/src/api/client.ts`; vitest widget tests (13 passing).
 - Contract: the `facility-staff` profile role gets the grants of `inventory-equipment-manager`, so the Facility / Inventory
   Staff dashboard (#6) can read this module's data.
+- Contract: the academy profile roles whose dashboards show this module's widgets get the grants of the module role
+  the PRD names for them (follow-up to #288 from Faizan's review; part of #331).
