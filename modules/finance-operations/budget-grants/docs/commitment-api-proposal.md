@@ -1,4 +1,4 @@
-# budget-grants: atomic commitments for procurement (proposal, v3)
+# budget-grants: atomic commitments for procurement (proposal, v4)
 
 Status: **design approved in direction by the module owner (29 Oct), not implemented.** Issue: #335 (was #129;
 risk 1 in #295). Owner: Gokula Lakshmi (budget-grants and procurement). Reviewer: Ashritha. Architecture review:
@@ -20,6 +20,14 @@ and its concurrency tests pass.
 - grant close and revision take the line lock;
 - recovery of orphan reservations is defined;
 - the gaps in the input and the tests are closed.
+
+**v4** answers the review of v3 on #350:
+- spend is capped on what the order **still holds** (its outstanding commitment), not on what was committed, so money
+  a cancel or close released can't be counted twice;
+- the spend call runs inside `mark-paid`, before procurement records the payment: a refusal leaves the invoice
+  approved, with nothing pending and no event published (decision 5);
+- the trust boundary adds that management can release a still-reserved row of an issued order, and confirm says what
+  it does when only released rows exist.
 
 ## The problem, reproduced
 
@@ -129,17 +137,41 @@ under the same keys. So when the relay later delivers those events, they find th
 ### Spend is capped (it can't be a back door)
 
 `spend` releases `min(amount, outstanding commitment)` and records `amount` as actual spend, as the consumer does. On
-its own that would let a caller record unlimited actual spend with any invoice id. So:
-- **Up to the order's committed amount,** the cumulative actual spend recorded through `spend` for an order is accepted
-  without a further check: it was checked when it was reserved.
-- **Any excess** (an invoice above the order, which procurement allows only with an approver's override note) is
-  checked against the line's availability under the line lock, like manual spend. If the line can't cover it, the call
-  answers 422 `exceeds_available`.
+its own that would let a caller record unlimited actual spend with any invoice id. So, under the line lock:
+- **The order's outstanding commitment** is what the ledger still holds for it at the moment of the call: committed,
+  less what `cancel` released, less what earlier payments already turned into spend. Only that part of the amount is
+  accepted without a further check; it was checked when it was reserved and nobody else can use it.
+- **Any excess** over the outstanding commitment is new money on the line. It is checked against the line's
+  availability, like manual spend. If the line can't cover it, the call answers 422 `exceeds_available` and records
+  nothing. This covers an invoice above the order (which procurement allows only with an approver's override note) and,
+  as importantly, an order whose remainder was cancelled or closed: the released money went back to the line and may
+  already be spent.
 - **`vendor_invoice_id` must be a real invoice.** budget-grants can't check that across modules, so the cap above is
-  what bounds it. procurement sends only its own paid invoices.
+  what bounds it. procurement sends only its own invoices.
 
-*Proposed rule; the module owner decides: refuse an uncovered excess (422), or record it and raise the 100% threshold
-alert.*
+The reviewer's case on a ₹2,000 line, which must be a test (test 3):
+
+| Step | Effect | Available |
+|---|---|---|
+| Order of ₹1,180 confirmed | committed ₹1,180 | ₹820 |
+| ₹500 delivered, the rest closed | `cancel` releases ₹680; outstanding ₹500 | ₹1,500 |
+| Manual spend of ₹1,500 | spent ₹1,500 | ₹0 |
+| Invoice of ₹1,180 (override) paid | ₹500 from the commitment, ₹680 excess checked: **422 `exceeds_available`**, nothing recorded | ₹0 |
+
+Capping on the committed amount (v3) would have accepted the ₹680 and left the line ₹680 over its allocation.
+
+**When spend answers 422 (decision 5).** The call is made inside procurement's `mark-paid`, before procurement records
+the payment, as reserve is made inside approval:
+- a 422 `exceeds_available` refuses `mark-paid` (422 `insufficient_budget`, with the uncovered amount). The invoice stays
+  `approved`, nothing is recorded in either module, nothing is pending, and no `vendor-invoice.paid` event is
+  published, so the consumer never records it unchecked;
+- finance staff free money for the line first (a reappropriation, decided by management) and mark it paid again. Payment
+  at the bank follows `mark-paid` in Education OS, as for every other payment the module records;
+- budget-grants unreachable (503) or a timeout also refuses `mark-paid` and leaves the invoice `approved`. If
+  budget-grants did record it, the retry finds the same key and answers 200: the spend is recorded once.
+
+So `spend` is never left pending. *Proposed rule; the module owner decides: refuse the uncovered excess as above, or
+record it and raise the 100% threshold alert.*
 
 ### When a call fails
 
@@ -147,26 +179,27 @@ budget-grants unreachable shows in procurement as 503 `budget_check_unavailable`
 shows as 503 `budget_permission_missing`.
 - *Reserve:* the approval is refused and the order stays `submitted`. If the request timed out after budget-grants
   recorded it, the reservation is held, and the next approval reuses it (200).
-- *Confirm, release, cancel or spend:* procurement records which operation is pending on the order (`budget_pending`:
-  a list such as `confirm`, `release`, `cancel`, `spend:<invoice>`), not a single flag. It retries them in lifecycle
-  order: confirm, then cancel, then each spend.
+- *Spend:* never pending. It runs inside `mark-paid`, and any failure refuses `mark-paid` (above).
+- *Confirm, release or cancel:* procurement records which operation is pending on the order (`budget_pending`: a list
+  such as `confirm`, `release`, `cancel`), not a single flag. It retries them in lifecycle order: confirm, then cancel.
 - *Who retries, so the token has the permission:*
   - **management** actions (any approval, return or cancel in the organisation) retry pending confirm, release and
     cancel;
-  - **finance-staff** payments (any `mark-paid`) retry pending spend;
-  - a **"Sync now"** action on the Finance Staff widget does the same for each role.
-  - Writes by other roles (receipts, edits) don't retry, because they hold neither permission.
+  - a **"Sync now"** action, for management, does the same.
+  - Writes by other roles (receipts, edits, payments) don't retry, because they don't hold `commitment:record`.
 - **An approval retries a pending release before it reserves again.** A 409 `commitment_mismatch` triggers that release,
   then the reservation.
 - **Money always errs on the held side:** a pending confirm stays `reserved`, which is counted; a pending release keeps
-  money held. Once the relay exists, its events also deliver pending cancel and spend, idempotently.
+  money held. Once the relay exists, its events also deliver a pending cancel, idempotently.
 
 ## Recovery of pending reservations
 
 | Situation | How it is noticed | How it recovers | Money meanwhile |
 |---|---|---|---|
 | procurement fails after reserving, before committing the issue | order still `submitted`; `GET /commitments?state=reserved` lists it | approving again reuses the live reservation (200), issues and confirms; returning releases it | held |
-| confirm, release, cancel or spend fails | order `budget_pending` | retried by the right role (above), or "Sync now"; cancel and spend confirm first | held (the safe side) |
+| confirm, release or cancel fails | order `budget_pending` | retried by management (above), or "Sync now"; cancel and spend confirm first | held (the safe side) |
+| spend fails or is refused | `mark-paid` answers 422 or 503; the invoice stays `approved` | finance staff mark it paid again once the line is covered or budget-grants is back | held as commitment; nothing paid is recorded |
+| a reserved row of an issued order was released (by a direct call) before its confirm | confirm finds only released rows | confirm re-reserves under the line lock (below), or 422 and the order stays `budget_pending` | held if the line covers it; otherwise shown to management |
 | an order nobody decides | Finance Staff widget (awaiting approval); `GET /commitments?state=reserved&older_than_days=N` (uses `reserved_at`) | the approver decides it | held |
 | an edited order after a failed release | approval finds `release` pending, or gets 409 `commitment_mismatch` | approval releases, then reserves the new total as a new row | held until then |
 | an **orphan reservation** (no order behind it, e.g. one reserved by a direct call) | `GET /commitments?state=reserved&older_than_days=N` | a management user calls `release` with a reason, audited | held until released |
@@ -197,8 +230,8 @@ other way to release a reservation.
       older_than_days (on reserved_at); cursor and limit. Permission budget-grants:budget:read.
     responses: { "200": CommitmentPage }
 /commitments/{source_module}/{source_reference}/confirm:
-  post: { summary: "reserved → committed, with its ledger commitment row; committed → 200 unchanged",
-          responses: { "200": Commitment, "404": "no live row in the caller's organisation (also when only released rows exist)" } }
+  post: { summary: "reserved → committed, with its ledger commitment row; committed → 200 unchanged; only released rows → a new reservation of the last released amount and line, availability checked under the line lock, then committed (audited as recommitted)",
+          responses: { "200": Commitment, "404": "no row at all in the caller's organisation", "422": "exceeds_available: only released rows, and the line can no longer cover the order" } }
 /commitments/{source_module}/{source_reference}/release:
   post: { summary: "reserved → released; no live row → 200, nothing to release (another organisation's row looks the same); committed → 409, use cancel",
           requestBody: { reason }, responses: { "200": Commitment or nothing, "409": committed } }
@@ -206,7 +239,7 @@ other way to release a reservation.
   post: { summary: "issued order cancelled or closed: confirm a reserved row first, then release released_amount (at most what the order still holds)",
           requestBody: { released_amount, reason }, responses: { "200": released amount, "404": no row and no ledger commitment } }
 /commitments/{source_module}/{source_reference}/spend:
-  post: { summary: "invoice of the order paid: confirm a reserved row first, then commitment to actual, capped as described; Permission budget-grants:commitment:spend",
+  post: { summary: "invoice of the order paid (called inside mark-paid): confirm a reserved row first, then commitment to actual; only the order's outstanding commitment is accepted unchecked, any excess is checked against availability; Permission budget-grants:commitment:spend",
           requestBody: { vendor_invoice_id, amount, paid_on },
           responses: { "200": spend recorded, "404": no row and no ledger commitment, "422": exceeds_available for an uncovered excess } }
 
@@ -221,7 +254,10 @@ Commitment: { id, organisation_id, line_id, amount, state: enum [reserved, commi
 - **`purchase-order.issued`:**
   1. It keeps its existing first check, `_exists(procurement, po, commitment)`. A ledger row means nothing to do.
   2. Otherwise, a live `reserved` row is confirmed.
-  3. With no live row at all (orders issued before this change, or only released rows), it records a commitment as today.
+  3. With no row at all (orders issued before this change), it records a commitment as today.
+  4. With only released rows, it does what confirm does: re-reserve under the line lock and commit. An event can't be
+     refused, so if the line no longer covers the order the commitment is still recorded (the order was issued) and the
+     100% threshold alert fires. procurement's own confirm normally gets there first and answers 422 instead.
 - **`purchase-order.cancelled` and `vendor-invoice.paid`:** unchanged. Their keys are the ones the synchronous calls
   use, so a repeat records nothing.
 
@@ -274,6 +310,13 @@ these users can call the API directly, outside procurement:
 - **any management user** (`commitment:record`) can **cancel an issued order's commitment**, up to what the order still
   holds. That releases money procurement still owes and reopens room for overspend. They can also reserve against a
   reference that matches no order (an orphan), which holds money.
+- **any management user** can also **release a still-reserved row of an issued order** whose confirm is pending (a
+  failed confirm leaves the row `reserved`). budget-grants can't tell that the order was issued, so the release
+  succeeds and the money goes back to the line. The pending confirm then finds only released rows: it re-reserves the
+  same amount on the same line under the line lock, checking availability, and commits it (audited as `recommitted`). If
+  the line was spent meanwhile, confirm answers 422 `exceeds_available`; the order stays `budget_pending: confirm`
+  and is shown to management, who free money for the line. Until then the issued order is not held on the line, which
+  is the overspend window this risk names.
 - **any finance-staff user** (`commitment:spend`) can turn an issued order's commitment into actual spend with invoice
   ids procurement doesn't have. That is bounded by the cap above, and the entries can't be reversed by
   `reverse_expenditure`.
@@ -281,8 +324,9 @@ these users can call the API directly, outside procurement:
 **Real mitigations:**
 - each permission is held by exactly one role;
 - every call is audited with its actor;
-- spend is capped;
+- spend is capped on the order's outstanding commitment;
 - orphan reservations are listed and released by management, audited;
+- a confirm after such a release re-checks availability, so it never recommits money the line no longer has;
 - release is never possible for a committed row (cancel is the path, and it is audited).
 
 **Two options:**
@@ -303,8 +347,10 @@ Recommendation: (a) for v1, (b) when identity supports service identities.
    - a re-reservation after a release inserts a new row, and the released row is unchanged.
 3. **budget-grants, the money path:** reserve, confirm, then invoice paid. The payment releases the commitment, found
    through `purchase_order_id`, and records the spend once, whether it comes from the synchronous call, the event, or
-   both. Cancel and spend on a still-`reserved` row confirm first. Spend above the committed amount is checked against
-   availability.
+   both. Cancel and spend on a still-`reserved` row confirm first. Spend above the order's outstanding commitment is
+   checked against availability, including the reviewer's case: ₹2,000 line, ₹1,180 order, ₹680 closed, ₹1,500 manual
+   spend, then a ₹1,180 invoice paid → 422 and nothing recorded. A confirm that finds only released rows re-reserves
+   when the line covers it and answers 422 when it doesn't.
 4. **budget-grants, reservations count everywhere:**
    - availability, manual spend and reappropriation see a reservation;
    - `close_grant` refuses with a reservation;
@@ -326,8 +372,9 @@ Recommendation: (a) for v1, (b) when identity supports service identities.
    - a close racing a reserve can't both succeed.
 8. **procurement, failures:**
    - a failure after reserving leaves the order `submitted` with the money reserved;
-   - a failed confirm, release, cancel or spend is recorded in `budget_pending` and retried by the right role, or by
-     "Sync now";
+   - a failed confirm, release or cancel is recorded in `budget_pending` and retried by management, or by "Sync now";
+   - a spend that answers 422 or 503 refuses `mark-paid`: the invoice stays `approved`, no `vendor-invoice.paid` event
+     is published, and marking it paid again after a timeout records the spend once;
    - an edit after a failed release re-reserves correctly;
    - a 403 shows as `budget_permission_missing`.
 9. **Migration `budget_grants_0002`:**
@@ -344,7 +391,7 @@ Recommendation: (a) for v1, (b) when identity supports service identities.
 | 2 | Every procurement money change synchronous and keyed like the events; append-only commitments table; reservations counted by `line_totals` everywhere | Gokula (owner) | proposed |
 | 3 | `commitment:record` for `management` only; `commitment:spend` for `finance-staff` only | Gokula (owner) | proposed |
 | 4 | Trust boundary: accept the named risks for v1 (a), or a service identity (b) | Gokula (owner), with Faizan for (b) | proposed: (a) |
-| 5 | Spend above the committed amount: refuse when uncovered (422), or record and alert | Gokula (owner) | proposed: refuse |
+| 5 | Spend above the order's outstanding commitment: refuse `mark-paid` when uncovered (422, invoice stays approved, nothing pending), or record and alert | Gokula (owner) | proposed: refuse |
 | 6 | The cross-module contract, the `budget_grants_0002` migration with its backfill, and the grant locking changes | Faizan (architecture review) | to review |
 
 ## Delivery
