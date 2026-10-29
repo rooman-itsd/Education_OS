@@ -19,6 +19,14 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `insufficient_budget`, 503 `budget_check_unavailable`); an expired quote is not awarded (409 `quote_expired`);
   business dates are Indian (Asia/Kolkata). Also documents 409 `vendor_blacklisted` and 422 `tender_required` on edit.
 - Backend (#129):
+- PRD: vendor bank details are the last four digits and the IFSC only; the full account number is never stored,
+  because payments are made outside Education OS. This replaces "stored encrypted" (#335).
+- Contract, after review (#294): cancelling a draft or returned order (409 `not_cancellable` otherwise); `invalid_date`
+  on order create, edit and submit and on goods receipts; `quantity_exceeds_outstanding` and `order_not_open` on
+  receipts; quotes need priced items whose total matches (`price_required`, `quote_total_mismatch`); an awarded order
+  keeps its quote's items (`awarded_order`); a tender holds its indents only while it can still be awarded; department
+  scoping of indent approvers is stated as not enforced; story S2 covers the purchase order list and detail.
+- Backend (#335, was #129):
   - vendors: registration, approval, suspension and blacklisting with a reason; only the last four digits of a bank
     account are kept;
   - indents: raise, edit, submit; approval by someone other than the requester checks budget-grants `GET /availability`
@@ -36,7 +44,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Audit trail: `procurement_audit_entry` records every state change in the same transaction (actor, action, entity, id),
   until the audit SDK exists, as in hostel, helpdesk and budget-grants.
 - `config/env.example` lists every key; `module.yaml` status is `in-progress`.
-- Tests: 74, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
+- Tests: 77, including the cross-tenant leak test, cross-organisation reads and writes, the migration test, contract
   drift (operations, permissions, enums, event payloads) and the audit trail.
 - Fixes from an independent review, each with a regression test:
   - one indent could be put on two orders by two requests at once: the indents are now locked while checked;
@@ -48,7 +56,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - an unreadable answer from budget-grants read as "insufficient budget": now 503 `budget_check_unavailable`;
   - a 422 on a vendor body echoed the bank account number back: no longer;
   - reopening indents after a cancelled order was audited as `indent.approved`: now `indent.reopened`.
-- Decisions on #129, each with tests:
+- Decisions recorded on #335 (was #129), each with tests:
   - a purchase order is issued only if its line covers its total: `GET /availability` for the total, less this
     organisation's issued orders budget-grants has not recorded yet (`GET /expenditures`), under a per-line Postgres
     advisory lock; otherwise 422 `insufficient_budget` (or 503) and the order stays submitted;
@@ -70,3 +78,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   receipts; quotes need priced items whose total matches (`price_required`, `quote_total_mismatch`); an awarded order
   keeps its quote's items (`awarded_order`); a tender holds its indents only while it can still be awarded; department
   scoping of indent approvers is stated as not enforced; story S2 covers the purchase order list and detail.
+- Third review (#295), each with a regression test:
+  - a quote is priced item by item and its total must equal the items' total including tax (`quote_total_mismatch`),
+    so a typed total can no longer win the ranking while the order is priced from different items;
+  - a closed tender holds its indents only while one of its quotes can still be awarded (unexpired, priced, vendor
+    approved), so an expired or unpriced quote no longer locks them;
+  - an awarded order keeps the quote's items and prices; only its delivery date, address and terms change
+    (`awarded_order`);
+  - running numbers take a per-organisation Postgres advisory lock before counting, as maintenance does.

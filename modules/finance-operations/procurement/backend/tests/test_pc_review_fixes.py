@@ -236,3 +236,86 @@ def test_order_and_receipt_dates_cannot_precede_the_order(client, org, monkeypat
     r = receive(client, org, issued, (0, 1, 1), received_on=yesterday)
     assert r.status_code == 422 and "before the order was issued" in r.json()["detail"]["message"]
     assert receive(client, org, issued, (0, 1, 1), received_on=TODAY).status_code == 201
+
+
+# ---------------------------------------------------------------- third review (#295)
+
+
+def _published(client, org, cost="60000.00"):
+    ind = approved_indent(client, org, cost)
+    t = _tender(client, org, ind).json()
+    assert client.post(f"{BASE}/tenders/{t['id']}/publish", headers=org.staff).status_code == 200
+    return ind, t
+
+
+def _quote(client, org, t, v, total, items, **fields):
+    body = {"vendor_id": v["id"], "items": items, "total": total, **fields}
+    return client.post(f"{BASE}/tenders/{t['id']}/quotes", json=body, headers=org.staff)
+
+
+def test_a_quotes_total_must_be_its_items_total(client, org, monkeypatch):
+    """The reviewer's case: vendor A typed total 1000 with items 2 x 40000, ranked first and was awarded at 80000."""
+    a, b = vendor(client, org), vendor(client, org)
+    vendor(client, org)  # the category needs an approved vendor to publish
+    _, t = _published(client, org)
+    r = _quote(client, org, t, a, "1000", [item(2, "40000.00")])
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "quote_total_mismatch"
+    assert "80000.00" in r.json()["detail"]["message"]
+    r = _quote(client, org, t, a, "1000", [item(2, None)])  # an unpriced item
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "price_required"
+    assert _quote(client, org, t, a, "1000", []).status_code == 422  # items are required
+    with_tax = [item(2, "25000.00", tax_percent=18)]  # 50000 + 18% = 59000
+    assert _quote(client, org, t, b, "50000", with_tax).json()["detail"]["code"] == "quote_total_mismatch"
+    assert _quote(client, org, t, b, "59000", with_tax).status_code == 201
+    assert _quote(client, org, t, a, "80000", [item(2, "40000.00")]).status_code == 201
+    _later(monkeypatch)
+    quotes = client.get(f"{BASE}/tenders/{t['id']}", headers=org.staff).json()["quotes"]
+    assert [q["total"] for q in quotes] == ["59000.00", "80000.00"]  # ranked by the real totals
+    po = client.post(f"{BASE}/tenders/{t['id']}/award", json={"quote_id": quotes[0]["id"]}, headers=org.staff).json()
+    assert po["total"] == "59000.00"  # the order is priced exactly as the quote that won
+
+
+def test_a_tender_whose_quotes_cannot_be_awarded_lets_its_indents_go(client, org, monkeypatch):
+    """The reviewer's case: a closed tender with only an expired quote, or only a quote from a vendor no longer
+    approved, could never be awarded but kept its indents locked."""
+    v = vendor(client, org)
+    expired_ind, t1 = _published(client, org)
+    _quote(client, org, t1, v, "50000", [item(1, "50000.00")], valid_until="2026-11-01")
+    blocked_ind, t2 = _published(client, org)
+    w = vendor(client, org)
+    _quote(client, org, t2, w, "50000", [item(1, "50000.00")])
+    client.post(
+        f"{BASE}/vendors/{w['id']}/status", json={"status": "blacklisted", "reason": "fraud"}, headers=org.staff
+    )
+    live_ind, t3 = _published(client, org)
+    _quote(client, org, t3, v, "50000", [item(1, "50000.00")])
+    _later(monkeypatch)  # 5 November: all three closed; the first quote expired on the 1st
+    again = (NOW + timedelta(days=20)).isoformat()
+    assert _tender(client, org, expired_ind, again).status_code == 201
+    assert _tender(client, org, blocked_ind, again).status_code == 201
+    r = _tender(client, org, live_ind, again)  # its quote can still be awarded: the indent stays with it
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "indent_in_use"
+
+
+def test_an_awarded_order_keeps_the_quotes_items_and_prices(client, org, monkeypatch):
+    """The reviewer's case: a 50000 quotation award was raised to 800000 with no check."""
+    v = vendor(client, org)
+    vendor(client, org)
+    _, t = _published(client, org)
+    q = _quote(client, org, t, v, "50000", [item(1, "50000.00")]).json()["quotes"][0]
+    _later(monkeypatch)
+    po = client.post(f"{BASE}/tenders/{t['id']}/award", json={"quote_id": q["id"]}, headers=org.staff).json()
+    body = {
+        "vendor_id": po["vendor_id"],
+        "indent_ids": po["indent_ids"],
+        "items": [item(1, "800000.00")],
+        "delivery_by": "2026-12-15",
+    }
+    r = client.put(f"{BASE}/purchase-orders/{po['id']}", json=body, headers=org.staff)
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "awarded_order"
+    body["items"] = [item(2, "25000.00")]  # same total, different items: still the award's items only
+    assert client.put(f"{BASE}/purchase-orders/{po['id']}", json=body, headers=org.staff).status_code == 422
+    body.update(items=po["items"], delivery_address="Stores, block B", terms="Net 30")
+    r = client.put(f"{BASE}/purchase-orders/{po['id']}", json=body, headers=org.staff)
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] == "50000.00" and r.json()["delivery_by"] == "2026-12-15" and r.json()["terms"] == "Net 30"

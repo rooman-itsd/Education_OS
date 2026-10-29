@@ -154,8 +154,14 @@ def _duplicate_is_409(code: str, message: str):
 
 
 def _next_number(db: Session, model, prefix: str) -> str:
-    """The next running number of the organisation, e.g. IND-00001. Rows are never deleted, so the count is stable;
-    two requests racing for one number meet the unique constraint and the second answers 409."""
+    """The next running number of the organisation, e.g. IND-00001. Rows are never deleted, so the count is stable.
+    On Postgres a transaction-level advisory lock per organisation and table makes concurrent creates take turns,
+    as maintenance does; the unique constraint still answers 409 if anything slips past."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+            {"key": f"procurement:number:{model.__tablename__}:{db.info.get('organisation_id', '')}"},
+        )
     count = db.scalar(scoped(db, select(func.count()).select_from(model), model)) or 0
     return f"{prefix}-{count + 1:05d}"
 
@@ -657,12 +663,26 @@ def _set_indent_status(
 
 
 def _tender_can_be_awarded(db: Session, t: Tender) -> bool:
-    """A draft that can still be published, a tender open for quotes, or a closed one with a quote to award."""
+    """A draft that can still be published, a tender open for quotes, or a closed one with a quote that can still be
+    awarded (unexpired, priced, from a vendor still approved)."""
     if t.status not in ("draft", "published"):
         return False
     if _aware(t.closes_at) > clock():
         return True
-    return t.status == "published" and db.scalar(_q(db, Quote).where(Quote.tender_id == t.id)) is not None
+    return t.status == "published" and any(_awardable(db, q) for q in _quotes(db, t.id))
+
+
+def _priced(quote: Quote) -> bool:
+    items = quote.items or []
+    return bool(items) and all(x.get("unit_price") is not None for x in items)
+
+
+def _awardable(db: Session, quote: Quote) -> bool:
+    """Whether an award of this quote could succeed: not expired, priced items, and its vendor still approved."""
+    if _expired(quote) or not _priced(quote):
+        return False
+    vendor = db.scalar(_q(db, Vendor).where(Vendor.id == quote.vendor_id))
+    return vendor is not None and vendor.status == "approved"
 
 
 def _tender_status(t: Tender) -> str:
@@ -828,12 +848,23 @@ def record_quote(db: Session, actor: Actor, tender_id: str, body: dict) -> dict:
         raise conflict("vendor_not_invited", f"vendor {v.name} is not in category {t.category}")
     if db.scalar(_q(db, Quote).where(Quote.tender_id == t.id, Quote.vendor_id == v.id)) is not None:
         raise conflict("quote_exists", f"a quote from {v.name} is already recorded")
+    items = _items(body["items"], priced=True)
+    if not items:
+        raise invalid("price_required", "a quote lists its priced items", "items")
+    total = _rule(parse_money, body["total"], "total")
+    computed = _rule(rules.order_totals, items)[2]
+    if total != computed:
+        raise invalid(
+            "quote_total_mismatch",
+            f"total {money(total)} differs from the items' total including tax, {money(computed)}",
+            "total",
+        )
     q = Quote(
         organisation_id=t.organisation_id,
         tender_id=t.id,
         vendor_id=v.id,
-        items=_items(body.get("items") or [], priced=False),
-        total=_rule(parse_money, body["total"], "total"),
+        items=items,
+        total=total,
         delivery_days=body.get("delivery_days"),
         valid_until=body.get("valid_until"),
         document_id=body.get("document_id"),
@@ -857,16 +888,16 @@ def award_tender(db: Session, actor: Actor, tender_id: str, quote_id: str, justi
         raise not_found("quote of this tender")
     if _expired(quote):
         raise conflict("quote_expired", f"the quote was valid until {_iso(quote.valid_until)}")
-    valid = [x for x in quotes if not _expired(x)]
+    vendor = _approved_vendor(db, quote.vendor_id, status=409)
+    if not _priced(quote):
+        raise invalid("price_required", "the awarded quote needs priced items to draft the order", "quote_id")
+    lowest = min(Decimal(x.total) for x in quotes if _awardable(db, x))
     justification = _text(justification)
-    if Decimal(quote.total) > Decimal(valid[0].total) and not justification:
+    if Decimal(quote.total) > lowest and not justification:
         raise invalid(
             "justification_required", "awarding other than the lowest quote needs a justification", "justification"
         )
-    vendor = _approved_vendor(db, quote.vendor_id, status=409)
-    items = quote.items or []
-    if not items or any(x.get("unit_price") is None for x in items):
-        raise invalid("price_required", "the awarded quote needs priced items to draft the order", "quote_id")
+    items = quote.items
     subtotal, tax_total, total = _rule(rules.order_totals, items)
     po = PurchaseOrder(
         organisation_id=t.organisation_id,
@@ -975,7 +1006,7 @@ def _delivery_date(day: date) -> date:
 
 def _order_values(db: Session, po: PurchaseOrder, body: dict) -> list[Indent]:
     if body.get("tender_id"):
-        raise invalid("tender_order", "an order for a tender is drafted by awarding the tender", "tender_id")
+        raise invalid("awarded_order", "an order for a tender is drafted by awarding the tender", "tender_id")
     indents = _usable_indents(db, body["indent_ids"], except_order=po.id)
     for i in indents:
         if i.purchase_method != "direct":
@@ -1040,16 +1071,17 @@ def _editable_order(db: Session, po_id: str) -> PurchaseOrder:
 def update_order(db: Session, actor: Actor, po_id: str, body: dict) -> dict:
     po = _editable_order(db, po_id)
     if po.tender_id:
-        # An awarded order keeps its tender, vendor and indents; prices, dates and terms can be corrected.
+        # An awarded order keeps its tender, vendor, indents and the awarded quote's items and prices: the award was
+        # decided on them. Only the delivery date, address and terms change.
         if body.get("tender_id") not in (None, po.tender_id) or body["vendor_id"] != po.vendor_id:
-            raise invalid("tender_order", "an awarded order keeps its tender and vendor", "vendor_id")
+            raise invalid("awarded_order", "an awarded order keeps its tender and vendor", "vendor_id")
         current = {x.indent_id for x in db.scalars(_q(db, OrderIndent).where(OrderIndent.purchase_order_id == po.id))}
         if set(body["indent_ids"]) != current:
-            raise invalid("tender_order", "an awarded order keeps the tender's indents", "indent_ids")
+            raise invalid("awarded_order", "an awarded order keeps the tender's indents", "indent_ids")
+        if _items(body["items"], priced=True) != po.items:
+            raise invalid("awarded_order", "an awarded order keeps the awarded quote's items and prices", "items")
         _approved_vendor(db, po.vendor_id)
-        items = _items(body["items"], priced=True)
-        po.subtotal, po.tax_total, po.total = _rule(rules.order_totals, items)
-        po.items, po.delivery_by = items, _delivery_date(body["delivery_by"])
+        po.delivery_by = _delivery_date(body["delivery_by"])
         po.delivery_address, po.terms = _text(body.get("delivery_address")), _text(body.get("terms"))
     else:
         indents = _order_values(db, po, body)
