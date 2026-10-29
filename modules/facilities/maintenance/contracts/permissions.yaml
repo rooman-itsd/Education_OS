@@ -29,3 +29,11 @@ roles:
   - name: facility-staff
     description: The Facility / Inventory Staff profile role. Same grants as maintenance-manager.
     grants: [maintenance:ticket:create, maintenance:ticket:read, maintenance:ticket:read-all, maintenance:ticket:work, maintenance:ticket:manage, maintenance:schedule:manage]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards; follow-up
+  # to #288, part of #331). Each gets the grants of the module role its PRD names for it.
+  - name: equipment-manager
+    description: "Profile role, store staff named in the PRD: triage and see every ticket (tickets). Same grants as maintenance-manager."
+    grants: [maintenance:ticket:create, maintenance:ticket:read, maintenance:ticket:read-all, maintenance:ticket:work, maintenance:ticket:manage, maintenance:schedule:manage]
+  - name: lab-in-charge
+    description: "Profile role, store staff named in the PRD: triage and see every ticket (tickets). Same grants as maintenance-manager."
+    grants: [maintenance:ticket:create, maintenance:ticket:read, maintenance:ticket:read-all, maintenance:ticket:work, maintenance:ticket:manage, maintenance:schedule:manage]

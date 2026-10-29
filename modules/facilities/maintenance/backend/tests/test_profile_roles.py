@@ -26,3 +26,23 @@ def test_facility_staff_reads_the_data_behind_the_tickets_widget(client, org):
 def test_a_role_without_grants_is_refused(client, org):
     _, student = org.user("student")
     assert client.get(f"{BASE}/tickets?scope=managed&open=true", headers=student).status_code == 403
+
+
+# Academy profile roles whose dashboards show this module's widgets (follow-up to #288, part of #331).
+# role -> (module role whose grants it gets, extra keys, the widget's endpoint it must be able to read)
+PROFILE_ROLES = {
+    "equipment-manager": ("maintenance-manager", set(), "/tickets?scope=managed&open=true"),
+    "lab-in-charge": ("maintenance-manager", set(), "/tickets?scope=managed&open=true"),
+}
+
+
+def test_each_dashboard_profile_role_has_the_grants_its_prd_names():
+    for role, (base, extra, _) in PROFILE_ROLES.items():
+        assert _module_grants(role) == _module_grants(base) | extra, role
+
+
+def test_each_dashboard_profile_role_reads_the_data_behind_its_widget(client, org):
+    for role, (_, _, path) in PROFILE_ROLES.items():
+        _, headers = org.user(role)
+        r = client.get(f"{BASE}{path}", headers=headers)
+        assert r.status_code == 200, (role, r.text)
