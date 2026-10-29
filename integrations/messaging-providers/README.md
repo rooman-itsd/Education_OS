@@ -17,14 +17,14 @@ contracted only.
 | `reply_to`, advertised through `capabilities().supports_reply_to` | built, tested |
 | Provider registry: channel → provider by environment, failing closed | built (`application/registry.py`) |
 | Credentials from the environment only, never in `repr()`, a log line or an error | built, tested |
-| Operator API: list providers, provider health, rate-limited test send (`api/router.py`) | built, tested; not mounted |
+| Operator API: list providers, provider health, rate-limited test send (`api/router.py`) | built, tested; mounted at `/api/v1/messaging-providers`, super admin only |
 | 65 tests: 62 against a fake server, 3 that need a real one | 62 pass; the 3 skip unless a server is configured |
 
 ## What this release does NOT do
 
-1. **Nothing on `main` calls it yet.** `platform/notification`'s `AdapterTransport` is written to call it
-   (PR #232, not yet merged) and finds it by entry point, not by import. What remains is installing it where
-   notification runs. See "Wiring" below.
+1. **Notification does not send through it until notification is enabled and configured.**
+   `platform/notification`'s `AdapterTransport` finds it by entry point, not by import; notification is enabled
+   by PR #300, and selects this adapter with `NOTIFICATION_TRANSPORT=adapter`. See "Wiring" below.
 2. **No SMS and no WhatsApp.** Named in `port.yaml` and `config/env.example` so the shape is agreed. Asking
    the registry for either raises `ProviderUnavailableError` rather than returning something that accepts a
    message and drops it.
@@ -33,10 +33,8 @@ contracted only.
 4. **No inbound receipts.** `port.yaml` defines the webhook shape and `domain/port.py` carries the `Receipt`
    type, but there is no endpoint, no signature verification and no event. So nothing records `delivered` or
    `bounced`, and a hard bounce does not suppress an address.
-5. **No webhook intake, and the operator API is not mounted.** Three of the four operations in
-   `contracts/openapi.yaml` are built; `POST /webhooks/{provider}` is not, because SMTP reports nothing by
-   webhook. `apps/backend` does not include the router yet, so none of it is reachable in the running app.
-   The three events in `contracts/events.yaml` are not published: each needs an outbox write, and this module
+5. **No webhook intake.** Three of the four operations in `contracts/openapi.yaml` are built and mounted;
+   `POST /webhooks/{provider}` is not, because SMTP reports nothing by webhook. The three events in `contracts/events.yaml` are not published: each needs an outbox write, and this module
    has no database session to make one.
 6. **No `retry_after_s`.** SMTP has no retry-after signal, only reply text, which this module never trusts. It
    is always null, and notification falls back to its own backoff.
@@ -97,19 +95,16 @@ relay staging will actually use.
 leaves `dev_secrets` out. So there is **no dependency to add to notification**, and adding one would break the
 boundary the entry point exists to keep.
 
-What it does need is this package installed wherever notification runs (`pip install -e
-integrations/messaging-providers`); without it, notification answers 503 rather than guessing a provider.
-`tools/scripts/py-setup.sh` installs it for local development and CI.
+What it does need is this package installed wherever notification runs; without it, notification answers 503
+rather than guessing a provider. It is listed under `integrations:` in `apps/backend/config/modules.enabled.yaml`,
+so `tools/scripts/py-setup.sh`, CI and the API image install it, and the host mounts the operator API at
+`/api/v1/messaging-providers`.
 
-The operator API is a separate step: `apps/backend` has to include `eos_messaging_providers.api.router` at
-`/api/v1/messaging-providers`, a change to the host rather than to this module (`payment-sbiepay` is in the same
-position). Every route already names its permission the way the host's route-coverage test reads it, and both
-keys are granted to a role, so they work at runtime: `eos_core.config` reads every `*/*/contracts/permissions.yaml`.
-**The host's test does not:** `apps/backend/tests/test_platform_permissions.py` reads only
-`platform/*/contracts/permissions.yaml`, so once mounted it would report both keys as unknown and ungranted
-until its catalogue also covers `integrations/*`. And `messaging-providers` has to join `PLATFORM_MODULES` in
-`packages/core/src/eos_core/entitlement.py`: otherwise the host's entitlement gate refuses any caller without an
-organisation, which is every caller here, before the route is reached.
+The operator API is platform-level: its two keys are granted only to `super-admin`, who has no organisation.
+`messaging-providers` is therefore in `PLATFORM_MODULES` (`packages/core/src/eos_core/entitlement.py`), so the
+host's entitlement gate lets the request through to the route's own permission check instead of refusing every
+caller without an organisation. `apps/backend/tests/test_messaging_providers_mount.py` checks both through the
+real host.
 
 ## Tests
 

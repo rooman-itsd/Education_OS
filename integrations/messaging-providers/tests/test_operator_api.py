@@ -7,7 +7,7 @@ import logging
 import uuid
 
 import pytest
-from eos_core.config import permissions_for
+from eos_core.config import load_role_grants, permissions_for
 from eos_core.security import create_token
 from eos_messaging_providers.api.router import ADMIN, READ, router
 from eos_messaging_providers.application import providers, registry
@@ -27,7 +27,6 @@ def auth(token: str) -> dict:
 
 SUPER_ADMIN_ID = str(uuid.uuid4())
 SUPER_ADMIN = auth(create_token(user_id=SUPER_ADMIN_ID, organisation_id=None, roles=["super-admin"], super_admin=True))
-OPERATOR = auth(create_token(user_id=str(uuid.uuid4()), organisation_id=None, roles=["messaging-providers-operator"]))
 ORG_ADMIN = auth(create_token(user_id=str(uuid.uuid4()), organisation_id=str(uuid.uuid4()), roles=["org-admin"]))
 
 
@@ -70,18 +69,15 @@ def test_an_organisation_admin_sees_nothing_because_providers_are_platform_level
     assert server.sent == [] and server.noops == 0
 
 
-def test_platform_support_can_read_but_not_send(client, server):
-    assert client.get(f"{PREFIX}/providers", headers=OPERATOR).status_code == 200
-    assert client.get(f"{PREFIX}/providers/smtp/health", headers=OPERATOR).status_code == 200
-    assert client.post(f"{PREFIX}/providers/smtp/test", json={"to": ADDRESS}, headers=OPERATOR).status_code == 403
-    assert server.sent == []
-
-
 def test_the_super_admin_holds_both_keys_through_the_catalogue():
     """Before the super-admin role was added to contracts/permissions.yaml, nobody held the admin key: a super
     admin is given only the platform: keys some role grants."""
     assert {READ, ADMIN} <= permissions_for(["super-admin"], super_admin=True)
-    assert ADMIN not in permissions_for(["messaging-providers-operator"])
+
+
+def test_no_role_but_the_super_admin_holds_either_key():
+    """Blocks are named with platform role ids; a block named for a role no profile assigns would grant nothing."""
+    assert {role for role, keys in load_role_grants().items() if keys & {READ, ADMIN}} == {"super-admin"}
 
 
 def test_every_route_names_its_permission_so_the_host_can_check_coverage_once_mounted():
@@ -95,7 +91,7 @@ def test_every_route_names_its_permission_so_the_host_can_check_coverage_once_mo
 
 
 def test_the_list_shows_smtp_selected_for_email_with_its_capabilities(client):
-    body = client.get(f"{PREFIX}/providers", headers=OPERATOR).json()
+    body = client.get(f"{PREFIX}/providers", headers=SUPER_ADMIN).json()
     (smtp,) = body["items"]
     assert smtp["id"] == "smtp" and smtp["channel"] == "email" and smtp["enabled"] is True
     assert smtp["capabilities"]["supports_html"] is True and smtp["capabilities"]["supports_reply_to"] is True
@@ -104,7 +100,7 @@ def test_the_list_shows_smtp_selected_for_email_with_its_capabilities(client):
 
 def test_a_provider_the_environment_does_not_select_is_listed_as_not_enabled(client, monkeypatch):
     monkeypatch.setenv("MESSAGING_PROVIDERS_EMAIL", "ses")
-    (smtp,) = client.get(f"{PREFIX}/providers", headers=OPERATOR).json()["items"]
+    (smtp,) = client.get(f"{PREFIX}/providers", headers=SUPER_ADMIN).json()["items"]
     assert smtp["enabled"] is False
 
 
@@ -126,14 +122,14 @@ def test_no_credential_or_host_ever_comes_back(client, monkeypatch):
 
 
 def test_health_reports_reachable_and_never_sends(client, server):
-    body = client.get(f"{PREFIX}/providers/smtp/health", headers=OPERATOR).json()
+    body = client.get(f"{PREFIX}/providers/smtp/health", headers=SUPER_ADMIN).json()
     assert body["reachable"] is True and body["checked_at"]
     assert server.noops == 1 and server.sent == []
 
 
 def test_the_last_health_result_appears_in_the_list(client):
-    checked = client.get(f"{PREFIX}/providers/smtp/health", headers=OPERATOR).json()
-    (smtp,) = client.get(f"{PREFIX}/providers", headers=OPERATOR).json()["items"]
+    checked = client.get(f"{PREFIX}/providers/smtp/health", headers=SUPER_ADMIN).json()
+    (smtp,) = client.get(f"{PREFIX}/providers", headers=SUPER_ADMIN).json()["items"]
     assert smtp["last_health"] == {"reachable": True, "checked_at": checked["checked_at"]}
 
 
@@ -142,12 +138,12 @@ def test_an_unreachable_provider_is_reported_not_raised(client, monkeypatch):
         raise ConnectionRefusedError("no listener")
 
     monkeypatch.setitem(registry.EMAIL_PROVIDERS, "smtp", lambda: SmtpEmailProvider(config=CONFIG, client_factory=down))
-    response = client.get(f"{PREFIX}/providers/smtp/health", headers=OPERATOR)
+    response = client.get(f"{PREFIX}/providers/smtp/health", headers=SUPER_ADMIN)
     assert response.status_code == 200 and response.json()["reachable"] is False
 
 
 def test_health_for_an_unknown_provider_is_a_404(client):
-    assert client.get(f"{PREFIX}/providers/sendgrid/health", headers=OPERATOR).status_code == 404
+    assert client.get(f"{PREFIX}/providers/sendgrid/health", headers=SUPER_ADMIN).status_code == 404
 
 
 # --- POST /providers/{provider}/test ---------------------------------------------------------------------

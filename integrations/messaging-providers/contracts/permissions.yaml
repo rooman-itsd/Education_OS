@@ -14,16 +14,14 @@ permissions:
       Super admin only. Enable or disable a provider and send a test message. Credentials
       themselves arrive as environment variables and are not editable through the API.
 
+# Blocks are named with platform role ids, the roles a token carries. No profile gives a person a
+# provider-support role, so only the super admin holds these keys; no organisation role holds either.
 roles:
-  - name: messaging-providers-operator
-    description: >-
-      Reads provider health when diagnosing a delivery problem. Intended for platform support,
-      not for an organisation admin.
-    grants:
-      - messaging-providers:provider:read
   # A super admin is handed only the platform: keys that some role grants (eos_core.config.permissions_for), so
   # without this the admin key would be held by nobody. Same pattern as platform/billing's super-admin role.
   - name: super-admin
+    description: >-
+      Super admin: sees which providers are configured and reachable, and sends a test message.
     grants:
       - messaging-providers:provider:read
       - platform:messaging-providers:admin
