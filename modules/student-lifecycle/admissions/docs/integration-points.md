@@ -20,8 +20,16 @@ module's event in this release.
 
 | Service | Use |
 |---|---|
-| `platform/documents` | Storage for uploaded application documents; this module stores only `document_id` references |
-| `platform/audit` | Every status change, document verification, offer and decision is audited |
+| `platform/documents` | Storage for uploaded application documents; this module stores only `document_id` references (opaque; not validated, since documents has no service to call yet) |
+| `platform/audit` | Every status change, document verification, offer and decision is audited. Until audit has a service, rows go to this module's own `admissions_audit_entry` table, as other built modules do |
+
+## What the host must provide
+
+- **Public routes through the gateway.** `apps/backend`'s entitlement gate must let
+  `/api/v1/admissions/public/{org_slug}/*` through without a token, after resolving the slug to an
+  active organisation entitled to admissions (404 otherwise), and pass that organisation id to the
+  route as `request.state.organisation_id`. Every other admissions path keeps the normal token check.
+  Without it the public routes answer 404 (the module never guesses an organisation).
 
 ## Cross-module API dependencies
 
@@ -37,8 +45,7 @@ references, never validated against another module's schema or API in this relea
   a `source` reference back to this application's id. This module does not call that API and does
   not need its contract to exist to publish its own — the relationship is staff-mediated, not
   code-mediated.
-- **An authenticated applicant experience**: `platform/identity/config/dashboards/applicant.yaml`
-  already references `admissions.application-status` and `admissions.pending-documents` widget
-  ids, which assume a logged-in applicant session. This release has no such session (see
-  `docs/prd.md` §6); building those widgets is blocked on a future, explicit decision about
-  applicant account creation, which is out of scope for Issue #62.
+- **An authenticated applicant experience**: not planned. Applicants stay anonymous (see
+  `docs/prd.md` §6) and use the public Track application page. `admissions.application-status`
+  and `admissions.pending-documents` are built as staff widgets; `applicant.yaml` still lists
+  them, and the shell hides them there (see `docs/screens.md`).
