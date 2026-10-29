@@ -8,6 +8,9 @@ What this provides, and what it does not (README states the same):
   provider accepted a message and before we recorded it can send a duplicate. Exactly-once is not claimed.
 - Events are not consumed here. `accept_message(source_event_id=...)` is the dedupe-safe entry a future event
   handler would call.
+- Two ways to send. `send_message` owns the transaction (the HTTP route). An in-process caller that already has
+  one open, such as tenancy recording a registration, uses `accept_in_transaction` and then, after its own
+  commit, `deliver_accepted`. Both go through the same accept and dispatch, so there is one delivery path.
 """
 
 from __future__ import annotations
@@ -74,6 +77,9 @@ class Accepted:
     message: Message
     created: bool
     secrets: dict[str, str] = field(default_factory=dict, repr=False)  # in memory only, never stored or logged
+    # The transport resolved before the row was written, so delivery uses the one that was checked. None for a
+    # replay and for in_app, which is stored rather than sent.
+    transport: Transport | None = field(default=None, repr=False)
 
 
 # --- guarded state changes -------------------------------------------------------------------------------------
@@ -318,15 +324,36 @@ def _find_duplicate(db, org, client_token, source_event_id, template, channel, r
 # --- send -----------------------------------------------------------------------------------------------------
 
 
-def send_message(
+def accept_in_transaction(
     db: Session,
     *,
     transport: Transport | None = None,
     config: NotificationConfig | None = None,
     now: datetime | None = None,
     **request,
-) -> tuple[Message, bool]:
-    """accept -> commit -> dispatch. Returns (message, created). A replay returns the original untouched."""
+) -> Accepted:
+    """Step one for an in-process caller that owns the transaction, such as tenancy recording a registration.
+
+    The calling contract:
+    1. Call it inside the caller's open transaction and organisation scope (`organisation_scope(org_id)`), with
+       the same fields POST /messages takes (template, recipient, variables, client_token, ...).
+    2. It validates, resolves the transport and adds the message row with a flush. It NEVER commits and NEVER
+       rolls back, so the row commits, or disappears, together with the caller's own work.
+    3. Every refusal is raised as NotificationError BEFORE a row is written. That includes 503 when the channel
+       needs a transport and none can be resolved (the memory transport outside dev mode, or no adapter
+       installed). The caller's pending work is left exactly as it was; the caller decides whether to roll back.
+    4. A replayed client_token returns the original (created=False) and writes nothing.
+    5. After its own commit, the caller passes the result to deliver_accepted(). Nothing is sent before that.
+
+    Acceptance is not delivery. The returned message is `queued`: recorded, not sent.
+
+    Secrets, such as a verification token, exist only in the returned object, never in the database. If the
+    process stops after the caller's commit and before deliver_accepted(), the row stays `queued`:
+    - a message without a secret is sent by the next recover_stuck() sweep, but nothing runs that sweep
+      automatically until the scheduler (#82) exists, so until then it waits;
+    - a message with a secret can never be sent later, because the secret is gone. The next dispatch or sweep
+      marks it `failed` with `secret_unavailable`, and the caller must issue a new secret under a new
+      client_token."""
     config = config or NotificationConfig.from_env()
     chosen: dict[str, Transport | None] = {"transport": transport}
 
@@ -337,7 +364,71 @@ def send_message(
         if channel != "in_app" and chosen["transport"] is None:
             chosen["transport"] = get_transport(config)
 
+    _open_transaction(db)
     accepted = accept_message(db, config=config, now=now, before_insert=need_transport, **request)
+    accepted.transport = chosen["transport"]
+    return accepted
+
+
+def _open_transaction(db: Session) -> None:
+    """Make sure the caller's transaction exists in the database before accept_message takes its savepoint.
+
+    Python's sqlite3 driver opens a transaction only before an INSERT, UPDATE or DELETE. If the caller has not
+    written anything yet, the savepoint is not nested in anything: SQLite starts the transaction with it, and
+    RELEASE then COMMITS, so the message would survive the caller's rollback. Starting the transaction here makes
+    the savepoint nested, as it already is on PostgreSQL, whose driver begins the transaction with the first
+    statement. Nothing is begun when one is already open."""
+    connection = db.connection()
+    if connection.dialect.name == "sqlite" and not connection.connection.dbapi_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+
+
+def deliver_accepted(
+    accepted: Accepted,
+    *,
+    session_factory: sessionmaker | None = None,
+    config: NotificationConfig | None = None,
+    now: datetime | None = None,
+) -> Message:
+    """Step two, after the caller has committed. A new message is sent once, through dispatch(), the path every
+    send takes. A replay is returned untouched and nothing is sent again.
+
+    It works in a session of its own, in the message's own organisation, never the caller's. That is what makes
+    "only after the commit" a guarantee rather than a rule to remember. A row the caller has not committed, or
+    has rolled back, is invisible to another session, so a call made too early finds no message, raises
+    NotificationError(404) and sends nothing. And dispatch() commits its claim and outcome in that session,
+    so it can never commit the caller's unfinished work.
+
+    The returned message says what actually happened, and none of it is "delivered to the inbox":
+    - `sent` (shown as `sending` by the API): the provider accepted it. Delivery is not confirmed; receipts
+      are not built.
+    - `queued` with next_attempt_at set: a retryable failure, retried by recover_stuck().
+    - `failed`: permanent, with last_error saying why.
+    - `suppressed`: the recipient's preferences blocked it.
+    - `delivered`: in_app only, where storing it is delivering it."""
+    if not accepted.created:
+        return accepted.message
+    factory = session_factory or SessionLocal
+    with organisation_scope(accepted.message.organisation_id), factory() as db:
+        return dispatch(
+            db, accepted.message.id, secrets=accepted.secrets, transport=accepted.transport, config=config, now=now
+        )
+
+
+def send_message(
+    db: Session,
+    *,
+    transport: Transport | None = None,
+    config: NotificationConfig | None = None,
+    now: datetime | None = None,
+    **request,
+) -> tuple[Message, bool]:
+    """accept -> commit -> dispatch, owning the transaction: for the HTTP route and any caller with no transaction
+    of its own. A caller that has one open uses accept_in_transaction() and deliver_accepted() instead, because
+    this function commits, and on a replay rolls back, whatever the session holds. Returns (message, created). A
+    replay returns the original untouched."""
+    config = config or NotificationConfig.from_env()
+    accepted = accept_in_transaction(db, transport=transport, config=config, now=now, **request)
     if not accepted.created:
         # A replay is read-only, so detach it with its loaded values BEFORE ending the transaction: a rollback
         # expires every attribute, and the caller would then be holding an object that must be re-read. On
@@ -348,9 +439,10 @@ def send_message(
             db.expunge(accepted.message)
         db.rollback()  # nothing was written; end the read transaction
         return accepted.message, False
-    transport = chosen["transport"]
     db.commit()
-    message = dispatch(db, accepted.message.id, secrets=accepted.secrets, transport=transport, config=config, now=now)
+    message = dispatch(
+        db, accepted.message.id, secrets=accepted.secrets, transport=accepted.transport, config=config, now=now
+    )
     return message, True
 
 
