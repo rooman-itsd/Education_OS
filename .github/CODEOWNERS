@@ -1,44 +1,47 @@
-# Mirror of docs/team/ownership.md. GitHub routes PR reviews to these owners (branch protection requires one).
-# The lead reviews every contract and architecture change.
+# Mirror of docs/team/ownership.md. GitHub routes PR reviews to these owners; branch protection needs one
+# approving review from a code owner of every file touched. Every path has an owner and a backup, so the
+# backup approves the owner's own PRs and nobody waits for the lead. The lead (Faizan) is required only for
+# platform core, packages, docs/architecture and the team rules; module contracts belong to the module owner.
 
-/docs/architecture/                 @faizanrooman
-/packages/                          @faizanrooman
-/platform/identity/                 @faizanrooman
-/platform/api-gateway/              @faizanrooman
-/platform/tenancy/                  @faizanrooman
-/platform/billing/                  @faizanrooman
-/.github/                           @faizanrooman @srujanrooman
-/tools/                             @faizanrooman @srujanrooman
-/docs/team/                         @faizanrooman
-**/contracts/                       @faizanrooman
+/docs/architecture/                  @faizanrooman @srujanrooman @himanshu-rooman
+/docs/team/                          @faizanrooman @srujanrooman
+/packages/                           @faizanrooman @srujanrooman @himanshu-rooman
+/packages/testing/                   @srujanrooman @faizanrooman
+/platform/identity/                  @faizanrooman @himanshu-rooman @srujanrooman
+/platform/identity/config/           @faizanrooman @srujanrooman @himanshu-rooman
+/platform/api-gateway/               @faizanrooman @himanshu-rooman @srujanrooman
+/platform/tenancy/                   @faizanrooman @himanshu-rooman @srujanrooman
+/platform/billing/                   @faizanrooman @himanshu-rooman @srujanrooman
+/.github/                            @faizanrooman @srujanrooman
+/tools/                              @faizanrooman @srujanrooman
+/infra/                              @srujanrooman @faizanrooman
+/apps/                               @srujanrooman @faizanrooman
+/tests/                              @srujanrooman @faizanrooman
 
-/platform/                          @himanshu-rooman
-/integrations/                      @himanshu-rooman
-/modules/practice/productions/      @himanshu-rooman
+/platform/                           @himanshu-rooman @faizanrooman @srujanrooman
+/integrations/                       @himanshu-rooman @faizanrooman @akshatatrathodrooman
+/integrations/payment-sbiepay/       @gokulalakshmirooman-source @Ashritharooman @faizanrooman
+/modules/practice/productions/       @himanshu-rooman @akshatatrathodrooman
 
-/modules/student-lifecycle/         @praveen-rooman
-/modules/practice/portfolio/        @praveen-rooman
-/modules/practice/selection-process/ @praveen-rooman
+/modules/student-lifecycle/          @praveen-rooman @shivanisinghrooman-09
+/modules/practice/portfolio/         @praveen-rooman @shivanisinghrooman-09
+/modules/practice/selection-process/ @praveen-rooman @shivanisinghrooman-09
 
-/modules/academics/                 @shivanisinghrooman-09
+/modules/academics/                  @shivanisinghrooman-09 @praveen-rooman
 
-/modules/sports/                    @akshatatrathodrooman
-/modules/facilities/sports-facilities/ @akshatatrathodrooman
-/modules/practice/skill-progress/   @akshatatrathodrooman
+/modules/sports/                     @akshatatrathodrooman @himanshu-rooman @Ashritharooman
+/modules/practice/skill-progress/    @akshatatrathodrooman @himanshu-rooman @Ashritharooman
 
-/modules/facilities/                @Ashritharooman
+/modules/facilities/                 @Ashritharooman @gokulalakshmirooman-source
+/modules/facilities/sports-facilities/ @Ashritharooman @akshatatrathodrooman
 
-/modules/finance-operations/        @gokulalakshmirooman-source
-/integrations/payment-sbiepay/      @gokulalakshmirooman-source
+/modules/finance-operations/         @gokulalakshmirooman-source @Ashritharooman
+/modules/campus-life/placement-career/ @gokulalakshmirooman-source @tejaswini-rooman
+/modules/campus-life/alumni/         @gokulalakshmirooman-source @tejaswini-rooman
 
-/modules/campus-life/               @tejaswini-rooman
-/modules/practice/field-training/   @tejaswini-rooman
-/modules/practice/projects/         @tejaswini-rooman
+/modules/campus-life/                @tejaswini-rooman @madhumitha-rooman
+/modules/practice/field-training/    @tejaswini-rooman @madhumitha-rooman
+/modules/practice/projects/          @tejaswini-rooman @madhumitha-rooman
 
-/modules/governance/                @madhumitha-rooman
-/modules/support/                   @madhumitha-rooman
-
-/apps/                              @srujanrooman
-/infra/                             @srujanrooman
-/tests/                             @srujanrooman
-/packages/testing/                  @srujanrooman
+/modules/governance/                 @madhumitha-rooman @tejaswini-rooman
+/modules/support/                    @madhumitha-rooman @tejaswini-rooman
