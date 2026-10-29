@@ -16,7 +16,7 @@ funds received, and utilisation certificates (UCs) for funders. Contract: `contr
 |---|---|---|
 | Finance staff | Prepare budgets, record spend, manage grants, certify UCs | `budget-grants.budget-vs-spend` (`GET /reports/budget-vs-spend`) |
 | Research office | Record grants and funds received, prepare UCs, watch grant spend | `budget-grants.budget-vs-spend` (`scope=grants`) |
-| Management | Approve budgets, reappropriations and UCs | — |
+| Management | Approve budgets, reappropriations and UCs; check a line's availability when approving procurement indents | — |
 | Department admin / HoD | See their department's budget | — |
 | Investigators (faculty, research supervisor, research scholar) | See their grants, balance and next UC due; pick a grant line when raising an indent | `budget-grants.my-grants` (`GET /me/grants`) |
 

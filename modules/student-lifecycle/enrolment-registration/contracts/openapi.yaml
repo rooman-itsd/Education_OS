@@ -2,9 +2,392 @@ openapi: 3.1.0
 info:
   title: enrolment-registration API
   version: 0.1.0
-  description: "Programme enrolment, semester registration, section and elective allocation."
+  description: |
+    Programme enrolment (with roll numbers), registration windows, and course registration for course offerings and
+    sections, the source of truth for who is registered for what (docs/prd.md).
+    Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
+    `x-permission` on each operation names the key from contracts/permissions.yaml it requires.
+    Ids of other modules' entities (person, programme, term, offering, section) are references only.
 servers:
   - url: /api/v1/enrolment-registration
-paths: {}
+tags:
+  - name: enrolments
+  - name: windows
+  - name: registrations
+  - name: widgets
+paths:
+  # ---------------------------------------------------------------- programme enrolment
+  /programme-enrolments:
+    get:
+      tags: [enrolments]
+      summary: Find programme enrolments, newest first
+      operationId: listEnrolments
+      x-permission: enrolment-registration:enrolment:read
+      parameters:
+        - { name: programme_id, in: query, schema: { type: string, format: uuid } }
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/EnrolmentStatus" } }
+        - { name: q, in: query, description: "Search in student name and roll number", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EnrolmentPage" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [enrolments]
+      summary: Enrol a person in a programme; the module assigns the roll number
+      operationId: createEnrolment
+      x-permission: enrolment-registration:enrolment:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EnrolmentInput" } } } }
+      responses:
+        "201": { description: Enrolled, content: { application/json: { schema: { $ref: "#/components/schemas/ProgrammeEnrolment" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: "duplicate_enrolment: the person already has an active enrolment in this programme", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /programme-enrolments/{programme_enrolment_id}:
+    parameters: [{ $ref: "#/components/parameters/ProgrammeEnrolmentId" }]
+    get:
+      tags: [enrolments]
+      summary: One programme enrolment
+      operationId: getEnrolment
+      x-permission: enrolment-registration:enrolment:read
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProgrammeEnrolment" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /programme-enrolments/{programme_enrolment_id}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/ProgrammeEnrolmentId" }]
+    post:
+      tags: [enrolments]
+      summary: >-
+        Withdraw an enrolment. Every confirmed course registration under it is withdrawn first, each with its own
+        course-registration.withdrawn event.
+      operationId: withdrawEnrolment
+      x-permission: enrolment-registration:enrolment:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses:
+        "200": { description: Withdrawn, content: { application/json: { schema: { $ref: "#/components/schemas/ProgrammeEnrolment" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "enrolment_ended: already withdrawn or completed", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /programme-enrolments/{programme_enrolment_id}/complete:
+    parameters: [{ $ref: "#/components/parameters/ProgrammeEnrolmentId" }]
+    post:
+      tags: [enrolments]
+      summary: Mark an enrolment completed (the student finished the programme)
+      operationId: completeEnrolment
+      x-permission: enrolment-registration:enrolment:manage
+      responses:
+        "200": { description: Completed, content: { application/json: { schema: { $ref: "#/components/schemas/ProgrammeEnrolment" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "enrolment_ended: already withdrawn or completed", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  # ---------------------------------------------------------------- registration windows
+  /terms/{academic_period_id}/registration-window:
+    parameters: [{ $ref: "#/components/parameters/AcademicPeriodId" }]
+    get:
+      tags: [windows]
+      summary: A term's registration window
+      operationId: getWindow
+      x-permission: enrolment-registration:registration:read
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationWindow" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The term has no window yet }
+    put:
+      tags: [windows]
+      summary: Set or change a term's registration window. Regular registrations need it open.
+      operationId: setWindow
+      x-permission: enrolment-registration:registration:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WindowInput" } } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationWindow" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { description: "invalid_window: closes_at is not after opens_at", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
+
+  # ---------------------------------------------------------------- course registrations
+  /registrations:
+    get:
+      tags: [registrations]
+      summary: Find course registrations, newest first
+      operationId: listRegistrations
+      x-permission: enrolment-registration:registration:read
+      parameters:
+        - { name: academic_period_id, in: query, schema: { type: string, format: uuid } }
+        - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
+        - { name: section_id, in: query, schema: { type: string, format: uuid } }
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { name: programme_enrolment_id, in: query, schema: { type: string, format: uuid } }
+        - { name: registration_type, in: query, schema: { $ref: "#/components/schemas/RegistrationType" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/RegistrationStatus" } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationPage" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [registrations]
+      summary: >-
+        Register an enrolled student for a course offering and section. Checks, in order: the enrolment is active;
+        no confirmed registration for this offering; for a regular registration, the term's window is open; the
+        offering is open, the section belongs to it and is open and not full (each checked when known locally,
+        otherwise the registration is flagged references_verified false).
+      operationId: register
+      x-permission: enrolment-registration:registration:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RegistrationInput" } } } }
+      responses:
+        "201": { description: Confirmed, content: { application/json: { schema: { $ref: "#/components/schemas/CourseRegistration" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: "not_found: no such enrolment in the caller's organisation" }
+        "409": { description: Refused by a registration rule, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+        "422": { description: "The section is not in the offering, or the offering is in another term", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
+
+  /registrations/bulk:
+    post:
+      tags: [registrations]
+      summary: >-
+        Register many enrolled students for one offering and section. Never fails as a whole: each student gets a
+        result, confirmed or refused with the same code a single registration would return.
+      operationId: registerBulk
+      x-permission: enrolment-registration:registration:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BulkRegistrationInput" } } } }
+      responses:
+        "200": { description: One result per student, in request order, content: { application/json: { schema: { $ref: "#/components/schemas/BulkRegistrationResult" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /registrations/{registration_id}:
+    parameters: [{ $ref: "#/components/parameters/RegistrationId" }]
+    get:
+      tags: [registrations]
+      summary: One course registration
+      operationId: getRegistration
+      x-permission: enrolment-registration:registration:read
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CourseRegistration" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /registrations/{registration_id}/withdraw:
+    parameters: [{ $ref: "#/components/parameters/RegistrationId" }]
+    post:
+      tags: [registrations]
+      summary: Withdraw a confirmed registration; it is kept with status withdrawn
+      operationId: withdrawRegistration
+      x-permission: enrolment-registration:registration:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses:
+        "200": { description: Withdrawn, content: { application/json: { schema: { $ref: "#/components/schemas/CourseRegistration" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "registration_not_confirmed: already withdrawn", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /registrations/{registration_id}/change-section:
+    parameters: [{ $ref: "#/components/parameters/RegistrationId" }]
+    post:
+      tags: [registrations]
+      summary: Move a confirmed registration to another section of the same offering, from effective_on
+      operationId: changeSection
+      x-permission: enrolment-registration:registration:manage
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionChangeInput" } } } }
+      responses:
+        "200": { description: Moved, content: { application/json: { schema: { $ref: "#/components/schemas/CourseRegistration" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "registration_not_confirmed, same_section, section_not_open or section_full", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+        "422": { description: "section_not_in_offering", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
+
+  # ---------------------------------------------------------------- widgets
+  /reports/registered-candidates:
+    get:
+      tags: [widgets]
+      summary: >-
+        Confirmed registrations per course offering for a term, busiest first. Backs the Examination Staff widget
+        enrolment-registration.registered-candidates. Without academic_period_id: the active term from the local copy
+        of academic-management; when no term is known, every confirmed registration (academic_period_id null).
+      operationId: registeredCandidates
+      x-permission: enrolment-registration:registration:read
+      parameters:
+        - { name: academic_period_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, description: "How many offerings to list", schema: { type: integer, minimum: 1, maximum: 50, default: 5 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RegisteredCandidatesReport" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  parameters:
+    ProgrammeEnrolmentId: { name: programme_enrolment_id, in: path, required: true, schema: { type: string, format: uuid } }
+    RegistrationId: { name: registration_id, in: path, required: true, schema: { type: string, format: uuid } }
+    AcademicPeriodId: { name: academic_period_id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  responses:
+    Forbidden: { description: The caller lacks the permission named in x-permission }
+    NotFound: { description: Not found in the caller's organisation }
+
+  schemas:
+    EnrolmentStatus: { type: string, enum: [active, completed, withdrawn] }
+    RegistrationType: { type: string, enum: [regular, supplementary, backlog] }
+    RegistrationStatus: { type: string, enum: [confirmed, withdrawn] }
+
+    EnrolmentInput:
+      type: object
+      required: [person_id, student_name, programme_id, start_academic_period_id]
+      properties:
+        person_id: { type: string, format: uuid, description: "student-information Person id" }
+        student_name: { type: string, minLength: 1, maxLength: 200, description: "Display name carried in events" }
+        programme_id: { type: string, format: uuid }
+        start_academic_period_id: { type: string, format: uuid }
+        source_application_id: { type: string, format: uuid, nullable: true, description: "Optional admissions application id" }
+    ProgrammeEnrolment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        person_id: { type: string, format: uuid }
+        student_name: { type: string }
+        programme_id: { type: string, format: uuid }
+        roll_number: { type: string, description: "Unique within the organisation, e.g. RN2026-00042" }
+        start_academic_period_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/EnrolmentStatus" }
+        source_application_id: { type: string, format: uuid, nullable: true }
+        enrolled_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        end_reason: { type: string, nullable: true }
+    EnrolmentPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ProgrammeEnrolment" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    ReasonInput:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 1000 }
+
+    WindowInput:
+      type: object
+      required: [opens_at, closes_at]
+      properties:
+        opens_at: { type: string, format: date-time }
+        closes_at: { type: string, format: date-time }
+    RegistrationWindow:
+      type: object
+      properties:
+        academic_period_id: { type: string, format: uuid }
+        opens_at: { type: string, format: date-time }
+        closes_at: { type: string, format: date-time }
+        is_open: { type: boolean, description: "Whether the window is open now" }
+        updated_at: { type: string, format: date-time }
+
+    RegistrationInput:
+      type: object
+      required: [programme_enrolment_id, course_offering_id, section_id, academic_period_id]
+      properties:
+        programme_enrolment_id: { type: string, format: uuid }
+        course_offering_id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        academic_period_id: { type: string, format: uuid, description: "Must match the offering's term when that is known" }
+        registration_type: { allOf: [{ $ref: "#/components/schemas/RegistrationType" }], default: regular }
+    BulkRegistrationInput:
+      type: object
+      required: [programme_enrolment_ids, course_offering_id, section_id, academic_period_id]
+      properties:
+        programme_enrolment_ids: { type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: { type: string, format: uuid } }
+        course_offering_id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        academic_period_id: { type: string, format: uuid }
+        registration_type: { allOf: [{ $ref: "#/components/schemas/RegistrationType" }], default: regular }
+    BulkRegistrationResult:
+      type: object
+      properties:
+        confirmed: { type: integer }
+        refused: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              programme_enrolment_id: { type: string, format: uuid }
+              outcome: { type: string, enum: [confirmed, refused] }
+              registration: { allOf: [{ $ref: "#/components/schemas/CourseRegistration" }], nullable: true }
+              code: { type: string, nullable: true, description: "The refusal code a single registration would return" }
+              message: { type: string, nullable: true }
+    CourseRegistration:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: "The registration_id every event carries" }
+        organisation_id: { type: string, format: uuid }
+        programme_enrolment_id: { type: string, format: uuid }
+        person_id: { type: string, format: uuid }
+        student_name: { type: string }
+        roll_number: { type: string }
+        course_offering_id: { type: string, format: uuid }
+        section_id: { type: string, format: uuid }
+        academic_period_id: { type: string, format: uuid }
+        registration_type: { $ref: "#/components/schemas/RegistrationType" }
+        status: { $ref: "#/components/schemas/RegistrationStatus" }
+        references_verified: { type: boolean, description: "False when the offering or section was not known locally when checked" }
+        section_since: { type: string, format: date }
+        confirmed_at: { type: string, format: date-time }
+        withdrawn_at: { type: string, format: date-time, nullable: true }
+        withdrawal_reason: { type: string, nullable: true }
+    RegistrationPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CourseRegistration" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    SectionChangeInput:
+      type: object
+      required: [to_section_id, effective_on]
+      properties:
+        to_section_id: { type: string, format: uuid }
+        effective_on: { type: string, format: date }
+
+    RegisteredCandidatesReport:
+      type: object
+      properties:
+        academic_period_id: { type: string, format: uuid, nullable: true }
+        term_name: { type: string, nullable: true }
+        total: { type: integer, description: "Confirmed registrations" }
+        by_type: { type: object, properties: { regular: { type: integer }, supplementary: { type: integer }, backlog: { type: integer } } }
+        offerings:
+          type: array
+          items:
+            type: object
+            properties:
+              course_offering_id: { type: string, format: uuid }
+              course_code: { type: string, nullable: true, description: "From the local copy of academic-management; null until known" }
+              course_title: { type: string, nullable: true }
+              registered: { type: integer }
+
+    ConflictError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+            - duplicate_enrolment
+            - enrolment_ended
+            - enrolment_not_active
+            - already_registered
+            - window_closed
+            - offering_not_open
+            - section_not_open
+            - section_full
+            - registration_not_confirmed
+            - same_section
+        message: { type: string }
+    RuleError:
+      type: object
+      properties:
+        code: { type: string, enum: [invalid_window, section_not_in_offering, term_mismatch] }
+        message: { type: string }
