@@ -16,8 +16,9 @@ SECRET = "s3cr3t-token-value"
 
 @pytest.fixture(autouse=True)
 def grants(monkeypatch):
-    """No role in the merged catalogue holds notification:message:send (it is meant for modules, not people), so
-    the tests add one test-only role. The real catalogue is otherwise untouched."""
+    """notification:message:send is granted only to the `service` block, which no person may hold (platform/
+    identity is to refuse it on a user), so the HTTP send route is exercised through one test-only role instead
+    of a user carrying `service`. The real catalogue is otherwise untouched."""
     real = core_config.load_role_grants()
     monkeypatch.setattr(core_config, "load_role_grants", lambda: {**real, "test-sender": {"notification:message:send"}})
 
@@ -103,9 +104,9 @@ def test_an_organisation_override_changes_the_next_mail(client, org):
     }
     assert post(client, org, org.admin, "/templates", body).status_code == 201
     post(client, org, org.sender, "/messages", reminder_request())
-    from eos_core import notify
+    from eos_notification.infrastructure import transport as transport_module
 
-    assert notify.sent[-1]["body"] == "ORG WORDING 2026-10-20"
+    assert transport_module.sent[-1]["body"] == "ORG WORDING 2026-10-20"
 
 
 def test_the_verification_template_cannot_be_overridden_and_preview_hides_secrets(client, org):
@@ -149,7 +150,7 @@ def test_a_person_manages_their_own_preferences_but_not_someone_elses(client, or
     )
     assert r.status_code == 200 and r.json()["channels"]["transactional"] == ["email", "in_app"]
     assert get(client, org, org.member, f"/preferences/{org.admin.id}").status_code == 403
-    assert get(client, org, org.admin, own).status_code == 200  # notification-admin holds preference:manage
+    assert get(client, org, org.admin, own).status_code == 200  # org-admin holds preference:manage
 
 
 def test_a_super_admin_without_an_organisation_is_refused(client, db):

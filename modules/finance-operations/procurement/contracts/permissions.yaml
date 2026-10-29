@@ -9,7 +9,9 @@ permissions:
   - key: procurement:indent:create
     description: Raise, edit and submit one's own indents and follow them.
   - key: procurement:indent:approve
-    description: View and decide indents raised by others (all, or one's department).
+    description: >-
+      View and decide indents raised by others. Limiting it to one's department is not enforced until identity
+      issues a department claim; until then it covers every indent of the organisation.
   - key: procurement:tender:manage
     description: Create, publish and award quotation requests and tenders; record quotes.
   - key: procurement:purchase-order:read
