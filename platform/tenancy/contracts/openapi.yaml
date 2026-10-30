@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: tenancy API
-  version: 0.1.0
+  version: 0.2.0
   description: "Organisations (tenants), self-service registration, academy type, entitlements. See ADR-0005."
 servers:
   - url: /api/v1/tenancy
@@ -78,6 +78,37 @@ paths:
       summary: One organisation with its entitlement and usage. Super admin only.
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OrganisationDetail" } } } } }
+    delete:
+      summary: Request deletion. The organisation is archived at once (its users can no longer sign in) and its rows are purged after delete_after, now plus EOS_ORGANISATION_RETENTION_DAYS (default 30), unless restored first. An active organisation with paid invoices is refused unless confirm_slug names it. Super admin only (platform:organisation:delete).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/DeletionRequest" } } } }
+      responses:
+        "200": { description: Archived with delete_after set, content: { application/json: { schema: { $ref: "#/components/schemas/Organisation" } } } }
+        "409": { description: Active with paid invoices and confirm_slug missing or wrong, or deletion already requested }
+  /admin/organisations/{id}/export:
+    get:
+      summary: Everything held about the organisation as one JSON document (DPDP data export), served as an attachment named <slug>-export-<date>.json. Super admin only (platform:organisation:export). Leaves a tenancy.organisation.exported event.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200":
+          description: The export
+          headers: { Content-Disposition: { schema: { type: string }, description: 'attachment; filename="<slug>-export-<date>.json"' } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OrganisationExport" } } }
+  /admin/organisations/{id}/restore:
+    post:
+      summary: Cancel a pending deletion before the purge runs. The organisation gets its previous status back and delete_after is cleared. Super admin only (platform:organisation:delete).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Organisation" } } } }
+        "409": { description: No deletion pending }
+  /admin/organisations/{id}/purge:
+    post:
+      summary: Delete every row of the organisation in every table that carries organisation_id, then the organisation itself. Irreversible. Allowed once delete_after has passed, or at once with force. Super admin only (platform:organisation:delete).
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/PurgeRequest" } } } }
+      responses:
+        "200": { description: Purged, content: { application/json: { schema: { $ref: "#/components/schemas/PurgeResult" } } } }
+        "409": { description: Deletion not requested, or retention still running and force not set }
   /admin/organisations/{id}/status:
     put:
       summary: Activate, suspend or archive an organisation. Super admin only (platform:organisations:manage).
@@ -133,9 +164,13 @@ components:
         academy_type: { type: string, description: "The academic package in effect" }
         requested_academy_type: { type: string, nullable: true, description: "A package change awaiting super admin approval" }
         status: { $ref: "#/components/schemas/OrganisationStatus" }
+        status_reason: { type: string, nullable: true }
         plan: { type: string, description: "Current plan id from billing" }
         trial_ends_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
+        delete_after: { type: string, format: date-time, nullable: true, description: "Set while a deletion is pending: the purge may run after this moment" }
+        deletion_requested_by: { type: string, format: uuid, nullable: true }
+        deletion_requested_at: { type: string, format: date-time, nullable: true }
     OrganisationUpdate:
       type: object
       properties:
@@ -166,6 +201,49 @@ components:
         grant_modules: { type: array, items: { type: string } }
         revoke_modules: { type: array, items: { type: string } }
         reason: { type: string }
+    DeletionRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        confirm_slug: { type: string, description: "Required, equal to the organisation's slug, when it is active with paid invoices" }
+    PurgeRequest:
+      type: object
+      properties:
+        force: { type: boolean, default: false, description: "Purge before delete_after has passed" }
+    PurgeResult:
+      type: object
+      properties:
+        organisation_id: { type: string, format: uuid }
+        slug: { type: string }
+        purged_at: { type: string, format: date-time }
+        forced: { type: boolean }
+        rows_deleted: { type: object, additionalProperties: { type: integer }, description: "table name -> rows deleted (tables left out had none)" }
+    OrganisationExport:
+      type: object
+      description: "One organisation's data. `tables` has every table that carries organisation_id (known models and any other table in the database) plus tenancy_organisation, each as a list of rows, column name -> value: dates ISO 8601, decimals as strings, JSON columns as is, secrets (password hashes, tokens) as \"[redacted]\"."
+      properties:
+        schema_version: { type: integer, description: "1" }
+        exported_at: { type: string, format: date-time }
+        exported_by: { type: string, format: uuid, description: "The super admin" }
+        organisation: { $ref: "#/components/schemas/Organisation" }
+        row_counts: { type: object, additionalProperties: { type: integer } }
+        tables:
+          type: object
+          additionalProperties: { type: array, items: { type: object, additionalProperties: true } }
+        files:
+          type: object
+          description: "Document references found in columns named document_id / file_id (or ending in them). References only until platform/documents exists; the files follow then."
+          properties:
+            note: { type: string }
+            references:
+              type: array
+              items:
+                type: object
+                properties:
+                  table: { type: string }
+                  row_id: { type: string }
+                  column: { type: string }
+                  document_id: { type: string }
     OrganisationDetail:
       allOf:
         - { $ref: "#/components/schemas/Organisation" }

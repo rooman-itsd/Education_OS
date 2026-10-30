@@ -26,8 +26,20 @@ events:
     description: Super admin suspended the organisation. Gateway refuses all its requests.
     payload: { organisation_id: uuid, reason: string }
   - name: tenancy.organisation.archived
-    description: Organisation closed. Data retained per policy, then deleted.
-    payload: { organisation_id: uuid }
+    description: Organisation closed. Data retained per policy, then deleted. When a super admin's DELETE caused it, the payload also carries delete_after and requested_by.
+    payload: { organisation_id: uuid, reason: string }
+  - name: tenancy.organisation.exported
+    description: A super admin downloaded the organisation's data export (DPDP). The actor is the super admin.
+    payload: { organisation_id: uuid, actor: uuid, tables: integer, rows: integer }
+  - name: tenancy.organisation.deletion_requested
+    description: A super admin asked for the organisation to be deleted. It is archived now and purged after delete_after (EOS_ORGANISATION_RETENTION_DAYS, default 30) unless restored first.
+    payload: { organisation_id: uuid, reason: string, delete_after: date-time, requested_by: uuid }
+  - name: tenancy.organisation.restored
+    description: A pending deletion was cancelled before the purge; the organisation is back in its previous status (tenancy.organisation.activated follows when that is active).
+    payload: { organisation_id: uuid, status: string, restored_by: uuid }
+  - name: tenancy.organisation.purged
+    description: Every row of the organisation in every table with organisation_id, and the organisation itself, were deleted for good. The envelope's organisation_id is null because the tenant no longer exists; the payload carries its id, slug and rows deleted per table (counts only, no personal data).
+    payload: { organisation_id: uuid, slug: string, purged_at: date-time, forced: boolean, rows_deleted: object, purged_by: uuid }
   - name: tenancy.entitlement.changed
     description: The set of modules, integrations or limits an organisation may use changed (plan change, override, toggle). Apps refresh.
     payload: { organisation_id: uuid, modules: [string], integrations: [string], plan: string }
