@@ -4,7 +4,7 @@
 #   1. db-roles.py         the eos_app role the API connects as: row access only, no DDL
 #   2. stamp-chains.py     only for a database whose tables the API created before migrations existed
 #   3. alembic upgrade     every chain apps/backend/config/modules.enabled.yaml enables, platform first
-#   4. init_db             outbox_event, the one table with no chain yet; goes when it gets an event-bus chain
+#                          (outbox_event belongs to platform/event-bus's chain; every table has a chain)
 #
 # CI runs this same file against its Postgres service (EOS_REPO_ROOT set to the checkout, .venv on PATH).
 set -eu
@@ -14,5 +14,4 @@ python infra/docker/stamp-chains.py
 for chain in $(python tools/scripts/enabled-modules.py chains); do
   (cd "$chain" && alembic upgrade head)
 done
-python -c "from eos_core.db import init_db; init_db()"
 echo "migrate: done"
