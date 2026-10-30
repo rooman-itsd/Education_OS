@@ -103,12 +103,12 @@ paths:
         "409": { description: No deletion pending }
   /admin/organisations/{id}/purge:
     post:
-      summary: Delete every row of the organisation in every table that carries organisation_id, then the organisation itself. Irreversible. Allowed once delete_after has passed, or at once with force. Super admin only (platform:organisation:delete).
+      summary: Delete every row of the organisation in every table that carries organisation_id, then the organisation itself. Irreversible. Allowed once delete_after has passed, or at once with force. The super admin runs it after delete_after; nothing schedules it yet (a platform/scheduler job will call it once #357 is in). Super admin only (platform:organisation:delete).
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/PurgeRequest" } } } }
       responses:
         "200": { description: Purged, content: { application/json: { schema: { $ref: "#/components/schemas/PurgeResult" } } } }
-        "409": { description: Deletion not requested, or retention still running and force not set }
+        "409": { description: Deletion not requested, or retention still running and force not set, or purge_blocked (a foreign key stops the delete; the detail names the table) }
   /admin/organisations/{id}/status:
     put:
       summary: Activate, suspend or archive an organisation. Super admin only (platform:organisations:manage).
