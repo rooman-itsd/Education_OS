@@ -2,6 +2,10 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: research-office
 title: "Research Office"
+module_roles:
+  - selection-process-coordinator
+  - projects-coordinator
+  - regulatory-reports-preparer
 widgets:
   - selection-process.open-calls
   - projects.active

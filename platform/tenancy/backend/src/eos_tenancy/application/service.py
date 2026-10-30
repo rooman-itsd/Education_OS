@@ -222,6 +222,15 @@ def organisation_status(db: Session, organisation_id: str) -> str | None:
     return org.status if org else None
 
 
+def organisation_name(db: Session, organisation_id: str) -> str | None:
+    """The display name, for a platform service that may not import tenancy. Published on the
+    `eos.organisation_directory` entry point, so a process that is not the API (the event-bus relay, the
+    scheduler) finds it too; platform/notification renders it into every organisation-facing template."""
+    with platform_scope():
+        org = db.get(Organisation, organisation_id)
+    return org.name if org else None
+
+
 def organisation_id_for_slug(db: Session, slug: str) -> str | None:
     with platform_scope():
         org = db.scalar(select(Organisation).where(Organisation.slug == slug))

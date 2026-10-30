@@ -3,6 +3,11 @@
 role: mentor-teacher
 title: "Mentor Teacher"
 extends: faculty
+module_roles:
+  - field-training-supervisor
+  - portfolio-reviewer
+  - projects-guide
+  - skill-progress-evaluator
 widgets:
   - field-training.trainees-to-assess
   - portfolio.reviews-pending

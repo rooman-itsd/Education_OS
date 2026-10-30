@@ -5,6 +5,13 @@ description = "Education OS platform service: plans, trials, subscriptions, upgr
 requires-python = ">=3.12"
 dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "alembic>=1.13", "eos-core", "eos-identity"]
 
+# Billing's scheduled jobs (platform/scheduler) and the events it reacts to (platform/event-bus).
+[project.entry-points."eos.scheduler_jobs"]
+billing = "eos_billing.application.jobs:JOBS"
+
+[project.entry-points."eos.event_consumers"]
+billing = "eos_billing.application.consumers:CONSUMERS"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

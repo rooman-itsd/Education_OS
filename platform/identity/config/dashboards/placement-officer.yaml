@@ -2,6 +2,8 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: placement-officer
 title: "Placement Officer"
+module_roles:
+  - field-training-coordinator
 widgets:
   - field-training.placements-open
   - placement-career.openings

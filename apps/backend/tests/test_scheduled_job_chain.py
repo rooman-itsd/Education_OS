@@ -82,3 +82,35 @@ def test_a_due_platform_job_reaches_its_module_and_the_report_closes_the_run(cli
         )
         assert run.status == "succeeded" and run.detail == "2 trials expired"
         assert db.get(Schedule, run.schedule_id).last_status == "succeeded"
+
+
+def test_billing_expire_trials_runs_end_to_end_with_the_installed_modules():
+    """No stand-ins: the jobs and consumers the installed modules declare, billing's real handler."""
+    from eos_billing.domain.models import Subscription
+    from eos_event_bus.application.consumers import discover as discover_consumers
+    from eos_scheduler.application.jobs import discover as discover_jobs
+
+    org = str(uuid.uuid4())
+    now = datetime.now(UTC)
+    with platform_scope(), SessionLocal() as db:
+        db.add(
+            Subscription(
+                organisation_id=org, plan_id="trial", status="trialing", trial_ends_at=now - timedelta(hours=1)
+            )
+        )
+        db.commit()
+    jobs = discover_jobs()
+    assert {"billing.expire-trials", "billing.trial-reminders"} <= set(jobs)
+    ticker = Ticker(jobs, SchedulerConfig(), clock=lambda: now)
+    ticker.seed_platform_defaults()
+    with platform_scope(), SessionLocal() as db:
+        schedule = db.scalar(select(Schedule).where(Schedule.job == "billing.expire-trials"))
+        schedule.next_run_at = now - timedelta(seconds=1)
+        db.commit()
+        schedule_id = schedule.id
+    ticker.tick()
+    _relay_until_quiet(Relay(InProcessTransport(discover_consumers()), EventBusConfig()))
+    with platform_scope(), SessionLocal() as db:
+        assert db.scalar(select(Subscription.status).where(Subscription.organisation_id == org)) == "read_only"
+        run = db.scalar(select(Run).where(Run.schedule_id == schedule_id).order_by(Run.started_at.desc()))
+        assert run.status == "succeeded" and "trial(s) expired" in run.detail

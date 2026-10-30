@@ -12,8 +12,10 @@ events:
     description: Plan lowered at period end. Entitlement narrows; data is kept.
     payload: { organisation_id: uuid, from_plan: string, to_plan: string }
   - name: billing.trial.expiring
-    description: Sent 7, 3 and 1 days before trial end. notification emails the org admin.
-    payload: { organisation_id: uuid, days_left: integer }
+    description: >-
+      Sent 7, 3 and 1 days before trial end by the daily billing.trial-reminders job. notification emails
+      the org admin. A repeated run raises the same reminder_key; send each key once.
+    payload: { organisation_id: uuid, days_left: integer, trial_ends_on: date, reminder_key: string }
   - name: billing.trial.expired
     description: Trial ended without upgrade. Organisation goes read-only or is suspended per plan policy.
     payload: { organisation_id: uuid, after_trial: string }
