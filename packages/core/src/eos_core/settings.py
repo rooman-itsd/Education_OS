@@ -42,6 +42,8 @@ class Settings:
     oidc_realms: str = field(default_factory=lambda: os.environ.get("EOS_OIDC_REALMS", ""))
     oidc_jwks_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("EOS_OIDC_JWKS_TTL_SECONDS", "3600")))
     oidc_http_timeout: float = field(default_factory=lambda: float(os.environ.get("EOS_OIDC_HTTP_TIMEOUT", "5")))
+    # The JWKS fetch runs inside a request: short, so a slow or unreachable Keycloak refuses quickly.
+    oidc_jwks_timeout: float = field(default_factory=lambda: float(os.environ.get("EOS_OIDC_JWKS_TIMEOUT", "2")))
 
     @property
     def is_postgres(self) -> bool:
