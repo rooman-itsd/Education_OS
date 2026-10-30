@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { organisationWithUser, type DashboardUser } from "./organisation";
 
@@ -10,8 +11,8 @@ import { organisationWithUser, type DashboardUser } from "./organisation";
  * - once examinations is in apps/frontend/config/modules.enabled.yaml (widgets: PR #216): the three
  *   examination widgets render;
  * - while the examinations backend is not mounted: each widget says its data is not available yet;
- * - once the examinations backend exists (Shivani) and enrolment-registration ships its widget (Praveen):
- *   the data journeys marked fixme below.
+ * - once the examinations backend exists (Shivani): the data journeys marked fixme below;
+ * - once enrolment-registration is enabled: its widget shows candidates registered through its API.
  *
  * Loading states are covered by the module's unit tests, not here. Permission-based hiding is not
  * tested: apps/frontend/src/App.tsx passes permissions="all" to the dashboard for now.
@@ -23,10 +24,11 @@ const WIDGETS = [
   { id: "examinations.results-pending", title: "Results pending" },
 ] as const;
 
-/** Whether the shell registers examinations' widgets (a listed, uncommented entry). */
-const examinationsEnabled = readFileSync(new URL("../../../apps/frontend/config/modules.enabled.yaml", import.meta.url), "utf8")
-  .split("\n")
-  .some((line) => /^\s*-\s*academics\/examinations\s*$/.test(line.replace(/#.*/, "")));
+const enabledModules = readFileSync(new URL("../../../apps/frontend/config/modules.enabled.yaml", import.meta.url), "utf8");
+/** Whether the shell registers a module's widgets (a listed, uncommented entry). */
+const enabled = (module: string) =>
+  enabledModules.split("\n").some((line) => line.replace(/#.*/, "").trim() === `- ${module}`);
+const examinationsEnabled = enabled("academics/examinations");
 
 let user: DashboardUser;
 let backendLive = false;
@@ -42,11 +44,11 @@ test.beforeAll(async ({ request }) => {
   backendLive = probe.status() !== 404;
 });
 
-async function signIn(page: Page) {
+async function signIn(page: Page, who: DashboardUser = user) {
   await page.goto("/app"); // the dashboard app lives at /app; / is the public site
   // exact: the organisation field's hint also says "email"
-  await page.getByLabel("Email", { exact: true }).fill(user.email);
-  await page.getByLabel("Password", { exact: true }).fill(user.password);
+  await page.getByLabel("Email", { exact: true }).fill(who.email);
+  await page.getByLabel("Password", { exact: true }).fill(who.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
@@ -108,6 +110,51 @@ test.describe("with examinations data", () => {
   });
 });
 
-test.fixme("enrolment-registration.registered-candidates shows registered candidates", async () => {
-  // Owned by enrolment-registration (Praveen); the widget does not exist yet. Write this journey with it.
+test.describe("enrolment-registration.registered-candidates", () => {
+  test.skip(!enabled("student-lifecycle/enrolment-registration"), "enrolment-registration is not in apps/frontend/config/modules.enabled.yaml");
+
+  test("shows the candidates registered through the enrolment API", async ({ page, request }) => {
+    // One user who lands on the Examination Staff dashboard (first role) and may also register students.
+    const staff = await organisationWithUser(request, {
+      academyType: "sports-college",
+      role: "examination-staff",
+      extraRoles: ["registration-staff"],
+    });
+    const api = "/api/v1/enrolment-registration";
+    const headers = { Authorization: `Bearer ${staff.token}` };
+    const term = randomUUID();
+    const offering = randomUUID();
+    const day = 24 * 3600 * 1000;
+    const window = await request.put(`${api}/terms/${term}/registration-window`, {
+      headers,
+      data: { opens_at: new Date(Date.now() - day).toISOString(), closes_at: new Date(Date.now() + day).toISOString() },
+    });
+    expect(window.ok(), await window.text()).toBeTruthy();
+    for (const name of ["Asha Rao", "Ben Okafor"]) {
+      const enrolment = await request.post(`${api}/programme-enrolments`, {
+        headers,
+        data: { person_id: randomUUID(), student_name: name, programme_id: randomUUID(), start_academic_period_id: term },
+      });
+      expect(enrolment.ok(), await enrolment.text()).toBeTruthy();
+      const registration = await request.post(`${api}/registrations`, {
+        headers,
+        data: {
+          programme_enrolment_id: (await enrolment.json()).id,
+          course_offering_id: offering,
+          section_id: randomUUID(),
+          academic_period_id: term,
+        },
+      });
+      expect(registration.ok(), await registration.text()).toBeTruthy();
+    }
+
+    await signIn(page, staff);
+    const panel = widget(page, "Registered candidates");
+    // No academic-management events reach this module without the event relay: every term, offering id shown.
+    await expect(panel.getByLabel("Registered candidates summary")).toHaveText("2 registered · all terms");
+    const row = panel.getByRole("list", { name: "Busiest course offerings" }).getByRole("listitem");
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(`Course offering ${offering.slice(0, 8)}`);
+    await expect(row).toContainText("2 registered");
+  });
 });

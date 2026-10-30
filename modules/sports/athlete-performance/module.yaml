@@ -6,7 +6,7 @@ domain: sports
 tier: specialized   # core (platform) | common (every institution) | specialized (one field)
 field: sports       # only for specialized: sports | music | arts | ...
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Athlete profiles, performance metrics, fitness testing, benchmarks."
 owners: [akshatatrathodrooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
