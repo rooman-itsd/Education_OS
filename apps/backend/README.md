@@ -8,6 +8,11 @@ the **entitlement gate** (ADR-0005): a request to a feature module is refused wi
 organisation is suspended, and `read_only` for writes after a trial ends. Platform services
 (identity, tenancy, billing, ...) are always reachable and do their own permission checks.
 
+Around the gate sit `platform/api-gateway`'s middlewares: rate limits per client IP, per organisation and
+for sign-in/sign-up (429 with `Retry-After`, `code: rate_limited`), CORS, and the security headers on every
+response. Settings and the proxy requirements: [platform/api-gateway/README.md](../../platform/api-gateway/README.md).
+The plan's user limit is enforced by identity through a hook wired here to billing (`409 plan_limit_reached`).
+
 ## What it mounts: `config/modules.enabled.yaml`
 
 One file decides what this host serves:
@@ -18,14 +23,15 @@ modules:                    # feature modules, <domain>/<module>
   - campus-life/hostel
   - support/helpdesk
 integrations: []            # adapters under integrations/, e.g. payment-sbiepay
-platform: [identity, tenancy, billing]
+platform: [identity, tenancy, billing, api-gateway]
 ```
 
 Every entry follows the same layout, so the entry alone is enough: package `eos_<name>` (from
 `<entry>/backend/`, or the entry folder itself for an adapter with `src/` at its root), router
 `eos_<name>.api.router:router` mounted at `/api/v1/<name>`, and its Alembic chain, if any, in `<entry>/db`.
 `/api/v1/health` lists the mounted modules and integrations. A listed entry that is not installed stops
-start-up with a message naming it, instead of serving 404s.
+start-up with a message naming it, instead of serving 404s. A platform service without `api/router.py`
+(`api-gateway`, middleware only) is installed like the rest and mounts nothing.
 
 `tools/scripts/enabled-modules.py` reads the same file for everything that runs before the API:
 `tools/scripts/py-setup.sh` and the API image install every entry, CI runs each enabled module's tests and
@@ -41,7 +47,8 @@ only here.
 
 | Mounted today | From |
 |---|---|
-| `/api/v1/identity`, `/tenancy`, `/billing` | `platform:` |
+| `/api/v1/identity`, `/tenancy`, `/billing`, `/notification` | `platform:` |
+| (no routes: headers and rate limits on every response) | `platform: api-gateway` |
 | `/api/v1/academic-management`, `/hostel`, `/helpdesk` | `modules:` (`modules/<domain>/<module>`) |
 | `/api/v1/health` | this host |
 

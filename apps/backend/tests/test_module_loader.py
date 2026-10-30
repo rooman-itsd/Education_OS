@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 from eos_backend.main import create_app
-from eos_backend.modules import CONFIG, enabled
+from eos_backend.modules import CONFIG, Entry, enabled, router_for
 
 ROOT = Path(__file__).resolve().parents[3]
 FRONTEND_CONFIG = ROOT / "apps/frontend/config/modules.enabled.yaml"
@@ -81,6 +81,15 @@ def test_a_listed_module_that_is_not_installed_stops_start_up(tmp_path, monkeypa
     )
     with pytest.raises(RuntimeError, match=r"modules/academics/not-a-module .* eos_not_a_module is not installed"):
         create_app()
+
+
+def test_a_platform_service_without_a_router_is_installed_but_mounts_nothing(tmp_path, monkeypatch):
+    """api-gateway is middleware only: enabled so py-setup.sh and the API image install it, no routes."""
+    assert router_for(Entry("platform", "api-gateway")) is None
+    monkeypatch.setenv("EOS_MODULES_FILE", str(_yaml(tmp_path, "platform: [api-gateway, identity]\n")))
+    app = create_app()
+    assert not any(p.startswith("/api/v1/api-gateway") for p in _paths(app))
+    assert any(p.startswith("/api/v1/identity/") for p in _paths(app))
 
 
 def test_an_integration_is_resolved_like_a_module(tmp_path, monkeypatch):

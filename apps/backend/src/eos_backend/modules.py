@@ -1,6 +1,7 @@
 """What this host composes, from config/modules.enabled.yaml: platform services, feature modules and
 integrations. Every entry follows the same layout, so the entry alone is enough: package eos_<name>,
-router eos_<name>.api.router:router, mounted at /api/v1/<name>.
+router eos_<name>.api.router:router, mounted at /api/v1/<name>. A platform service may add no routes at all
+(api-gateway is middleware only): its package is installed like every other entry and nothing is mounted.
 
 A listed entry that is not installed stops start-up with a message saying what to install: a module that
 is silently skipped would only show up later as 404s."""
@@ -74,7 +75,8 @@ def enabled(path: Path | None = None) -> list[Entry]:
     return entries
 
 
-def router_for(entry: Entry) -> APIRouter:
+def router_for(entry: Entry) -> APIRouter | None:
+    """The entry's router, or None for a platform service that has none to mount."""
     dotted = f"{entry.package}.api.router"
     try:
         module = importlib.import_module(dotted)
@@ -87,6 +89,8 @@ def router_for(entry: Entry) -> APIRouter:
                 "Run tools/scripts/py-setup.sh (or rebuild the API image), which installs every enabled entry."
             ) from e
         if e.name in (f"{entry.package}.api", dotted):
+            if entry.kind == "platform":
+                return None
             raise RuntimeError(f"{entry.source} has no {dotted.replace('.', '/')}.py to mount") from e
         raise
     router = getattr(module, "router", None)

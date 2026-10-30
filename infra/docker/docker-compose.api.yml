@@ -49,6 +49,13 @@ services:
       EOS_SUPER_ADMIN_PASSWORD: ${EOS_SUPER_ADMIN_PASSWORD:?set EOS_SUPER_ADMIN_PASSWORD}
       EOS_CORS_ORIGINS: ${EOS_CORS_ORIGINS:-https://educationos.futureacad.ae}
       BILLING_PAYMENT_ADAPTER: ${BILLING_PAYMENT_ADAPTER:-none}
+      # platform/api-gateway: empty keeps the defaults in platform/api-gateway/config/env.example. Set
+      # EOS_TRUSTED_PROXIES to the reverse proxy's address when it is not on a private network.
+      EOS_TRUSTED_PROXIES: ${EOS_TRUSTED_PROXIES:-}
+      EOS_REDIS_URL: ${EOS_REDIS_URL:-}
+      EOS_RATE_LIMIT_IP_PER_MINUTE: ${EOS_RATE_LIMIT_IP_PER_MINUTE:-}
+      EOS_RATE_LIMIT_ORG_PER_MINUTE: ${EOS_RATE_LIMIT_ORG_PER_MINUTE:-}
+      EOS_RATE_LIMIT_AUTH_PER_MINUTE: ${EOS_RATE_LIMIT_AUTH_PER_MINUTE:-}
     ports:
       - "${EOS_API_PORT:-8000}:8000"
 volumes:
