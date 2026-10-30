@@ -22,9 +22,23 @@ from sqlalchemy.orm import Session
 ORGANISATION_TABLE = "tenancy_organisation"
 # Columns whose values are secrets, never data a person has a right to receive: written as "[redacted]".
 REDACTED_COLUMNS = frozenset({"password_hash", "password", "token", "secret", "api_key", "client_secret"})
+REDACTED_SUFFIXES = ("_token", "_hash", "_secret")
 REDACTED = "[redacted]"
 # Columns that reference a file in platform/documents, listed in the export's `files` section.
 FILE_COLUMN_SUFFIXES = ("document_id", "file_id")
+
+
+def is_redacted(column: str) -> bool:
+    """Exact names (REDACTED_COLUMNS) or any column ending in _token, _hash or _secret."""
+    return column in REDACTED_COLUMNS or column.endswith(REDACTED_SUFFIXES)
+
+
+class PurgeBlockedError(RuntimeError):
+    """Foreign keys keep the organisation's rows in `tables` from being deleted."""
+
+    def __init__(self, tables: list[str]):
+        self.tables = tables
+        super().__init__(f"foreign keys block deleting the organisation's rows from {', '.join(tables)}")
 
 
 def organisation_tables(db: Session) -> list[Table]:
@@ -69,9 +83,7 @@ def export_rows(db: Session, table: Table, organisation_id: str) -> list[dict]:
     """Every row of `table` belonging to the organisation, column name -> JSON-safe value, secrets redacted."""
     column = table.c.id if table.name == ORGANISATION_TABLE else table.c.organisation_id
     rows = db.execute(select(table).where(column == organisation_id)).mappings()
-    return [
-        {k: (REDACTED if k in REDACTED_COLUMNS and v is not None else json_safe(v)) for k, v in r.items()} for r in rows
-    ]
+    return [{k: (REDACTED if is_redacted(k) and v is not None else json_safe(v)) for k, v in r.items()} for r in rows]
 
 
 def file_references(table_name: str, rows: list[dict]) -> list[dict]:
@@ -104,8 +116,7 @@ def delete_rows(db: Session, tables: list[Table], organisation_id: str) -> dict[
             except IntegrityError:
                 blocked.append(table)
         if len(blocked) == len(remaining):
-            names = ", ".join(t.name for t in blocked)
-            raise RuntimeError(f"foreign keys block deleting the organisation's rows from {names}")
+            raise PurgeBlockedError([t.name for t in blocked])
         remaining = blocked
     return counts
 

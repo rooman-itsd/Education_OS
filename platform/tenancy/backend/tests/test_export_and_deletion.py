@@ -160,7 +160,9 @@ def test_purge_waits_for_retention_then_removes_every_row(client, super_admin, m
         upgrade_to_paid(org["org"]["id"])
     url = f"{BASE}/{a['org']['id']}"
     assert client.post(f"{url}/purge", headers=super_admin).status_code == 409  # not requested
-    assert client.request("DELETE", url, json={"confirm_slug": "purge-a"}, headers=super_admin).status_code == 200
+    r = client.request("DELETE", url, json={"confirm_slug": "purge-a"}, headers=super_admin)
+    assert r.status_code == 200
+    requested = r.json()
     r = client.post(f"{url}/purge", headers=super_admin)
     assert r.status_code == 409 and "retention runs until" in r.json()["detail"]
     left_a, left_b = rows_left(a["org"]["id"]), rows_left(b["org"]["id"])
@@ -179,6 +181,8 @@ def test_purge_waits_for_retention_then_removes_every_row(client, super_admin, m
     ev = fake_events.assert_published("tenancy.organisation.purged", slug="purge-a")
     assert ev["organisation_id"] is None, "the tenant is gone: the record is the platform's"
     assert ev["payload"]["organisation_id"] == a["org"]["id"] and ev["payload"]["rows_deleted"] == out["rows_deleted"]
+    assert ev["payload"]["requested_by"] and ev["payload"]["requested_at"] == requested["deletion_requested_at"]
+    assert ev["payload"]["requested_by"] == requested["deletion_requested_by"]
     # the slug is free again
     assert organisation(client, "purge-a")["org"]["slug"] == "purge-a"
 
@@ -237,6 +241,97 @@ def test_tables_are_found_from_the_database_without_module_code(client):
         "outbox_event",
     } <= set(names)
     assert "tenancy_organisation" not in names and "billing_plan" not in names  # no organisation_id column
-    assert names.index("billing_invoice") < len(names)  # children-first order comes from metadata
     with SessionLocal() as db, platform_scope():
         assert db.scalar(select(tables.organisation_row_table().c.id).limit(1)) is not None
+
+
+def test_reflected_table_is_exported_and_purged_for_its_organisation_only(client, super_admin):
+    """A table no model knows (created with SQL, with organisation_id and a foreign key to a tenant table) takes
+    part through reflection: exported for the exported organisation only, purged for the purged one only."""
+    from eos_identity.domain.models import User
+    from sqlalchemy import text
+
+    a = organisation(client, "raw-a")
+    b = organisation(client, "raw-b", academy_type="law-college")
+    with SessionLocal() as db, platform_scope():
+        user = {
+            o: db.scalar(select(User.id).where(User.organisation_id == o)) for o in (a["org"]["id"], b["org"]["id"])
+        }
+        db.execute(
+            text(
+                "CREATE TABLE raw_extra (id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL, "
+                "user_id TEXT REFERENCES identity_user(id), note TEXT, session_token TEXT)"
+            )
+        )
+        for i, (o, uid) in enumerate(user.items()):
+            db.execute(
+                text("INSERT INTO raw_extra VALUES (:id, :o, :u, :n, :t)"),
+                {"id": f"raw-{i}", "o": o, "u": uid, "n": f"note of {o}", "t": "s3cr3t"},
+            )
+        db.commit()
+    try:
+        r = client.get(f"{BASE}/{a['org']['id']}/export", headers=super_admin)
+        assert r.status_code == 200, r.text
+        rows = r.json()["tables"]["raw_extra"]
+        assert [x["organisation_id"] for x in rows] == [a["org"]["id"]] and rows[0]["user_id"] == user[a["org"]["id"]]
+        assert rows[0]["session_token"] == "[redacted]" and rows[0]["note"] == f"note of {a['org']['id']}"
+        assert "raw-b" not in r.text and b["org"]["id"] not in r.text
+
+        url = f"{BASE}/{a['org']['id']}"
+        assert client.request("DELETE", url, headers=super_admin).status_code == 200
+        r = client.post(f"{url}/purge", json={"force": True}, headers=super_admin)
+        assert r.status_code == 200, r.text
+        assert r.json()["rows_deleted"]["raw_extra"] == 1
+        assert rows_left(a["org"]["id"]) == {}
+        assert rows_left(b["org"]["id"])["raw_extra"] == 1
+    finally:
+        with SessionLocal() as db:
+            db.execute(text("DROP TABLE raw_extra"))
+            db.commit()
+
+
+def test_redaction_covers_secret_like_suffixes():
+    assert all(tables.is_redacted(c) for c in ("password_hash", "api_key", "reset_token", "otp_hash", "webhook_secret"))
+    assert not any(tables.is_redacted(c) for c in ("email", "token_count", "hash_algorithm", "secretary"))
+
+
+def test_a_blocked_purge_is_a_409_naming_the_table(monkeypatch):
+    """The foreign-key error is not a 500: the purge is refused, rolled back, and says which table blocks."""
+    org = type(
+        "O",
+        (),
+        {
+            "id": "o1",
+            "slug": "s",
+            "delete_after": datetime(2020, 1, 1, tzinfo=UTC),
+            "deletion_requested_by": "u",
+            "deletion_requested_at": datetime(2020, 1, 1, tzinfo=UTC),
+        },
+    )()
+
+    class Session:
+        rolled_back = False
+
+        def rollback(self):
+            self.rolled_back = True
+
+    db = Session()
+    monkeypatch.setattr(tenancy, "get_organisation", lambda *_: org)
+    monkeypatch.setattr(tables, "organisation_tables", lambda _db: [])
+
+    def blocked(*_):
+        raise tables.PurgeBlockedError(["billing_invoice"])
+
+    monkeypatch.setattr(tables, "delete_rows", blocked)
+    with pytest.raises(tenancy.TenancyError, match="purge_blocked.*billing_invoice") as e:
+        tenancy.purge_organisation(db, "o1", actor="a")
+    assert e.value.status == 409 and db.rolled_back
+
+    def refused(*_):
+        raise IntegrityError("delete", {}, Exception("fk"))
+
+    db.rolled_back = False
+    monkeypatch.setattr(tables, "delete_rows", refused)
+    with pytest.raises(tenancy.TenancyError, match="purge_blocked") as e:
+        tenancy.purge_organisation(db, "o1", actor="a")
+    assert e.value.status == 409 and db.rolled_back

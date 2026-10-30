@@ -38,8 +38,8 @@ events:
     description: A pending deletion was cancelled before the purge; the organisation is back in its previous status (tenancy.organisation.activated follows when that is active).
     payload: { organisation_id: uuid, status: string, restored_by: uuid }
   - name: tenancy.organisation.purged
-    description: Every row of the organisation in every table with organisation_id, and the organisation itself, were deleted for good. The envelope's organisation_id is null because the tenant no longer exists; the payload carries its id, slug and rows deleted per table (counts only, no personal data).
-    payload: { organisation_id: uuid, slug: string, purged_at: date-time, forced: boolean, rows_deleted: object, purged_by: uuid }
+    description: Every row of the organisation in every table with organisation_id, and the organisation itself, were deleted for good. The envelope's organisation_id is null because the tenant no longer exists; the payload carries its id, slug and rows deleted per table (counts only, no personal data). requested_by and requested_at come from the deletion request, because the purge removes that request's own outbox events.
+    payload: { organisation_id: uuid, slug: string, purged_at: date-time, forced: boolean, rows_deleted: object, purged_by: uuid, requested_by: uuid, requested_at: date-time }
   - name: tenancy.entitlement.changed
     description: The set of modules, integrations or limits an organisation may use changed (plan change, override, toggle). Apps refresh.
     payload: { organisation_id: uuid, modules: [string], integrations: [string], plan: string }

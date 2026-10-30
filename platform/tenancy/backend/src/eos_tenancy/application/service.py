@@ -15,6 +15,7 @@ from eos_core.settings import settings
 from eos_core.tenant import organisation_scope, platform_scope
 from eos_identity.application import service as identity
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..domain.models import Organisation, OrganisationModule, RegistrationToken
@@ -530,10 +531,22 @@ def purge_organisation(db: Session, organisation_id: str, *, actor: str, force: 
     if not force and now < _aware(org.delete_after):
         raise TenancyError(f"retention runs until {org.delete_after.isoformat()}; pass force to purge now", 409)
     slug = org.slug
+    requested_by = org.deletion_requested_by
+    requested_at = _aware(org.deletion_requested_at).isoformat() if org.deletion_requested_at else None
     with platform_scope():
         try:
             counts = tables.delete_rows(db, tables.organisation_tables(db), org.id)
             db.execute(tables.organisation_row_table().delete().where(tables.organisation_row_table().c.id == org.id))
+        except tables.PurgeBlockedError as e:
+            db.rollback()
+            raise TenancyError(
+                f"purge_blocked: foreign keys block deleting rows from {', '.join(e.tables)}", 409
+            ) from e
+        except SQLAlchemyError as e:
+            db.rollback()
+            raise TenancyError(
+                "purge_blocked: the database refused the delete (" + type(e).__name__ + "); nothing was deleted", 409
+            ) from e
         except Exception:
             db.rollback()
             raise
@@ -546,6 +559,12 @@ def purge_organisation(db: Session, organisation_id: str, *, actor: str, force: 
             "rows_deleted": {name: n for name, n in sorted(counts.items()) if n},
         }
         # The tenant no longer exists, so this one record is the platform's, not the organisation's.
-        events.publish(db, "tenancy.organisation.purged", None, {**result, "purged_by": actor}, actor=actor)
+        events.publish(
+            db,
+            "tenancy.organisation.purged",
+            None,
+            {**result, "purged_by": actor, "requested_by": requested_by, "requested_at": requested_at},
+            actor=actor,
+        )
         db.commit()
     return result
