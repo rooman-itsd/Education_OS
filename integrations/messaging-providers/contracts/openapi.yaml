@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: messaging-providers API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Email, SMS and WhatsApp provider adapters. Sending is not done through this API: callers
     use the OutboundMessaging port in contracts/port.yaml, and only platform/notification
@@ -51,7 +51,7 @@ paths:
 
   /providers:
     get:
-      summary: List configured providers
+      summary: List configured providers. Permission messaging-providers:provider:read.
       description: >-
         Operator view. Credentials are never returned, in any form, masked or otherwise.
       operationId: listProviders
@@ -71,7 +71,7 @@ paths:
 
   /providers/{provider}/health:
     get:
-      summary: Check a provider is reachable
+      summary: Check a provider is reachable. Permission messaging-providers:provider:read.
       description: >-
         Runs the port's healthcheck. Does not send a message. Backs the adapter registry and
         the Super Admin dashboard.
@@ -98,10 +98,12 @@ paths:
 
   /providers/{provider}/test:
     post:
-      summary: Send a test message
+      summary: Send a test message. Permission platform:messaging-providers:admin.
       description: >-
         Sends one real message to an address the operator supplies, to prove credentials and
-        sending identity work. Audited, and rate limited so it cannot be used to send mail.
+        sending identity work. Audited, and rate limited so it cannot be used to send mail:
+        MESSAGING_PROVIDERS_TEST_SEND_PER_HOUR per process, counting refused attempts too. A
+        refusal by the provider is still a 202, with accepted false and a port reason code.
       operationId: sendTestMessage
       parameters:
         - name: provider
@@ -132,6 +134,7 @@ paths:
                   provider_message_id: { type: [string, "null"] }
                   reason: { type: [string, "null"] }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "429":
           description: Test send rate limit reached
           content:
@@ -159,6 +162,7 @@ components:
             supports_attachments: { type: boolean }
             supports_html: { type: boolean }
             rate_limit_per_minute: { type: integer }
+            supports_reply_to: { type: boolean }
         last_health:
           type: [object, "null"]
           properties:

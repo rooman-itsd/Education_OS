@@ -2,6 +2,8 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: industry-coordinator
 title: "Industry Coordinator"
+module_roles:
+  - field-training-coordinator
 widgets:
   - field-training.placements-open
   - field-training.active-placements

@@ -56,6 +56,19 @@ checklist that makes it portable to another repo.
    policy on `app.organisation_id`; every query is scoped; every event carries `organisation_id`; documents,
    search and cache keys are prefixed by organisation. The cross-tenant leak test from `packages/testing` runs in the module's suite.
 
+## Permission catalogues
+
+`contracts/permissions.yaml` declares the module's keys (`<module>:<resource>:<action>`) and which
+roles are granted them. The platform reads every catalogue (`eos_core.config.permissions_for`);
+a module never computes permissions itself. A module grants its own
+roles (`<module>-learner`, `-reviewer`, `-coordinator`, ...), not each academy's. The layout of each profile role
+(`platform/identity/config/dashboards/<role>.yaml`) lists which module roles that role holds in `module_roles`,
+and a role whose layout `extends: student` or `extends: faculty` also inherits that role's grants and
+`module_roles` (ADR-0004, "Role inheritance"). Name an academy role in the catalogue only to give it more than
+its layout grants it. A catalogue that grants no role at all leaves its widgets unbacked.
+The host test `apps/backend/tests/test_role_inheritance.py` checks that every dashboard widget of a
+module with a catalogue is backed by a key the layout's role holds.
+
 ## Portability checklist
 
 Set `portable: true` in `module.yaml` only when all of these pass:

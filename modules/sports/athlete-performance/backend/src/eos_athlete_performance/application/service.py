@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
@@ -561,7 +562,19 @@ def update_athlete(db: Session, actor: Actor, athlete_id: str, data: dict) -> di
         _audit(db, actor, "updated", "athlete", a, before=before, after=after)
         tracked = sorted(set(after) & rules.TRACKED_ATHLETE_FIELDS)
         if tracked:
-            _publish(db, actor, "athlete.updated", {"athlete_id": a.id, "changed_fields": tracked, "status": a.status})
+            _publish(
+                db,
+                actor,
+                "athlete.updated",
+                _clean(
+                    {
+                        "athlete_id": a.id,
+                        "user_id": a.user_id,
+                        "changed_fields": tracked,
+                        "status": a.status,
+                    }
+                ),
+            )
         _commit(db, "duplicate_user", "this user already has an athlete profile")
     return athlete_out(a)
 
@@ -836,7 +849,8 @@ def compare_with_benchmarks(db: Session, actor: Actor, athlete_id: str, level: s
 
 def get_clearance(db: Session, actor: Actor, athlete_id: str) -> dict:
     athlete = _visible_athlete(db, actor, athlete_id)
-    return clearance_out(athlete.id, repo.first_by(db, Clearance, athlete_id=athlete.id), clock().date())
+    today = as_utc(clock()).astimezone(ZoneInfo(load_settings().timezone)).date()
+    return clearance_out(athlete.id, repo.first_by(db, Clearance, athlete_id=athlete.id), today)
 
 
 def set_clearance(db: Session, actor: Actor, athlete_id: str, data: dict) -> dict:
@@ -889,7 +903,7 @@ def squad_summary(db: Session, actor: Actor, filters: dict) -> dict:
     metric_ids = {m for (_, m) in points}
     metrics = {m.id: m for m in db.scalars(repo.query(db, Metric).where(Metric.id.in_(list(metric_ids))))}
     steady = load_settings().trend_steady_percent
-    today = clock().date()
+    today = as_utc(clock()).astimezone(ZoneInfo(load_settings().timezone)).date()
     items = []
     for a in athletes:
         rows = []

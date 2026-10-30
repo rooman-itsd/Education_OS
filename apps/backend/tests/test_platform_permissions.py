@@ -18,6 +18,8 @@ PUBLIC = {
     ("GET", "/api/v1/health"): "liveness",
     ("POST", "/api/v1/identity/auth/login"): "authentication itself",
     ("GET", "/api/v1/identity/auth/me"): "who am I: any active user, returns their own permissions",
+    ("GET", "/api/v1/identity/auth/oidc/config"): "ADR-0006: realm endpoints for the sign-in page, no secret",
+    ("POST", "/api/v1/identity/auth/oidc/callback"): "ADR-0006: authentication itself (code exchange)",
     ("GET", "/api/v1/tenancy/academy-types"): "shown on the sign-up page",
     ("POST", "/api/v1/tenancy/register"): "self-service registration",
     ("POST", "/api/v1/tenancy/register/verify"): "email verification token",

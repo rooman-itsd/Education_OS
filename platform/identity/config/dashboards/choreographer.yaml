@@ -3,6 +3,9 @@
 role: choreographer
 title: "Choreographer"
 extends: faculty
+module_roles:
+  - selection-process-panelist
+  - skill-progress-evaluator
 widgets:
   - productions.in-preparation
   - selection-process.to-judge

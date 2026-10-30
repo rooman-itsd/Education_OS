@@ -4,4 +4,5 @@ packages:
   - packages/*
   - modules/*/*/frontend
   - platform/*/frontend
+  - integrations/*/frontend
   - tests/e2e

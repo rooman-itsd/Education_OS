@@ -2,6 +2,9 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: industry-liaison
 title: "Industry Liaison"
+module_roles:
+  - field-training-viewer
+  - projects-viewer
 widgets:
   - field-training.placements-open
   - projects.active
