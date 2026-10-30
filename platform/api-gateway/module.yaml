@@ -5,13 +5,14 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Edge routing, auth enforcement, rate limiting, request logging and monitoring."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+status: in-progress           # planned | in-progress | stable | deprecated
+description: "Edge of the API host: security headers on every response, rate limits per client IP and per organisation."
+owners: [faizanrooman]                # GitHub handles. Keep in sync with CODEOWNERS.
 
-# Platform services this module calls through packages/sdk. Nothing else.
+# Platform services this module calls through packages/sdk. Nothing else. Bearer tokens are decoded with
+# packages/core (eos_core.security), so identity is not imported.
 depends_on:
-  platform: [identity, audit]
+  platform: []
   integrations: []
 
 # Public surface. Other modules may ONLY use these.

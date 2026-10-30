@@ -1,15 +1,16 @@
 [project]
 name = "eos-api-gateway"
 version = "0.1.0"
-description = "Education OS module: api-gateway (backend)"
+description = "Education OS platform service: api-gateway (security headers, rate limits per IP and per organisation)."
 requires-python = ">=3.12"
-dependencies = [
-  "fastapi",
-  "sqlalchemy>=2",
-  "alembic",
-  "eos-core",
-  "eos-sdk",
-]
+dependencies = ["fastapi>=0.115", "PyJWT>=2", "redis>=5", "eos-core"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

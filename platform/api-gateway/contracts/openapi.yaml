@@ -2,9 +2,46 @@ openapi: 3.1.0
 info:
   title: api-gateway API
   version: 0.1.0
-  description: "Edge routing, auth enforcement, rate limiting, request logging and monitoring."
+  description: |
+    Edge of the API host. No paths of its own: two middlewares in apps/backend apply to every route of every
+    platform service and module, so the response headers and the 429 below belong to every operation in
+    every other contract.
+
+    **Security headers** (every response; `Strict-Transport-Security` only when the request arrived over
+    HTTPS, directly or as `X-Forwarded-Proto: https` from the reverse proxy):
+    `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+    `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`,
+    `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` (not on the interactive docs pages),
+    `Cache-Control: no-store` on `/api/` responses unless the route set its own.
+
+    **Rate limits** (token buckets): per client IP, per organisation (the `org` claim of a valid bearer
+    token), and a stricter bucket per client IP for `POST /identity/auth/login` and `POST /tenancy/register`.
+    `GET /health` is exempt. Over the limit: `429` with `Retry-After` and the body below.
 servers:
-  - url: /api/v1/api-gateway
+  - url: /api/v1
 paths: {}
 components:
-  schemas: {}
+  headers:
+    Retry-After:
+      description: Whole seconds until the next request from this client (or organisation) will be served.
+      schema: { type: integer, minimum: 1 }
+  responses:
+    RateLimited:
+      description: Too many requests from this address, this organisation or this sign-in address.
+      headers:
+        Retry-After: { $ref: "#/components/headers/Retry-After" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RateLimited" }
+  schemas:
+    RateLimited:
+      type: object
+      required: [detail, code, scope, retry_after]
+      properties:
+        detail: { type: string, examples: ["too many requests for this address; retry after 12 seconds"] }
+        code: { type: string, const: rate_limited }
+        scope:
+          type: string
+          enum: [ip, organisation, auth]
+          description: Which bucket refused the request.
+        retry_after: { type: integer, minimum: 1, description: The same value as the Retry-After header. }
