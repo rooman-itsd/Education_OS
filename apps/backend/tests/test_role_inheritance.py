@@ -55,19 +55,7 @@ EXTENDING = [(lay["role"], lay["extends"]) for lay in _layouts() if lay.get("ext
 # under #315; the batch that owns each module is named beside it.
 EMPTY = "the catalogue grants no role yet (#315)"
 NAMED = "the catalogue names no role this profile role can hold (#315)"
-LEARNER_GAP = (
-    "the catalogue grants only panelist and coordinator roles; nobody who applies or auditions holds a role, so "
-    "learner layouts list no selection-process role (#315)"
-)
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # admissions: no role fits (admissions module, batch #321)
-    "admissions": (
-        NAMED,
-        [
-            "applicant admissions.application-status",
-            "applicant admissions.pending-documents",
-        ],
-    ),
     # alumni: empty catalogue (alumni module, batch #337)
     "alumni": (
         EMPTY,
@@ -143,19 +131,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
         [
             "department-admin reporting.department-reports",
             "management reporting.attendance-and-results-by-department",
-        ],
-    ),
-    # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
-    "selection-process": (
-        LEARNER_GAP,
-        [
-            "actor selection-process.upcoming",
-            "artist selection-process.upcoming",
-            "dancer selection-process.upcoming",
-            "designer selection-process.upcoming",
-            "law-student selection-process.upcoming",
-            "musician selection-process.upcoming",
-            "research-scholar selection-process.my-applications",
         ],
     ),
     # workflow: empty catalogue (workflow module, batch #317)
