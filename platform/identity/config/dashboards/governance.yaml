@@ -2,6 +2,11 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: governance
 title: "Governance (Grievance / RTI / IQAC)"
+module_roles:
+  - grievance-coordinator
+  - rti-officer
+  - iqac-accreditation-coordinator
+  - regulatory-reports-coordinator
 widgets:
   - grievance.open-by-committee
   - rti.nearing-deadline

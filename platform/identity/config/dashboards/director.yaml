@@ -3,6 +3,9 @@
 role: director
 title: "Director"
 extends: faculty
+module_roles:
+  - selection-process-panelist
+  - projects-guide
 widgets:
   - productions.in-preparation
   - selection-process.to-judge

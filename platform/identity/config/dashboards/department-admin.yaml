@@ -2,6 +2,9 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: department-admin
 title: "Department Admin / HoD"
+module_roles:
+  - examinations-department-head
+  - timetable-attendance-department-head
 widgets:
   - workflow.approvals-pending
   - academic-management.faculty-load

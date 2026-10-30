@@ -3,6 +3,9 @@
 role: coach
 title: "Coach"
 extends: faculty
+module_roles:
+  - training-video-analysis-coach
+  - tournament-events-coach
 widgets:
   - athlete-performance.squad-overview
   - athlete-performance.session-plan

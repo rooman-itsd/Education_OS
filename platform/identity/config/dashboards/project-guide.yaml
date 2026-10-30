@@ -3,6 +3,10 @@
 role: project-guide
 title: "Project Guide"
 extends: faculty
+module_roles:
+  - projects-guide
+  - skill-progress-evaluator
+  - field-training-supervisor
 widgets:
   - projects.to-review
   - projects.active

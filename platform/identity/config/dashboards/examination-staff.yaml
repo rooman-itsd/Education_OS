@@ -2,6 +2,8 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: examination-staff
 title: "Examination Staff"
+module_roles:
+  - examinations-controller
 widgets:
   - examinations.schedule
   - examinations.hall-tickets-issued
