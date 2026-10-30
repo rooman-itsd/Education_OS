@@ -33,3 +33,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - a request delivers only its own payment's notifications;
   - date-times always carry `+00:00`;
   - a negative cursor answers `400` and a token without a subject `401`.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (`integrations:`), mounted at `/api/v1/payment-sbiepay`; CI now
+  installs it, runs its tests and migrates its chain on Postgres. The README says who reaches it (profile and plan) and
+  what works without gateway settings.
