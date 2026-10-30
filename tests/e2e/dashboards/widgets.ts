@@ -40,6 +40,21 @@ export function enabled(module: string): boolean {
     .some((line) => line.replace(/#.*/, "").trim() === `- ${entry}`);
 }
 
+/**
+ * Whether apps/backend mounts a module's API (a listed, uncommented entry of modules.enabled.yaml: `modules` takes
+ * `<domain>/<module>`, `platform` takes the service name, which may be listed inline as `platform: [a, b]`).
+ */
+export function backendEnabled(module: string): boolean {
+  const text = repo("apps/backend/config/modules.enabled.yaml").split("\n").map((line) => line.replace(/#.*/, "").trim());
+  if (module.startsWith("platform/")) {
+    const service = module.slice("platform/".length);
+    const inline = text.find((line) => line.startsWith("platform:"));
+    const names = (inline?.match(/\[(.*)\]/)?.[1] ?? "").split(",").map((n) => n.trim());
+    return names.includes(service) || text.includes(`- ${service}`);
+  }
+  return text.includes(`- ${module}`);
+}
+
 /** Whether the module's widgets entry point exports the widget id. */
 export function exported(w: LayoutWidget): boolean {
   const dir = w.module.startsWith("platform/") ? w.module : `modules/${w.module}`;
@@ -85,15 +100,28 @@ export async function standardPlan(request: APIRequestContext, organisationId: s
   expect(plan.ok(), await plan.text()).toBeTruthy();
 }
 
-/** The status the widget's own GET gets for this user; what the panel shows follows from it. */
+/**
+ * The status the widget's own GET gets for this user; what the panel shows follows from it. A module the backend
+ * enables must answer 200: a 404 (not mounted) or 403 (role catalogue regression) there fails the journey instead of
+ * passing as "not available yet". Only a module absent from apps/backend/config/modules.enabled.yaml may answer otherwise.
+ */
 export async function probe(request: APIRequestContext, user: DashboardUser, w: LayoutWidget): Promise<number> {
   const r = await request.get(`/api/v1${w.probe}`, { headers: { Authorization: `Bearer ${user.token}` } });
+  if (backendEnabled(w.module)) {
+    expect(r.status(), `${w.id}: ${w.module} is enabled in apps/backend/config/modules.enabled.yaml, so ${w.probe} must answer 200 (got ${r.status()} ${await r.text()})`).toBe(200);
+  }
   return r.status();
 }
 
 /** The panel's body for a new organisation, given what the probe answered. */
 export async function expectBody(page: Page, w: LayoutWidget, status: number) {
   const panel = widget(page, w.title!);
+  if (backendEnabled(w.module)) {
+    // enabled in the backend: data or the empty state, never the "not available yet" or "no access" wording
+    expect(status, `${w.id}: ${w.module} is enabled in the backend, its probe must answer 200`).toBe(200);
+    await expect(panel.getByText(w.empty!, { exact: true })).toBeVisible();
+    return;
+  }
   if (status === 200) await expect(panel.getByText(w.empty!, { exact: true })).toBeVisible();
   else if (status === 403) await expect(panel.getByText(w.forbidden ?? "You do not have access to this.", { exact: true })).toBeVisible();
   else await expect(panel.getByText(w.unavailable!, { exact: true })).toBeVisible();
