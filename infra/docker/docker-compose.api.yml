@@ -167,6 +167,21 @@ services:
     command: ["python", "-m", "eos_event_bus"]
     healthcheck:
       disable: true # the image's HEALTHCHECK calls the API on :8000, which this container does not serve
+  # The scheduler (platform/scheduler): every SCHEDULER_TICK_INTERVAL_S it publishes scheduler.job.due for the
+  # schedules that are due (billing's trial expiry and reminders, ...) and fails runs nobody closed; the relay
+  # delivers those events to the module that owns the job. Exactly one per deployment: never scale it.
+  scheduler:
+    image: eos-api:${EOS_API_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment: *app-environment
+    command: ["python", "-m", "eos_scheduler"]
+    healthcheck:
+      disable: true # as for the relay: no API in this container
 volumes:
   eos-pgdata:
   eos-kcdata:
