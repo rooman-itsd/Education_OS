@@ -72,8 +72,22 @@ copy the dump from the second location, then step 3.
 **Until `EOS_BACKUP_OFFSITE` is set, the backups sit on the same disk as the database**, so a failed
 disk or a deleted container loses both. Set it in `/etc/eos/db-backup.env` to an rsync destination:
 a mounted folder (`/mnt/backup/eos/`) or another server over SSH (`backup@<host>:/srv/eos-backups/`,
-with the root SSH key of the API host allowed there). Copies are never deleted on the destination by
-this script, so a wiped local disk cannot wipe them too; prune them there.
+with the root SSH key of the API host allowed there). The destination keeps **the same dumps as the
+local folders**: a dump pruned locally is deleted there on the same run. Two limits keep a wiped local
+disk from wiping the second copy too: only this script's own files (`eos-*.dump`, `keycloak-*.dump` and
+their `.sha256`) are ever deleted there, and a run that would delete more than
+`EOS_BACKUP_OFFSITE_MAX_PRUNE` dumps (default 4, a normal night's rotation) deletes nothing, copies the
+new dump and ends `FAILED`. After lowering the retention on purpose, let the destination catch up once:
+
+```
+EOS_BACKUP_OFFSITE_FORCE_PRUNE=1 eos-db-backup
+```
+
+**How long data stays in backups (DPDP).** With the defaults, a dump is kept 14 days as a daily and,
+if it is a Sunday's, 8 weeks as a weekly, here and at the second location alike. So data deleted from
+the database (an organisation purged by tenancy, a person's record removed) is gone from every backup
+after at most 8 weeks; restoring a backup older than a purge would bring that organisation back, so a
+restore after a purge must be followed by the purge again.
 
 Proxmox's own backup of the whole container (vzdump, the container's Backup tab) complements this:
 it restores the whole machine, while `eos-db-restore` restores just the database, from any point in
