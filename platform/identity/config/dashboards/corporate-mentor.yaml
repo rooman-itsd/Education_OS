@@ -3,6 +3,10 @@
 role: corporate-mentor
 title: "Corporate Mentor"
 extends: faculty
+module_roles:
+  - projects-guide
+  - field-training-supervisor
+  - selection-process-panelist
 widgets:
   - projects.to-review
   - field-training.trainees-to-assess

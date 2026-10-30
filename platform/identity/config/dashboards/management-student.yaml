@@ -3,6 +3,9 @@
 role: management-student
 title: "Management Student"
 extends: student
+module_roles:
+  - projects-member
+  - field-training-trainee
 widgets:
   - productions.upcoming
   - projects.my-projects

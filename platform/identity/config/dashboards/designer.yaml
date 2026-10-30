@@ -3,6 +3,10 @@
 role: designer
 title: "Designer"
 extends: student
+module_roles:
+  - portfolio-learner
+  - projects-member
+  - field-training-trainee
 widgets:
   - portfolio.my-portfolio
   - projects.my-projects

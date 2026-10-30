@@ -35,6 +35,16 @@ sports colleges. Three things change:
 Roles and dashboards stay configuration. The role list in `packages/contracts` is the sports
 profile's list today and moves into the profile as the identity service is built.
 
+**Role inheritance.** A profile role whose dashboard layout
+(`platform/identity/config/dashboards/<role>.yaml`) says `extends: student` or `extends: faculty`
+holds that role's grants plus its own: a research scholar, athlete or law student can do everything
+a student can, and a research supervisor, coach or mentor teacher everything a faculty member can.
+Module catalogues therefore name the common roles once instead of every academy's roles, and name an
+academy role only to give it more. The rule lives in one place, `eos_core.config.permissions_for`,
+which follows `extends` transitively and stops at a role already seen. Inheritance only adds keys,
+and a layout never extends `org-admin`, `super-admin` or a role no person may hold (a host test
+checks this).
+
 ## Consequences
 - A new institution type is a profile plus, at most, a few specialized modules. No fork.
 - `facility-booking` and `inventory-equipment` are the first modules to generalise: they become

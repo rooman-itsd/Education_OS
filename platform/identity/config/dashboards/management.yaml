@@ -2,6 +2,9 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: management
 title: "Management (VC, Registrar)"
+module_roles:
+  - grievance-viewer
+  - regulatory-reports-viewer
 widgets:
   - admissions.funnel
   - fees-accounts.collection-vs-target

@@ -2,6 +2,10 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: faculty
 title: "Faculty / Instructor"
+module_roles:
+  - lms-instructor
+  - timetable-attendance-faculty
+  - examinations-faculty
 widgets:
   - timetable-attendance.today-classes
   - timetable-attendance.attendance-to-mark

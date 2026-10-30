@@ -1,9 +1,9 @@
 # budget-grants: atomic commitments for procurement (proposal, v4)
 
-Status: **design approved in direction by the module owner (29 Oct), not implemented.** Issue: #335 (was #129;
-risk 1 in #295). Owner: Gokula Lakshmi (budget-grants and procurement). Reviewer: Ashritha. Architecture review:
-Faizan (cross-module contract and migration). The overspend risk stays **open** until the delivery below is merged
-and its concurrency tests pass.
+Status: **decisions 1–5 taken by the module owner (29 Oct); not implemented.** Issue: #335 (was #129;
+risk 1 in #295). Owner: Gokula Lakshmi (budget-grants and procurement). Reviewer: Ashritha (code-owner backup). Both
+modules are the owner's, so under sprint v1.0 no second reviewer is needed; Faizan would review only a service identity
+(decision 4 b). The overspend risk stays **open** until the delivery below is merged and its concurrency tests pass.
 
 **v2** answered the review on #350:
 - procurement's money changes became synchronous;
@@ -170,8 +170,8 @@ the payment, as reserve is made inside approval:
 - budget-grants unreachable (503) or a timeout also refuses `mark-paid` and leaves the invoice `approved`. If
   budget-grants did record it, the retry finds the same key and answers 200: the spend is recorded once.
 
-So `spend` is never left pending. *Proposed rule; the module owner decides: refuse the uncovered excess as above, or
-record it and raise the 100% threshold alert.*
+So `spend` is never left pending. *Decided by the module owner (decision 5, 29 Oct): refuse the uncovered excess as
+above, rather than record it and raise the 100% threshold alert.*
 
 ### When a call fails
 
@@ -334,7 +334,8 @@ these users can call the API directly, outside procurement:
 - **(b) Use a non-person service identity** for procurement's calls (Faizan, platform identity), so that no user holds
   `commitment:*` at all. This removes both risks.
 
-Recommendation: (a) for v1, (b) when identity supports service identities.
+**Decided (decision 4, 29 Oct): (a) for v1.** The risks above go into the budget-grants README with the backend PR.
+(b) is revisited when identity supports service identities.
 
 ## Tests that must pass before risk 1 is closed
 
@@ -388,17 +389,17 @@ Recommendation: (a) for v1, (b) when identity supports service identities.
 | # | Decision | Who | Status |
 |---|---|---|---|
 | 1 | Atomic reservation, confirmation on issue, release on return or cancellation; no expiry | Gokula (owner) | approved 29 Oct |
-| 2 | Every procurement money change synchronous and keyed like the events; append-only commitments table; reservations counted by `line_totals` everywhere | Gokula (owner) | proposed |
-| 3 | `commitment:record` for `management` only; `commitment:spend` for `finance-staff` only | Gokula (owner) | proposed |
-| 4 | Trust boundary: accept the named risks for v1 (a), or a service identity (b) | Gokula (owner), with Faizan for (b) | proposed: (a) |
-| 5 | Spend above the order's outstanding commitment: refuse `mark-paid` when uncovered (422, invoice stays approved, nothing pending), or record and alert | Gokula (owner) | proposed: refuse |
-| 6 | The cross-module contract, the `budget_grants_0002` migration with its backfill, and the grant locking changes | Faizan (architecture review) | to review |
+| 2 | Every procurement money change synchronous and keyed like the events; append-only commitments table; reservations counted by `line_totals` everywhere | Gokula (owner) | approved 29 Oct |
+| 3 | `commitment:record` for `management` only; `commitment:spend` for `finance-staff` only | Gokula (owner) | approved 29 Oct |
+| 4 | Trust boundary: accept the named risks for v1 (a), or a service identity (b) | Gokula (owner), with Faizan for (b) | approved 29 Oct: (a) |
+| 5 | Spend above the order's outstanding commitment: refuse `mark-paid` when uncovered (422, invoice stays approved, nothing pending), or record and alert | Gokula (owner) | approved 29 Oct: refuse |
+| 6 | The contract, the `budget_grants_0002` migration with its backfill, and the grant locking changes | Ashritha (code-owner backup review, sprint v1.0). Both modules are the owner's, so no second reviewer is needed; Faizan only if 4 (b) is taken up later | to review |
 
 ## Delivery
 
 | Step | What | Depends on |
 |---|---|---|
-| 1 | Contract PR (budget-grants): the endpoints, schemas, both permissions | decisions 2–6 |
+| 1 | Contract PR (budget-grants): the endpoints, schemas, both permissions | this design approved (decision 6) |
 | 2 | budget-grants backend: migration 0002 with backfill, `line_reserved` in `line_totals`, endpoints, consumer change, grant locking, tests 1–6 and 9 | step 1 |
 | 3 | procurement: approval, return, cancel and payment use the calls; `budget_pending`, role-scoped retries and "Sync now"; tests 7 and 8; the per-line advisory lock and the "not recorded yet" listing are removed | step 2, and #295 merged |
 

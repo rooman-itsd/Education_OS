@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
 import secrets
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from eos_billing.application import service as billing
 from eos_core import events, notify
@@ -14,11 +15,16 @@ from eos_core.settings import settings
 from eos_core.tenant import organisation_scope, platform_scope
 from eos_identity.application import service as identity
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..domain.models import Organisation, OrganisationModule, RegistrationToken
+from . import tables
 
 AUTO_APPROVE = settings.auto_approve  # module-level so tests can flip it
+clock = utcnow  # module-level so tests can move time past the retention period
+EXPORT_SCHEMA_VERSION = 1
+DEFAULT_RETENTION_DAYS = 30
 SLUG_RE = re.compile(r"^[a-z0-9-]{3,40}$")
 RESERVED = {"admin", "api", "www", "app", "platform"}
 
@@ -216,6 +222,15 @@ def organisation_status(db: Session, organisation_id: str) -> str | None:
     return org.status if org else None
 
 
+def organisation_name(db: Session, organisation_id: str) -> str | None:
+    """The display name, for a platform service that may not import tenancy. Published on the
+    `eos.organisation_directory` entry point, so a process that is not the API (the event-bus relay, the
+    scheduler) finds it too; platform/notification renders it into every organisation-facing template."""
+    with platform_scope():
+        org = db.get(Organisation, organisation_id)
+    return org.name if org else None
+
+
 def organisation_id_for_slug(db: Session, slug: str) -> str | None:
     with platform_scope():
         org = db.scalar(select(Organisation).where(Organisation.slug == slug))
@@ -389,3 +404,176 @@ def impersonate(db: Session, *, organisation_id: str, user_id: str, super_admin_
         ttl_minutes=60,
     )
     return {"token": token, "expires_in_minutes": 60}
+
+
+# ---- export and deletion with retention (DPDP, ADR-0005 "exports and deletion must work per organisation") ----
+
+
+def retention_days() -> int:
+    """How long an archived organisation's rows are kept before a purge may run. EOS_ORGANISATION_RETENTION_DAYS."""
+    return int(os.environ.get("EOS_ORGANISATION_RETENTION_DAYS", str(DEFAULT_RETENTION_DAYS)))
+
+
+def _aware(moment: datetime) -> datetime:
+    """SQLite hands timezone-aware columns back naive; everything stored here is UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def export_organisation(db: Session, organisation_id: str, *, actor: str) -> dict:
+    """Everything the platform holds about one organisation: its record and, for every table that carries
+    organisation_id (known models and any other table in the database), its rows as column -> JSON-safe value.
+    Secrets (password hashes, tokens) are redacted. `files` lists document references; the files themselves follow
+    once platform/documents exists. Runs in platform scope and leaves an audit event in the outbox."""
+    org = get_organisation(db, organisation_id)
+    with platform_scope():
+        exported: dict[str, list[dict]] = {}
+        references: list[dict] = []
+        for table in [tables.organisation_row_table(), *tables.organisation_tables(db)]:
+            rows = tables.export_rows(db, table, organisation_id)
+            exported[table.name] = rows
+            references += tables.file_references(table.name, rows)
+        exported_at = clock()
+        events.publish(
+            db,
+            "tenancy.organisation.exported",
+            org.id,
+            {
+                "organisation_id": org.id,
+                "actor": actor,
+                "tables": len(exported),
+                "rows": sum(len(r) for r in exported.values()),
+            },
+            actor=actor,
+        )
+        db.commit()
+    return {
+        "schema_version": EXPORT_SCHEMA_VERSION,
+        "exported_at": exported_at.isoformat(),
+        "exported_by": actor,
+        "organisation": org.to_dict(),
+        "row_counts": {name: len(rows) for name, rows in exported.items()},
+        "tables": exported,
+        "files": {
+            "note": "platform/documents is not built yet: these are references only; the files follow once it exists.",
+            "references": references,
+        },
+    }
+
+
+def _has_paid_invoices(db: Session, organisation_id: str) -> bool:
+    return any(i["status"] == "paid" for i in billing.list_invoices(db, organisation_id))
+
+
+def request_deletion(
+    db: Session, organisation_id: str, *, requested_by: str, reason: str = "", confirm_slug: str | None = None
+) -> Organisation:
+    """Archive the organisation and start the retention clock. Its users cannot sign in from now on (identity
+    refuses any status but active). An active organisation with paid invoices is refused unless confirm_slug
+    names it, so a paying customer is never archived by a slip."""
+    org = get_organisation(db, organisation_id)
+    if org.delete_after is not None:
+        raise TenancyError(f"deletion already requested; rows are purged after {org.delete_after.isoformat()}", 409)
+    if org.status == "active" and _has_paid_invoices(db, org.id) and confirm_slug != org.slug:
+        raise TenancyError(
+            "organisation is active with paid invoices; repeat the request with confirm_slug set to its slug", 409
+        )
+    now = clock()
+    with platform_scope():
+        org.status_before_deletion, org.status = org.status, "archived"
+        org.status_reason = reason or "deletion requested"
+        org.delete_after = now + timedelta(days=retention_days())
+        org.deletion_requested_by, org.deletion_requested_at = requested_by, now
+        payload = {
+            "organisation_id": org.id,
+            "reason": org.status_reason,
+            "delete_after": org.delete_after.isoformat(),
+            "requested_by": requested_by,
+        }
+        events.publish(db, "tenancy.organisation.archived", org.id, payload, actor=requested_by)
+        events.publish(db, "tenancy.organisation.deletion_requested", org.id, payload, actor=requested_by)
+        email = _admin_email(db, org.id)
+        if email:
+            notify.send_email(
+                email,
+                f"Your Education OS organisation {org.name} has been archived",
+                f"Your organisation {org.name} has been archived and its users can no longer sign in. Its data is "
+                f"kept until {org.delete_after.date().isoformat()} and deleted after that unless the organisation "
+                f"is restored. Reason: {org.status_reason}",
+                organisation_id=org.id,
+                status="archived",
+                delete_after=org.delete_after.isoformat(),
+            )
+        db.commit()
+    return org
+
+
+def restore_organisation(db: Session, organisation_id: str, *, actor: str) -> Organisation:
+    """Undo a deletion request before the purge runs: the previous status comes back, the clock stops."""
+    org = get_organisation(db, organisation_id)
+    if org.delete_after is None:
+        raise TenancyError("no deletion is pending for this organisation", 409)
+    with platform_scope():
+        org.status = org.status_before_deletion or "active"
+        org.status_reason = "restored"
+        org.delete_after = org.deletion_requested_by = org.deletion_requested_at = org.status_before_deletion = None
+        events.publish(
+            db,
+            "tenancy.organisation.restored",
+            org.id,
+            {"organisation_id": org.id, "status": org.status, "restored_by": actor},
+            actor=actor,
+        )
+        if org.status == "active":
+            events.publish(db, "tenancy.organisation.activated", org.id, {"organisation_id": org.id})
+        db.commit()
+    return org
+
+
+def purge_organisation(db: Session, organisation_id: str, *, actor: str, force: bool = False) -> dict:
+    """Delete every row of the organisation in every table that carries organisation_id, then the organisation
+    itself. Only after delete_after has passed, or with force. Irreversible; the outbox keeps one platform-level
+    event recording what was removed (counts, no personal data)."""
+    org = get_organisation(db, organisation_id)
+    if org.delete_after is None:
+        raise TenancyError("deletion has not been requested for this organisation", 409)
+    now = clock()
+    if not force and now < _aware(org.delete_after):
+        raise TenancyError(f"retention runs until {org.delete_after.isoformat()}; pass force to purge now", 409)
+    slug = org.slug
+    requested_by = org.deletion_requested_by
+    requested_at = _aware(org.deletion_requested_at).isoformat() if org.deletion_requested_at else None
+    with platform_scope():
+        try:
+            counts = tables.delete_rows(db, tables.organisation_tables(db), org.id)
+            db.execute(tables.organisation_row_table().delete().where(tables.organisation_row_table().c.id == org.id))
+        except tables.PurgeBlockedError as e:
+            db.rollback()
+            raise TenancyError(
+                f"purge_blocked: foreign keys block deleting rows from {', '.join(e.tables)}", 409
+            ) from e
+        except SQLAlchemyError as e:
+            db.rollback()
+            raise TenancyError(
+                "purge_blocked: the database refused the delete (" + type(e).__name__ + "); nothing was deleted", 409
+            ) from e
+        except Exception:
+            db.rollback()
+            raise
+        db.expunge(org)
+        result = {
+            "organisation_id": organisation_id,
+            "slug": slug,
+            "purged_at": now.isoformat(),
+            "forced": force,
+            "rows_deleted": {name: n for name, n in sorted(counts.items()) if n},
+        }
+        # The tenant no longer exists, so this one record is the platform's, not the organisation's.
+        events.publish(
+            db,
+            "tenancy.organisation.purged",
+            None,
+            {**result, "purged_by": actor, "requested_by": requested_by, "requested_at": requested_at},
+            actor=actor,
+        )
+        db.commit()
+    return result

@@ -3,6 +3,10 @@
 role: research-supervisor
 title: "Research Supervisor"
 extends: faculty
+module_roles:
+  - projects-guide
+  - selection-process-panelist
+  - portfolio-reviewer
 widgets:
   - projects.to-review
   - projects.active

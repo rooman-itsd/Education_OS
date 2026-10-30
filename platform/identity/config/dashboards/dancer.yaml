@@ -3,6 +3,8 @@
 role: dancer
 title: "Dancer"
 extends: student
+module_roles:
+  - skill-progress-viewer
 widgets:
   - skill-progress.my-progress
   - productions.my-roles
