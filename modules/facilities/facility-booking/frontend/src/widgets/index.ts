@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "@eos/ui-kit";
+import { BookingsTodayWidget } from "./BookingsTodayWidget";
 
 /**
  * Dashboard widgets exported by facility-booking.
@@ -7,4 +8,14 @@ import type { DashboardWidget } from "@eos/ui-kit";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's generated API client in ../api.
  */
-export const widgets: DashboardWidget[] = [];
+export const widgets: DashboardWidget[] = [
+  {
+    id: "facility-booking.bookings-today",
+    title: "Bookings today",
+    permission: "facility-booking:booking:read",
+    size: "1x1",
+    kind: "list",
+    subtitle: "Spaces and equipment you look after",
+    component: BookingsTodayWidget,
+  },
+];

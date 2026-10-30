@@ -39,6 +39,8 @@ def current_principal(authorization: str | None = Header(default=None), db: Sess
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
     try:
+        # Our own HS256 token, or (ADR-0006) a realm's RS256 token that eos_core verified and this service's
+        # resolve_oidc_claims mapped to the same shape: `sub` is an identity user id either way.
         claims = decode_token(authorization.split(" ", 1)[1])
     except jwt.PyJWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e

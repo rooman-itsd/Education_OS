@@ -3,7 +3,10 @@
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
 module: identity
 version: 1
-events: []
-#  - name: identity.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: identity.user.created
+    description: A user was created (registration, POST /users, the super-admin seed). Payload: user_id, roles.
+  - name: identity.user.oidc_linked
+    description: >-
+      A user signed in through the organisation's Keycloak realm for the first time and the realm subject was
+      linked to the user by verified email (ADR-0006). Payload: user_id, realm.

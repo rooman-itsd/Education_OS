@@ -5,6 +5,99 @@ info:
   description: "SSO (SAML / OAuth2 / OIDC), RBAC with fine-grained permissions, MFA, session management."
 servers:
   - url: /api/v1/identity
-paths: {}
+paths:
+  /auth/login:
+    post:
+      summary: Password sign-in; answers the platform's own token.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401": { description: invalid credentials, or the organisation is not active }
+  /auth/me:
+    get:
+      summary: The caller, with the permissions the role catalogues grant.
+      responses:
+        "200": { description: the user plus `permissions` and `impersonated_by` }
+  /auth/oidc/config:
+    get:
+      summary: ADR-0006. What the sign-in page needs to start the authorization code flow with PKCE.
+      parameters:
+        - { name: slug, in: query, required: true, schema: { type: string, maxLength: 40 } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OIDCConfig"
+        "404": { description: OIDC is off, or the organisation has no realm or is not active }
+  /auth/oidc/callback:
+    post:
+      summary: ADR-0006. Redeem the authorization code; answers exactly like /auth/login.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OIDCCallback"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401": { description: the code or the id token was refused, or the organisation or user is not active }
+        "403": { description: "`no_account`: the realm knows the person, identity does not" }
+        "404": { description: OIDC is not configured for the slug }
+  /users:
+    get:
+      summary: Users of own organisation (identity:user:read).
+      responses:
+        "200": { description: list of users }
+    post:
+      summary: Create a user of own organisation (identity:user:manage).
+      responses:
+        "201": { description: the user }
 components:
-  schemas: {}
+  schemas:
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        organisation_slug: { type: string }
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string, description: the platform's own HS256 bearer token }
+        user: { type: object }
+    OIDCConfig:
+      type: object
+      required: [realm, issuer, authorization_endpoint, token_endpoint, client_id, response_type, scope, code_challenge_method]
+      properties:
+        realm: { type: string, description: the organisation slug }
+        issuer: { type: string, format: uri }
+        authorization_endpoint: { type: string, format: uri }
+        token_endpoint: { type: string, format: uri }
+        jwks_uri: { type: string, format: uri }
+        end_session_endpoint: { type: string, format: uri }
+        client_id: { type: string }
+        response_type: { type: string, enum: [code] }
+        scope: { type: string, example: openid email profile }
+        code_challenge_method: { type: string, enum: [S256] }
+    OIDCCallback:
+      type: object
+      required: [code, code_verifier, redirect_uri, slug]
+      properties:
+        code: { type: string }
+        code_verifier: { type: string, minLength: 43, maxLength: 128 }
+        redirect_uri: { type: string, format: uri }
+        slug: { type: string, maxLength: 40 }
