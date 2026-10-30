@@ -116,7 +116,6 @@ registers it (a separate PR).
 - **Reconciliation runs immediately** and returns the finished run with `202`.
   - It covers fee payments against the organisation's merchant account.
   - Reconciling subscription payments against the platform account is a platform task.
-- **Days use UTC.** That applies to the summary, reconciliation and list filters. The contract says the summary's
-  default day is today in the organisation's time zone; the adapter, and so the widget, use today in UTC.
+- **Days use UTC.** That applies to the summary, reconciliation and list filters.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
 - **Not mounted in `apps/backend` and not run in CI yet.** Those files belong to other owners.
