@@ -341,6 +341,18 @@ def test_appointment_notes_reach_only_those_who_may_see_them(client, org):
     assert client.post(f"{BASE}/appointments", json=body, headers=nutritionist).status_code == 403
     assert client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=physio).json()["notes"].startswith("ACL")
 
+    # retyping it as a nutrition session does not hand the notes over, nor does clearing them while retyping
+    for patch in ({"appointment_type": "nutrition"}, {"appointment_type": "nutrition", "notes": None}):
+        r = client.patch(f"{BASE}/appointments/{physio_appt['id']}", json=patch, headers=nutritionist)
+        assert r.status_code == 403 and "notes" not in r.json()
+    assert "notes" not in client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=nutritionist).json()
+    stored = client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=physio).json()
+    assert stored["appointment_type"] == "physiotherapy" and stored["notes"].startswith("ACL")
+    # an appointment without notes can still be retyped by whoever manages appointments
+    plain = org.appointment(ATHLETE_A, physio_id, headers=physio)
+    r = client.patch(f"{BASE}/appointments/{plain['id']}", json={"appointment_type": "medical"}, headers=org_admin)
+    assert r.status_code == 200 and r.json()["appointment_type"] == "medical"
+
     # a nutritionist keeps the notes of their own nutrition sessions
     session = org.appointment(
         ATHLETE_A, nutritionist_id, appointment_type="nutrition", notes="Increase carbs", headers=nutritionist

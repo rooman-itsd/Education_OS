@@ -622,8 +622,13 @@ def update_appointment(db: Session, actor: Actor, appointment_id: str, data: dic
     now = clock()
     changes = {k: v for k, v in data.items() if (as_utc(getattr(a, k)) if k == "scheduled_at" else getattr(a, k)) != v}
     _rules(rules.check_appointment_change, a.status, changes)
-    if "notes" in changes and not _may_write_notes(actor, data.get("appointment_type", a.appointment_type)):
-        raise _forbidden(f"notes on a {a.appointment_type} appointment require {HEALTH_WRITE}")
+    # The type decides who sees the notes, so retyping an appointment that has notes is a notes change: it needs the
+    # right to write notes of both the stored and the new type (else retyping a physio session reveals its notes).
+    retyped = "appointment_type" in changes and data.get("notes", a.notes) is not None
+    if "notes" in changes or retyped:
+        for kind in dict.fromkeys((a.appointment_type, data.get("appointment_type", a.appointment_type))):
+            if not _may_write_notes(actor, kind):
+                raise _forbidden(f"notes on a {kind} appointment require {HEALTH_WRITE}")
     if "injury_id" in changes or "athlete_id" in changes:
         _check_injury_link(db, data.get("injury_id", a.injury_id), data.get("athlete_id", a.athlete_id))
     when = data.get("scheduled_at", as_utc(a.scheduled_at))

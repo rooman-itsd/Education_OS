@@ -19,7 +19,8 @@ Confidentiality: health records need `health-record:read`, held only by medical 
 An injury's `clinical_notes` are returned only to holders of `health-record:read` and written or cleared only with
 `health-record:write` (403 otherwise); coaches, athletes and org-admin see the injury, its status and expected return.
 Appointment `notes` are clinical too: returned to and written by medical roles, and by a nutritionist (`plan:write`)
-only for `nutrition` appointments. Events carry ids, statuses and dates only, and audit entries never copy clinical or
+only for `nutrition` appointments. Since the type decides who sees the notes, changing the type of an appointment that has
+notes needs the right to write notes of both the old and the new type. Events carry ids, statuses and dates only, and audit entries never copy clinical or
 free-text fields.
 
 Athletes see only their own plans, injuries and appointments. This module learns which user is which athlete from
