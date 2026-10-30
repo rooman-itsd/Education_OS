@@ -3,7 +3,8 @@ name = "eos-core"
 version = "0.1.0"
 description = "Education OS core: settings, database, tenant context, security, config loaders, entitlement rule, outbox."
 requires-python = ">=3.12"
-dependencies = ["sqlalchemy>=2.0", "pyyaml>=6", "PyJWT>=2.8", "pydantic>=2"]
+# PyJWT[crypto] pulls in `cryptography`, which PyJWT needs to verify Keycloak's RS256 tokens (ADR-0006).
+dependencies = ["sqlalchemy>=2.0", "pyyaml>=6", "PyJWT[crypto]>=2.8", "pydantic>=2", "httpx>=0.27"]
 
 [build-system]
 requires = ["setuptools>=68"]
