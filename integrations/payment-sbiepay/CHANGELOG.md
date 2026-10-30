@@ -30,3 +30,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - a request delivers only its own payment's notifications;
   - date-times always carry `+00:00`;
   - a negative cursor answers `400` and a token without a subject `401`.
+- Frontend (`frontend/`, package `@eos/payment-sbiepay`): the Finance Staff widget `payment-sbiepay.reconciliation`
+  (#335) shows today's succeeded, settled, pending and failed payments with their amounts, the latest run's mismatches
+  and when the day was last reconciled, with loading, empty and error-with-retry states, and its tests.

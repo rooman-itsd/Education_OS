@@ -12,6 +12,7 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
   - `infrastructure/notifier.py`: signed notifications to `notify_url`.
   - `infrastructure/config.py`: reads `PAYMENT_SBIEPAY_*`.
   - `api/router.py`: the HTTP surface, mounted at `/api/v1/payment-sbiepay`.
+- `frontend/` is the Finance Staff dashboard widget (package `@eos/payment-sbiepay`); see [Frontend](#frontend).
 - `config/env.example` documents every setting.
 - `tests/` covers the flow end to end on the mock gateway, plus the cross-tenant leak test.
 
@@ -84,6 +85,27 @@ pytest integrations/payment-sbiepay
 
 The tests mount only this adapter's router and issue tokens with `eos_core.security`, so they need no other module.
 
+## Frontend
+
+`frontend/src/widgets/index.ts` exports the dashboard widget. The Finance Staff layout in
+`platform/identity/config/dashboards/finance-staff.yaml` places it, and the `integrations:` list in `apps/frontend`
+registers it (a separate PR).
+
+| Widget | Dashboard | Endpoint | Permission |
+|---|---|---|---|
+| `payment-sbiepay.reconciliation` | Finance Staff | `GET /reconciliation/summary` | `payment-sbiepay:payment:read` |
+
+- **Online payments reconciliation:** today's payments through SBIePay: succeeded, settled and pending, each with its
+  count and amount, and failed with its count. Under them, the latest settlement reconciliation for the day: a danger
+  badge with the number of mismatches, or "No mismatches", with "Last reconciled <date, time>" in the viewer's time
+  zone; "Not reconciled yet" when no run exists for the day. Read-only: runs are started through `POST /reconciliation/runs`.
+- **Data:** the widget reads through `src/api/client.ts`, a hand-written typed client that the generated client will
+  replace. It asks for no `date`, so the adapter summarises today in UTC (see the limitations).
+- **States:** loading; empty ("No online payments today") when every count is zero and the day has no run; and error
+  with a retry when trying again can help. Until the adapter is mounted, the error reads "Payment data is not available yet."
+- **Tests:** `cd integrations/payment-sbiepay/frontend && pnpm test` (vitest and Testing Library), or
+  `corepack pnpm --filter @eos/payment-sbiepay test` from the repo root.
+
 ## Known limitations (tracked on #97)
 
 - **Starting a payment needs only the payer's token.** A payer could start a payment for the right module but someone else's invoice, or a different amount. Consumers must check `amount` and `source_reference` against their own record before acting on `payment-sbiepay.payment.succeeded`. Service-to-service authentication is the platform's decision (raised on #97).
@@ -94,6 +116,7 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
 - **Reconciliation runs immediately** and returns the finished run with `202`.
   - It covers fee payments against the organisation's merchant account.
   - Reconciling subscription payments against the platform account is a platform task.
-- **Days use UTC.** That applies to the summary, reconciliation and list filters.
+- **Days use UTC.** That applies to the summary, reconciliation and list filters. The contract says the summary's
+  default day is today in the organisation's time zone; the adapter, and so the widget, use today in UTC.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
 - **Not mounted in `apps/backend` and not run in CI yet.** Those files belong to other owners.
