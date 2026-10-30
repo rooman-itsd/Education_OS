@@ -1,5 +1,7 @@
 import type { DashboardWidget } from "@eos/ui-kit";
 import { BookingsTodayWidget } from "./BookingsTodayWidget";
+import { BookingsWidget } from "./BookingsWidget";
+import { MyBookingsWidget } from "./MyBookingsWidget";
 
 /**
  * Dashboard widgets exported by facility-booking.
@@ -10,6 +12,15 @@ import { BookingsTodayWidget } from "./BookingsTodayWidget";
  */
 export const widgets: DashboardWidget[] = [
   {
+    id: "facility-booking.bookings",
+    title: "Upcoming bookings",
+    permission: "facility-booking:booking:read",
+    size: "1x1",
+    kind: "list",
+    subtitle: "Spaces and equipment you approve",
+    component: BookingsWidget,
+  },
+  {
     id: "facility-booking.bookings-today",
     title: "Bookings today",
     permission: "facility-booking:booking:read",
@@ -17,5 +28,14 @@ export const widgets: DashboardWidget[] = [
     kind: "list",
     subtitle: "Spaces and equipment you look after",
     component: BookingsTodayWidget,
+  },
+  {
+    id: "facility-booking.my-bookings",
+    title: "My bookings",
+    permission: "facility-booking:booking:read",
+    size: "1x1",
+    kind: "list",
+    subtitle: "Your upcoming bookings",
+    component: MyBookingsWidget,
   },
 ];
