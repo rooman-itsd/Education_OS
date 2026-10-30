@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
@@ -215,13 +216,17 @@ def _page(items: list, total: int) -> dict:
     return {"items": items, "total": total}
 
 
+def _local_zone() -> ZoneInfo:
+    return ZoneInfo(load_settings().timezone)
+
+
 def _local_date(value: datetime) -> date:
-    return as_utc(value).astimezone(load_settings().local_timezone).date()
+    return as_utc(value).astimezone(_local_zone()).date()
 
 
 def _local_midnight(day: date) -> datetime:
     """The UTC instant at which a local day starts."""
-    return datetime.combine(day, time.min, tzinfo=load_settings().local_timezone).astimezone(UTC)
+    return datetime.combine(day, time.min, tzinfo=_local_zone()).astimezone(UTC)
 
 
 # ---------------------------------------------------------------- who may see what

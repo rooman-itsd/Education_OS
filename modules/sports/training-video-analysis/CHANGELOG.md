@@ -17,5 +17,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract: `x-permission` and a 403 response on every operation; an optional free-text `location` on sessions (the
   `session.scheduled` event already carried it); the sports-college profile roles `athlete` and `org-admin` granted
   the same keys as the matching module roles (non-breaking).
-- Config: `TRAINING_VIDEO_ANALYSIS_UTC_OFFSET`.
+- Config: `TRAINING_VIDEO_ANALYSIS_TIMEZONE`.
 - Tests: domain, API, athlete self-scope, consumers, cross-tenant leak, migration and contract-drift tests.

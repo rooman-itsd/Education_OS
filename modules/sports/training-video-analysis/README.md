@@ -35,7 +35,7 @@ Behaviour:
   be completed before it starts, and `session.completed` carries the actual duration or, without one, the scheduled
   length.
 - A session in a plan starts on one of the plan's days, by the institution's local date
-  (`TRAINING_VIDEO_ANALYSIS_UTC_OFFSET`); the session list's `from_date`/`to_date` are local dates too. Times are
+  (`TRAINING_VIDEO_ANALYSIS_TIMEZONE`); the session list's `from_date`/`to_date` are local dates too. Times are
   stored and returned in UTC.
 - Drill tags lie inside the video (0 ≤ start < end ≤ duration) and name a drill of the repository. Annotations point
   inside the video; they are written in the caller's name (`author_id` must be the caller), changed only by their
