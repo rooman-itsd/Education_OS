@@ -109,4 +109,4 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
 - **Days use UTC.** That applies to the summary, reconciliation and list filters.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
 - **The reconciliation summary's default day is UTC,** while the contract says the organisation's time zone. Pass `date` to choose the day.
-- **The Finance Staff widget `payment-sbiepay.reconciliation` isn't built yet.** `apps/frontend` loads widgets only from `modules/` and `platform/`, so an integration's widget needs the host to read an `integrations:` list first.
+- **The Finance Staff widget `payment-sbiepay.reconciliation` (#376) isn't on the dashboard yet.** `apps/frontend` must read an `integrations:` list (#375) and list `payment-sbiepay` in it (a follow-up PR).
