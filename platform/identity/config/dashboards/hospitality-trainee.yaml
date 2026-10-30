@@ -3,6 +3,9 @@
 role: hospitality-trainee
 title: "Hospitality Trainee"
 extends: student
+module_roles:
+  - field-training-trainee
+  - skill-progress-viewer
 widgets:
   - field-training.my-placement
   - skill-progress.my-progress

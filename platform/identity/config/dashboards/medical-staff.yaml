@@ -2,6 +2,8 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: medical-staff
 title: "Medical Staff (Doctor / Physio)"
+module_roles:
+  - sports-nutrition-health-medical
 widgets:
   - sports-nutrition-health.injured-athletes
   - sports-nutrition-health.appointments-today

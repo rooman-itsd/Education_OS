@@ -2,6 +2,8 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: ensemble-director
 title: "Ensemble / Orchestra Director"
+module_roles:
+  - selection-process-coordinator
 widgets:
   - productions.in-preparation
   - productions.calendar

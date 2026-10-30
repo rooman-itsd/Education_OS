@@ -3,6 +3,9 @@
 role: artist
 title: "Artist"
 extends: student
+module_roles:
+  - portfolio-learner
+  - projects-member
 widgets:
   - portfolio.my-portfolio
   - projects.my-projects

@@ -3,6 +3,10 @@
 role: studio-instructor
 title: "Studio Instructor"
 extends: faculty
+module_roles:
+  - portfolio-reviewer
+  - projects-guide
+  - selection-process-panelist
 widgets:
   - portfolio.reviews-pending
   - projects.to-review

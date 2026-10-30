@@ -3,6 +3,10 @@
 role: medical-student
 title: "Medical Student"
 extends: student
+module_roles:
+  - field-training-trainee
+  - skill-progress-viewer
+  - projects-member
 widgets:
   - field-training.my-placement
   - field-training.hours-logged

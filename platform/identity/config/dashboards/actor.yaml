@@ -3,6 +3,8 @@
 role: actor
 title: "Actor"
 extends: student
+module_roles:
+  - portfolio-learner
 widgets:
   - productions.my-roles
   - selection-process.upcoming

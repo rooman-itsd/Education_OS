@@ -1,5 +1,41 @@
-# API host plus Postgres. Run on a Docker host (not the nginx container):
+# API host plus Postgres, and (ADR-0006) Keycloak with its own Postgres behind the `oidc` profile. Run on a
+# Docker host (not the nginx container):
 #   docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build
+# Keycloak starts only with COMPOSE_PROFILES=oidc in .env.api (README, "Keycloak"), so a host that has not
+# filled in its settings keeps running the API alone.
+
+# What every process that runs module code needs: the API and the event-bus relay, which runs the consumers
+# (notification sends its mail there). Every variable added here takes a `:-` default: a `:?` one stops every
+# deploy on a host whose .env.api predates it, as EOS_APP_DB_PASSWORD did. Defaults match each module's own.
+x-app-environment: &app-environment
+  EOS_DATABASE_URL: postgresql+psycopg://eos_app:${EOS_APP_DB_PASSWORD:?set EOS_APP_DB_PASSWORD}@db:5432/eos
+  EOS_DB_MANAGE_SCHEMA: "false"
+  EOS_JWT_SECRET: ${EOS_JWT_SECRET:?set EOS_JWT_SECRET (32+ random bytes)}
+  EOS_DEV_MODE: ${EOS_DEV_MODE:-false}
+  EOS_SUPER_ADMIN_EMAIL: ${EOS_SUPER_ADMIN_EMAIL:?set EOS_SUPER_ADMIN_EMAIL}
+  EOS_SUPER_ADMIN_PASSWORD: ${EOS_SUPER_ADMIN_PASSWORD:?set EOS_SUPER_ADMIN_PASSWORD}
+  EOS_CORS_ORIGINS: ${EOS_CORS_ORIGINS:-https://educationos.futureacad.ae}
+  BILLING_PAYMENT_ADAPTER: ${BILLING_PAYMENT_ADAPTER:-none}
+  # ADR-0006: empty keeps OIDC off; the API then accepts only its own tokens.
+  EOS_OIDC_ISSUER_BASE: ${EOS_OIDC_ISSUER_BASE:-}
+  EOS_OIDC_CLIENT_ID: ${EOS_OIDC_CLIENT_ID:-education-os-web}
+  EOS_OIDC_REALMS: ${EOS_OIDC_REALMS:-}
+  # Mail (platform/notification, integrations/messaging-providers). "memory" sends nothing and is refused when
+  # EOS_DEV_MODE is false, so a host with dev mode off needs NOTIFICATION_TRANSPORT=adapter and the SMTP relay.
+  NOTIFICATION_TRANSPORT: ${NOTIFICATION_TRANSPORT:-memory}
+  NOTIFICATION_ADAPTER: ${NOTIFICATION_ADAPTER:-messaging-providers}
+  NOTIFICATION_DEFAULT_FROM_EMAIL: ${NOTIFICATION_DEFAULT_FROM_EMAIL:-no-reply@example.invalid}
+  NOTIFICATION_DEFAULT_FROM_NAME: ${NOTIFICATION_DEFAULT_FROM_NAME:-Education OS}
+  NOTIFICATION_SENDING_LEASE_S: ${NOTIFICATION_SENDING_LEASE_S:-120}
+  MESSAGING_PROVIDERS_SMTP_HOST: ${MESSAGING_PROVIDERS_SMTP_HOST:-localhost}
+  MESSAGING_PROVIDERS_SMTP_PORT: ${MESSAGING_PROVIDERS_SMTP_PORT:-1025}
+  MESSAGING_PROVIDERS_SMTP_USE_TLS: ${MESSAGING_PROVIDERS_SMTP_USE_TLS:-false}
+  MESSAGING_PROVIDERS_SMTP_USERNAME: ${MESSAGING_PROVIDERS_SMTP_USERNAME:-}
+  MESSAGING_PROVIDERS_SMTP_PASSWORD: ${MESSAGING_PROVIDERS_SMTP_PASSWORD:-}
+  MESSAGING_PROVIDERS_SMTP_TIMEOUT_S: ${MESSAGING_PROVIDERS_SMTP_TIMEOUT_S:-10}
+  MESSAGING_PROVIDERS_FROM_EMAIL: ${MESSAGING_PROVIDERS_FROM_EMAIL:-no-reply@example.invalid}
+  MESSAGING_PROVIDERS_FROM_NAME: ${MESSAGING_PROVIDERS_FROM_NAME:-Education OS}
+
 services:
   db:
     image: postgres:16-alpine
@@ -40,16 +76,97 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    environment:
-      EOS_DATABASE_URL: postgresql+psycopg://eos_app:${EOS_APP_DB_PASSWORD:?set EOS_APP_DB_PASSWORD}@db:5432/eos
-      EOS_DB_MANAGE_SCHEMA: "false"
-      EOS_JWT_SECRET: ${EOS_JWT_SECRET:?set EOS_JWT_SECRET (32+ random bytes)}
-      EOS_DEV_MODE: ${EOS_DEV_MODE:-false}
-      EOS_SUPER_ADMIN_EMAIL: ${EOS_SUPER_ADMIN_EMAIL:?set EOS_SUPER_ADMIN_EMAIL}
-      EOS_SUPER_ADMIN_PASSWORD: ${EOS_SUPER_ADMIN_PASSWORD:?set EOS_SUPER_ADMIN_PASSWORD}
-      EOS_CORS_ORIGINS: ${EOS_CORS_ORIGINS:-https://educationos.futureacad.ae}
-      BILLING_PAYMENT_ADAPTER: ${BILLING_PAYMENT_ADAPTER:-none}
+    environment: *app-environment
     ports:
       - "${EOS_API_PORT:-8000}:8000"
+  # Keycloak's own database (ADR-0006 decision 2): a second Postgres so the provider's schema, upgrades and
+  # restores never touch the API's database. Backed up by the same nightly routine (infra/backup-dr).
+  kc-db:
+    image: postgres:16-alpine
+    profiles: ["oidc"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      # `:-`, not `:?`: Compose interpolates services of inactive profiles too, so a required variable here
+      # would stop `up` on every host without these settings. Postgres itself refuses an empty password.
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      POSTGRES_DB: keycloak
+    volumes:
+      - eos-kcdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  # The OIDC provider, served by the public proxy under /auth/ (infra/docker/wire-api-proxy.sh). One realm per
+  # organisation, named by its slug (tools/scripts/keycloak-realm.sh). The image is Keycloak's official one on
+  # quay.io; docs/architecture/approved-stack.yaml lists libraries, not container images.
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.0}
+    profiles: ["oidc"]
+    restart: unless-stopped
+    depends_on:
+      kc-db:
+        condition: service_healthy
+    # Refuse to start with a setting missing (they cannot be `:?`-required, see kc-db), then run Keycloak.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        [ -n "$$KC_DB_PASSWORD" ] && [ -n "$$KC_HOSTNAME" ] && [ -n "$$KC_BOOTSTRAP_ADMIN_PASSWORD" ] ||
+        { echo "keycloak: KEYCLOAK_DB_PASSWORD, KC_HOSTNAME and KEYCLOAK_ADMIN_PASSWORD must be set in .env.api" >&2; exit 1; };
+        exec /opt/keycloak/bin/kc.sh start
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://kc-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-}
+      # The public URL including the /auth path: every realm issuer is <KC_HOSTNAME>/realms/<slug>, which is
+      # what the API checks (EOS_OIDC_ISSUER_BASE must be the same value).
+      KC_HOSTNAME: ${KC_HOSTNAME:-}
+      KC_HTTP_RELATIVE_PATH: /auth
+      # TLS ends at the nginx proxy; Keycloak trusts its X-Forwarded-* headers and serves plain HTTP inside.
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # First-start admin for the master realm (Keycloak 26 names). Change the password in the console after
+      # the first sign-in; later starts ignore these.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # A fixed heap instead of Keycloak's default share of the host's memory, inside the container cap below,
+      # so the JVM cannot crowd out the API and the two databases on the same host.
+      JAVA_OPTS_KC_HEAP: "-Xms256m -Xmx512m"
+    mem_limit: 1g
+    # Published on one address only: the API host's LAN address the public proxy reaches (deploy-api-lxc.sh
+    # writes KEYCLOAK_BIND=<container ip> into .env.api), else loopback. Never all interfaces.
+    ports:
+      - "${KEYCLOAK_BIND:-127.0.0.1}:${KEYCLOAK_PORT:-8080}:8080"
+    healthcheck:
+      # The management port (9000) serves /auth/health; the image has no curl, so bash opens the socket.
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.0\r\n\r\n' >&3 && grep -q UP <&3",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+  # The event-bus relay (platform/event-bus): delivers outbox_event rows to the consumers modules declare, in
+  # each event's organisation with row-level security on. Without it no event is ever acted on. One process;
+  # a second is safe (rows are claimed FOR UPDATE SKIP LOCKED). Same image and settings as the API.
+  relay:
+    image: eos-api:${EOS_API_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment: *app-environment
+    command: ["python", "-m", "eos_event_bus"]
+    healthcheck:
+      disable: true # the image's HEALTHCHECK calls the API on :8000, which this container does not serve
 volumes:
   eos-pgdata:
+  eos-kcdata:

@@ -20,6 +20,7 @@ python:
     - httpx
     - pyyaml
     - PyJWT
+    - cryptography             # PyJWT[crypto]: RS256 verification of Keycloak realm tokens (ADR-0006)
     - python-multipart
     - opensearch-py
     - minio
