@@ -2,6 +2,11 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: support-staff
 title: "Support Staff (Helpdesk)"
+module_roles:
+  - sla-management-viewer
+  - incident-management-responder
+  - knowledge-base-viewer
+  - amc-vendor-support-viewer
 widgets:
   - helpdesk.open-by-priority
   - sla-management.breaches

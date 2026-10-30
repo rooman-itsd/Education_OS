@@ -42,3 +42,13 @@ def test_a_research_supervisor_holds_what_a_faculty_member_holds(monkeypatch):
     p = _principal(monkeypatch, ["research-supervisor"])
     assert p.can("academic-management:roster:read")
     assert not p.can("academic-management:roster:read-all")  # inheritance gives faculty's keys, not an admin's
+
+
+PROJECTS = REPO / "modules/practice/projects/contracts/permissions.yaml"
+
+
+@pytest.mark.skipif(not PROJECTS.exists(), reason="projects catalogue not in this repo")
+def test_a_research_scholar_holds_the_module_roles_its_layout_lists(monkeypatch):
+    p = _principal(monkeypatch, ["research-scholar"])
+    assert p.can("projects:self:propose")  # projects-member, from `module_roles`
+    assert not p.can("projects:project:manage")  # a learner layout never lists a coordinator role

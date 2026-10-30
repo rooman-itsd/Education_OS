@@ -5,8 +5,9 @@ whose catalogue only names `student` or `faculty`. This is the host's check over
 1. Every layout with `extends` holds at least what the extended role holds.
 2. Every widget on a layout whose module has a catalogue is backed by at least one key that module's catalogue
    declares (`<module>:...`, or a `platform:` key it declares) held by the layout's role, the way the role really
-   holds keys: its own grants, its inherited grants and the implicit `member` role every organisation user has, or,
-   for the super-admin layout, the super-admin rule. Without one the shell hides the card and the API refuses it.
+   holds keys: its own grants, its inherited grants (the role it `extends` and the module roles its layout lists in
+   `module_roles`) and the implicit `member` role every organisation user has, or, for the super-admin layout, the
+   super-admin rule. Without one the shell hides the card and the API refuses it.
 """
 
 import uuid
@@ -48,20 +49,18 @@ def _held(role: str) -> set[str]:
 CATALOGUE_KEYS = _catalogue_keys()
 EXTENDING = [(lay["role"], lay["extends"]) for lay in _layouts() if lay.get("extends")]
 
-# Widgets the layout's role cannot use yet, by module. Each is a gap in that module's catalogue (or in the mapping of
-# profile roles onto it), not in the platform rule, and is closed by a PR to that module, one module per PR. The
-# test fails on an entry that has become backed, so this list only shrinks. Tracked under #315.
+# Widgets the layout's role cannot use yet, by module. Each is a gap in that module's catalogue, not in the platform
+# rule (a layout's `module_roles` maps a profile role onto the module's own roles), and is closed by a PR to that
+# module, one module per PR. The test fails on an entry that has become backed, so this list only shrinks. Tracked
+# under #315; the batch that owns each module is named beside it.
 EMPTY = "the catalogue grants no role yet (#315)"
-UNMAPPED = (
-    "the catalogue grants only its own generic roles (<module>-learner, -reviewer, ...); no profile role is mapped "
-    "onto them yet, and the layout's role (or the student/faculty role it extends) is not named (#315)"
-)
-NAMED = "the catalogue names profile roles, but not this one (#315)"
-SUPER = (
-    "the super-admin rule grants only platform: keys that some role is granted, and no role is granted "
-    "platform:audit:read (#315)"
+NAMED = "the catalogue names no role this profile role can hold (#315)"
+LEARNER_GAP = (
+    "the catalogue grants only panelist and coordinator roles; nobody who applies or auditions holds a role, so "
+    "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
+    # admissions: no role fits (admissions module, batch #321)
     "admissions": (
         NAMED,
         [
@@ -69,116 +68,21 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "applicant admissions.pending-documents",
         ],
     ),
+    # alumni: empty catalogue (alumni module, batch #337)
     "alumni": (
         EMPTY,
         [
             "management-student alumni.mentoring",
         ],
     ),
-    "amc-vendor-support": (
-        UNMAPPED,
-        [
-            "support-staff amc-vendor-support.contracts-expiring",
-        ],
-    ),
+    # athlete-performance: no role fits (athlete-performance module, batch #329)
     "athlete-performance": (
         NAMED,
         [
             "nutritionist athlete-performance.body-composition-trend",
         ],
     ),
-    "audit": (
-        SUPER,
-        [
-            "super-admin audit.super-admin-actions",
-        ],
-    ),
-    "examinations": (
-        UNMAPPED,
-        [
-            "department-admin examinations.results-summary",
-            "examination-staff examinations.schedule",
-            "examination-staff examinations.hall-tickets-issued",
-            "examination-staff examinations.results-pending",
-            "faculty examinations.exam-duties",
-            "student examinations.upcoming-assessments",
-        ],
-    ),
-    "field-training": (
-        UNMAPPED,
-        [
-            "clinical-supervisor field-training.trainees-to-assess",
-            "clinical-supervisor field-training.placements-open",
-            "corporate-mentor field-training.trainees-to-assess",
-            "design-mentor field-training.trainees-to-assess",
-            "designer field-training.my-placement",
-            "engineering-student field-training.my-placement",
-            "farm-supervisor field-training.trainees-to-assess",
-            "field-trainee field-training.my-placement",
-            "field-trainee field-training.hours-logged",
-            "hospital-coordinator field-training.active-placements",
-            "hospital-coordinator field-training.placements-open",
-            "hospitality-trainee field-training.my-placement",
-            "industry-coordinator field-training.placements-open",
-            "industry-coordinator field-training.active-placements",
-            "industry-liaison field-training.placements-open",
-            "law-student field-training.my-placement",
-            "law-student field-training.hours-logged",
-            "legal-mentor field-training.trainees-to-assess",
-            "management-student field-training.my-placement",
-            "medical-student field-training.my-placement",
-            "medical-student field-training.hours-logged",
-            "mentor-teacher field-training.trainees-to-assess",
-            "moot-court-coordinator field-training.placements-open",
-            "placement-officer field-training.placements-open",
-            "practicum-coordinator field-training.placements-open",
-            "practicum-coordinator field-training.active-placements",
-            "project-guide field-training.trainees-to-assess",
-            "research-lead field-training.placements-open",
-            "teacher-trainee field-training.my-placement",
-            "teacher-trainee field-training.hours-logged",
-        ],
-    ),
-    "grievance": (
-        UNMAPPED,
-        [
-            "governance grievance.open-by-committee",
-            "management grievance.open",
-        ],
-    ),
-    "incident-management": (
-        UNMAPPED,
-        [
-            "support-staff incident-management.open",
-        ],
-    ),
-    "iqac-accreditation": (
-        UNMAPPED,
-        [
-            "governance iqac-accreditation.action-items",
-        ],
-    ),
-    "knowledge-base": (
-        UNMAPPED,
-        [
-            "support-staff knowledge-base.top-articles",
-        ],
-    ),
-    "library": (
-        UNMAPPED,
-        [
-            "student library.loans",
-        ],
-    ),
-    "lms": (
-        UNMAPPED,
-        [
-            "faculty lms.assignments-to-grade",
-            "management-student lms.course-materials",
-            "medical-student lms.course-materials",
-            "student lms.course-materials",
-        ],
-    ),
+    # placement-career: empty catalogue (placement-career module, batch #337)
     "placement-career": (
         EMPTY,
         [
@@ -193,23 +97,7 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "practicum-coordinator placement-career.openings",
         ],
     ),
-    "portfolio": (
-        UNMAPPED,
-        [
-            "actor portfolio.my-portfolio",
-            "artist portfolio.my-portfolio",
-            "design-mentor portfolio.reviews-pending",
-            "designer portfolio.my-portfolio",
-            "filmmaker portfolio.my-portfolio",
-            "mentor-teacher portfolio.reviews-pending",
-            "music-teacher portfolio.reviews-pending",
-            "musician portfolio.my-portfolio",
-            "research-scholar portfolio.my-portfolio",
-            "research-supervisor portfolio.reviews-pending",
-            "studio-instructor portfolio.reviews-pending",
-            "teacher-trainee portfolio.my-portfolio",
-        ],
-    ),
+    # productions: empty catalogue (productions module, batch #318)
     "productions": (
         EMPTY,
         [
@@ -249,50 +137,7 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "studio-instructor productions.in-preparation",
         ],
     ),
-    "projects": (
-        UNMAPPED,
-        [
-            "artist projects.my-projects",
-            "corporate-mentor projects.to-review",
-            "design-mentor projects.to-review",
-            "designer projects.my-projects",
-            "director projects.to-review",
-            "engineering-student projects.my-projects",
-            "engineering-student projects.milestones-due",
-            "farm-supervisor projects.active",
-            "field-trainee projects.my-projects",
-            "filmmaker projects.my-projects",
-            "filmmaker projects.milestones-due",
-            "industry-liaison projects.active",
-            "law-student projects.my-projects",
-            "legal-mentor projects.to-review",
-            "management-student projects.my-projects",
-            "medical-student projects.my-projects",
-            "mentor-teacher projects.to-review",
-            "production-supervisor projects.to-review",
-            "production-supervisor projects.active",
-            "project-guide projects.to-review",
-            "project-guide projects.active",
-            "research-lead projects.active",
-            "research-lead projects.to-review",
-            "research-office projects.active",
-            "research-scholar projects.my-projects",
-            "research-scholar projects.milestones-due",
-            "research-supervisor projects.to-review",
-            "research-supervisor projects.active",
-            "studio-instructor projects.to-review",
-            "teacher-trainee projects.my-projects",
-        ],
-    ),
-    "regulatory-reports": (
-        UNMAPPED,
-        [
-            "governance regulatory-reports.due",
-            "hospital-coordinator regulatory-reports.due",
-            "management regulatory-reports.compliance-calendar",
-            "research-office regulatory-reports.due",
-        ],
-    ),
+    # reporting: empty catalogue (reporting module, batch #317)
     "reporting": (
         EMPTY,
         [
@@ -300,100 +145,20 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "management reporting.attendance-and-results-by-department",
         ],
     ),
-    "rti": (
-        UNMAPPED,
-        [
-            "governance rti.nearing-deadline",
-        ],
-    ),
+    # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
     "selection-process": (
-        UNMAPPED,
+        LEARNER_GAP,
         [
             "actor selection-process.upcoming",
             "artist selection-process.upcoming",
-            "choreographer selection-process.to-judge",
-            "corporate-mentor selection-process.to-judge",
             "dancer selection-process.upcoming",
-            "design-mentor selection-process.to-judge",
             "designer selection-process.upcoming",
-            "director selection-process.to-judge",
-            "ensemble-director selection-process.open-calls",
             "law-student selection-process.upcoming",
-            "legal-mentor selection-process.to-judge",
-            "moot-court-coordinator selection-process.open-calls",
-            "music-teacher selection-process.to-judge",
             "musician selection-process.upcoming",
-            "production-supervisor selection-process.to-judge",
-            "research-office selection-process.open-calls",
             "research-scholar selection-process.my-applications",
-            "research-supervisor selection-process.to-judge",
-            "studio-instructor selection-process.to-judge",
         ],
     ),
-    "skill-progress": (
-        UNMAPPED,
-        [
-            "chef-instructor skill-progress.assessments-due",
-            "choreographer skill-progress.assessments-due",
-            "clinical-supervisor skill-progress.assessments-due",
-            "dancer skill-progress.my-progress",
-            "field-trainee skill-progress.my-progress",
-            "hospitality-trainee skill-progress.my-progress",
-            "medical-student skill-progress.my-progress",
-            "mentor-teacher skill-progress.assessments-due",
-            "music-teacher skill-progress.assessments-due",
-            "musician skill-progress.my-progress",
-            "practicum-coordinator skill-progress.cohort-overview",
-            "project-guide skill-progress.assessments-due",
-            "teacher-trainee skill-progress.my-progress",
-        ],
-    ),
-    "sla-management": (
-        UNMAPPED,
-        [
-            "support-staff sla-management.breaches",
-        ],
-    ),
-    "sports-nutrition-health": (
-        UNMAPPED,
-        [
-            "athlete sports-nutrition-health.nutrition-plan",
-            "medical-staff sports-nutrition-health.injured-athletes",
-            "medical-staff sports-nutrition-health.appointments-today",
-            "nutritionist sports-nutrition-health.athletes-on-plans",
-            "nutritionist sports-nutrition-health.plan-reviews-due",
-        ],
-    ),
-    "timetable-attendance": (
-        UNMAPPED,
-        [
-            "dancer timetable-attendance.today",
-            "department-admin timetable-attendance.department-attendance",
-            "faculty timetable-attendance.today-classes",
-            "faculty timetable-attendance.attendance-to-mark",
-            "student timetable-attendance.today",
-            "student timetable-attendance.attendance-summary",
-        ],
-    ),
-    "tournament-events": (
-        UNMAPPED,
-        [
-            "athlete tournament-events.upcoming",
-            "coach tournament-events.calendar",
-        ],
-    ),
-    "training-video-analysis": (
-        UNMAPPED,
-        [
-            "coach training-video-analysis.reviews-pending",
-        ],
-    ),
-    "transport": (
-        UNMAPPED,
-        [
-            "student transport.notices",
-        ],
-    ),
+    # workflow: empty catalogue (workflow module, batch #317)
     "workflow": (
         EMPTY,
         [

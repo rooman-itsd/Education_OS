@@ -3,6 +3,9 @@
 role: law-student
 title: "Law Student"
 extends: student
+module_roles:
+  - field-training-trainee
+  - projects-member
 widgets:
   - selection-process.upcoming
   - productions.upcoming
