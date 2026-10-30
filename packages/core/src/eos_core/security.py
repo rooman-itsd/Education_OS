@@ -52,4 +52,12 @@ def create_token(
 
 
 def decode_token(token: str) -> dict:
+    """Claims of a token the API accepts: its own HS256 tokens, or (ADR-0006) an RS256 token from one of our
+    Keycloak realms, verified against the realm's JWKS and handed to the host's resolver so the claims come back
+    in the same shape (`sub` an identity user id, `org`, `roles`). The algorithm picks the path, so an HS256
+    token is never checked against a public key and an RS256 one never against the shared secret."""
+    if jwt.get_unverified_header(token).get("alg") == "RS256":
+        from . import oidc
+
+        return oidc.decode_realm_token(token)
     return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
