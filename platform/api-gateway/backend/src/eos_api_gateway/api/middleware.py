@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable
 
@@ -19,6 +20,8 @@ CSP = "default-src 'none'; frame-ancestors 'none'"
 CSP_EXEMPT = ("/docs", "/docs/oauth2-redirect", "/redoc")
 PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 API_PREFIX = "/api/"
+# A sign-in body is an email, a password and a slug; anything larger is not read for the per-account bucket.
+_LOGIN_BODY_LIMIT = 16 * 1024
 
 
 def _is_https(request: Request) -> bool:
@@ -30,9 +33,26 @@ def _is_https(request: Request) -> bool:
     return proto.split(",", 1)[0].strip().lower() == "https"
 
 
+async def _login_email(request: Request) -> str | None:
+    """The `email` of a sign-in body, for the per-account bucket. Starlette keeps the body it read here for the
+    route. Anything unreadable (not JSON, too large, no email) is None: the route answers it, and the
+    per-address bucket still applies."""
+    if request.method != "POST":
+        return None
+    try:
+        if int(request.headers.get("content-length") or 0) > _LOGIN_BODY_LIMIT:
+            return None
+        body = json.loads(await request.body() or b"null")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    email = body.get("email") if isinstance(body, dict) else None
+    return email if isinstance(email, str) and email.strip() else None
+
+
 class SecurityHeaders(BaseHTTPMiddleware):
     """Outermost: every response, including the gate's and the limiter's refusals, carries the headers. A route
-    that set one of them keeps its own value."""
+    that set one of them keeps its own value (setdefault): a page the API serves on purpose, such as the
+    payment adapter's hand-off to the bank, sends its own Content-Security-Policy and keeps it."""
 
     def __init__(self, app, *, settings: GatewaySettings | None = None) -> None:
         super().__init__(app)
@@ -58,9 +78,9 @@ class SecurityHeaders(BaseHTTPMiddleware):
 
 
 class RateLimit(BaseHTTPMiddleware):
-    """429 with Retry-After and {"code": "rate_limited"} when a client IP, an organisation or a sign-in address
-    is over its bucket. Sits inside CORS (a browser must be allowed to read the 429) and outside the
-    entitlement gate (a refused request costs no database query)."""
+    """429 with Retry-After and {"code": "rate_limited"} when a client address, an organisation, sign-in from an
+    address or sign-in to one account is over its bucket. Sits inside CORS (a browser must be allowed to read
+    the 429) and outside the entitlement gate (a refused request costs no database query)."""
 
     def __init__(
         self,
@@ -77,15 +97,22 @@ class RateLimit(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if not self.limiter.enabled:
             return await call_next(request)
+        path = request.url.path
         denied = self.limiter.check(
-            path=request.url.path,
+            path=path,
             peer=request.client.host if request.client else None,
             forwarded_for=request.headers.get("x-forwarded-for"),
             authorization=request.headers.get("authorization"),
+            login_email=await _login_email(request) if self.limiter.is_login_path(path) else None,
         )
         if denied is None:
             return await call_next(request)
-        noun = {"ip": "this address", "organisation": "your organisation", "auth": "sign-in from this address"}
+        noun = {
+            "ip": "this address",
+            "organisation": "your organisation",
+            "auth": "sign-in from this address",
+            "login": "sign-in to this account",
+        }
         return JSONResponse(
             {
                 "detail": f"too many requests for {noun[denied.scope]}; retry after {denied.retry_after} seconds",

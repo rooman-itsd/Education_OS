@@ -55,8 +55,9 @@ def test_memory_store_keys_buckets_apart_and_prunes_full_ones():
 def test_settings_from_env_reads_every_key_and_keeps_defaults():
     s = GatewaySettings.from_env({})
     assert s.security_headers and s.rate_limit and s.redis_url is None
-    assert s.ip == Limit(600, 600) and s.organisation == Limit(3000, 3000) and s.auth == Limit(20, 20)
-    assert s.trusted_proxies == DEFAULT_TRUSTED_PROXIES
+    assert s.ip == Limit(1200, 1200) and s.organisation == Limit(3000, 3000)
+    assert s.auth == Limit(60, 60) and s.login == Limit(10, 10)
+    assert s.trusted_proxies == DEFAULT_TRUSTED_PROXIES == ("127.0.0.0/8", "::1/128")  # loopback only
     s = GatewaySettings.from_env(
         {
             "EOS_SECURITY_HEADERS": "false",
@@ -66,6 +67,7 @@ def test_settings_from_env_reads_every_key_and_keeps_defaults():
             "EOS_RATE_LIMIT_ORG_PER_MINUTE": "900",
             "EOS_RATE_LIMIT_AUTH_PER_MINUTE": "5",
             "EOS_RATE_LIMIT_AUTH_BURST": "3",
+            "EOS_RATE_LIMIT_LOGIN_PER_MINUTE": "4",
             "EOS_TRUSTED_PROXIES": "192.0.2.1, 198.51.100.0/24",
             "EOS_REDIS_URL": "redis://cache:6379/1",
             "EOS_HSTS_MAX_AGE": "600",
@@ -73,6 +75,7 @@ def test_settings_from_env_reads_every_key_and_keeps_defaults():
     )
     assert not s.security_headers and not s.rate_limit and s.hsts_max_age == 600
     assert s.ip == Limit(100, 10) and s.organisation == Limit(900, 900) and s.auth == Limit(5, 3)
+    assert s.login == Limit(4, 4)
     assert s.trusted_proxies == ("192.0.2.1", "198.51.100.0/24") and s.redis_url == "redis://cache:6379/1"
 
 

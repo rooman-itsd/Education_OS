@@ -2,17 +2,25 @@
 behind the proxy counts against the same limits. Keys expire once the bucket would be full again.
 
 A Redis that cannot be reached fails open: the request passes and the failure is logged. Losing rate limiting
-for a while is better than refusing every request because the cache is down."""
+for a while is better than refusing every request because the cache is down. It also fails fast: a short
+connect and read timeout, no client retries, and after a failure the store is not asked again for
+`RETRY_AFTER_FAILURE` seconds, so a Redis outage costs one request at most ~0.25 s every 30 s instead of every
+request ~1.5 s."""
 
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 
 from ..domain.bucket import Limit
 
 log = logging.getLogger("eos.gateway")
 
 PREFIX = "eos:gateway:bucket:"
+CONNECT_TIMEOUT = 0.1  # seconds; Redis sits next to the API, a healthy one answers in well under a millisecond
+READ_TIMEOUT = 0.25
+RETRY_AFTER_FAILURE = 30.0  # seconds during which a failed store is skipped (requests pass unmetered)
 
 # KEYS[1] bucket; ARGV: burst, refill per second, now, ttl seconds. Returns {allowed, wait}.
 _TAKE = """
@@ -38,21 +46,35 @@ return {allowed, tostring(wait)}
 
 
 class RedisStore:
-    def __init__(self, client) -> None:
+    def __init__(self, client, clock: Callable[[], float] = time.monotonic) -> None:
         self._client = client
         self._take = client.register_script(_TAKE)
+        self._clock = clock
+        self._down_until = 0.0
 
     @classmethod
     def from_url(cls, url: str) -> RedisStore:
         import redis
+        from redis.backoff import NoBackoff
+        from redis.retry import Retry
 
-        return cls(redis.Redis.from_url(url, socket_timeout=0.5, socket_connect_timeout=0.5))
+        return cls(
+            redis.Redis.from_url(
+                url,
+                socket_timeout=READ_TIMEOUT,
+                socket_connect_timeout=CONNECT_TIMEOUT,
+                retry=Retry(NoBackoff(), 0),  # the client's default retries with backoff would hold the request
+            )
+        )
 
     def take(self, key: str, limit: Limit, now: float) -> float | None:
+        if self._clock() < self._down_until:
+            return None  # failed recently: fail open without waiting on it again
         ttl = int(limit.seconds_to_full) + 1
         try:
             allowed, wait = self._take(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
-        except Exception as e:  # any client error: fail open, say so
-            log.warning("rate limit store unavailable, allowing request: %s", e)
+        except Exception as e:  # any client error: fail open, say so, and leave Redis alone for a while
+            self._down_until = self._clock() + RETRY_AFTER_FAILURE
+            log.warning("rate limit store unavailable, allowing requests for %.0fs: %s", RETRY_AFTER_FAILURE, e)
             return None
         return None if int(allowed) == 1 else float(wait)

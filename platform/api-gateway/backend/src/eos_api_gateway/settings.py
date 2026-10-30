@@ -9,16 +9,25 @@ from dataclasses import dataclass
 
 from .domain.bucket import Limit
 
-# Peers whose X-Forwarded-For is believed by default: the reverse proxy sits on the same host or the same
-# private network (infra/docker/nginx.public-vhost.conf proxies from CT 101 to the API host over the LAN).
-# EOS_TRUSTED_PROXIES replaces the list; "*" trusts every peer.
-DEFAULT_TRUSTED_PROXIES = ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
+# Peers whose X-Forwarded-For is believed by default: loopback only. Trusting whole private ranges would let any
+# client on the office LAN or VPN write its own X-Forwarded-For and pick a fresh bucket per request, so a
+# deployment names its reverse proxy: EOS_TRUSTED_PROXIES=<the nginx container's address> (infra/docker/
+# .env.api.example; tools/scripts/deploy-api-lxc.sh writes it). The list replaces this default; "*" makes every
+# direct peer a proxy (only behind a proxy that is the sole way in).
+DEFAULT_TRUSTED_PROXIES = ("127.0.0.0/8", "::1/128")
 
 # Paths a token bucket never touches. Monitoring polls health; a limiter in front of it would hide an outage.
 DEFAULT_EXEMPT_PATHS = ("/api/v1/health",)
 
 # Sign-in and sign-up: the stricter bucket, per client IP, against password guessing and bulk registrations.
+# The anonymous public routes of every module (/api/v1/<module>/public/..., e.g. admissions' application
+# form) draw from the same bucket: they are the other thing a stranger can call without a token.
 DEFAULT_AUTH_PATHS = ("/api/v1/identity/auth/login", "/api/v1/tenancy/register")
+PUBLIC_SEGMENT = "public"
+
+# Sign-in, per account (the email in the body) on top of the per-address bucket: a lab of 40 behind one NAT
+# address signs in together, while nobody gets more than a handful of guesses at one account.
+DEFAULT_LOGIN_PATHS = ("/api/v1/identity/auth/login",)
 
 
 def _bool(env: Mapping[str, str], key: str, default: bool) -> bool:
@@ -53,15 +62,21 @@ def _csv(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class GatewaySettings:
+    """Defaults sized for a school: one campus is often one NAT address, and a class signs in at once.
+    Signed-in requests are charged to their organisation only, so the IP bucket meters anonymous traffic.
+    The reasoning is in README.md (Sizing the limits)."""
+
     security_headers: bool = True
     hsts_max_age: int = 31_536_000  # one year, the usual value for a host that is HTTPS-only
     rate_limit: bool = True
-    ip: Limit = Limit(600, 600)
+    ip: Limit = Limit(1200, 1200)
     organisation: Limit = Limit(3000, 3000)
-    auth: Limit = Limit(20, 20)
+    auth: Limit = Limit(60, 60)
+    login: Limit = Limit(10, 10)
     trusted_proxies: tuple[str, ...] = DEFAULT_TRUSTED_PROXIES
     exempt_paths: tuple[str, ...] = DEFAULT_EXEMPT_PATHS
     auth_paths: tuple[str, ...] = DEFAULT_AUTH_PATHS
+    login_paths: tuple[str, ...] = DEFAULT_LOGIN_PATHS
     redis_url: str | None = None
 
     @classmethod
@@ -74,6 +89,7 @@ class GatewaySettings:
             ip=_limit(env, "IP", cls.ip.per_minute),
             organisation=_limit(env, "ORG", cls.organisation.per_minute),
             auth=_limit(env, "AUTH", cls.auth.per_minute),
+            login=_limit(env, "LOGIN", cls.login.per_minute),
             trusted_proxies=_csv(env.get("EOS_TRUSTED_PROXIES"), DEFAULT_TRUSTED_PROXIES),
             redis_url=(env.get("EOS_REDIS_URL") or "").strip() or None,
         )
