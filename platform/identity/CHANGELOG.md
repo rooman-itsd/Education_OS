@@ -13,6 +13,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   the platform's own token; 403 `no_account` for a person identity does not know). Password login stays;
   the super admin never uses OIDC. Realm setup for a pilot organisation: README and
   `tools/scripts/keycloak-realm.sh`. Event `identity.user.oidc_linked`.
+  Review of #365: a realm must be in `EOS_OIDC_REALMS` before any key fetch (removing a slug stops its
+  tokens at once); only access tokens (`typ: Bearer`) are bearer tokens and the callback accepts only an ID
+  token (`typ: ID`), `azp` must be our client when present; the JWKS fetch runs outside the cache lock with
+  `EOS_OIDC_JWKS_TIMEOUT` (2 s), at most one unknown-`kid` refetch per realm per 60 s, failures remembered
+  for 30 s, at most four fetches at once.
 - No person may hold the `service` role. `create_user` refuses it before writing anything, so every way a
   role is assigned (`POST /users`, tenancy's registration, the super-admin seed) is covered, and `POST /users`
   answers 403. `current_principal` also drops it from any token, so a row or token that already carries it

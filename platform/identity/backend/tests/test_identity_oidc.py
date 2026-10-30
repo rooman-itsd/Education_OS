@@ -144,6 +144,38 @@ def test_unknown_kid_refreshes_the_jwks_once_then_refuses(client, db, realm):
     assert realm.fetches == 2
 
 
+def test_realm_removed_from_settings_no_longer_authenticates(client, db, realm, monkeypatch):
+    """Review of #365, point 5: taking a slug out of EOS_OIDC_REALMS stops its tokens at once, cached keys or
+    not, and a token naming a realm that was never configured costs no JWKS fetch."""
+    from dataclasses import replace
+
+    sub = "kc-" + uuid.uuid4().hex
+    _user(db, "pilot", _email("removed"), subject=sub)
+    assert client.get(f"{PREFIX}/auth/me", headers=_bearer(realm.token(sub=sub))).status_code == 200
+    fetches = realm.fetches
+    monkeypatch.setattr(oidc, "settings", replace(oidc.settings, oidc_realms="dormant,gone"))
+    r = client.get(f"{PREFIX}/auth/me", headers=_bearer(realm.token(sub=sub)))
+    assert r.status_code == 401 and "not enabled" in r.json()["detail"]
+    r = client.get(f"{PREFIX}/auth/me", headers=_bearer(realm.token("norealm", sub=sub)))
+    assert r.status_code == 401
+    assert realm.fetches == fetches
+
+
+def test_id_token_is_not_a_bearer_token(client, db, realm):
+    sub = "kc-" + uuid.uuid4().hex
+    _user(db, "pilot", _email("idtok"), subject=sub)
+    assert client.get(f"{PREFIX}/auth/me", headers=_bearer(realm.token(sub=sub, typ="ID"))).status_code == 401
+    other_client = realm.token(sub=sub, azp="security-admin-console")
+    assert client.get(f"{PREFIX}/auth/me", headers=_bearer(other_client)).status_code == 401
+
+
+def test_callback_refuses_an_access_token_in_place_of_the_id_token(client, db, realm, monkeypatch):
+    sub = "kc-" + uuid.uuid4().hex
+    _user(db, "pilot", _email("cbaccess"), subject=sub)
+    _exchange_returning(realm, monkeypatch, sub=sub, typ="Bearer")
+    assert _callback(client).status_code == 401
+
+
 def test_token_signed_by_another_key_is_refused(client, db, realm):
     """Same kid, different private key: the signature check, not only the kid lookup, decides."""
     sub = "kc-" + uuid.uuid4().hex
@@ -212,7 +244,7 @@ def _exchange_returning(realm, monkeypatch, **token_overrides):
 
     def exchange(realm_name, *, code, code_verifier, redirect_uri):
         calls.append({"realm": realm_name, "code": code, "code_verifier": code_verifier, "redirect_uri": redirect_uri})
-        return {"access_token": "opaque", "id_token": realm.token(realm_name, **token_overrides)}
+        return {"access_token": "opaque", "id_token": realm.token(realm_name, **{"typ": "ID", **token_overrides})}
 
     monkeypatch.setattr(oidc, "exchange_code", exchange)
     return calls
@@ -271,7 +303,7 @@ def test_callback_refuses_an_id_token_from_another_realm(client, db, realm, monk
     _user(db, "dormant", _email("cross"), subject=sub)
 
     def exchange(realm_name, **kw):  # noqa: ARG001
-        return {"id_token": realm.token("dormant", sub=sub)}
+        return {"id_token": realm.token("dormant", sub=sub, typ="ID")}
 
     monkeypatch.setattr(oidc, "exchange_code", exchange)
     assert _callback(client, slug="pilot").status_code == 401

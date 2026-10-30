@@ -29,14 +29,22 @@ How a sign-in runs:
    `code` back on its redirect URI.
 3. It posts `{code, code_verifier, redirect_uri, slug}` to `POST /auth/oidc/callback`. The API redeems the
    code at the realm's token endpoint (`eos_core.oidc.exchange_code`), verifies the id token against the
-   realm's JWKS (`eos_core.oidc.verify_realm_token`: RS256, issuer `<EOS_OIDC_ISSUER_BASE>/realms/<slug>`,
-   audience `EOS_OIDC_CLIENT_ID`, expiry; keys cached per realm for `EOS_OIDC_JWKS_TTL_SECONDS` and refreshed
-   once on an unknown `kid`), maps it to a user (below) and answers like `/auth/login`: the platform's own
-   HS256 token. Nothing else in the API changes. `403 no_account` means the realm knows the person and
+   realm's JWKS (`eos_core.oidc.verify_realm_token`: the realm must be in `EOS_OIDC_REALMS`, checked before
+   any network call; RS256, issuer `<EOS_OIDC_ISSUER_BASE>/realms/<slug>`, audience `EOS_OIDC_CLIENT_ID`,
+   expiry, `typ: ID` here and `azp` our client when present; keys cached per realm for
+   `EOS_OIDC_JWKS_TTL_SECONDS`), maps it to a user (below) and answers like `/auth/login`: the platform's
+   own HS256 token. Nothing else in the API changes. `403 no_account` means the realm knows the person and
    identity does not.
 4. A realm access token presented directly as a bearer token also works: `eos_core.security.decode_token`
    routes RS256 tokens to the verifier and to `resolve_oidc_claims` here, which returns the platform's
-   claim shape (`sub` = identity user id, `org`, `roles` from the user row, `sa` false).
+   claim shape (`sub` = identity user id, `org`, `roles` from the user row, `sa` false). Only an access
+   token (`typ: Bearer`): an ID token is refused as a bearer token. A slug taken out of `EOS_OIDC_REALMS`
+   stops authenticating at once, cached keys or not.
+
+The realm comes from the token's unverified issuer, so the key lookup assumes a forged token: the JWKS is
+fetched outside the cache lock with a short timeout (`EOS_OIDC_JWKS_TIMEOUT`, 2 s), an unknown `kid`
+refetches at most once per realm per 60 s (key rotation), a failed fetch is remembered for 30 s, and at
+most four fetches run at once across realms (beyond that a request is refused, not queued).
 
 User mapping (`application/service.py: user_for_oidc_claims`): the organisation is the one whose slug is
 the realm; it must be `active`. The user is found by `(organisation_id, oidc_subject)`; when no user carries
@@ -53,13 +61,17 @@ before their first sign-in.
 | `EOS_OIDC_ISSUER_BASE` | Keycloak's public base, e.g. `https://educationos.futureacad.ae/auth`. Empty: OIDC off. |
 | `EOS_OIDC_CLIENT_ID` | The public client every realm holds; the audience the API checks. Default `education-os-web`. |
 | `EOS_OIDC_REALMS` | Slugs whose realm exists, comma-separated; `*` once tenancy creates realms at approval. |
-| `EOS_OIDC_JWKS_TTL_SECONDS`, `EOS_OIDC_HTTP_TIMEOUT` | Key cache lifetime (3600) and Keycloak call timeout (5 s). |
+| `EOS_OIDC_JWKS_TTL_SECONDS`, `EOS_OIDC_HTTP_TIMEOUT` | Key cache lifetime (3600) and code-exchange timeout (5 s). |
+| `EOS_OIDC_JWKS_TIMEOUT` | Signing-key fetch timeout, inside a request (2 s). |
 
 ### Realm setup for a pilot organisation (manual until `integrations/keycloak`)
 
 `tools/scripts/keycloak-realm.sh <slug> [redirect-uri ...]` does all of this through the Admin REST API
 and is safe to re-run (`KEYCLOAK_URL`, `KEYCLOAK_ADMIN`, `KEYCLOAK_ADMIN_PASSWORD` in the environment; the
-password is prompted for when unset and never stored). By hand, in the admin console at `/auth/admin/`:
+password is prompted for when unset, never stored and never on curl's command line). The public proxy
+serves `/auth/admin/` and the master realm only on the LAN, so run it from the office network or on the
+API host with `KEYCLOAK_URL=http://<KEYCLOAK_BIND>:8080/auth`. By hand, in the admin console at
+`/auth/admin/` (office network):
 
 1. **Realm**: name = the organisation slug exactly (it is the issuer path and the lookup key); enabled;
    Login tab: *Email as username* on, *Login with email* on, *User registration* off, *Forgot password* on,

@@ -241,7 +241,7 @@ def authenticate_oidc(db: Session, *, slug: str, code: str, code_verifier: str, 
         id_token = tokens.get("id_token") if isinstance(tokens, dict) else None
         if not id_token:
             raise AuthError("the realm returned no id token")
-        claims = oidc.verify_realm_token(id_token)
+        claims = oidc.verify_realm_token(id_token, token_type=oidc.ID_TOKEN)
     except jwt.PyJWTError as e:
         raise AuthError(f"invalid id token: {e}") from e
     if claims.get("realm") != slug:

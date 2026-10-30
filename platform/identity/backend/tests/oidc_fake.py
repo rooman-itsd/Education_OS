@@ -46,6 +46,8 @@ class Realm:
             "exp": int((now + timedelta(minutes=5)).timestamp()),
             "email": "pilot.user@pilot.example.com",
             "email_verified": True,
+            "typ": "Bearer",  # Keycloak's access token; its ID token says "ID"
+            "azp": CLIENT_ID,
             **overrides,
         }
         claims = {k: v for k, v in claims.items() if v is not None}
