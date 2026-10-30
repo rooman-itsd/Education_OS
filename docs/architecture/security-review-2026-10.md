@@ -13,8 +13,8 @@ Reviewer: Faizan, with the review findings of the sprint's pull requests. Date: 
 | One organisation's data | Another organisation's user reads or writes it | Postgres row-level security on every tenant table (`eos_core.rls.POLICY`, `FORCE`), the API connecting as the non-superuser `eos_app` (#272), `app.organisation_id` set per transaction from the verified token (#274), and `eos_core.db.scoped` / explicit filters in every module; foreign rows answer 404 |
 | Platform data (organisations, plans, invoices) | An organisation user reaches super-admin routes | Catalogue permission keys on every platform route (`require("platform:…")`, enforced by `apps/backend/tests/test_platform_permissions.py`); `platform:*` keys are granted only to `super-admin` |
 | Modules an organisation has not paid for | Calls to a module outside the entitlement | The entitlement gate in the host (`apps/backend/src/eos_backend/gateway.py`): feature modules need an organisation user whose organisation is active and entitled |
-| User accounts | Credential stuffing, weak passwords, token theft | PBKDF2-HMAC-SHA256, 200 000 iterations, 16-byte salt; passwords at least 8 characters; HS256 tokens with a 12-hour life; a login rate limit (#77); OIDC through Keycloak for institutions (#76) |
-| Sign-up | Fake organisations, slug squatting, email bombing | Email verification before an organisation exists for anyone, super-admin approval before it goes live, one registration token per email, a registration rate limit (#77) |
+| User accounts | Credential stuffing, weak passwords, token theft | PBKDF2-HMAC-SHA256, 200 000 iterations, 16-byte salt; passwords at least 8 characters; HS256 tokens with a 12-hour life. In review: a login rate limit (#363) and OIDC through Keycloak for institutions (#365) |
+| Sign-up | Fake organisations, slug squatting, email bombing | Email verification before an organisation exists for anyone, super-admin approval before it goes live, one registration token per email. In review: a registration rate limit (#363) |
 | Roles | A person holding a machine role | The `service` role can be held by no person (#299) and never appears in a minted token |
 | Secrets | Secrets in git or in logs | `.env*` ignored, `*.example` templates only, secrets generated on the server by `deploy-api-lxc.sh`; nothing personal is logged (ids only) |
 
@@ -30,7 +30,7 @@ which cannot bypass the policies at all (#272).
 listed no roles was unreachable in production while its tests passed through a forged `perms` claim
 (student-information, #278); a module whose only writing role exists in no academy profile
 (enrolment-registration, #291); a legacy row holding `service` logged in with a token carrying it
-(#299). Rule recorded in `docs/team/pr-review` notes: tests mint tokens with roles only.
+(#299). Rule recorded in the review comments of those PRs and in `docs/team/sprint-v1.0.md`: tests mint tokens with roles only.
 
 **Approval workflows.** Self-approval is refused on every decision route reviewed (procurement indents,
 orders and invoices, budget-grants, asset disposals). Found and fixed: an order's creator could approve
@@ -69,13 +69,13 @@ setup and must be rotated (Srujan, before go-live).
 | S2 | High | API connected as the Postgres superuser, which ignores RLS | Fixed, #272 |
 | S3 | High | A module unreachable in production hid by a forged test claim; roles not granted | Fixed, #278, #291 |
 | S4 | Medium | `service` role on a person's row reached feature modules through the token | Fixed, #299 |
-| S5 | Medium | No rate limit on login or registration; no security headers from the API | Fixed, #77 (this batch) |
+| S5 | Medium | No rate limit on login or registration; no security headers from the API | In review, #363 |
 | S6 | Medium | Self-approval of a purchase order by its creator | Fixed, #295 |
-| S7 | Medium | `EOS_DEV_MODE` defaults to true and the JWT secret has a development default | Mitigated: `deploy-api-lxc.sh` writes `EOS_DEV_MODE=false` and a random secret; the launch checklist verifies both on the server. Follow-up: refuse to start with the default secret when not in dev mode (Faizan) |
-| S8 | Low | Tokens live 12 hours with no revocation | Accepted for v1.0; OIDC sessions through Keycloak supersede this for institutions (#76) |
+| S7 | Medium | `EOS_DEV_MODE` defaults to true and the JWT secret has a development default | Open. `deploy-api-lxc.sh` writes `EOS_DEV_MODE=false` and a random secret only when it first creates `.env.api`; the current host (CT 122) runs with dev mode on, and turning it off needs the SMTP settings passed through Compose (`NOTIFICATION_*`, `MESSAGING_PROVIDERS_*`, Srujan and Himanshu) or registration breaks. The launch checklist verifies both on the server. Follow-up: refuse to start with the default secret when not in dev mode (Faizan) |
+| S8 | Low | Tokens live 12 hours with no revocation | Accepted for v1.0; once #365 lands, institutions sign in through Keycloak, whose sessions can be revoked |
 | S9 | Low | Reference-number enumeration on public admissions routes | Open, Praveen (#321) |
-| S10 | Low | Public admissions submit/attach have no per-application cap | Mitigated by the gateway rate limit (#77); cap is a follow-up (Praveen) |
-| S11 | Low | Database port 8000 of the API container is bound on the LAN, not only to the proxy | Open, Srujan (#345): bind to the proxy's address or firewall the container |
+| S10 | Low | Public admissions submit/attach have no per-application cap | Mitigated once the gateway rate limit lands (#363); cap is a follow-up (Praveen) |
+| S11 | Low | The API's port 8000 is published on every interface of the container, not only towards the proxy (the database publishes no port) | Open, Srujan (#345): bind to the proxy's address or firewall the container |
 
 ## 4. What the external test should cover
 
