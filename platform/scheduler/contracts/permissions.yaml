@@ -26,10 +26,10 @@ permissions:
       which run once per deployment across every organisation, and see schedules of all
       organisations.
 
+# Blocks are named with platform role ids, the roles a token carries.
 roles:
-  - name: scheduler-admin
-    description: >-
-      Manages an academy's scheduled work. Intended for an organisation admin.
+  - name: org-admin
+    description: Manages their own academy's scheduled work (organisation-scoped jobs only).
     grants:
       - scheduler:job:read
       - scheduler:schedule:read
@@ -37,11 +37,15 @@ roles:
       - scheduler:run:read
       - scheduler:run:trigger
 
-  - name: scheduler-viewer
+  # A super admin is handed only the platform: keys that some role grants (eos_core.config.permissions_for).
+  - name: super-admin
     description: >-
-      Read-only. For support staff answering "did the overnight job run?" without the ability
-      to retime or fire anything.
+      Super admin. Platform jobs such as billing.expire-trials, every organisation's schedules,
+      and the run history ("did the nightly job run?").
     grants:
       - scheduler:job:read
       - scheduler:schedule:read
+      - scheduler:schedule:write
       - scheduler:run:read
+      - scheduler:run:trigger
+      - platform:scheduler:admin
