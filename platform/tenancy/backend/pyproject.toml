@@ -5,6 +5,12 @@ description = "Education OS platform service: organisations, registration, acade
 requires-python = ">=3.12"
 dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "alembic>=1.13", "eos-core", "eos-identity", "eos-billing"]
 
+# The organisation display name, for platform services that may not import tenancy (platform/notification
+# renders it into every organisation-facing template). An entry point rather than a hook wired by apps/backend:
+# the event-bus relay and the scheduler run as their own processes and never execute the API's lifespan.
+[project.entry-points."eos.organisation_directory"]
+tenancy = "eos_tenancy.application.service:organisation_name"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

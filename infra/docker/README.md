@@ -141,14 +141,31 @@ succeeded; it does, in order (`migrate.sh`):
 
 1. `db-roles.py`: creates or updates `eos_app`, with row access on every table and on tables `eos` creates later
 2. `stamp-chains.py`: only for a database whose tables the API created before migrations existed
-3. `alembic upgrade head` for every chain `apps/backend/config/modules.enabled.yaml` enables
-4. `init_db()` for `outbox_event`, the one table without a chain yet
+3. `alembic upgrade head` for every chain `apps/backend/config/modules.enabled.yaml` enables (every table
+   has one; `outbox_event` belongs to platform/event-bus)
 
 The auto-deploy runs the same service. By hand:
 
 ```
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm migrate
 ```
+
+**The relay.** Modules write events to `outbox_event` in the same transaction as their change; the `relay`
+service (`python -m eos_event_bus`, platform/event-bus) delivers them to the consumers modules declare, each
+in its event's organisation with row-level security on. Notification's mail (trial reminders, approvals) is
+sent from there, so the relay gets the same settings as the API (`x-app-environment` in the compose file).
+It starts after `migrate`, like the API, and restarts on its own. Without it events pile up undelivered and
+nothing reacts to them. Its log:
+
+```
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api logs --tail 20 relay
+```
+
+**Mail.** With `EOS_DEV_MODE=true` nothing is sent and the verification token comes back in the register
+response. With dev mode off, `NOTIFICATION_TRANSPORT=memory` is refused and registration answers 503, so a
+production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_PROVIDERS_SMTP_*` relay
+(`.env.api.example` lists them). Every one of these is optional in the compose file: a host whose
+`.env.api` lacks them keeps deploying.
 
 **Settings applied only once.** Editing `.env.api` and running `up -d` changes most settings
 (`EOS_DEV_MODE`, `EOS_JWT_SECRET`, which signs everyone out). Two do not:
