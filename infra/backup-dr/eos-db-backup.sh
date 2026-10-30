@@ -4,6 +4,8 @@
 #
 # Writes a compressed pg_dump archive, proves it is readable, keeps KEEP_DAILY nightly and KEEP_WEEKLY
 # Sunday copies, optionally copies them to a second location, and records the last success.
+# When Keycloak runs (ADR-0006: the `oidc` compose profile, its own Postgres in service kc-db), its
+# database is dumped the same way beside the API's, as keycloak-<time>.dump.
 set -euo pipefail
 
 CONFIG="${EOS_BACKUP_CONFIG:-/etc/eos/db-backup.env}"
@@ -57,18 +59,37 @@ mv "$tmp" "$file"
 chmod 600 "$file"
 (cd "$(dirname "$file")" && sha256sum "$(basename "$file")" >"$(basename "$file").sha256")
 
-# Sunday's dump is also kept as the weekly copy (a hard link: no extra space).
-if [ "$(date -u +%u)" = 7 ]; then
-  ln -f "$file" "$BACKUP_DIR/weekly/$(basename "$file")"
-  ln -f "$file.sha256" "$BACKUP_DIR/weekly/$(basename "$file").sha256"
+# Keycloak's database, only while its service is up (the profile is off on a host without OIDC).
+kc_file=""
+if [ -n "$(compose ps -q --status running kc-db 2>/dev/null)" ]; then
+  kc_file="$BACKUP_DIR/daily/keycloak-$stamp.dump"
+  kc_tmp="$kc_file.partial"
+  trap 'rm -f "$tmp" "$kc_tmp"' EXIT
+  compose exec -T kc-db pg_dump -U keycloak -d keycloak --format=custom --compress=6 >"$kc_tmp" ||
+    fail "pg_dump of the keycloak database returned an error"
+  [ -s "$kc_tmp" ] || fail "pg_dump of the keycloak database wrote nothing"
+  compose exec -T kc-db pg_restore --list <"$kc_tmp" >/dev/null || fail "the keycloak dump is not a readable archive"
+  mv "$kc_tmp" "$kc_file"
+  chmod 600 "$kc_file"
+  (cd "$(dirname "$kc_file")" && sha256sum "$(basename "$kc_file")" >"$(basename "$kc_file").sha256")
 fi
 
-prune() { # keep the newest $2 dumps in folder $1; names sort by time
-  find "$1" -maxdepth 1 -name 'eos-*.dump' -printf '%f\n' | sort -r | tail -n +"$(($2 + 1))" |
+# Sunday's dump is also kept as the weekly copy (a hard link: no extra space).
+if [ "$(date -u +%u)" = 7 ]; then
+  for f in "$file" $kc_file; do
+    ln -f "$f" "$BACKUP_DIR/weekly/$(basename "$f")"
+    ln -f "$f.sha256" "$BACKUP_DIR/weekly/$(basename "$f").sha256"
+  done
+fi
+
+prune() { # keep the newest $3 dumps named $2-* in folder $1; names sort by time
+  find "$1" -maxdepth 1 -name "$2-*.dump" -printf '%f\n' | sort -r | tail -n +"$(($3 + 1))" |
     while read -r old; do rm -f "$1/$old" "$1/$old.sha256"; done
 }
-prune "$BACKUP_DIR/daily" "$KEEP_DAILY"
-prune "$BACKUP_DIR/weekly" "$KEEP_WEEKLY"
+for name in eos keycloak; do
+  prune "$BACKUP_DIR/daily" "$name" "$KEEP_DAILY"
+  prune "$BACKUP_DIR/weekly" "$name" "$KEEP_WEEKLY"
+done
 
 size="$(du -h "$file" | cut -f1)"
 echo "$stamp $size $(basename "$file")" >"$BACKUP_DIR/last-success"
@@ -77,7 +98,7 @@ if [ -n "$OFFSITE" ]; then
   # No --delete: a wiped local disk must never wipe the second copy. Prune the destination there.
   rsync -a "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly" "$BACKUP_DIR/last-success" "$OFFSITE" ||
     fail "local backup ok ($file), but the copy to $OFFSITE failed"
-  log "ok: $(basename "$file") ($size), copied to $OFFSITE"
+  log "ok: $(basename "$file") ($size)${kc_file:+ + $(basename "$kc_file")}, copied to $OFFSITE"
 else
-  log "ok: $(basename "$file") ($size). Local copy only: set EOS_BACKUP_OFFSITE for a second location"
+  log "ok: $(basename "$file") ($size)${kc_file:+ + $(basename "$kc_file")}. Local copy only: set EOS_BACKUP_OFFSITE for a second location"
 fi

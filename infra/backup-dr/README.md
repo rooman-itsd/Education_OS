@@ -16,6 +16,11 @@ database every night at about 02:30 with a systemd timer.
 | `install.sh` | | one-time install |
 
 Backups land in `/var/backups/eos/daily/eos-<UTC time>.dump`; each Sunday's is also kept in `weekly/`.
+When Keycloak runs (ADR-0006, compose profile `oidc`), its own database is dumped in the same run as
+`keycloak-<UTC time>.dump`, kept and pruned the same way. `eos-db-restore` restores the API's database
+only; to restore Keycloak's, stop the `keycloak` service and run
+`docker compose ... exec -T kc-db pg_restore -U keycloak -d keycloak --clean --if-exists < keycloak-<time>.dump`,
+then start it again.
 Defaults keep 14 nightly and 8 weekly copies. `/var/backups/eos/last-success` holds the time, size and
 name of the last good backup.
 
