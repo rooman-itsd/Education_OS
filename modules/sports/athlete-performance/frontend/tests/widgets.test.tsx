@@ -2,10 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import type { ComponentType } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WidgetProps } from "@eos/ui-kit";
-import type { Athlete, FitnessClearance, FitnessTest, Metric, PerformanceHistory, SquadSummaryRow } from "../src/api/client";
+import type { Athlete, ClearanceReportRow, FitnessTest, Metric, PerformanceHistory, SquadSummaryRow } from "../src/api/client";
 import { widgets } from "../src/widgets";
 import { BodyCompositionTrend, bodyCompositionMetrics } from "../src/widgets/BodyCompositionTrend";
-import { CHECKED, FitnessClearances } from "../src/widgets/FitnessClearances";
+import { FitnessClearances, LAPSING_DAYS, SHOWN } from "../src/widgets/FitnessClearances";
 import { isoDay } from "../src/widgets/format";
 import { PerformanceTrend } from "../src/widgets/PerformanceTrend";
 import { SquadOverview } from "../src/widgets/SquadOverview";
@@ -151,21 +151,27 @@ describe("athlete-performance.squad-overview", () => {
 });
 
 describe("athlete-performance.fitness-clearances", () => {
-  const team = [athlete("a-1", "Asha Rao"), athlete("a-2", "Bilal Khan"), athlete("a-3", "Chitra Iyer"), athlete("a-4", "Dev Nair"), athlete("a-5", "Esha Paul")];
-  const clearances: Record<string, FitnessClearance> = {
-    "a-1": { athlete_id: "a-1", status: "cleared", valid_until: isoDay(120) },
-    "a-2": { athlete_id: "a-2", status: "not_cleared" },
-    "a-3": { athlete_id: "a-3", status: "restricted", valid_until: isoDay(30), restrictions: "No contact drills", set_at: "2026-10-01T09:00:00Z" },
-    "a-4": { athlete_id: "a-4", status: "cleared", valid_until: isoDay(5), set_at: "2026-10-01T09:00:00Z" },
-    "a-5": { athlete_id: "a-5", status: "not_cleared", valid_until: isoDay(-3), set_at: "2026-01-01T09:00:00Z" },
-  };
-  const routes = (list: Athlete[], total = list.length) => ({
-    "/athletes": ok(page(list, total)),
-    ...Object.fromEntries(list.map((a) => [`/athletes/${a.id}/clearance`, ok(clearances[a.id] ?? { athlete_id: a.id, status: "cleared" })])),
-  });
+  // The server's order: not cleared, restricted, lapsing soon, cleared.
+  const rows: ClearanceReportRow[] = [
+    { athlete_id: "a-2", full_name: "Bilal Khan", status: "not_cleared", lapsing_soon: false },
+    { athlete_id: "a-5", full_name: "Esha Paul", status: "not_cleared", valid_until: isoDay(-3), set_at: "2026-01-01T09:00:00Z", lapsing_soon: false },
+    {
+      athlete_id: "a-3",
+      full_name: "Chitra Iyer",
+      status: "restricted",
+      valid_until: isoDay(30),
+      restrictions: "No contact drills",
+      set_at: "2026-10-01T09:00:00Z",
+      lapsing_soon: false,
+    },
+    { athlete_id: "a-4", full_name: "Dev Nair", status: "cleared", valid_until: isoDay(5), set_at: "2026-10-01T09:00:00Z", lapsing_soon: true },
+    { athlete_id: "a-1", full_name: "Asha Rao", status: "cleared", valid_until: isoDay(120), lapsing_soon: false },
+  ];
+  const report = (items: ClearanceReportRow[], total = items.length) =>
+    ok({ items, total, counts: { cleared: 2, restricted: 1, not_cleared: 2, lapsing_soon: 1 } });
 
-  it("shows each athlete's status, not cleared and restricted first, and flags clearances lapsing soon", async () => {
-    const fetchMock = stubApi(routes(team));
+  it("shows each athlete's status in the server's order and flags clearances lapsing soon, in one request", async () => {
+    const fetchMock = stubApi({ "/reports/clearances": report(rows) });
     render(<FitnessClearances role="medical-staff" />);
     const items = within(await screen.findByRole("list", { name: "Fitness clearances" })).getAllByRole("listitem");
     expect(items.map((li) => li.textContent?.split(/(?=Valid|Lapsed|No clearance|No contact)/)[0])).toEqual([
@@ -183,32 +189,31 @@ describe("athlete-performance.fitness-clearances", () => {
     expect(items[3]?.textContent).toContain("Lapsing soon");
     expect(items[4]?.textContent).not.toContain("Lapsing soon");
     expect(screen.getByLabelText("Clearance summary").textContent).toBe("Cleared2Restricted1Not cleared2Lapsing soon1");
-    expect(urls(fetchMock)[0]).toBe(`${BASE}/athletes?status=active&limit=${CHECKED}`);
-    expect(fetchMock).toHaveBeenCalledTimes(1 + team.length);
-    expect(screen.queryByText(/Checked the first/)).toBeNull();
+    expect(urls(fetchMock)).toEqual([`${BASE}/reports/clearances?lapsing_within_days=${LAPSING_DAYS}&limit=${SHOWN}`]);
+    expect(screen.queryByText(/more$/)).toBeNull();
   });
 
-  it("checks at most the first page of athletes and says so", async () => {
-    stubApi(routes(team, 42));
+  it("counts every athlete, not only the rows shown", async () => {
+    stubApi({ "/reports/clearances": report(rows, 42) });
     render(<FitnessClearances role="medical-staff" />);
-    expect(await screen.findByText("Checked the first 5 of 42 active athletes, by name.")).toBeTruthy();
+    expect(await screen.findByText("and 37 athletes more")).toBeTruthy();
   });
 
   it("has an empty state", async () => {
-    stubApi({ "/athletes": ok(page([])) });
+    stubApi({ "/reports/clearances": ok({ items: [], total: 0, counts: { cleared: 0, restricted: 0, not_cleared: 0, lapsing_soon: 0 } }) });
     render(<FitnessClearances role="medical-staff" />);
     expect(await screen.findByText("No athletes yet")).toBeTruthy();
   });
 
   it("does not offer a retry that cannot help (403)", async () => {
-    stubApi({ "/athletes": { status: 403, body: { code: "forbidden", message: "no" } } });
+    stubApi({ "/reports/clearances": { status: 403, body: { code: "forbidden", message: "no" } } });
     render(<FitnessClearances role="medical-staff" />);
     expect(await screen.findByText("You do not have access to this.")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("says the data is not available yet while the backend is missing", async () => {
-    stubApi({ "/athletes": { status: 404, body: { detail: "Not Found" } } });
+    stubApi({ "/reports/clearances": { status: 404, body: { detail: "Not Found" } } });
     render(<FitnessClearances role="medical-staff" />);
     expect(await screen.findByText("Athlete performance data is not available yet.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();

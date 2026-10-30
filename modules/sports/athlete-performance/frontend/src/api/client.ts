@@ -94,7 +94,20 @@ export interface FitnessClearance {
   set_at?: string;
 }
 
-export type Trend = "improving" | "steady" | "declining" | "no_data";
+/** contract ClearanceReportRow: an active athlete's clearance, with their name and whether it lapses soon. */
+export interface ClearanceReportRow extends FitnessClearance {
+  full_name: string;
+  lapsing_soon: boolean;
+}
+
+/** GET /reports/clearances: most urgent first; counts cover every active athlete, not only the page. */
+export interface ClearanceReport {
+  items: ClearanceReportRow[];
+  total: number;
+  counts: { cleared: number; restricted: number; not_cleared: number; lapsing_soon: number };
+}
+
+export type Trend ="improving" | "steady" | "declining" | "no_data";
 
 /** contract SquadSummaryRow: latest value and trend of every metric the athlete has values for. */
 export interface SquadSummaryRow {
@@ -193,9 +206,12 @@ export function getPerformanceHistory(athleteId: string, metricId: string, signa
   return get(`/athletes/${encodeURIComponent(athleteId)}/history`, { metric_id: metricId }, signal);
 }
 
-/** GET /athletes/{id}/clearance. Permission athlete-performance:clearance:read. */
-export function getClearance(athleteId: string, signal?: AbortSignal): Promise<FitnessClearance> {
-  return get(`/athletes/${encodeURIComponent(athleteId)}/clearance`, {}, signal);
+/** GET /reports/clearances: every active athlete's clearance, most urgent first. Permission athlete-performance:clearance:read. */
+export function getClearanceReport(
+  query: { lapsing_within_days: number; limit: number },
+  signal?: AbortSignal,
+): Promise<ClearanceReport> {
+  return get("/reports/clearances", query, signal);
 }
 
 /** Words for a failed call, for the widget's error state. */

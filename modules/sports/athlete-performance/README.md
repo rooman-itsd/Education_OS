@@ -40,13 +40,14 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 | Widget | Layout | Permission | Endpoints |
 |---|---|---|---|
 | `athlete-performance.squad-overview` | coach | `report:read` | `GET /reports/squad-summary`, `GET /metrics` |
-| `athlete-performance.fitness-clearances` | medical-staff | `clearance:read` | `GET /athletes?status=active&limit=20`, then `GET /athletes/{id}/clearance` per athlete |
+| `athlete-performance.fitness-clearances` | medical-staff | `clearance:read` | `GET /reports/clearances` |
 | `athlete-performance.performance-trend` | athlete | `result:read` | `GET /athletes` (own profile), `GET /metrics`, `GET /results`, `GET /assessments`, `GET /athletes/{id}/history` for up to 4 metrics |
 | `athlete-performance.body-composition-trend` | nutritionist | `report:read` | `GET /reports/squad-summary`, `GET /metrics`, `GET /fitness-tests` |
 
-The contract has no list of clearances, and the squad summary (which carries the status, without `valid_until`)
-needs `report:read`, which medical staff do not hold; so the clearance widget checks the first 20 active athletes
-by name and says so when there are more. Metrics have no category: a metric is body composition when a fitness test
+`GET /reports/clearances` lists every active athlete's clearance most urgent first (not cleared, restricted,
+lapsing within `lapsing_within_days`, cleared) with counts over all of them; an athlete gets only their own row.
+The `nutritionist` profile role reads athletes and summaries (`report:read`) for the body-composition widget, but
+not clearances. Metrics have no category: a metric is body composition when a fitness test
 whose name mentions body composition measures it, or its name does (body fat, weight, BMI, lean or muscle mass,
 skinfolds, waist). The coach's `session-plan` and the athlete's `training-schedule` belong to training-video-analysis
 (plans and sessions), not here.
