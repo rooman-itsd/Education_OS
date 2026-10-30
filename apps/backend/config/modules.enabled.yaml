@@ -16,9 +16,10 @@ modules:
   - facilities/maintenance
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
+  - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
   - student-lifecycle/web-portal-cms
   - support/helpdesk
 integrations: []
-platform: [identity, tenancy, billing, notification]
+platform: [identity, tenancy, billing, notification, event-bus]

@@ -18,7 +18,7 @@ import re
 import subprocess
 import sys
 
-REPO = "faizanrooman/Education_OS"
+REPO = "rooman-itsd/Education_OS"
 OWNER = "faizanrooman"
 PROJECT = 1
 PREFIX = re.compile(r"^\[\d+\]\s*")

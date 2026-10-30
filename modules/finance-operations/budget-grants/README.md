@@ -44,6 +44,9 @@ Rules the code keeps:
 - **Certificate due dates are period ends.** A grant starting 2026-04-01 with yearly certificates has due dates 2027-03-31 and so on, so a certificate for that period covers its due date. A returned certificate is redrafted, never certified as it stands.
 - **Every change is audited.** An `audit_entry` row (actor, action, entity, id) is written in the same transaction. That covers changes from other modules' events too, until the audit SDK exists. Changes the contract defines events for also publish them to the outbox.
 - **A grant with orders still committed can't be closed.** Release or pay them first.
+- **Business dates are Indian.** "Today" is the date in Asia/Kolkata (UTC+05:30, a fixed offset: India has no daylight
+  saving, and tzdata is not on the approved stack), as in procurement (#129). It dates spend recorded from events and
+  sets the default financial year, reminder windows and a certificate's default submission date. Timestamps stay UTC.
 
 ### Running the tests
 
