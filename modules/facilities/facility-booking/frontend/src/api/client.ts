@@ -43,6 +43,9 @@ export interface Summary {
 /** Today's bookings that still matter on a dashboard: cancelled and rejected ones are left out. */
 export const LIVE_STATUSES: BookingStatus[] = ["pending", "confirmed", "checked_in", "completed", "no_show"];
 
+/** Bookings still ahead or under way: finished, cancelled and rejected ones are left out. */
+export const UPCOMING_STATUSES: BookingStatus[] = ["pending", "confirmed", "checked_in"];
+
 const API_BASE = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL ?? "/api/v1";
 const TOKEN_KEY = "eos.token";
 
@@ -81,6 +84,16 @@ export function listBookingsToday(pageSize: number, signal?: AbortSignal): Promi
   return get<BookingPage>(`/bookings?scope=managed&date=today&status=${status}&page_size=${pageSize}`, signal);
 }
 
+/**
+ * GET /bookings?scope=<scope>&from=now: bookings not yet over, earliest first. scope=mine is the caller's own (booked
+ * by or for them); scope=managed is those on the resources the caller approves, or every resource with
+ * facility-booking:booking:read-all. Permission facility-booking:booking:read.
+ */
+export function listUpcomingBookings(scope: "mine" | "managed", pageSize: number, signal?: AbortSignal): Promise<BookingPage> {
+  const status = UPCOMING_STATUSES.join(",");
+  return get<BookingPage>(`/bookings?scope=${scope}&from=now&status=${status}&page_size=${pageSize}`, signal);
+}
+
 /** GET /summary?date=today: counts over the resources the caller manages or approves. Permission facility-booking:booking:read. */
 export function getSummary(signal?: AbortSignal): Promise<Summary> {
   return get<Summary>("/summary?date=today", signal);
@@ -106,6 +119,18 @@ export function timeWindow(startIso: string | null | undefined, endIso: string |
     return sameDay ? clock(iso) : `${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${clock(iso)}`;
   };
   return `${part(startIso)}–${part(endIso)}`;
+}
+
+/** The day a booking starts, in the viewer's time: "Today", "Tomorrow" or "Fri 31 Oct"; "—" when missing or not a date. */
+export function dayLabel(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) return "Today";
+  if (d.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
 }
 
 export interface Failure {
