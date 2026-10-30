@@ -241,3 +241,36 @@ def expire_trials(db: Session) -> int:
                 n += 1
         db.commit()
     return n
+
+
+REMINDER_DAYS = (7, 3, 1)
+
+
+def remind_trials(db: Session) -> int:
+    """Run by the scheduler daily: billing.trial.expiring 7, 3 and 1 whole days (UTC) before a trial ends.
+
+    Delivery of the job is at-least-once, so a second run on the same day raises the same reminder again; its
+    `reminder_key` (organisation, trial end date, days left) lets a consumer send each reminder once."""
+    n = 0
+    with platform_scope():
+        today = utcnow().date()
+        for sub in db.scalars(select(Subscription).where(Subscription.status == "trialing")):
+            if not sub.trial_ends_at:
+                continue
+            ends_on = sub.trial_ends_at.date()
+            days_left = (ends_on - today).days
+            if days_left in REMINDER_DAYS:
+                events.publish(
+                    db,
+                    "billing.trial.expiring",
+                    sub.organisation_id,
+                    {
+                        "organisation_id": sub.organisation_id,
+                        "days_left": days_left,
+                        "trial_ends_on": ends_on.isoformat(),
+                        "reminder_key": f"{sub.organisation_id}:{ends_on.isoformat()}:{days_left}",
+                    },
+                )
+                n += 1
+        db.commit()
+    return n
