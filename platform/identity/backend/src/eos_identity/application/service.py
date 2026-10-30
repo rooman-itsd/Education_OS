@@ -4,8 +4,8 @@ from eos_core import events
 from eos_core.db import scoped
 from eos_core.security import create_token, hash_password, verify_password
 from eos_core.settings import settings
-from eos_core.tenant import get_current_organisation, platform_scope
-from sqlalchemy import select
+from eos_core.tenant import get_current_organisation, organisation_scope, platform_scope
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..domain.models import User
@@ -28,14 +28,26 @@ class RoleNotAssignableError(Exception):
     """A role no person may hold. Raised before anything is written."""
 
 
+class PlanLimitReachedError(Exception):
+    """The organisation's plan allows no more of something (`limit`: users). Raised before anything is written."""
+
+    def __init__(self, limit: str, allowed: int, used: int):
+        super().__init__(f"the plan allows {allowed} {limit}; {used} are active")
+        self.limit, self.allowed, self.used = limit, allowed, used
+
+
 class OrganisationHooks:
-    """How identity learns about organisations without importing tenancy (module standard rule 1).
-    apps/backend replaces these at startup with tenancy's implementations."""
+    """How identity learns about organisations and plans without importing tenancy or billing (module standard
+    rule 1). apps/backend replaces these at startup with tenancy's and billing's implementations."""
 
     def status(self, db: Session, organisation_id: str) -> str | None:  # noqa: ARG002
         return "active"
 
     def id_for_slug(self, db: Session, slug: str) -> str | None:  # noqa: ARG002
+        return None
+
+    def user_limit(self, db: Session, organisation_id: str) -> int | None:  # noqa: ARG002
+        """The plan's ceiling on active users of the organisation; None (the default) is no ceiling."""
         return None
 
 
@@ -55,6 +67,12 @@ def create_user(
     refused = NOT_A_PERSON_ROLES.intersection(roles or [])
     if refused:
         raise RoleNotAssignableError(f"{', '.join(sorted(refused))} is not a role a person can hold")
+    if organisation_id is not None:
+        limit = hooks.user_limit(db, organisation_id)
+        if limit is not None and limit > 0:
+            used = count_active_users(db, organisation_id)
+            if used >= limit:
+                raise PlanLimitReachedError("users", limit, used)
     user = User(
         organisation_id=organisation_id,
         email=email.lower(),
@@ -71,6 +89,19 @@ def create_user(
 
 def list_users(db: Session) -> list[User]:
     return list(db.scalars(scoped(db, select(User), User).order_by(User.created_at)))
+
+
+def count_active_users(db: Session, organisation_id: str) -> int:
+    """Active people of one organisation: what the plan's `users` limit counts (billing reads it for usage)."""
+    # Filtered by the organisation itself, not only by scoped(): a caller running as the platform (bypass) must
+    # still get one organisation's count, never everyone's.
+    with organisation_scope(organisation_id):
+        q = (
+            select(func.count())
+            .select_from(User)
+            .where(User.organisation_id == organisation_id, User.status == "active")
+        )
+        return int(db.scalar(q) or 0)
 
 
 def get_user(db: Session, user_id: str) -> User | None:

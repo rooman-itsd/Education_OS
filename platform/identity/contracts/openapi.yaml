@@ -1,10 +1,41 @@
 openapi: 3.1.0
 info:
   title: identity API
-  version: 0.1.0
+  version: 0.1.1
   description: "SSO (SAML / OAuth2 / OIDC), RBAC with fine-grained permissions, MFA, session management."
 servers:
   - url: /api/v1/identity
-paths: {}
+paths:
+  /users:
+    post:
+      summary: Create a person in the caller's organisation. Permission identity:user:manage.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, name, password]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string }
+                password: { type: string, minLength: 8 }
+                roles: { type: array, items: { type: string }, default: [student] }
+      responses:
+        "201": { description: Created }
+        "403": { description: A platform role, or a role no person may hold (`service`). }
+        "409":
+          description: The organisation's plan allows no more active users.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanLimitReached" }
 components:
-  schemas: {}
+  schemas:
+    PlanLimitReached:
+      type: object
+      required: [detail, code, limit, allowed, used]
+      properties:
+        detail: { type: string, examples: ["the plan allows 25 users; 25 are active"] }
+        code: { type: string, const: plan_limit_reached }
+        limit: { type: string, enum: [users], description: Which plan limit was reached. }
+        allowed: { type: integer, description: The plan's limit. }
+        used: { type: integer, description: Active users counted against it. }
