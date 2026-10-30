@@ -14,6 +14,10 @@ permissions:
     description: Super admin. Grant or revoke modules outside the plan.
   - key: platform:organisations:impersonate
     description: Super admin. Start an audited session as an organisation user.
+  - key: platform:organisation:export
+    description: Super admin. Download everything held about one organisation as JSON (DPDP data export).
+  - key: platform:organisation:delete
+    description: Super admin. Archive an organisation with a retention period, restore it, or purge its rows for good.
 roles:
   - name: member
     description: Implicit. Every active organisation user holds it beside their assigned roles; it is never assigned or removed by hand.
@@ -23,4 +27,10 @@ roles:
     grants: [tenancy:organisation:read, tenancy:organisation:manage]
   - name: super-admin
     description: Platform operator. Outside every organisation.
-    grants: [platform:organisations:read, platform:organisations:manage, platform:entitlements:manage, platform:organisations:impersonate]
+    grants:
+      - platform:organisations:read
+      - platform:organisations:manage
+      - platform:entitlements:manage
+      - platform:organisations:impersonate
+      - platform:organisation:export
+      - platform:organisation:delete

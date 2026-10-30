@@ -23,6 +23,13 @@ class Organisation(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="pending_verification")
     status_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Deletion with retention (DPDP). A super admin's DELETE archives the organisation and sets delete_after;
+    # the purge removes every row of the organisation once that moment has passed; a restore before the purge
+    # puts status_before_deletion back and clears the three fields.
+    delete_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_requested_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status_before_deletion: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     def to_dict(self, **extra) -> dict:
         return {
@@ -35,6 +42,9 @@ class Organisation(Base, TimestampMixin):
             "status": self.status,
             "status_reason": self.status_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "delete_after": self.delete_after.isoformat() if self.delete_after else None,
+            "deletion_requested_by": self.deletion_requested_by,
+            "deletion_requested_at": self.deletion_requested_at.isoformat() if self.deletion_requested_at else None,
             **extra,
         }
 
