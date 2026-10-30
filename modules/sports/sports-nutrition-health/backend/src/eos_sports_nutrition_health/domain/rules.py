@@ -60,6 +60,23 @@ def check_appointment_change(current: str, changes: dict) -> None:
         raise RuleViolationError("invalid_status", f"cannot move a {current} appointment to {changes['status']}")
 
 
-def check_held(scheduled_at: datetime, now: datetime) -> None:
+def check_held(scheduled_at: datetime, now: datetime, status: str = "completed") -> None:
+    """Completed and no-show both say something about a time that has passed."""
     if scheduled_at > now:
-        raise RuleViolationError("not_yet_held", "an appointment cannot be completed before its time")
+        what = "completed" if status == "completed" else "marked no-show"
+        raise RuleViolationError("not_yet_held", f"an appointment cannot be {what} before its time")
+
+
+def check_upcoming(scheduled_at: datetime, now: datetime) -> None:
+    """A scheduled appointment is in the future; a past session is logged as completed instead."""
+    if scheduled_at < now:
+        raise RuleViolationError(
+            "in_past", "a scheduled appointment must be in the future; log a past one as completed"
+        )
+
+
+def check_reviewable(status: str) -> None:
+    """Only an active plan is reviewed: a draft has not started, a completed or archived one has ended."""
+    check_plan_open(status)
+    if status == "draft":
+        raise RuleViolationError("plan_not_active", "activate the plan before reviewing it")

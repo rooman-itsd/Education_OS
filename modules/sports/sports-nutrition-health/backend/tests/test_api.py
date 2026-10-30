@@ -1,8 +1,11 @@
 """The HTTP surface against contracts/openapi.yaml: plans and reviews, health records, injuries and appointments,
 with the events and audit entries each change writes, and who may see which rows and fields."""
 
+from datetime import UTC, datetime
+
 from conftest import ATHLETE, BASE, COACH, MEDICAL, NUTRITIONIST, outbox
 from eos_core.db import SessionLocal, new_id
+from eos_sports_nutrition_health.application import service
 from eos_sports_nutrition_health.infrastructure.models import AuditEntry
 from sqlalchemy import select
 
@@ -195,7 +198,7 @@ def test_injury_lifecycle_and_clinical_notes(client, org):
 # ---------------------------------------------------------------- appointments
 
 
-def test_appointments(client, org):
+def test_appointments(client, org, monkeypatch):
     physio_id, physio = org.user(MEDICAL)
     _, coach = org.user(COACH)
     injury = org.injury(ATHLETE_A)
@@ -212,14 +215,20 @@ def test_appointments(client, org):
 
     early = client.patch(f"{BASE}/appointments/{a['id']}", json={"status": "completed"}, headers=physio)
     assert early.status_code == 400 and early.json()["detail"]["code"] == "not_yet_held"
-    moved = client.patch(
+    into_past = client.patch(
         f"{BASE}/appointments/{a['id']}", json={"scheduled_at": "2026-10-29T08:00:00Z"}, headers=physio
     )
-    assert moved.json()["scheduled_at"] == "2026-10-29T08:00:00+00:00"
+    assert into_past.status_code == 400 and into_past.json()["detail"]["code"] == "in_past"
+    moved = client.patch(
+        f"{BASE}/appointments/{a['id']}", json={"scheduled_at": "2026-10-30T09:30:00Z"}, headers=physio
+    )
+    assert moved.json()["scheduled_at"] == "2026-10-30T09:30:00+00:00"
+    later = datetime(2026, 10, 30, 11, 0, tzinfo=UTC)
+    monkeypatch.setattr(service, "clock", lambda: later)
     done = client.patch(f"{BASE}/appointments/{a['id']}", json={"status": "completed"}, headers=physio)
     assert done.json()["status"] == "completed"
     [comp] = outbox(org.id, "sports-nutrition-health.appointment.completed")
-    assert comp.payload["completed_at"] == "2026-10-29T09:00:00+00:00"
+    assert comp.payload["completed_at"] == "2026-10-30T11:00:00+00:00"
     closed = client.patch(f"{BASE}/appointments/{a['id']}", json={"status": "cancelled"}, headers=physio)
     assert closed.json()["detail"]["code"] == "appointment_closed"
     assert (
@@ -302,3 +311,98 @@ def test_permissions_are_checked(client, org):
     assert r.status_code == 403 and r.json()["detail"]["code"] == "forbidden"
     assert client.post(f"{BASE}/injuries", json={}, headers=nutritionist).status_code == 403
     assert client.get(f"{BASE}/injuries").status_code == 401
+
+
+# ---------------------------------------------------------------- review fixes (#370)
+
+
+def test_appointment_notes_reach_only_those_who_may_see_them(client, org):
+    physio_id, physio = org.user(MEDICAL)
+    nutritionist_id, nutritionist = org.user(NUTRITIONIST)
+    _, org_admin = org.user("org-admin")
+    _, profile_nutritionist = org.user("nutritionist")
+    physio_appt = org.appointment(ATHLETE_A, physio_id, notes="ACL rupture suspected, refer MRI", headers=physio)
+    for headers in (nutritionist, profile_nutritionist, org_admin):
+        assert "notes" not in client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=headers).json()
+        assert "notes" not in client.get(f"{BASE}/appointments", headers=headers).json()["items"][0]
+    assert client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=physio).json()["notes"].startswith("ACL")
+
+    # writing clinical notes is refused the same way
+    r = client.patch(f"{BASE}/appointments/{physio_appt['id']}", json={"notes": None}, headers=org_admin)
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "forbidden"
+    body = {
+        "athlete_id": ATHLETE_A,
+        "practitioner_id": physio_id,
+        "appointment_type": "physiotherapy",
+        "scheduled_at": "2026-10-30T10:00:00Z",
+        "status": "scheduled",
+        "notes": "x",
+    }
+    assert client.post(f"{BASE}/appointments", json=body, headers=nutritionist).status_code == 403
+    assert client.get(f"{BASE}/appointments/{physio_appt['id']}", headers=physio).json()["notes"].startswith("ACL")
+
+    # a nutritionist keeps the notes of their own nutrition sessions
+    session = org.appointment(
+        ATHLETE_A, nutritionist_id, appointment_type="nutrition", notes="Increase carbs", headers=nutritionist
+    )
+    assert client.get(f"{BASE}/appointments/{session['id']}", headers=nutritionist).json()["notes"] == "Increase carbs"
+
+
+def test_clinical_notes_need_health_record_write(client, org):
+    _, medic = org.user(MEDICAL)
+    _, org_admin = org.user("org-admin")
+    i = org.injury(ATHLETE_A, clinical_notes="Grade 2 tear", headers=medic)
+    for body in ({"clinical_notes": None}, {"clinical_notes": "overwritten"}):
+        r = client.patch(f"{BASE}/injuries/{i['id']}", json=body, headers=org_admin)
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "forbidden"
+    assert client.get(f"{BASE}/injuries/{i['id']}", headers=medic).json()["clinical_notes"] == "Grade 2 tear"
+    report = {
+        "athlete_id": ATHLETE_A,
+        "body_part": "Knee",
+        "severity": "minor",
+        "occurred_on": "2026-10-28",
+        "status": "active",
+        "clinical_notes": "x",
+    }
+    assert client.post(f"{BASE}/injuries", json=report, headers=org_admin).status_code == 403
+    # org-admin still reports and updates injuries without clinical notes
+    del report["clinical_notes"]
+    assert client.post(f"{BASE}/injuries", json=report, headers=org_admin).status_code == 201
+    assert (
+        client.patch(f"{BASE}/injuries/{i['id']}", json={"status": "recovering"}, headers=org_admin).status_code == 200
+    )
+
+
+def test_closed_and_draft_plans_are_not_due_for_review(client, org):
+    active = org.plan(ATHLETE_A, review_due_on="2026-11-01")
+    closed = org.plan(ATHLETE_B, review_due_on="2026-11-01")
+    r = client.patch(f"{BASE}/nutrition-plans/{closed['id']}", json={"status": "completed"}, headers=org.admin)
+    assert r.status_code == 200 and "review_due_on" not in r.json()
+    due = client.get(f"{BASE}/nutrition-plans?review_due_before=2026-11-30", headers=org.admin).json()["items"]
+    assert [p["id"] for p in due] == [active["id"]]
+
+    draft = org.plan(ATHLETE_A, status="draft")
+    r = client.post(
+        f"{BASE}/nutrition-plans/{draft['id']}/reviews",
+        json={"reviewed_on": "2026-10-28", "outcome": "continue"},
+        headers=org.admin,
+    )
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "plan_not_active"
+
+
+def test_appointment_times(client, org):
+    physio_id, physio = org.user(MEDICAL)
+    body = {
+        "athlete_id": ATHLETE_A,
+        "practitioner_id": physio_id,
+        "appointment_type": "medical",
+        "scheduled_at": "2026-10-28T10:00:00Z",
+        "status": "scheduled",
+    }
+    past = client.post(f"{BASE}/appointments", json=body, headers=physio)
+    assert past.status_code == 400 and past.json()["detail"]["code"] == "in_past"
+    upcoming = org.appointment(ATHLETE_A, physio_id, headers=physio)
+    early = client.patch(f"{BASE}/appointments/{upcoming['id']}", json={"status": "no_show"}, headers=physio)
+    assert early.status_code == 400 and early.json()["detail"]["code"] == "not_yet_held"
+    cancel = client.patch(f"{BASE}/appointments/{upcoming['id']}", json={"status": "cancelled"}, headers=physio)
+    assert cancel.json()["status"] == "cancelled"  # cancelling ahead of time is what cancelling is for

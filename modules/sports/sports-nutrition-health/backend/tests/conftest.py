@@ -53,6 +53,7 @@ class Event:
     payload: dict
     name: str = consumers.ATHLETE_REGISTERED
     id: str = field(default_factory=new_id)
+    occurred_at: datetime = NOW
 
 
 def deliver(event: Event) -> None:

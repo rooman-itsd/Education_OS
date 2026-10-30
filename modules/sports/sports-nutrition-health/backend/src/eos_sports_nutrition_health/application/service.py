@@ -7,7 +7,8 @@ Confidentiality (PRD §5):
 - Health records need health-record:read, which only medical roles hold.
 - An injury's clinical_notes are returned only to callers with health-record:read; coaches and athletes see the
   injury, its status and expected return.
-- An appointment's notes are returned only to callers with appointment:write (the practitioners).
+- An appointment's notes are clinical: returned to and written by medical roles, and by a nutritionist only for
+  nutrition appointments. An injury's clinical_notes are written only with health-record:write.
 - Events carry ids, statuses and dates only; audit entries never copy clinical or free-text fields (NOT_RECORDED).
 
 Athletes see only their own plans, injuries and appointments: a caller whose only access comes from an athlete role
@@ -92,6 +93,28 @@ def _not_found(what: str) -> ServiceError:
 
 def _invalid(code: str, message: str) -> ServiceError:
     return ServiceError(400, code, message)
+
+
+def _forbidden(message: str) -> ServiceError:
+    return ServiceError(403, "forbidden", message)
+
+
+def _may_see_notes(actor: Actor, appointment_type: str) -> bool:
+    """Appointment notes are clinical: medical roles see them; a nutritionist sees those of nutrition sessions."""
+    return actor.can(HEALTH_READ) or (appointment_type == "nutrition" and actor.can(PLAN_WRITE))
+
+
+def _may_write_notes(actor: Actor, appointment_type: str) -> bool:
+    return actor.can(HEALTH_WRITE) or (appointment_type == "nutrition" and actor.can(PLAN_WRITE))
+
+
+def _check_clinical_notes(actor: Actor, data: dict, *, partial: bool) -> None:
+    """Writing or clearing an injury's clinical notes is a health-record change: refused without health-record:write,
+    which is also what it takes to read them. A new injury carries every field, so there only actual notes count; an
+    update carries only the fields sent, so sending the field at all (null included) counts."""
+    sent = "clinical_notes" in data if partial else data.get("clinical_notes") is not None
+    if sent and not actor.can(HEALTH_WRITE):
+        raise _forbidden(f"clinical_notes require {HEALTH_WRITE}")
 
 
 def _rules(fn, *args) -> None:
@@ -290,7 +313,7 @@ def appointment_out(a: Appointment, actor: Actor) -> dict:
             "scheduled_at": iso(a.scheduled_at),
             "duration_minutes": a.duration_minutes,
             "status": a.status,
-            "notes": a.notes if actor.can(APPOINTMENT_WRITE) else None,
+            "notes": a.notes if _may_see_notes(actor, a.appointment_type) else None,
         }
     )
 
@@ -303,7 +326,11 @@ def list_plans(db: Session, actor: Actor, filters: dict, limit: int, offset: int
     if filters.get("status"):
         q = q.where(Plan.status == filters["status"])
     if filters.get("review_due_before"):
-        q = q.where(Plan.review_due_on.is_not(None), Plan.review_due_on <= filters["review_due_before"])
+        q = q.where(
+            Plan.review_due_on.is_not(None),
+            Plan.review_due_on <= filters["review_due_before"],
+            Plan.status.not_in(rules.CLOSED_PLAN),
+        )
     rows, total = repo.page(db, q, (Plan.start_date.desc(), Plan.created_at.desc(), Plan.id), limit, offset)
     return _page([plan_out(p) for p in rows], total)
 
@@ -345,6 +372,8 @@ def update_plan(db: Session, actor: Actor, plan_id: str, data: dict) -> dict:
         set(data) - {"status"} or data.get("status", p.status) not in rules.CLOSED_PLAN
     ):
         _rules(rules.check_plan_open, p.status)
+    if data.get("status") in rules.CLOSED_PLAN:
+        data = {**data, "review_due_on": None}  # a closed plan is never due for review
     keys = ("start_date", "end_date", "review_due_on")
     _check_plan_dates({k: data.get(k, getattr(p, k)) for k in keys})
     before, after = _apply(p, data)
@@ -371,7 +400,7 @@ def list_reviews(db: Session, actor: Actor, plan_id: str, limit: int, offset: in
 
 def record_review(db: Session, actor: Actor, plan_id: str, data: dict) -> dict:
     p = _get_plan(db, plan_id)
-    _rules(rules.check_plan_open, p.status)
+    _rules(rules.check_reviewable, p.status)
     _rules(rules.not_in_future, data["reviewed_on"], clock(), "reviewed_on")
     _rules(rules.not_before, data["reviewed_on"], p.start_date, "reviewed_on", "the plan's start_date")
     _rules(rules.not_before, data.get("next_review_on"), data["reviewed_on"], "next_review_on", "reviewed_on")
@@ -461,6 +490,7 @@ def _publish_resolved(db: Session, actor: Actor, i: Injury) -> None:
 
 
 def report_injury(db: Session, actor: Actor, data: dict) -> dict:
+    _check_clinical_notes(actor, data, partial=False)
     now = clock()
     _check_injury(data, now)
     i = Injury(organisation_id=actor.organisation_id, reported_by=actor.user_id, **data)
@@ -495,6 +525,7 @@ def update_injury(db: Session, actor: Actor, injury_id: str, data: dict) -> dict
     i = repo.get(db, Injury, injury_id)
     if i is None:
         raise _not_found("injury")
+    _check_clinical_notes(actor, data, partial=True)
     now = clock()
     keys = ("occurred_on", "expected_return_on")
     _check_injury({k: data.get(k, getattr(i, k)) for k in keys}, now)
@@ -551,9 +582,13 @@ def _publish_completed(db: Session, actor: Actor, a: Appointment) -> None:
 def schedule_appointment(db: Session, actor: Actor, data: dict) -> dict:
     now = clock()
     _rules(rules.check_new_appointment, data["status"])
+    if data.get("notes") is not None and not _may_write_notes(actor, data["appointment_type"]):
+        raise _forbidden(f"notes on a {data['appointment_type']} appointment require {HEALTH_WRITE}")
     _check_injury_link(db, data.get("injury_id"), data["athlete_id"])
     if data["status"] == "completed":
         _rules(rules.check_held, data["scheduled_at"], now)
+    else:
+        _rules(rules.check_upcoming, data["scheduled_at"], now)
     if data.get("duration_minutes") is None:
         data = {**data, "duration_minutes": load_settings().default_appointment_minutes}
     a = Appointment(organisation_id=actor.organisation_id, **data)
@@ -587,10 +622,15 @@ def update_appointment(db: Session, actor: Actor, appointment_id: str, data: dic
     now = clock()
     changes = {k: v for k, v in data.items() if (as_utc(getattr(a, k)) if k == "scheduled_at" else getattr(a, k)) != v}
     _rules(rules.check_appointment_change, a.status, changes)
+    if "notes" in changes and not _may_write_notes(actor, data.get("appointment_type", a.appointment_type)):
+        raise _forbidden(f"notes on a {a.appointment_type} appointment require {HEALTH_WRITE}")
     if "injury_id" in changes or "athlete_id" in changes:
         _check_injury_link(db, data.get("injury_id", a.injury_id), data.get("athlete_id", a.athlete_id))
-    if changes.get("status") == "completed":
-        _rules(rules.check_held, data.get("scheduled_at", as_utc(a.scheduled_at)), now)
+    when = data.get("scheduled_at", as_utc(a.scheduled_at))
+    if changes.get("status") in ("completed", "no_show"):
+        _rules(rules.check_held, when, now, changes["status"])
+    elif "scheduled_at" in changes and changes.get("status", a.status) == "scheduled":
+        _rules(rules.check_upcoming, when, now)
     before, after = _apply(a, changes)
     if not after:
         return appointment_out(a, actor)

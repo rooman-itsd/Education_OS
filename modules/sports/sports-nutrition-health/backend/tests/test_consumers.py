@@ -1,5 +1,7 @@
 """athlete-performance.athlete.registered links a user to an athlete; the handler is idempotent and tenant-bound."""
 
+from datetime import timedelta
+
 from conftest import ATHLETE, BASE, Event, deliver
 from eos_core.db import SessionLocal, new_id
 from eos_sports_nutrition_health.infrastructure.models import AthleteLink
@@ -22,7 +24,14 @@ def test_registration_links_the_user_once(client, org):
     assert (link.athlete_id, link.user_id, link.event_id) == (ATHLETE_A, user, event.id)
 
     other = new_id()
-    deliver(Event(org.id, {"organisation_id": org.id, "athlete_id": ATHLETE_A, "user_id": other}))
+    later = event.occurred_at + timedelta(minutes=5)
+    deliver(Event(org.id, {"organisation_id": org.id, "athlete_id": ATHLETE_A, "user_id": other}, occurred_at=later))
+    [link] = _links(org.id)
+    assert link.user_id == other
+
+    # a retry of an older registration arriving late does not move the link back
+    stale = event.occurred_at - timedelta(minutes=5)
+    deliver(Event(org.id, {"organisation_id": org.id, "athlete_id": ATHLETE_A, "user_id": user}, occurred_at=stale))
     [link] = _links(org.id)
     assert link.user_id == other
 

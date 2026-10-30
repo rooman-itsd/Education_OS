@@ -7,6 +7,8 @@ dependencies = [
   "fastapi>=0.115",
   "sqlalchemy>=2",
   "alembic>=1.13",
+  "pydantic>=2",
+  "PyJWT>=2",
   "eos-core",
 ]
 

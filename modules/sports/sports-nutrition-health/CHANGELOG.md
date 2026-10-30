@@ -17,3 +17,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Config: `SPORTS_NUTRITION_HEALTH_DEFAULT_APPOINTMENT_MINUTES`.
 - Tests: domain, API, confidentiality, athlete self-scope, consumer idempotency, cross-tenant leak, migration and
   contract-drift tests.
+- Review (#370): appointment notes are clinical (medical roles, and nutritionists only for nutrition sessions); injury
+  `clinical_notes` written or cleared only with `health-record:write`; closing a plan clears `review_due_on` and the
+  reviews-due filter skips closed plans; only active plans are reviewed; a scheduled appointment must be in the future
+  and no-show waits for its time; a late, older registration event no longer moves an athlete link; pydantic and PyJWT
+  declared; the athlete reassignment risk recorded in the README.
