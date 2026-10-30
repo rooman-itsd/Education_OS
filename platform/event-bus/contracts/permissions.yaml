@@ -10,23 +10,29 @@ permissions:
   - key: event-bus:event:replay
     description: Replay a dead-lettered event of this organisation
   - key: event-bus:relay:read
-    description: View relay health, backlog and stall state
+    description: >-
+      View relay health, backlog and stall state. The backlog counts every organisation's events,
+      so only the super admin holds it.
   - key: platform:event-bus:admin
     description: >-
       Super admin only. Inspect and replay events across every organisation, including
       platform-level events that belong to none.
 
+# Blocks are named with platform role ids, the roles a token carries.
 roles:
-  - name: event-bus-operator
+  - name: org-admin
     description: >-
-      Diagnoses delivery problems inside one organisation. Intended for an organisation admin,
-      not a general user; seeing an event payload means seeing the data that changed.
+      Diagnoses delivery problems inside their own organisation: seeing an event payload means
+      seeing the data that changed, so this is not a general user's grant.
+    grants:
+      - event-bus:event:read
+      - event-bus:event:replay
+
+  # A super admin is handed only the platform: keys that some role grants (eos_core.config.permissions_for).
+  - name: super-admin
+    description: Super admin. Every organisation's events, platform-level events, and relay health.
     grants:
       - event-bus:event:read
       - event-bus:event:replay
       - event-bus:relay:read
-
-  - name: event-bus-viewer
-    description: Read-only relay health, without access to event payloads
-    grants:
-      - event-bus:relay:read
+      - platform:event-bus:admin
