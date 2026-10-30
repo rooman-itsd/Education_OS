@@ -66,6 +66,24 @@ SQLite by default (`EOS_DATABASE_URL=sqlite:///./eos.db`). For Postgres with row
 `EOS_DATABASE_URL=postgresql+psycopg://eos:eos@localhost/eos`. `EOS_DEV_MODE=true` returns the
 verification token in the register response so the flow can be driven without email.
 
+## Logs and errors
+
+`src/eos_backend/observability.py` (#91). Every log line is one JSON object (`EOS_LOG_FORMAT=json`, the default;
+`console` is easier to read locally) with `timestamp`, `level`, `logger`, `event`, and the request's `request_id`
+and `organisation_id`, so a module's own lines carry them too without passing them around. Each request ends with
+one `request` line: `method`, `module`, `route` (the module's template, e.g. `/auth/me`), `path` (no query
+string), `status`, `duration_ms`. Uvicorn's access log is replaced by it.
+
+- **Organisation id:** only from a token the API verified (its own tokens here; a Keycloak token through the
+  entitlement gate), never from an unchecked claim, so a forged token cannot write another organisation's id.
+- **Request id:** the caller's `X-Request-ID` when it is a plain token (letters, digits, `._-`, up to 64), else a
+  new one; returned in the response's `X-Request-ID`, so a user's error report finds its lines.
+- **Sentry:** off unless `EOS_SENTRY_DSN` is set. Events carry `organisation_id` and `request_id` as tags and
+  nothing personal: no body, cookies, headers (except user agent and content type), query string, user or IP.
+
+On the Docker host: `docker compose ... logs --tail 50 api` (the relay and the scheduler log in their own format
+for now).
+
 ## Tests
 
 ```

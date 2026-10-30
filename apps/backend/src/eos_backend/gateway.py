@@ -32,6 +32,7 @@ class EntitlementGate(BaseHTTPMiddleware):
         except jwt.PyJWTError as e:
             return JSONResponse({"detail": f"invalid token: {e}"}, status_code=401)
         org = claims.get("org")
+        request.state.organisation_id = org  # verified above; the request log line uses it (observability.py)
         if not org:
             return JSONResponse({"detail": "feature modules need an organisation user"}, status_code=403)
         from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
