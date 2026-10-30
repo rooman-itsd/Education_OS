@@ -1,5 +1,8 @@
 # Permission catalogue for skill-progress. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Learners see only their own assessments, progress and timeline: a caller whose only skill-progress access comes
+# from a learner role (one whose dashboard layout extends `student`) is narrowed to records whose learner_id is
+# their user id. The keys below say which kinds of data a role may use at all.
 module: skill-progress
 permissions:
   - key: skill-progress:framework:read

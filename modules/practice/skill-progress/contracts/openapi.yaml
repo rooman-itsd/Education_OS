@@ -11,6 +11,7 @@ paths:
       summary: List skill frameworks
       description: Retrieve competency frameworks configured for the organisation.
       operationId: listFrameworks
+      x-permission: skill-progress:framework:read
       parameters:
         - name: status
           in: query
@@ -42,10 +43,13 @@ paths:
                       $ref: "#/components/schemas/SkillFramework"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Create a skill framework
       description: Define a new competency framework.
       operationId: createFramework
+      x-permission: skill-progress:framework:write
       requestBody:
         required: true
         content:
@@ -61,11 +65,14 @@ paths:
                 $ref: "#/components/schemas/SkillFramework"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /frameworks/{framework_id}:
     get:
       summary: Get framework details
       operationId: getFramework
+      x-permission: skill-progress:framework:read
       parameters:
         - name: framework_id
           in: path
@@ -82,9 +89,12 @@ paths:
                 $ref: "#/components/schemas/SkillFramework"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update a skill framework
       operationId: updateFramework
+      x-permission: skill-progress:framework:write
       parameters:
         - name: framework_id
           in: path
@@ -105,14 +115,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SkillFramework"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /skills:
     get:
       summary: List skills
       description: Query skills by framework, category, or parent skill.
       operationId: listSkills
+      x-permission: skill-progress:framework:read
       parameters:
         - name: framework_id
           in: query
@@ -153,10 +168,13 @@ paths:
                       $ref: "#/components/schemas/Skill"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Create a skill
       description: Add a skill node to a framework.
       operationId: createSkill
+      x-permission: skill-progress:framework:write
       requestBody:
         required: true
         content:
@@ -172,11 +190,14 @@ paths:
                 $ref: "#/components/schemas/Skill"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /skills/{skill_id}:
     get:
       summary: Get skill details
       operationId: getSkill
+      x-permission: skill-progress:framework:read
       parameters:
         - name: skill_id
           in: path
@@ -193,9 +214,12 @@ paths:
                 $ref: "#/components/schemas/Skill"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update a skill
       operationId: updateSkill
+      x-permission: skill-progress:framework:write
       parameters:
         - name: skill_id
           in: path
@@ -216,14 +240,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Skill"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /rubrics:
     get:
       summary: List rubrics
       description: Retrieve evaluation rubrics.
       operationId: listRubrics
+      x-permission: skill-progress:framework:read
       parameters:
         - name: skill_id
           in: query
@@ -250,10 +279,13 @@ paths:
                       $ref: "#/components/schemas/Rubric"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Create a rubric
       description: Define criteria and scoring levels for skill evaluation.
       operationId: createRubric
+      x-permission: skill-progress:framework:write
       requestBody:
         required: true
         content:
@@ -269,11 +301,14 @@ paths:
                 $ref: "#/components/schemas/Rubric"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /rubrics/{rubric_id}:
     get:
       summary: Get rubric details
       operationId: getRubric
+      x-permission: skill-progress:framework:read
       parameters:
         - name: rubric_id
           in: path
@@ -290,12 +325,15 @@ paths:
                 $ref: "#/components/schemas/Rubric"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /assessments:
     get:
       summary: List assessments
       description: Query assessment records by learner, evaluator, or skill.
       operationId: listAssessments
+      x-permission: skill-progress:assessment:read
       parameters:
         - name: learner_id
           in: query
@@ -347,10 +385,13 @@ paths:
                       $ref: "#/components/schemas/AssessmentRecord"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Record an assessment
       description: Record a learner skill evaluation with rubric scores and optional feedback.
       operationId: recordAssessment
+      x-permission: skill-progress:assessment:record
       requestBody:
         required: true
         content:
@@ -366,11 +407,14 @@ paths:
                 $ref: "#/components/schemas/AssessmentRecord"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /assessments/{assessment_id}:
     get:
       summary: Get assessment details
       operationId: getAssessment
+      x-permission: skill-progress:assessment:read
       parameters:
         - name: assessment_id
           in: path
@@ -387,12 +431,69 @@ paths:
                 $ref: "#/components/schemas/AssessmentRecord"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /assessments/{assessment_id}/verify:
+    post:
+      summary: Verify an assessment
+      description: A reviewer confirms a submitted assessment (submitted -> verified). The evaluator who recorded it cannot verify it.
+      operationId: verifyAssessment
+      x-permission: skill-progress:assessment:approve
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assessment verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /assessments/{assessment_id}/void:
+    post:
+      summary: Void an assessment
+      description: Withdraw a submitted or verified assessment (-> voided). A voided assessment stays on record but no longer counts towards progress or the timeline.
+      operationId: voidAssessment
+      x-permission: skill-progress:assessment:delete
+      parameters:
+        - name: assessment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assessment voided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentRecord"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /learners/{learner_id}/progress:
     get:
       summary: Get learner skill progress summary
       description: Returns the latest proficiency status across all evaluated skills.
       operationId: getLearnerProgress
+      x-permission: skill-progress:progress:read
       parameters:
         - name: learner_id
           in: path
@@ -414,12 +515,15 @@ paths:
                 $ref: "#/components/schemas/LearnerProgressSummary"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /learners/{learner_id}/timeline:
     get:
       summary: Get learner skill progression timeline
       description: Returns a chronological timeline of assessments and milestones.
       operationId: getLearnerTimeline
+      x-permission: skill-progress:progress:read
       parameters:
         - name: learner_id
           in: path
@@ -452,6 +556,8 @@ paths:
                       $ref: "#/components/schemas/TimelineEntry"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
 components:
   responses:
@@ -463,6 +569,12 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The caller lacks the permission this operation needs
       content:
         application/json:
           schema:
