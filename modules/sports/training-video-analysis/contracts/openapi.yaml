@@ -11,6 +11,7 @@ paths:
       summary: List training plans
       description: Retrieve training plans scoped to the organisation.
       operationId: listTrainingPlans
+      x-permission: training-video-analysis:plan:read
       parameters:
         - name: coach_id
           in: query
@@ -47,10 +48,13 @@ paths:
                       $ref: "#/components/schemas/TrainingPlan"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Create a training plan
       description: Define a new training period or seasonal plan.
       operationId: createTrainingPlan
+      x-permission: training-video-analysis:plan:write
       requestBody:
         required: true
         content:
@@ -66,11 +70,14 @@ paths:
                 $ref: "#/components/schemas/TrainingPlan"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /plans/{plan_id}:
     get:
       summary: Get training plan details
       operationId: getTrainingPlan
+      x-permission: training-video-analysis:plan:read
       parameters:
         - name: plan_id
           in: path
@@ -87,9 +94,12 @@ paths:
                 $ref: "#/components/schemas/TrainingPlan"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update a training plan
       operationId: updateTrainingPlan
+      x-permission: training-video-analysis:plan:write
       parameters:
         - name: plan_id
           in: path
@@ -112,12 +122,15 @@ paths:
                 $ref: "#/components/schemas/TrainingPlan"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /sessions:
     get:
       summary: List training sessions
       description: Query training sessions by plan, coach, date range, or status.
       operationId: listTrainingSessions
+      x-permission: training-video-analysis:session:read
       parameters:
         - name: plan_id
           in: query
@@ -169,10 +182,13 @@ paths:
                       $ref: "#/components/schemas/TrainingSession"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Schedule a training session
       description: Schedule a new practical training session.
       operationId: scheduleTrainingSession
+      x-permission: training-video-analysis:session:write
       requestBody:
         required: true
         content:
@@ -188,11 +204,14 @@ paths:
                 $ref: "#/components/schemas/TrainingSession"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /sessions/{session_id}:
     get:
       summary: Get training session details
       operationId: getTrainingSession
+      x-permission: training-video-analysis:session:read
       parameters:
         - name: session_id
           in: path
@@ -209,9 +228,12 @@ paths:
                 $ref: "#/components/schemas/TrainingSession"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update a training session
       operationId: updateTrainingSession
+      x-permission: training-video-analysis:session:write
       parameters:
         - name: session_id
           in: path
@@ -234,12 +256,15 @@ paths:
                 $ref: "#/components/schemas/TrainingSession"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /drills:
     get:
       summary: List drills catalog
       description: Retrieve catalogued exercises and drills.
       operationId: listDrills
+      x-permission: training-video-analysis:drill:read
       parameters:
         - name: category
           in: query
@@ -276,10 +301,13 @@ paths:
                       $ref: "#/components/schemas/Drill"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Create a drill definition
       description: Add a new reusable drill to the catalog.
       operationId: createDrill
+      x-permission: training-video-analysis:drill:write
       requestBody:
         required: true
         content:
@@ -295,11 +323,14 @@ paths:
                 $ref: "#/components/schemas/Drill"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /drills/{drill_id}:
     get:
       summary: Get drill details
       operationId: getDrill
+      x-permission: training-video-analysis:drill:read
       parameters:
         - name: drill_id
           in: path
@@ -316,9 +347,12 @@ paths:
                 $ref: "#/components/schemas/Drill"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update a drill
       operationId: updateDrill
+      x-permission: training-video-analysis:drill:write
       parameters:
         - name: drill_id
           in: path
@@ -341,12 +375,15 @@ paths:
                 $ref: "#/components/schemas/Drill"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /videos:
     get:
       summary: List training videos
       description: Retrieve recorded sessions and analysis videos.
       operationId: listTrainingVideos
+      x-permission: training-video-analysis:video:read
       parameters:
         - name: session_id
           in: query
@@ -383,10 +420,13 @@ paths:
                       $ref: "#/components/schemas/TrainingVideo"
                   total:
                     type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Register an uploaded video
       description: Store metadata for an uploaded training video file.
       operationId: registerTrainingVideo
+      x-permission: training-video-analysis:video:upload
       requestBody:
         required: true
         content:
@@ -402,12 +442,15 @@ paths:
                 $ref: "#/components/schemas/TrainingVideo"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /videos/{video_id}:
     get:
       summary: Get video details
       description: Retrieve video metadata, annotations, and tagged drills.
       operationId: getTrainingVideo
+      x-permission: training-video-analysis:video:read
       parameters:
         - name: video_id
           in: path
@@ -424,9 +467,12 @@ paths:
                 $ref: "#/components/schemas/TrainingVideo"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update video metadata
       operationId: updateTrainingVideo
+      x-permission: training-video-analysis:video:upload
       parameters:
         - name: video_id
           in: path
@@ -449,12 +495,15 @@ paths:
                 $ref: "#/components/schemas/TrainingVideo"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /videos/{video_id}/annotations:
     get:
       summary: List video annotations
       description: Retrieve time-coded annotations and drawings for a video.
       operationId: listVideoAnnotations
+      x-permission: training-video-analysis:video:read
       parameters:
         - name: video_id
           in: path
@@ -473,10 +522,13 @@ paths:
                   $ref: "#/components/schemas/VideoAnnotation"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Add an annotation
       description: Add a coaching note, voiceover, or visual drawing to a video timestamp.
       operationId: addVideoAnnotation
+      x-permission: training-video-analysis:annotation:write
       parameters:
         - name: video_id
           in: path
@@ -501,11 +553,14 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /videos/{video_id}/annotations/{annotation_id}:
     get:
       summary: Get annotation details
       operationId: getVideoAnnotation
+      x-permission: training-video-analysis:video:read
       parameters:
         - name: video_id
           in: path
@@ -528,9 +583,12 @@ paths:
                 $ref: "#/components/schemas/VideoAnnotation"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     patch:
       summary: Update an annotation
       operationId: updateVideoAnnotation
+      x-permission: training-video-analysis:annotation:write
       parameters:
         - name: video_id
           in: path
@@ -559,9 +617,12 @@ paths:
                 $ref: "#/components/schemas/VideoAnnotation"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     delete:
       summary: Delete an annotation
       operationId: deleteVideoAnnotation
+      x-permission: training-video-analysis:annotation:write
       parameters:
         - name: video_id
           in: path
@@ -580,12 +641,15 @@ paths:
           description: Annotation deleted
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /videos/{video_id}/drill-tags:
     get:
       summary: List drill tags for video
       description: Retrieve drill timeline segments tagged on this video.
       operationId: listVideoDrillTags
+      x-permission: training-video-analysis:video:read
       parameters:
         - name: video_id
           in: path
@@ -604,10 +668,13 @@ paths:
                   $ref: "#/components/schemas/DrillTag"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       summary: Tag a drill segment
       description: Tag a specific drill between start and end timestamps on the video.
       operationId: tagDrillInVideo
+      x-permission: training-video-analysis:video:tag
       parameters:
         - name: video_id
           in: path
@@ -632,11 +699,19 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
 components:
   responses:
     BadRequest:
       description: Invalid request parameters or payload
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The caller lacks the permission this operation needs (x-permission)
       content:
         application/json:
           schema:
@@ -782,6 +857,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        location:
+          type: string
+          nullable: true
+          description: Where the session takes place (free text, e.g. a ground or hall); facility_id links a facility record.
         scheduled_start:
           type: string
           format: date-time
@@ -831,6 +910,9 @@ components:
         facility_id:
           type: string
           format: uuid
+        location:
+          type: string
+          description: Where the session takes place (free text, e.g. a ground or hall); facility_id links a facility record.
         scheduled_start:
           type: string
           format: date-time
@@ -858,6 +940,9 @@ components:
         facility_id:
           type: string
           format: uuid
+        location:
+          type: string
+          description: Where the session takes place (free text, e.g. a ground or hall); facility_id links a facility record.
         scheduled_start:
           type: string
           format: date-time
