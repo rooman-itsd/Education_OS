@@ -17,6 +17,9 @@ PLATFORM_MODULES = {
     "event-bus",
     "api-gateway",
     "integration-hub",
+    # Integrations whose routes are platform-level (super admin only, no organisation): the gate must let them
+    # through, or every caller is refused before the route's own permission check.
+    "messaging-providers",
 }
 
 
