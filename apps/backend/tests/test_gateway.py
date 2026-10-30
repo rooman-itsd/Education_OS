@@ -4,6 +4,8 @@ organisation with 429 + Retry-After, and the plan's user limit enforced where us
 from eos_backend.main import create_app
 from eos_testing import register_and_login
 from eos_testing.tenancy import auth
+from fastapi import APIRouter
+from fastapi.responses import HTMLResponse
 from fastapi.testclient import TestClient
 
 ME = "/api/v1/identity/auth/me"
@@ -23,6 +25,22 @@ def test_every_response_carries_the_security_headers(client):
     # the gate's refusal and a 404 carry them too
     assert client.get("/api/v1/fees-accounts/ping").headers["x-frame-options"] == "DENY"
     assert client.get("/api/v1/no-such-module/x").headers["x-content-type-options"] == "nosniff"
+
+
+def test_a_page_with_its_own_csp_keeps_it_through_the_host(monkeypatch):
+    """Like the SBI ePay hand-off page: the route's policy wins over the host's JSON default."""
+    monkeypatch.setenv("EOS_RATE_LIMIT_ENABLED", "false")
+    page = APIRouter()
+    policy = "default-src 'none'; script-src 'nonce-x'; form-action https://bank.example.com"
+
+    @page.get("/test-handoff")
+    def handoff():
+        return HTMLResponse("<form></form>", headers={"Content-Security-Policy": policy})
+
+    # mounted under a platform prefix, which the entitlement gate lets through without a token
+    r = TestClient(create_app(extra_routers={"identity": page})).get("/api/v1/identity/test-handoff")
+    assert r.status_code == 200
+    assert r.headers["content-security-policy"] == policy and r.headers["x-frame-options"] == "DENY"
 
 
 def test_the_host_rate_limits_per_address_and_exempts_health(monkeypatch):

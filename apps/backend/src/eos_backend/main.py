@@ -11,15 +11,15 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .gateway import EntitlementGate
-from .modules import enabled, router_for
+from .modules import enabled, middleware_only, router_for
 
 log = logging.getLogger("eos.api")
 
 # The platform services' routers as create_app mounts them, from the YAML's `platform` list
-# (tests/test_platform_permissions.py checks every route of these). A platform service without a router
-# (api-gateway) mounts nothing and is not here.
+# (tests/test_platform_permissions.py checks every route of these). Only a service whose module.yaml says
+# `router: false` (api-gateway, middleware only) is left out; any other must have a router, or start-up fails.
 PLATFORM_ROUTERS = {
-    e.name: f"{e.package}.api.router" for e in enabled() if e.kind == "platform" and router_for(e) is not None
+    e.name: f"{e.package}.api.router" for e in enabled() if e.kind == "platform" and not middleware_only(e)
 }
 
 

@@ -27,5 +27,9 @@ consumes_events: []
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
 
+# Middleware only: no api/router.py, on purpose. apps/backend mounts nothing for an entry with `router: false`
+# and refuses to start for any other entry without a router.
+router: false
+
 # Set true only when the portability checklist in module-standard.md passes.
 portable: false

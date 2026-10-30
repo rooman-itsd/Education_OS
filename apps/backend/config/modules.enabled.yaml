@@ -4,8 +4,8 @@
 #                 lists whose backend has api/router.py must be here too (apps/backend/tests checks), or the
 #                 dashboard shows widgets whose requests 404; a module with an API and no widgets is only here.
 #   integrations  adapters, as <adapter> under integrations/
-#   platform      platform services, as <service> under platform/. One without api/router.py (api-gateway:
-#                 middleware only) is installed like the rest and mounts nothing.
+#   platform      platform services, as <service> under platform/. One whose module.yaml says `router: false`
+#                 (api-gateway: middleware only) is installed like the rest and mounts nothing.
 # Each entry's package must be installed (tools/scripts/py-setup.sh and the API image install every entry
 # here); its router is eos_<name>.api.router:router and its Alembic chain, if any, is <entry>/db.
 modules:

@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 import yaml
+from eos_backend import modules
 from eos_backend.main import create_app
-from eos_backend.modules import CONFIG, Entry, enabled, router_for
+from eos_backend.modules import CONFIG, Entry, enabled, middleware_only, router_for
 
 ROOT = Path(__file__).resolve().parents[3]
 FRONTEND_CONFIG = ROOT / "apps/frontend/config/modules.enabled.yaml"
@@ -83,13 +84,51 @@ def test_a_listed_module_that_is_not_installed_stops_start_up(tmp_path, monkeypa
         create_app()
 
 
-def test_a_platform_service_without_a_router_is_installed_but_mounts_nothing(tmp_path, monkeypatch):
-    """api-gateway is middleware only: enabled so py-setup.sh and the API image install it, no routes."""
-    assert router_for(Entry("platform", "api-gateway")) is None
+def test_a_platform_service_marked_router_false_is_installed_but_mounts_nothing(tmp_path, monkeypatch):
+    """api-gateway is middleware only (`router: false` in its module.yaml): enabled so py-setup.sh and the API
+    image install it, no routes."""
+    gateway = Entry("platform", "api-gateway")
+    assert middleware_only(gateway) and router_for(gateway) is None
+    assert not middleware_only(Entry("platform", "identity"))
     monkeypatch.setenv("EOS_MODULES_FILE", str(_yaml(tmp_path, "platform: [api-gateway, identity]\n")))
     app = create_app()
     assert not any(p.startswith("/api/v1/api-gateway") for p in _paths(app))
     assert any(p.startswith("/api/v1/identity/") for p in _paths(app))
+
+
+def _installed_service_without_router(tmp_path, monkeypatch, manifest: str) -> None:
+    """An installed package eos_quiet_service with no api/router.py, and its module.yaml under a fake repo."""
+    pkg = tmp_path / "site" / "eos_quiet_service"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path / "site"))
+    service = tmp_path / "repo" / "platform" / "quiet-service"
+    service.mkdir(parents=True)
+    (service / "module.yaml").write_text(manifest, encoding="utf-8")
+    monkeypatch.setattr(modules, "MANIFESTS", tmp_path / "repo")
+    monkeypatch.setenv("EOS_MODULES_FILE", str(_yaml(tmp_path, "platform: [quiet-service, identity]\n")))
+
+
+def test_a_platform_service_without_a_router_and_without_the_flag_stops_start_up(tmp_path, monkeypatch):
+    """Review of PR 363, point 3: a renamed or deleted router must not start the API with its routes 404ing."""
+    _installed_service_without_router(tmp_path, monkeypatch, "name: quiet-service\nkind: platform\n")
+    with pytest.raises(RuntimeError, match=r"platform/quiet-service has no eos_quiet_service/api/router\.py"):
+        create_app()
+
+
+def test_the_router_false_flag_lets_a_service_without_a_router_start(tmp_path, monkeypatch):
+    _installed_service_without_router(tmp_path, monkeypatch, "name: quiet-service\nrouter: false\n")
+    app = create_app()
+    assert not any(p.startswith("/api/v1/quiet-service") for p in _paths(app))
+
+
+def test_a_router_false_service_must_still_be_installed(tmp_path, monkeypatch):
+    service = tmp_path / "repo" / "platform" / "absent-service"
+    service.mkdir(parents=True)
+    (service / "module.yaml").write_text("router: false\n", encoding="utf-8")
+    monkeypatch.setattr(modules, "MANIFESTS", tmp_path / "repo")
+    with pytest.raises(RuntimeError, match=r"platform/absent-service .* eos_absent_service is not installed"):
+        router_for(Entry("platform", "absent-service"))
 
 
 def test_an_integration_is_resolved_like_a_module(tmp_path, monkeypatch):
@@ -121,3 +160,12 @@ def test_the_install_script_reads_the_same_list():
     assert [(e.kind, e.entry) for e in script.entries(CONFIG, ROOT)] == [(e.kind, e.entry) for e in enabled()]
     for e in script.entries(CONFIG, ROOT):
         assert (e.package / "pyproject.toml").is_file(), e.entry
+
+
+def test_every_routed_platform_service_is_covered_by_the_permissions_check():
+    """PLATFORM_ROUTERS (tests/test_platform_permissions.py) leaves out only `router: false` services."""
+    from eos_backend.main import PLATFORM_ROUTERS
+
+    platform = {e.name for e in enabled() if e.kind == "platform"}
+    assert set(PLATFORM_ROUTERS) == platform - {"api-gateway"}
+    assert {"identity", "tenancy", "billing"} <= set(PLATFORM_ROUTERS)
