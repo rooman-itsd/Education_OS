@@ -4,6 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from eos_core import oidc
 from eos_core.db import SessionLocal, init_db
 from eos_core.settings import settings
 from fastapi import APIRouter, FastAPI
@@ -32,6 +33,8 @@ async def lifespan(app: FastAPI):
     # identity learns organisation status and slugs from tenancy without importing it (rule 1)
     identity.hooks.status = tenancy.organisation_status
     identity.hooks.id_for_slug = tenancy.organisation_id_for_slug
+    # eos_core verifies a Keycloak realm token (ADR-0006); identity owns the mapping to a user
+    oidc.hooks.resolve_claims = identity.resolve_oidc_claims
     seed_super_admin = identity.seed_super_admin
 
     db = SessionLocal()
