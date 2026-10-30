@@ -3,6 +3,11 @@
 role: teacher-trainee
 title: "Teacher Trainee"
 extends: student
+module_roles:
+  - field-training-trainee
+  - projects-member
+  - portfolio-learner
+  - skill-progress-viewer
 widgets:
   - field-training.my-placement
   - projects.my-projects

@@ -2,6 +2,9 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: research-lead
 title: "Research Lead"
+module_roles:
+  - projects-coordinator
+  - field-training-viewer
 widgets:
   - projects.active
   - projects.to-review

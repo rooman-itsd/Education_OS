@@ -3,6 +3,9 @@
 role: engineering-student
 title: "Engineering Student"
 extends: student
+module_roles:
+  - projects-member
+  - field-training-trainee
 widgets:
   - projects.my-projects
   - projects.milestones-due

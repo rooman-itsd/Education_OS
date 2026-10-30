@@ -2,6 +2,9 @@
 # Widgets come from the generic practice, facilities and academics modules; the profile vocabulary names them.
 role: moot-court-coordinator
 title: "Moot Court Coordinator"
+module_roles:
+  - selection-process-coordinator
+  - field-training-coordinator
 widgets:
   - selection-process.open-calls
   - productions.calendar

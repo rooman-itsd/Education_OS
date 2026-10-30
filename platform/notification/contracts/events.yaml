@@ -70,5 +70,6 @@ consumes:
   - tenancy.package.changed             # package change applied
   - identity.user.created               # welcome, set your password
   - billing.subscription.started        # trial started, what it includes
+  - billing.trial.expiring              # 7, 3 and 1 days before the trial ends
   - billing.trial.expired               # trial ended, how to upgrade
   - billing.subscription.upgraded       # plan changed, what is now available

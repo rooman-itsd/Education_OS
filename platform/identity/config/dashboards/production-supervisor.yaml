@@ -3,6 +3,9 @@
 role: production-supervisor
 title: "Production Supervisor"
 extends: faculty
+module_roles:
+  - projects-guide
+  - selection-process-panelist
 widgets:
   - projects.to-review
   - projects.active

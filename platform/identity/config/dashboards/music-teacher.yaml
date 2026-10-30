@@ -3,6 +3,10 @@
 role: music-teacher
 title: "Music Teacher"
 extends: faculty
+module_roles:
+  - skill-progress-evaluator
+  - selection-process-panelist
+  - portfolio-reviewer
 widgets:
   - skill-progress.assessments-due
   - selection-process.to-judge
