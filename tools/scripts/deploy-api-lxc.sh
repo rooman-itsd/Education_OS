@@ -96,6 +96,14 @@ EOF
   scp -q "$TMP/.env.api" "$PVE:/tmp/eos.env.api"
   pve "pct push $CTID /tmp/eos.env.api $APP/infra/docker/.env.api --perms 600 && rm -f /tmp/eos.env.api"
 fi
+# The reverse proxy (nginx container PROXY_CTID) is the only peer whose X-Forwarded-For the API believes
+# (platform/api-gateway): written once, kept when it is already set.
+proxy_ip="$(pve "pct exec $PROXY_CTID -- hostname -I" 2>/dev/null | awk '{print $1}' || true)"
+if [ -n "$proxy_ip" ]; then
+  in_ct "grep -q '^EOS_TRUSTED_PROXIES=.' $APP/infra/docker/.env.api || printf '\nEOS_TRUSTED_PROXIES=%s\n' $proxy_ip >> $APP/infra/docker/.env.api"
+else
+  echo "   could not read the address of container $PROXY_CTID: set EOS_TRUSTED_PROXIES in .env.api by hand" >&2
+fi
 # An .env.api from before the eos_app role: give the API its own database password, generated in the container.
 in_ct "grep -q '^EOS_APP_DB_PASSWORD=.' $APP/infra/docker/.env.api || printf '\nEOS_APP_DB_PASSWORD=%s\n' \"\$(openssl rand -hex 24)\" >> $APP/infra/docker/.env.api"
 
