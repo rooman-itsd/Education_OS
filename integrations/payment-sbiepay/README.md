@@ -60,6 +60,18 @@ These are plain functions that `platform/scheduler` will call. They aren't wired
 - **`sandbox`** (the default) and **`live`**: use `SbiepayGateway`. Both need `PAYMENT_SBIEPAY_CALLBACK_BASE_URL`, so `payment_url` and the gateway's return URL are absolute. Without it, payment calls answer `503`. The gateway can't talk to SBIePay yet; see the limitations below.
 - **`mock`**: an in-memory gateway for development and tests. The redirect form posts straight back to the callback. It must be set explicitly (`PAYMENT_SBIEPAY_MODE=mock`) and is refused unless `EOS_DEV_MODE=true`, so a missing setting never selects it.
 
+## In the host app
+
+`apps/backend/config/modules.enabled.yaml` lists `payment-sbiepay` under `integrations:`, so the API mounts the router at
+`/api/v1/payment-sbiepay`, and `py-setup.sh`, the API image, CI and the auto-deploy install it, run its tests and upgrade
+its chain.
+- **Who reaches it:** the entitlement gate treats it like a module. An organisation reaches it only when its profile and
+  its plan both include `payment-sbiepay`. Every profile does, and so do the standard and premium plans; the trial plan
+  doesn't, so a trial organisation gets `403 module_not_entitled`.
+- **Without settings:** the API starts with no `PAYMENT_SBIEPAY_*` set, because settings are read per call. The read
+  endpoints (payments, the reconciliation summary and runs) work. Starting a payment, verify, refunds and reconciliation
+  runs answer `503` until the gateway settings exist (see Modes).
+
 ## Migrations
 
 `db/` holds this adapter's own Alembic chain:
@@ -96,4 +108,5 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
   - Reconciling subscription payments against the platform account is a platform task.
 - **Days use UTC.** That applies to the summary, reconciliation and list filters.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
-- **Not mounted in `apps/backend` and not run in CI yet.** Those files belong to other owners.
+- **The reconciliation summary's default day is UTC,** while the contract says the organisation's time zone. Pass `date` to choose the day.
+- **The Finance Staff widget `payment-sbiepay.reconciliation` isn't built yet.** `apps/frontend` loads widgets only from `modules/` and `platform/`, so an integration's widget needs the host to read an `integrations:` list first.
