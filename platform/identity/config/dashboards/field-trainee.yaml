@@ -3,6 +3,10 @@
 role: field-trainee
 title: "Field Trainee"
 extends: student
+module_roles:
+  - field-training-trainee
+  - projects-member
+  - skill-progress-viewer
 widgets:
   - field-training.my-placement
   - field-training.hours-logged

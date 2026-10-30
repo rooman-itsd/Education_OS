@@ -3,6 +3,9 @@
 role: farm-supervisor
 title: "Farm Supervisor"
 extends: faculty
+module_roles:
+  - field-training-supervisor
+  - projects-guide
 widgets:
   - field-training.trainees-to-assess
   - facility-booking.bookings-today

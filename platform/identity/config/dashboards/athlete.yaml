@@ -3,6 +3,9 @@
 role: athlete
 title: "Athlete"
 extends: student
+module_roles:
+  - sports-nutrition-health-athlete
+  - tournament-events-athlete
 widgets:
   - athlete-performance.training-schedule
   - athlete-performance.performance-trend
