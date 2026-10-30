@@ -85,6 +85,29 @@ reminder and invoice have no caller at all — see the limitations below.
 | `recover_stuck()` for abandoned messages and due retries, with a bounded recovery-failure policy | built as a **function**, nothing calls it |
 | Alembic chain `db/` with RLS, fresh and existing-database paths | built |
 
+## Reacting to other modules' events
+
+`application/consumers.py` is registered on event-bus's `eos.event_consumers` entry point, so the relay hands
+notification the events it consumes and the organisation's `org-admin` users get the mail:
+
+| Event | Template |
+|---|---|
+| `billing.trial.expiring` | `billing.trial.reminder` |
+| `billing.trial.expired` | `billing.trial.expired` |
+| `tenancy.organisation.verified` | `tenancy.organisation.verified` |
+| `tenancy.organisation.approved` | `tenancy.organisation.approved` |
+
+Delivery is at-least-once, so each message's `client_token` is `event:<event id>:<user id>`: a redelivered event
+returns the original message and mails nobody twice. A send that fails raises, so the relay retries the event
+with backoff and the recipients already mailed are deduplicated on the retry.
+
+Every template needs `organisation_name`, which an envelope does not carry and which notification may not read
+from tenancy directly. It comes from the `eos.organisation_directory` entry point (tenancy publishes
+`organisation_name`); if it cannot be resolved the consumer logs an error and sends nothing. The lookup is an
+entry point rather than a hook wired in `apps/backend` on purpose: **the relay runs in its own process** and
+never executes the API's lifespan, so a hook wired there would be missing exactly where these mails are sent.
+
+
 ## What this release does NOT do
 
 Do not read this module as a finished notification workflow. Missing, and blocking production use:
