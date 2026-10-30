@@ -16,3 +16,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: domain, API, athlete self-scope, cross-tenant leak, migration and contract-drift tests.
 - Review (#352): a lapsed clearance reads `not_cleared`; ids in request bodies must be UUIDs; same-day assessments
   keep the order they were recorded; dates may be one day ahead of UTC; benchmark matching documented in the README.
+- Event: publish athlete.updated with user_id when an athlete's user changes.
+- Clearance: lapses by the institution's local date (ATHLETE_PERFORMANCE_TIMEZONE) rather than the UTC date.
