@@ -14,7 +14,7 @@ import { login, type DashboardUser } from "./organisation";
 export interface LayoutWidget {
   /** `<module>.<widget>`, as the layout lists it. */
   id: string;
-  /** `<domain>/<module>` under modules/ (or `platform/<service>`), as modules.enabled.yaml lists it. */
+  /** `<domain>/<module>` under modules/ (or `platform/<service>`, `integrations/<adapter>`), as modules.enabled.yaml lists it. */
   module: string;
   /** The sprint batch (GitHub issue) that builds or built the module, for the skip message while it is missing. */
   batch: string;
@@ -32,9 +32,13 @@ export interface LayoutWidget {
 
 export const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
 
+/** The list a module is named in by kind: `platform/<service>` → platform, `integrations/<adapter>` → integrations. */
+const listOf = (module: string) => ["platform", "integrations"].find((kind) => module.startsWith(`${kind}/`));
+
 /** Whether apps/frontend registers a module's widgets (a listed, uncommented entry of modules.enabled.yaml). */
 export function enabled(module: string): boolean {
-  const entry = module.startsWith("platform/") ? module.slice("platform/".length) : module;
+  const kind = listOf(module);
+  const entry = kind ? module.slice(`${kind}/`.length) : module;
   return repo("apps/frontend/config/modules.enabled.yaml")
     .split("\n")
     .some((line) => line.replace(/#.*/, "").trim() === `- ${entry}`);
@@ -42,13 +46,14 @@ export function enabled(module: string): boolean {
 
 /**
  * Whether apps/backend mounts a module's API (a listed, uncommented entry of modules.enabled.yaml: `modules` takes
- * `<domain>/<module>`, `platform` takes the service name, which may be listed inline as `platform: [a, b]`).
+ * `<domain>/<module>`, `platform` and `integrations` take the name, which may be listed inline as `platform: [a, b]`).
  */
 export function backendEnabled(module: string): boolean {
   const text = repo("apps/backend/config/modules.enabled.yaml").split("\n").map((line) => line.replace(/#.*/, "").trim());
-  if (module.startsWith("platform/")) {
-    const service = module.slice("platform/".length);
-    const inline = text.find((line) => line.startsWith("platform:"));
+  const kind = listOf(module);
+  if (kind) {
+    const service = module.slice(`${kind}/`.length);
+    const inline = text.find((line) => line.startsWith(`${kind}:`));
     const names = (inline?.match(/\[(.*)\]/)?.[1] ?? "").split(",").map((n) => n.trim());
     return names.includes(service) || text.includes(`- ${service}`);
   }
@@ -57,7 +62,7 @@ export function backendEnabled(module: string): boolean {
 
 /** Whether the module's widgets entry point exports the widget id. */
 export function exported(w: LayoutWidget): boolean {
-  const dir = w.module.startsWith("platform/") ? w.module : `modules/${w.module}`;
+  const dir = listOf(w.module) ? w.module : `modules/${w.module}`;
   try {
     return repo(`${dir}/frontend/src/widgets/index.ts`).includes(`"${w.id}"`);
   } catch {
