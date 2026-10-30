@@ -3,7 +3,8 @@
 # eos-db-backup.timer; settings in /etc/eos/db-backup.env (see eos-db-backup.env.example).
 #
 # Writes a compressed pg_dump archive, proves it is readable, keeps KEEP_DAILY nightly and KEEP_WEEKLY
-# Sunday copies, optionally copies them to a second location, and records the last success.
+# Sunday copies, optionally mirrors them to a second location (same retention there), and records the last
+# success.
 # When Keycloak runs (ADR-0006: the `oidc` compose profile, its own Postgres in service kc-db), its
 # database is dumped the same way beside the API's, as keycloak-<time>.dump.
 set -euo pipefail
@@ -19,6 +20,9 @@ BACKUP_DIR="${EOS_BACKUP_DIR:-/var/backups/eos}"
 KEEP_DAILY="${EOS_BACKUP_KEEP_DAILY:-14}"
 KEEP_WEEKLY="${EOS_BACKUP_KEEP_WEEKLY:-8}"
 OFFSITE="${EOS_BACKUP_OFFSITE:-}"
+# Most dumps one run may delete at the second location: a normal night rotates out one daily and one weekly,
+# for the API and for Keycloak. More than that means the local folder lost dumps, and is refused.
+OFFSITE_MAX_PRUNE="${EOS_BACKUP_OFFSITE_MAX_PRUNE:-4}"
 LOCK="${EOS_BACKUP_LOCK:-/run/lock/eos-db-backup.lock}"
 DB_USER=eos
 DB_NAME=eos
@@ -110,11 +114,26 @@ done
 size="$(du -h "$file" | cut -f1)"
 [ -n "$kc_error" ] || echo "$stamp $size $(basename "$file")" >"$BACKUP_DIR/last-success"
 
+offsite_error=""
 if [ -n "$OFFSITE" ]; then
-  # No --delete: a wiped local disk must never wipe the second copy. Prune the destination there.
-  rsync -a "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly" "$BACKUP_DIR/last-success" "$OFFSITE" ||
+  # The second location keeps what the local folders keep, so a dump pruned here (and the data of an
+  # organisation purged since, DPDP) is gone there too. Deleting is limited twice: only our own dump files
+  # (P protects everything else at the destination), and only as many as a normal night rotates out, so a
+  # wiped or emptied local folder can never wipe the second copy with it.
+  sync=(rsync -a --filter='R eos-*.dump' --filter='R eos-*.dump.sha256' --filter='R keycloak-*.dump'
+    --filter='R keycloak-*.dump.sha256' --filter='P *')
+  plan="$("${sync[@]}" --delete --dry-run --itemize-changes "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly" "$OFFSITE")" ||
+    fail "local backup ok ($file), but $OFFSITE could not be read${kc_error:+; also: $kc_error}"
+  doomed="$(printf '%s\n' "$plan" | grep -c '^\*deleting .*\.dump$' || true)"
+  delete=(--delete)
+  if [ "$doomed" -gt "$OFFSITE_MAX_PRUNE" ] && [ "${EOS_BACKUP_OFFSITE_FORCE_PRUNE:-}" != 1 ]; then
+    delete=()
+    offsite_error="$OFFSITE holds $doomed dump(s) the local folders no longer have (more than $OFFSITE_MAX_PRUNE): kept, nothing deleted there. If the retention was lowered on purpose, run once with EOS_BACKUP_OFFSITE_FORCE_PRUNE=1; otherwise check $BACKUP_DIR"
+  fi
+  "${sync[@]}" "${delete[@]}" "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly" "$BACKUP_DIR/last-success" "$OFFSITE" ||
     fail "local backup ok ($file), but the copy to $OFFSITE failed${kc_error:+; also: $kc_error}"
 fi
+[ -z "$offsite_error" ] || fail "$offsite_error${kc_error:+; also: $kc_error}"
 [ -z "$kc_error" ] || fail "$kc_error (the API's $(basename "$file") is kept${OFFSITE:+ and copied to $OFFSITE})"
 if [ -n "$OFFSITE" ]; then
   log "ok: $(basename "$file") ($size)${kc_file:+ + $(basename "$kc_file")}, copied to $OFFSITE"
