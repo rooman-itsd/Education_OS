@@ -67,6 +67,31 @@ def current_plan(db: Session, organisation_id: str) -> dict:
     return plan.to_rule()
 
 
+def plan_limits(db: Session, organisation_id: str) -> dict:
+    """The organisation's plan limits as config/plans.yaml declares them (users, students, storage_gb). A missing
+    or zero entry is no limit."""
+    return current_plan(db, organisation_id)["limits"]
+
+
+def user_limit(db: Session, organisation_id: str) -> int | None:
+    """The ceiling on active users, or None for none. apps/backend wires this into identity's
+    `hooks.user_limit`, so create_user refuses the user that would exceed it (409 plan_limit_reached)."""
+    n = plan_limits(db, organisation_id).get("users")
+    return int(n) if n else None
+
+
+def usage_vs_limits(db: Session, organisation_id: str) -> dict:
+    """What the organisation uses against what its plan allows. Users are counted by identity (a declared
+    dependency); students and storage have no module counting them yet and are reported as null."""
+    from eos_identity.application.service import count_active_users
+
+    plan = current_plan(db, organisation_id)
+    limits = plan["limits"]
+    usage = {"users": count_active_users(db, organisation_id), "students": None, "storage_gb": None}
+    exceeded = [k for k, used in usage.items() if used is not None and limits.get(k) and used >= limits[k]]
+    return {"plan": plan["id"], "limits": limits, "usage": usage, "at_limit": exceeded}
+
+
 def start_trial(db: Session, *, organisation_id: str) -> Subscription:
     plan = get_plan(db, "trial")
     ends = utcnow() + timedelta(days=plan.trial_days or 30)

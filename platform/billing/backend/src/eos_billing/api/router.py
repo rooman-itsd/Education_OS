@@ -62,6 +62,15 @@ def subscription(
     return sub.to_dict()
 
 
+@router.get("/usage")
+def usage(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
+    """Usage against the plan's limits: users counted by identity; students and storage null until a module
+    counts them."""
+    return service.usage_vs_limits(db, p.organisation_id)
+
+
 @router.get("/invoices")
 def invoices(
     p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
