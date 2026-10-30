@@ -3,6 +3,22 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Notification now reacts to other modules' events (#316). It declared nine consumed events in its contract but
+  registered no consumer, so the relay delivered them to nobody, marked them published and sent nothing.
+  `application/consumers.py` is published on the `eos.event_consumers` entry point and mails the organisation's
+  active `org-admin` users for `billing.trial.expiring` (template `billing.trial.reminder`),
+  `billing.trial.expired`, `tenancy.organisation.verified` and `tenancy.organisation.approved`. The
+  `client_token` is derived from `reminder_key` when present (or the event id) and the recipient, so a redelivery
+  or a repeated scheduler run on the same day mails nobody twice; a failed send raises so the relay retries the
+  event.
+- `application/organisations.py`: the organisation display name every template needs, read from the
+  `eos.organisation_directory` entry point (tenancy publishes it) rather than a hook wired by `apps/backend`,
+  because the relay runs in its own process and never executes the API's lifespan. Unresolvable: the consumer
+  logs an error and sends nothing rather than mailing about "The trial for  has ended".
+- `contracts/events.yaml` consumes `billing.trial.expiring`. Not yet consumed: `billing.invoice.issued`, whose
+  template needs `invoice_number` and `due_on` whereas the event carries `invoice_id`, `amount` and `currency`;
+  and `tenancy.organisation.registered`, `tenancy.package.*`, `identity.user.created`,
+  `billing.subscription.started|upgraded`, which have no template yet.
 - Activation (#79 follow-up). Enabled in `apps/backend/config/modules.enabled.yaml`, so the host installs,
   mounts and migrates this module.
 - Permissions per the contract owner's scheme: catalogue blocks named with platform role ids (`member`,
