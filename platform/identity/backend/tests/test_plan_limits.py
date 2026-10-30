@@ -1,6 +1,8 @@
 """create_user refuses a person past the plan's user limit. The limit comes through `hooks.user_limit`, which the
 host wires to billing; alone, identity has no limit and the count is its own."""
 
+from types import SimpleNamespace
+
 import pytest
 from eos_core.db import SessionLocal, init_db
 from eos_core.tenant import organisation_scope
@@ -75,3 +77,45 @@ def test_super_admins_and_a_zero_limit_are_never_counted_against_a_plan(db, monk
         password="Passw0rd!x",
         roles=["super-admin"],
     )
+
+
+class _FakePostgres:
+    """Stands in for a Postgres session: records what lock_user_seats sends."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, dict]] = []
+
+    def get_bind(self):
+        return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+    def execute(self, statement, params=None):
+        self.sent.append((str(statement), params))
+
+
+def test_on_postgres_the_count_runs_under_a_per_organisation_advisory_lock():
+    """Review note on PR 363: two POST /users at limit - 1 must not both pass."""
+    fake = _FakePostgres()
+    service.lock_user_seats(fake, "org-1")
+    service.lock_user_seats(fake, "org-1")
+    service.lock_user_seats(fake, "org-2")
+    (sql, first), (_, again), (_, other) = fake.sent
+    assert sql == "SELECT pg_advisory_xact_lock(:space, :key)"  # released when the transaction ends
+    assert first["space"] == service.USER_SEATS_LOCK and first == again  # one lock per organisation
+    assert other["key"] != first["key"] and -(2**31) <= first["key"] < 2**31  # fits the int4 key
+
+
+def test_create_user_takes_the_lock_before_it_counts_and_only_under_a_limit(db, monkeypatch):
+    calls = []
+    count = service.count_active_users
+    monkeypatch.setattr(service, "lock_user_seats", lambda db, org: calls.append(("lock", org)))
+    monkeypatch.setattr(service, "count_active_users", lambda db, org: calls.append(("count", org)) or count(db, org))
+    with organisation_scope("org-e"):
+        _person(db, "org-e", 1)  # no limit wired: neither
+        assert calls == []
+        monkeypatch.setattr(service.hooks, "user_limit", lambda db, org: 5)
+        _person(db, "org-e", 2)
+    assert calls == [("lock", "org-e"), ("count", "org-e")]
+
+
+def test_on_sqlite_the_lock_is_a_no_op(db):
+    service.lock_user_seats(db, "org-f")  # no advisory locks in SQLite: nothing sent, nothing raised

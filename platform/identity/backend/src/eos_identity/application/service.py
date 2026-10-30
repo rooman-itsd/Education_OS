@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+
 from eos_core import events
 from eos_core.db import scoped
 from eos_core.security import create_token, hash_password, verify_password
 from eos_core.settings import settings
 from eos_core.tenant import get_current_organisation, organisation_scope, platform_scope
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..domain.models import User
@@ -70,6 +72,8 @@ def create_user(
     if organisation_id is not None:
         limit = hooks.user_limit(db, organisation_id)
         if limit is not None and limit > 0:
+            # Count and insert under the organisation's lock, or two requests at limit - 1 would both pass.
+            lock_user_seats(db, organisation_id)
             used = count_active_users(db, organisation_id)
             if used >= limit:
                 raise PlanLimitReachedError("users", limit, used)
@@ -85,6 +89,20 @@ def create_user(
     db.flush()
     events.publish(db, "identity.user.created", organisation_id, {"user_id": user.id, "roles": roles})
     return user
+
+
+# Namespace (first key) of the per-organisation advisory lock that serialises create_user's count-then-insert.
+USER_SEATS_LOCK = 0x454F5355  # "EOSU"
+
+
+def lock_user_seats(db: Session, organisation_id: str) -> None:
+    """Hold the organisation's seat lock until the transaction ends (pg_advisory_xact_lock): a second create_user
+    for the same organisation waits here, then counts the first one's user. Other organisations are not
+    blocked. SQLite (local dev and tests) has one writer at a time and no advisory locks: nothing to do."""
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    key = int.from_bytes(hashlib.sha256(organisation_id.encode("utf-8")).digest()[:4], "big", signed=True)
+    db.execute(text("SELECT pg_advisory_xact_lock(:space, :key)"), {"space": USER_SEATS_LOCK, "key": key})
 
 
 def list_users(db: Session) -> list[User]:

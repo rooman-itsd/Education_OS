@@ -8,7 +8,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `{"code": "plan_limit_reached", "limit": "users", "allowed", "used"}`. The limit comes through the new
   `hooks.user_limit(db, organisation_id)` (None, the default, is no limit), which apps/backend wires to
   billing's `user_limit`, so identity imports nothing. New `count_active_users(db, organisation_id)`, the
-  figure the limit and billing's usage count.
+  figure the limit and billing's usage count. On Postgres the count and the insert run under a
+  per-organisation advisory lock (`lock_user_seats`, `pg_advisory_xact_lock`), so two requests at the limit
+  minus one cannot both pass (review of PR 363).
 - No person may hold the `service` role. `create_user` refuses it before writing anything, so every way a
   role is assigned (`POST /users`, tenancy's registration, the super-admin seed) is covered, and `POST /users`
   answers 403. `current_principal` also drops it from any token, so a row or token that already carries it
