@@ -2,6 +2,8 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: nutritionist
 title: "Nutritionist"
+module_roles:
+  - sports-nutrition-health-nutritionist
 widgets:
   - sports-nutrition-health.athletes-on-plans
   - sports-nutrition-health.plan-reviews-due

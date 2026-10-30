@@ -3,6 +3,9 @@
 role: filmmaker
 title: "Filmmaker"
 extends: student
+module_roles:
+  - projects-member
+  - portfolio-learner
 widgets:
   - projects.my-projects
   - projects.milestones-due

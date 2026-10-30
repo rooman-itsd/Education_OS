@@ -3,6 +3,10 @@
 role: legal-mentor
 title: "Legal Mentor"
 extends: faculty
+module_roles:
+  - projects-guide
+  - selection-process-panelist
+  - field-training-supervisor
 widgets:
   - projects.to-review
   - selection-process.to-judge

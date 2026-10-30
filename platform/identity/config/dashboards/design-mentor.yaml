@@ -3,6 +3,11 @@
 role: design-mentor
 title: "Design Mentor"
 extends: faculty
+module_roles:
+  - portfolio-reviewer
+  - projects-guide
+  - selection-process-panelist
+  - field-training-supervisor
 widgets:
   - portfolio.reviews-pending
   - projects.to-review
