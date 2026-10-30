@@ -7,6 +7,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contracts: payments, gateway callback, verify, refunds, reconciliation, merchant account;
   events for succeeded, failed, expired, refunded payments and reconciliation mismatches; permissions and roles.
 - PRD (`docs/prd.md`).
+- Frontend (`frontend/`, package `@eos/payment-sbiepay`): the Finance Staff widget `payment-sbiepay.reconciliation`
+  (#335) shows today's succeeded, settled, pending and failed payments with their amounts, the latest run's mismatches
+  and when the day was last reconciled, with loading, empty and error-with-retry states, and its tests.
 - Adapter implementation (`src/eos_payment_sbiepay`):
   - payments with idempotent start, redirect page, gateway callback with double verification, verify, refunds;
   - reconciliation runs and the daily summary for the Finance Staff widget; merchant account;
