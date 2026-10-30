@@ -12,4 +12,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `platform:organisation:delete` for super-admin; events `tenancy.organisation.exported`, `.deletion_requested`,
   `.restored`, `.purged`. Migration `tenancy_0002` adds `delete_after`, `deletion_requested_by`,
   `deletion_requested_at`, `status_before_deletion` to `tenancy_organisation`.
+- TODO: schedule the purge once platform/scheduler (#357) is in; until then the super admin runs `POST .../purge`
+  after `delete_after`.
+- Purge: a foreign-key block is a 409 `purge_blocked` naming the table (was a 500); the `purged` event carries
+  `requested_by` and `requested_at`; export also redacts columns ending in `_token`, `_hash`, `_secret`.
 - Module scaffolded.

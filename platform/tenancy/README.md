@@ -44,6 +44,20 @@ Both are super admin operations under `/admin/organisations/{id}`, keys `platfor
   deferred on Postgres) and then the organisation row; it runs only after `delete_after`, or at once with
   `{"force": true}`. The purge is irreversible; export first.
 
+**Who runs the purge.** Retention is not enforced automatically: nothing schedules the purge today. The super
+admin runs `POST .../purge` once `delete_after` has passed; a scheduler job will call it when platform/scheduler
+(#357) is in. The `purged` event carries `requested_by` and `requested_at` from the deletion request, since the
+purge also removes that request's own outbox events. If a foreign key blocks the purge it answers 409
+`purge_blocked` naming the table, and nothing is deleted.
+
+**Backups (DPDP).** Purged data remains in database backups until they rotate out; the purge does not touch
+them. How long backups are kept is in [infra/backup-dr/README.md](../../infra/backup-dr/README.md) (defaults: 14
+nightly and 8 weekly copies, plus the second location).
+
+**Legal retention.** Invoices (`billing_invoice`) are included in the export. GST rules may require keeping
+them, and a legal-retention exception for `billing_invoice` is a decision for the lead (an issue is to be
+opened), so the purge today removes them.
+
 ## Data
 Schema `tenancy`: `organisation` (with `delete_after`, `deletion_requested_by/at` and `status_before_deletion`
 while a deletion is pending), `organisation_module` (toggles and overrides), `registration_token`,
