@@ -18,7 +18,7 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
 ## How a payment works
 
 1. The caller sends `POST /payments` with its `source_module`, `source_reference`, amount, `return_url` and an optional `notify_url`. The adapter returns `{reference, payment_url, expires_at}`. While a payment for the same source is open, a second request returns `409` with that payment's session. A unique index on open payments (`uq_payment_sbiepay_open_source`) enforces this in the database too, so two simultaneous requests can't both start a payment.
-2. The browser opens `payment_url`, an auto-submitting form to the gateway. The payment becomes `pending`.
+2. The browser opens `payment_url`, an auto-submitting form to the gateway. The payment becomes `pending`. The page sets its own Content-Security-Policy (its script by nonce, forms only to the gateway's origin); the API host keeps it instead of its JSON default, which would block the auto-submit.
 3. The gateway posts its response to `POST /callbacks/sbiepay`. The adapter never trusts that response alone. It asks the gateway again (double verification), records `succeeded` or `failed`, publishes the event, and redirects the browser to `return_url?reference=...&status=...`.
 4. A payment can reach `expired` in two ways:
    - its session was never opened before it ran out;

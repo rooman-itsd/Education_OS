@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The redirect page (`GET /payments/{reference}/redirect`) sets its own Content-Security-Policy: its one
+  inline script by a per-page nonce (the `onload` attribute is gone), forms only to the gateway's origin.
+  The API host's default `default-src 'none'` (platform/api-gateway) would otherwise block the auto-submit
+  and leave the payer on a blank page (review of PR 363).
 - Module scaffolded.
 - Contracts: payments, gateway callback, verify, refunds, reconciliation, merchant account;
   events for succeeded, failed, expired, refunded payments and reconciliation mismatches; permissions and roles.

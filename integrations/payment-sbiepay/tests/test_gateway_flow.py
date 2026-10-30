@@ -1,6 +1,7 @@
 """The payer's journey through the gateway: redirect, callback, double verification, events, notifications."""
 
 import json
+import re
 from datetime import timedelta
 from decimal import Decimal
 from urllib.parse import parse_qs, urlparse
@@ -107,6 +108,28 @@ def test_redirect_page_escapes_and_posts_to_the_callback(client, org):
     assert page.headers["content-type"].startswith("text/html")
     assert f'action="{PREFIX}/callbacks/sbiepay"' in page.text
     assert _payment(s["reference"]).status == "pending"
+
+
+def test_the_redirect_page_brings_a_policy_that_lets_its_script_run_and_its_form_post(client, org):
+    """The API host's default Content-Security-Policy (default-src 'none') would block the auto-submit and leave
+    the payer on a blank page; the page sets its own, which the host keeps."""
+    s = start(client, org.admin)
+    page = client.get(s["payment_url"])
+    csp = page.headers["content-security-policy"]
+    directives = dict(d.strip().split(" ", 1) for d in csp.split(";"))
+    assert directives["default-src"] == "'none'" and directives["frame-ancestors"] == "'none'"
+    # the one inline script carries the nonce the policy allows; no inline event handler (a nonce cannot allow it)
+    nonce = re.search(r'<script nonce="([^"]+)">document\.forms\[0\]\.submit\(\)</script>', page.text).group(1)
+    assert directives["script-src"] == f"'nonce-{nonce}'" and "onload" not in page.text
+    assert directives["form-action"] == "'self'"  # the mock gateway posts back to this host
+    again = client.get(start(client, org.admin)["payment_url"])
+    assert again.headers["content-security-policy"] != csp  # a fresh nonce per page
+
+
+def test_the_redirect_policy_allows_the_gateway_origin_only():
+    csp = service.handoff_csp("https://www.sbiepay.sbi/secure/AggregatorHostedListener?x=1", "n0nce")
+    assert "form-action https://www.sbiepay.sbi;" in csp and "script-src 'nonce-n0nce';" in csp
+    assert "form-action 'self'" in service.handoff_csp("/api/v1/payment-sbiepay/callbacks/sbiepay", "n")
 
 
 def test_unreadable_or_unknown_gateway_responses(client):

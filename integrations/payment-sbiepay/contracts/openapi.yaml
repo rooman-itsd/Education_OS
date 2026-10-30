@@ -62,7 +62,14 @@ paths:
       security: []
       parameters: [{ $ref: "#/components/parameters/Reference" }]
       responses:
-        "200": { description: Auto-submitting form to the gateway, content: { text/html: { schema: { type: string } } } }
+        "200":
+          description: >-
+            Auto-submitting form to the gateway. Served with its own Content-Security-Policy (`default-src
+            'none'; script-src 'nonce-<per page>'; form-action <gateway origin>; base-uri 'none';
+            frame-ancestors 'none'`), which the API host keeps in place of its JSON default.
+          headers:
+            Content-Security-Policy: { schema: { type: string } }
+          content: { text/html: { schema: { type: string } } }
         "410": { description: Session expired or payment already finished }
   /payments/{reference}/verify:
     post:
