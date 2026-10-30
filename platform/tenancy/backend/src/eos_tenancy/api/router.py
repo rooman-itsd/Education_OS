@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+
 from eos_core.db import get_db
 from eos_core.settings import settings
 from eos_identity.api.deps import Principal, require
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -66,6 +68,15 @@ class Reject(BaseModel):
 class Impersonate(BaseModel):
     user_id: str
     reason: str
+
+
+class DeletionRequest(BaseModel):
+    reason: str = ""
+    confirm_slug: str | None = None
+
+
+class PurgeRequest(BaseModel):
+    force: bool = False
 
 
 @router.get("/academy-types")
@@ -229,5 +240,68 @@ def admin_impersonate(
         return service.impersonate(
             db, organisation_id=org_id, user_id=body.user_id, super_admin_id=p.user_id, reason=body.reason
         )
+    except TenancyError as e:
+        raise _err(e) from e
+
+
+@router.get("/admin/organisations/{org_id}/export")
+def admin_export(
+    org_id: str,
+    p: Principal = Depends(require("platform:organisation:export")),
+    db: Session = Depends(get_db),
+):
+    """Everything held about the organisation as one JSON document (DPDP data export), as a download."""
+    try:
+        doc = service.export_organisation(db, org_id, actor=p.user_id)
+    except TenancyError as e:
+        raise _err(e) from e
+    filename = f"{doc['organisation']['slug']}-export-{doc['exported_at'][:10]}.json"
+    return Response(
+        content=json.dumps(doc, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.delete("/admin/organisations/{org_id}")
+def admin_delete(
+    org_id: str,
+    body: DeletionRequest | None = None,
+    p: Principal = Depends(require("platform:organisation:delete")),
+    db: Session = Depends(get_db),
+):
+    """Archive the organisation and start the retention period; its rows are purged after delete_after."""
+    body = body or DeletionRequest()
+    try:
+        return service.request_deletion(
+            db, org_id, requested_by=p.user_id, reason=body.reason, confirm_slug=body.confirm_slug
+        ).to_dict()
+    except TenancyError as e:
+        raise _err(e) from e
+
+
+@router.post("/admin/organisations/{org_id}/restore")
+def admin_restore(
+    org_id: str,
+    p: Principal = Depends(require("platform:organisation:delete")),
+    db: Session = Depends(get_db),
+):
+    """Cancel a pending deletion: the organisation gets its previous status back."""
+    try:
+        return service.restore_organisation(db, org_id, actor=p.user_id).to_dict()
+    except TenancyError as e:
+        raise _err(e) from e
+
+
+@router.post("/admin/organisations/{org_id}/purge")
+def admin_purge(
+    org_id: str,
+    body: PurgeRequest | None = None,
+    p: Principal = Depends(require("platform:organisation:delete")),
+    db: Session = Depends(get_db),
+):
+    """Delete every row of the organisation for good, once the retention period has passed (or with force)."""
+    try:
+        return service.purge_organisation(db, org_id, actor=p.user_id, force=bool(body and body.force))
     except TenancyError as e:
         raise _err(e) from e
