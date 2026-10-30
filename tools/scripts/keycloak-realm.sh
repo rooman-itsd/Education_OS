@@ -21,7 +21,10 @@
 #                            the given redirect URIs, web origin +, default scopes basic email profile
 #                            (basic carries `sub` into access tokens since Keycloak 25)
 #   audience mapper          puts the client id in the access token's aud, so the API accepts it
-# Needs curl and python3 (for JSON). Run it from a laptop or the API host.
+# Needs curl and python3 (for JSON). The public proxy answers /auth/admin/ and the master realm only from the
+# LAN (infra/docker/nginx.public-vhost.conf), so run it from the office network, or on the API host with
+# KEYCLOAK_URL=http://<keycloak-bind-address>:8080/auth. The password and the admin token reach curl on stdin,
+# never on its command line (where `ps` would show them).
 set -euo pipefail
 
 SLUG="${1:?usage: keycloak-realm.sh <slug> [redirect-uri ...]}"
@@ -45,38 +48,57 @@ fi
 
 # ---- helpers -------------------------------------------------------------------------------------------
 json() { python3 -c 'import json,sys; print(json.dumps(json.loads(sys.stdin.read())))'; }
-jget() { python3 -c 'import json,sys; d=json.load(sys.stdin); v=d
+# jget <a.0.b>: one value from the JSON on stdin; empty when any step is missing (an empty list, a missing
+# key, no body at all), never an error, so `set -e` does not end the script on a realm with no client yet.
+jget() { python3 -c '
+import json, sys
+try:
+    v = json.loads(sys.stdin.read() or "null")
+except ValueError:
+    v = None
 for k in sys.argv[1].split("."):
-    v = v[int(k)] if isinstance(v, list) else v.get(k)
-    if v is None: break
+    if isinstance(v, list):
+        v = v[int(k)] if k.isdigit() and int(k) < len(v) else None
+    elif isinstance(v, dict):
+        v = v.get(k)
+    else:
+        v = None
 print("" if v is None else v)' "$1"; }
-jlist() { python3 -c 'import json,sys; print(json.dumps([json.loads(a) for a in sys.argv[1:]]))' "$@"; }
+jstr() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
+jlist() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
 
-TOKEN="$(curl -fsS -X POST "$URL/realms/master/protocol/openid-connect/token" \
-  -d grant_type=password -d client_id=admin-cli -d "username=$ADMIN" --data-urlencode "password=$KEYCLOAK_ADMIN_PASSWORD" |
-  jget access_token)"
+TOKEN="$(printf '%s' "$KEYCLOAK_ADMIN_PASSWORD" |
+  curl -fsS -X POST "$URL/realms/master/protocol/openid-connect/token" \
+    -d grant_type=password -d client_id=admin-cli --data-urlencode "username=$ADMIN" --data-urlencode "password@-" |
+  jget access_token)" || TOKEN=""
 unset KEYCLOAK_ADMIN_PASSWORD
-[ -n "$TOKEN" ] || { echo "error: no admin token (wrong user or password?)" >&2; exit 1; }
-api() { # api <method> <path> [json body]  -> body; status in $STATUS
+[ -n "$TOKEN" ] || { echo "error: no admin token from $URL (wrong user or password, or not on the LAN?)" >&2; exit 1; }
+
+# api <method> <path> [json body]: sets BODY (the response) and STATUS (the HTTP code, 000 when unreachable)
+# in this shell. Call it as a plain command, never inside $(...): a subshell would lose both. The bearer token
+# goes to curl as a --config line on stdin.
+BODY="" STATUS=""
+api() {
   local method="$1" path="$2" body="${3:-}" out
-  if [ -n "$body" ]; then
-    out="$(curl -sS -o /dev/stdout -w '\n%{http_code}' -X "$method" "$URL/admin/realms$path" \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data "$body")"
+  local args=(-sS --config - -w '\n%{http_code}' -X "$method" "$URL/admin/realms$path")
+  if [ -n "$body" ]; then args+=(-H "Content-Type: application/json" --data-binary "$body"); fi
+  if out="$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl "${args[@]}")"; then
+    STATUS="${out##*$'\n'}"
+    BODY="${out%$'\n'*}"
   else
-    out="$(curl -sS -o /dev/stdout -w '\n%{http_code}' -X "$method" "$URL/admin/realms$path" -H "Authorization: Bearer $TOKEN")"
+    STATUS=000
+    BODY=""
   fi
-  STATUS="${out##*$'\n'}"
-  printf '%s' "${out%$'\n'*}"
 }
 expect() { # expect <ok-codes-regex> <what>
-  [[ "$STATUS" =~ ^($1)$ ]] || { echo "error: $2 answered HTTP $STATUS" >&2; exit 1; }
+  [[ "$STATUS" =~ ^($1)$ ]] || { echo "error: $2 answered HTTP $STATUS${BODY:+: $BODY}" >&2; exit 1; }
 }
 
 # ---- realm ---------------------------------------------------------------------------------------------
 REALM_BODY="$(cat <<EOF | json
 {
   "realm": "$SLUG",
-  "displayName": "$DISPLAY",
+  "displayName": $(jstr "$DISPLAY"),
   "enabled": true,
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
@@ -89,18 +111,18 @@ REALM_BODY="$(cat <<EOF | json
 }
 EOF
 )"
-api GET "/$SLUG" >/dev/null
+api GET "/$SLUG"
 if [ "$STATUS" = 404 ]; then
-  api POST "" "$REALM_BODY" >/dev/null; expect "201" "creating realm $SLUG"
+  api POST "" "$REALM_BODY"; expect "201" "creating realm $SLUG"
   echo "realm $SLUG: created"
 else
   expect "200" "reading realm $SLUG"
-  api PUT "/$SLUG" "$REALM_BODY" >/dev/null; expect "204" "updating realm $SLUG"
+  api PUT "/$SLUG" "$REALM_BODY"; expect "204" "updating realm $SLUG"
   echo "realm $SLUG: exists, settings refreshed"
 fi
 
 # ---- the web shell's public client ----------------------------------------------------------------------
-redirects="$(printf '"%s" ' "${REDIRECTS[@]}" | sed 's/ $//; s/" "/", "/g')"
+redirects="$(jlist "${REDIRECTS[@]}")"
 CLIENT_BODY="$(cat <<EOF | json
 {
   "clientId": "$CLIENT_ID",
@@ -113,7 +135,7 @@ CLIENT_BODY="$(cat <<EOF | json
   "directAccessGrantsEnabled": false,
   "serviceAccountsEnabled": false,
   "fullScopeAllowed": false,
-  "redirectUris": [$redirects],
+  "redirectUris": $redirects,
   "webOrigins": ["+"],
   "defaultClientScopes": ["basic", "email", "profile", "web-origins"],
   "optionalClientScopes": [],
@@ -124,14 +146,16 @@ CLIENT_BODY="$(cat <<EOF | json
 }
 EOF
 )"
-existing="$(api GET "/$SLUG/clients?clientId=$CLIENT_ID")"; expect "200" "listing clients"
-client_uuid="$(printf '%s' "$existing" | jget 0.id)"
+api GET "/$SLUG/clients?clientId=$CLIENT_ID"; expect "200" "listing clients"
+client_uuid="$(printf '%s' "$BODY" | jget 0.id)"
 if [ -z "$client_uuid" ]; then
-  api POST "/$SLUG/clients" "$CLIENT_BODY" >/dev/null; expect "201" "creating client $CLIENT_ID"
-  client_uuid="$(api GET "/$SLUG/clients?clientId=$CLIENT_ID" | jget 0.id)"
+  api POST "/$SLUG/clients" "$CLIENT_BODY"; expect "201" "creating client $CLIENT_ID"
+  api GET "/$SLUG/clients?clientId=$CLIENT_ID"; expect "200" "reading client $CLIENT_ID back"
+  client_uuid="$(printf '%s' "$BODY" | jget 0.id)"
+  [ -n "$client_uuid" ] || { echo "error: client $CLIENT_ID was created but cannot be read back" >&2; exit 1; }
   echo "client $CLIENT_ID: created"
 else
-  api PUT "/$SLUG/clients/$client_uuid" "$CLIENT_BODY" >/dev/null; expect "204" "updating client $CLIENT_ID"
+  api PUT "/$SLUG/clients/$client_uuid" "$CLIENT_BODY"; expect "204" "updating client $CLIENT_ID"
   echo "client $CLIENT_ID: exists, settings refreshed"
 fi
 
@@ -152,11 +176,20 @@ MAPPER_BODY="$(cat <<EOF | json
 }
 EOF
 )"
-mappers="$(api GET "/$SLUG/clients/$client_uuid/protocol-mappers/models")"; expect "200" "listing mappers"
-if printf '%s' "$mappers" | python3 -c 'import json,sys; sys.exit(0 if any(m.get("name")==sys.argv[1] for m in json.load(sys.stdin)) else 1)' "$MAPPER_NAME"; then
-  echo "audience mapper: exists"
+api GET "/$SLUG/clients/$client_uuid/protocol-mappers/models"; expect "200" "listing mappers"
+mapper_id="$(printf '%s' "$BODY" | python3 -c '
+import json, sys
+try:
+    ms = json.loads(sys.stdin.read() or "[]")
+except ValueError:
+    ms = []
+print(next((m.get("id", "") for m in ms if isinstance(m, dict) and m.get("name") == sys.argv[1]), ""))' "$MAPPER_NAME")"
+if [ -n "$mapper_id" ]; then
+  body="$(printf '%s' "$MAPPER_BODY" | python3 -c 'import json,sys; print(json.dumps({**json.load(sys.stdin), "id": sys.argv[1]}))' "$mapper_id")"
+  api PUT "/$SLUG/clients/$client_uuid/protocol-mappers/models/$mapper_id" "$body"; expect "204" "updating the audience mapper"
+  echo "audience mapper: exists, settings refreshed"
 else
-  api POST "/$SLUG/clients/$client_uuid/protocol-mappers/models" "$MAPPER_BODY" >/dev/null; expect "201" "creating the audience mapper"
+  api POST "/$SLUG/clients/$client_uuid/protocol-mappers/models" "$MAPPER_BODY"; expect "201" "creating the audience mapper"
   echo "audience mapper: created"
 fi
 
@@ -164,7 +197,7 @@ cat <<EOF
 
 done. Issuer: $URL/realms/$SLUG
   sign-in page:   $URL/realms/$SLUG/account
-  admin console:  $URL/admin/$SLUG/console  (users, identity providers for Google / Microsoft / SAML)
+  admin console:  $URL/admin/$SLUG/console  (office LAN only; users, identity providers for Google / Microsoft / SAML)
 On the API host, add "$SLUG" to EOS_OIDC_REALMS in infra/docker/.env.api (comma-separated) and
 \`docker compose ... up -d\` the api service. Users must exist in platform/identity with the same email
 before their first sign-in (ADR-0006 decision 4): the realm authenticates, identity decides who has an account.
