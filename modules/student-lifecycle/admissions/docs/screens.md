@@ -1,22 +1,13 @@
-# admissions — screen inventory
+# Screens and UI — admissions
 
-The screens and widgets the contracts are designed to support.
+This module owns no full-page staff screens in this release; staff work through the super admin
+console's applications queue and detail views, which call this module's `/applications`,
+`/merit-lists` and `/reports` endpoints directly.
 
-## Public (web-portal-cms hosts the entry point; these are admissions' own pages)
+The public Track Application page is exported by this module's frontend as `<TrackApplicationPage
+orgSlug="..." />` for the host to mount at a public URL (e.g. `#/apply/{org_slug}/track`).
 
-Every public page is reached under the organisation's slug, e.g. `/apply/{org_slug}/track`.
-
-| Screen | Purpose | Auth |
-|---|---|---|
-| Application form | Submit a new application | None (public) |
-| Track application | Look up status and documents by reference number + email | None (public, email-verified) |
-| Document upload | Attach a supporting document to an in-progress application | None (public, email-verified) |
-| Offer decision | Accept or decline an offer | None (public, email-verified) |
-
-Applicants have no account (`docs/prd.md` §6), so the Track application page is their view of
-their own application — what an applicant dashboard would otherwise show.
-
-## Staff (admissions dashboard / console)
+## Staff actions (mounted in the super admin console)
 
 | Screen | Purpose | Primary permission |
 |---|---|---|
@@ -32,11 +23,9 @@ their own application — what an applicant dashboard would otherwise show.
 | Widget id | Kind | Permission | Data | Shows |
 |---|---|---|---|---|
 | `admissions.funnel` | chart | `admissions:report:read` | `GET /reports/funnel` | Applied → eligible → offered → accepted, with conversion between stages |
-| `admissions.application-status` | list | `admissions:application:read` | `GET /applications` | Latest applications with their status |
-| `admissions.pending-documents` | list | `admissions:document:verify` | `GET /documents?verification_status=pending` | Documents waiting for verification, oldest first |
+| `admissions.application-status` | list | `admissions:self:read` | `GET /me/applications` | The applicant's linked application, its status and any offer (or link form if unlinked) |
+| `admissions.pending-documents` | list | `admissions:self:read` | `GET /me/applications` | Documents waiting for verification or rejected, with rejection notes |
 
 `admissions.funnel` is on the Management (VC, Registrar) layout. `admissions.application-status`
-and `admissions.pending-documents` are staff widgets: `platform/identity/config/dashboards/applicant.yaml`
-still lists them, and the shell hides them there because an applicant holds no permission (and has
-no session). Placing them on a staff layout is a change to the layout files, which the
-Architecture lead owns; it is not made here.
+and `admissions.pending-documents` are on the Applicant dashboard (`platform/identity/config/dashboards/applicant.yaml`).
+Applicants sign in with their identity account, hold `admissions:self:read`, and see their own applications and documents.

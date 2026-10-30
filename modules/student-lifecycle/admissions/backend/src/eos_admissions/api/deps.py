@@ -18,6 +18,7 @@ PERM_DOCUMENT_VERIFY = "admissions:document:verify"
 PERM_MERIT_LIST_MANAGE = "admissions:merit-list:manage"
 PERM_OFFER_MANAGE = "admissions:offer:manage"
 PERM_REPORT_READ = "admissions:report:read"
+PERM_SELF_READ = "admissions:self:read"
 
 
 def current_actor(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> Actor:
