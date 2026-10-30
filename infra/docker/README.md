@@ -236,18 +236,27 @@ nano .env.api   # COMPOSE_PROFILES=oidc, KEYCLOAK_ADMIN_PASSWORD, KC_HOSTNAME=ht
 cd /opt/education-os
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps   # keycloak healthy after ~1 min
-curl -s http://127.0.0.1:8080/auth/realms/master | head -c 120
+curl -s http://$(grep ^KEYCLOAK_BIND= infra/docker/.env.api | cut -d= -f2):8080/auth/realms/master | head -c 120
 ```
+
+Keycloak's port is published on `KEYCLOAK_BIND` only (the container's LAN address, which
+`deploy-api-lxc.sh` writes into `.env.api`; unset, `127.0.0.1`), never on all interfaces. The container is
+capped at 1 GB (`mem_limit`) with a 512 MB Java heap (`JAVA_OPTS_KC_HEAP`), so it cannot starve the API and
+the databases beside it. On the host itself, check it at `http://$KEYCLOAK_BIND:8080/auth/realms/master`.
 
 Then in the nginx container re-run `wire-api-proxy.sh <api-host-ip>` (it now adds the `/auth/` location
 beside `/api/`; `tools/scripts/deploy-api-lxc.sh` does this), and check
-`curl -s https://educationos.futureacad.ae/auth/realms/master | head -c 120`. The admin console is at
-`/auth/admin/` with `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`; those two are read only at the first start
-(change the password in the console afterwards). `KEYCLOAK_DB_PASSWORD`, like `EOS_DB_PASSWORD`, is read by
-Postgres only when it creates its volume.
+`curl -s https://educationos.futureacad.ae/auth/realms/pilot | head -c 120` for a realm you created. The
+proxy answers `/auth/admin/` (admin console and Admin API) and `/auth/realms/master/` (where administrators
+sign in) only from LAN addresses (127.0.0.1, 10/8, 172.16/12, 192.168/16) and 404 for everyone else, so
+from outside the office the master realm and console are not reachable. The admin console is at
+`/auth/admin/` on the office network with `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`; those two are read
+only at the first start (change the password in the console afterwards). `KEYCLOAK_DB_PASSWORD`, like
+`EOS_DB_PASSWORD`, is read by Postgres only when it creates its volume.
 
-Create an organisation's realm with `tools/scripts/keycloak-realm.sh <slug>` (platform/identity's README
-explains what it sets up), add the slug to `EOS_OIDC_REALMS` and `up -d` again. The nightly backup dumps
+Create an organisation's realm with `tools/scripts/keycloak-realm.sh <slug>` from the office network, or
+on the API host with `KEYCLOAK_URL=http://<KEYCLOAK_BIND>:8080/auth` (platform/identity's README explains
+what it sets up), add the slug to `EOS_OIDC_REALMS` and `up -d` again. The nightly backup dumps
 the Keycloak database beside the API's when the service runs (`../backup-dr/README.md`). Allow port 8080
 only from the proxy, as for port 8000 above (a second rule, dest. port `8080`, source `<nginx-container-ip>`);
 it is only ever reached through `/auth/`.

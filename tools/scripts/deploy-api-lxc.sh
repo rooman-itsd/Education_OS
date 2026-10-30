@@ -98,6 +98,8 @@ EOF
 fi
 # An .env.api from before the eos_app role: give the API its own database password, generated in the container.
 in_ct "grep -q '^EOS_APP_DB_PASSWORD=.' $APP/infra/docker/.env.api || printf '\nEOS_APP_DB_PASSWORD=%s\n' \"\$(openssl rand -hex 24)\" >> $APP/infra/docker/.env.api"
+# Keycloak (profile `oidc`) publishes its port on the container's LAN address only, where the proxy reaches it.
+in_ct "grep -q '^KEYCLOAK_BIND=.' $APP/infra/docker/.env.api || { sed -i '/^KEYCLOAK_BIND=/d' $APP/infra/docker/.env.api; printf '\nKEYCLOAK_BIND=%s\n' $CT_IP >> $APP/infra/docker/.env.api; }"
 
 # ---------- 4. build and start ----------
 # `up` runs the migrate service first (eos_app role, migration chains; infra/docker/migrate.sh) and starts the

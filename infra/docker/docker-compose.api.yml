@@ -112,8 +112,14 @@ services:
       # the first sign-in; later starts ignore these.
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      # A fixed heap instead of Keycloak's default share of the host's memory, inside the container cap below,
+      # so the JVM cannot crowd out the API and the two databases on the same host.
+      JAVA_OPTS_KC_HEAP: "-Xms256m -Xmx512m"
+    mem_limit: 1g
+    # Published on one address only: the API host's LAN address the public proxy reaches (deploy-api-lxc.sh
+    # writes KEYCLOAK_BIND=<container ip> into .env.api), else loopback. Never all interfaces.
     ports:
-      - "${KEYCLOAK_PORT:-8080}:8080"
+      - "${KEYCLOAK_BIND:-127.0.0.1}:${KEYCLOAK_PORT:-8080}:8080"
     healthcheck:
       # The management port (9000) serves /auth/health; the image has no curl, so bash opens the socket.
       test:
