@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from eos_core import events
-from eos_core.db import scoped
+import jwt
+from eos_core import events, oidc
+from eos_core.db import SessionLocal, scoped
 from eos_core.security import create_token, hash_password, verify_password
 from eos_core.settings import settings
 from eos_core.tenant import get_current_organisation, platform_scope
@@ -13,6 +14,28 @@ from ..domain.models import User
 
 class AuthError(Exception):
     pass
+
+
+class NoAccountError(AuthError):
+    """A verified realm identity that no user of the organisation carries (ADR-0006 decision 4: Keycloak
+    authenticates, identity decides who has an account)."""
+
+
+class OIDCNotConfiguredError(AuthError):
+    """The slug has no realm, or OIDC is off on this API."""
+
+
+# Roles that name something other than a person. identity_user holds people only (domain/models.py: "A person who
+# can sign in"), so no user may carry one. `service` exists so notification:message:send has a holder in the
+# catalogue; the modules that send do it in-process through notification's application service, with no
+# principal at all, so no person ever needs it. Refused here, where every role assignment passes (the users
+# route, organisation registration in tenancy, the super-admin seed), and ignored again in current_principal
+# for any token or row that predates this check.
+NOT_A_PERSON_ROLES = frozenset({"service"})
+
+
+class RoleNotAssignableError(Exception):
+    """A role no person may hold. Raised before anything is written."""
 
 
 class OrganisationHooks:
@@ -39,6 +62,9 @@ def create_user(
     roles: list[str],
     is_super_admin: bool = False,
 ) -> User:
+    refused = NOT_A_PERSON_ROLES.intersection(roles or [])
+    if refused:
+        raise RoleNotAssignableError(f"{', '.join(sorted(refused))} is not a role a person can hold")
     user = User(
         organisation_id=organisation_id,
         email=email.lower(),
@@ -84,10 +110,18 @@ def authenticate(db: Session, *, email: str, password: str, organisation_slug: s
     token = create_token(
         user_id=user.id,
         organisation_id=user.organisation_id,
-        roles=list(user.roles or []),
+        roles=person_roles(user.roles),
         super_admin=user.is_super_admin,
     )
     return user, token
+
+
+def person_roles(roles: list[str] | None) -> list[str]:
+    """The roles a token may carry for a person: a stored row that predates the create_user refusal still lists
+    `service`, and feature modules compute permissions from the token's roles claim directly (their api/deps.py
+    call eos_core.config.permissions_for on it, never current_principal), so the claim itself must not carry a
+    role no person may hold. Used by every token minted for a user (login here, impersonation in tenancy)."""
+    return [r for r in (roles or []) if r not in NOT_A_PERSON_ROLES]
 
 
 def seed_super_admin(db: Session) -> None:
@@ -113,3 +147,110 @@ def seed_super_admin(db: Session) -> None:
 
 def current_org_or_none() -> str | None:
     return get_current_organisation()
+
+
+# ---- OpenID Connect (ADR-0006) -------------------------------------------------------------------------
+
+
+def oidc_config(db: Session, slug: str) -> dict | None:
+    """What the web shell needs to start the authorization code flow for `slug`, or None when the organisation
+    has no realm (EOS_OIDC_REALMS), does not exist or is not active. Public: it holds no secret."""
+    if not oidc.realm_exists(slug):
+        return None
+    org_id = hooks.id_for_slug(db, slug)
+    if not org_id or hooks.status(db, org_id) != "active":
+        return None
+    return oidc.endpoints(slug)
+
+
+def user_for_oidc_claims(db: Session, claims: dict) -> User:
+    """The user a verified realm token names: by (organisation of the realm, `oidc_subject`); on first sight by
+    the token's verified email, which links the subject to that user. The super admin has no organisation and
+    is never matched. Raises NoAccountError when nobody matches, AuthError when the organisation or the user is
+    not active."""
+    realm, subject = claims.get("realm"), claims.get("sub")
+    if not realm or not subject:
+        raise AuthError("token names no realm subject")
+    org_id = hooks.id_for_slug(db, realm)
+    if not org_id:
+        raise AuthError("unknown organisation")
+    status = hooks.status(db, org_id)
+    if status != "active":
+        raise AuthError(f"organisation is {status or 'missing'}")
+    with platform_scope():
+        user = db.scalar(select(User).where(User.organisation_id == org_id, User.oidc_subject == subject))
+        if user is None:
+            email = claims.get("email")
+            if email and claims.get("email_verified") is True:
+                user = db.scalar(
+                    select(User).where(
+                        User.organisation_id == org_id,
+                        User.email == email.lower(),
+                        User.oidc_subject.is_(None),
+                        User.status == "active",
+                    )
+                )
+                if user is not None:
+                    user.oidc_subject = subject
+                    events.publish(db, "identity.user.oidc_linked", org_id, {"user_id": user.id, "realm": realm})
+                    db.commit()
+    if user is None:
+        raise NoAccountError("no_account")
+    if user.status != "active":
+        raise AuthError("user disabled")
+    return user
+
+
+def platform_claims(user: User, claims: dict) -> dict:
+    """The platform's own claim shape for a user a realm token names, so `current_principal` and the module
+    dependencies read it like one of our tokens. `sa` is always false: the super admin never uses OIDC."""
+    return {
+        "sub": user.id,
+        "org": user.organisation_id,
+        "roles": person_roles(user.roles),
+        "sa": False,
+        "iat": claims.get("iat"),
+        "exp": claims.get("exp"),
+        "oidc": {"realm": claims.get("realm"), "sub": claims.get("sub")},
+    }
+
+
+def resolve_oidc_claims(claims: dict) -> dict:
+    """eos_core.oidc.hooks.resolve_claims: apps/backend registers this at startup. Opens its own session
+    because the call comes from inside decode_token, which has none; refusals become OIDCError so the
+    caller's `except jwt.PyJWTError` answers 401."""
+    db = SessionLocal()
+    try:
+        try:
+            user = user_for_oidc_claims(db, claims)
+        except AuthError as e:
+            raise oidc.OIDCError(str(e)) from e
+        return platform_claims(user, claims)
+    finally:
+        db.close()
+
+
+def authenticate_oidc(db: Session, *, slug: str, code: str, code_verifier: str, redirect_uri: str) -> tuple[User, str]:
+    """Finish the authorization code flow the web shell started: redeem the code at the realm's token endpoint,
+    verify the id token against the realm's keys, map it to a user, and issue the platform's own token exactly as
+    the password login does, so nothing else in the API changes."""
+    if oidc_config(db, slug) is None:
+        raise OIDCNotConfiguredError("OIDC is not configured for this organisation")
+    try:
+        tokens = oidc.exchange_code(slug, code=code, code_verifier=code_verifier, redirect_uri=redirect_uri)
+        id_token = tokens.get("id_token") if isinstance(tokens, dict) else None
+        if not id_token:
+            raise AuthError("the realm returned no id token")
+        claims = oidc.verify_realm_token(id_token, token_type=oidc.ID_TOKEN)
+    except jwt.PyJWTError as e:
+        raise AuthError(f"invalid id token: {e}") from e
+    if claims.get("realm") != slug:
+        raise AuthError("id token belongs to another realm")
+    user = user_for_oidc_claims(db, claims)
+    token = create_token(
+        user_id=user.id,
+        organisation_id=user.organisation_id,
+        roles=person_roles(user.roles),
+        super_admin=False,
+    )
+    return user, token

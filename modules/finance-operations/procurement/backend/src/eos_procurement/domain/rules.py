@@ -145,7 +145,7 @@ def within_tolerance(invoiced: Decimal, accepted: Decimal, tolerance_percent: De
 
 
 def account_last4(account_number: str) -> str:
-    """The only part of a bank account number that is kept: no encryption library is approved yet (decided on #129)."""
+    """The only part of a bank account number that is kept: no encryption library is approved yet (decided by the owner; see #335)."""
     digits = "".join(ch for ch in account_number if not ch.isspace())
     if not digits.isdigit() or not 6 <= len(digits) <= 20:
         raise RuleError("invalid_account_number", "account_number must be 6 to 20 digits", field="bank_account")

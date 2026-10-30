@@ -1,6 +1,6 @@
 # ADR-0006: OpenID Connect provider
 
-- **Status:** accepted
+- **Status:** accepted, implemented 2026-10-29 (password login kept)
 - **Date:** 2026-10-12
 - **Deciders:** Faizan (lead), with platform/identity (Himanshu) and infrastructure (Srujan)
 

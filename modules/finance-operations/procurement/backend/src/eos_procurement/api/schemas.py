@@ -84,7 +84,7 @@ class TenderInput(Strict):
 
 class QuoteInput(Strict):
     vendor_id: str
-    items: list[Item] = Field(default_factory=list)
+    items: list[Item] = Field(min_length=1)
     total: str = Field(pattern=MONEY)
     delivery_days: int | None = Field(default=None, ge=0)
     valid_until: date | None = None

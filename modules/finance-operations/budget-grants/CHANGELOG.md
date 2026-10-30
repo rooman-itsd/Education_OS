@@ -51,3 +51,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   Scholar), with loading, empty and error-with-retry states; 22 tests. Frontend test dependencies came in #266.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/budget-grants`) and
   `apps/frontend/config/modules.enabled.yaml`; the README documents the widgets.
+- Business dates follow Asia/Kolkata (IST), the same policy as procurement (#129): spend recorded from events, the
+  default financial year, reminder windows and a certificate's default submission date use the date in India, so
+  between 00:00 and 05:30 IST they no longer fall on the previous day. Timestamps stay UTC. Tests on both sides of
+  IST midnight.
+- Permissions: management gets `budget-grants:availability:read`. Management approves procurement indents, and
+  procurement checks `GET /availability` with the approver's token before approving (#129). Additive; story M4.

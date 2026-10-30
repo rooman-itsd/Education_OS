@@ -43,7 +43,7 @@ Rules the code keeps:
   with the approver's token. A line that can't cover it, or isn't open, is 422 `insufficient_budget`. If budget-grants
   can't be reached, refuses the check or gives an unreadable answer, the answer is 503 `budget_check_unavailable` and
   nothing is decided. Nothing is reserved: the commitment starts when the order is issued (#221).
-- **An order is issued only if its line covers its total** (decided on #129). Approving a purchase order asks
+- **An order is issued only if its line covers its total** (decided by the owner; see #335). Approving a purchase order asks
   budget-grants `GET /availability` for the order total and `GET /expenditures` (commitments) for the line, with the
   approver's token, so the approver needs `budget-grants:availability:read` and `budget-grants:budget:read`.
   budget-grants records a commitment only when `procurement.purchase-order.issued` reaches it, so the totals of this
@@ -53,20 +53,33 @@ Rules the code keeps:
   refusing is 503 `budget_check_unavailable`. Either way the order stays submitted and nothing is published.
 - **The purchase method follows the value.** Up to `PROCUREMENT_DIRECT_PURCHASE_LIMIT` a direct purchase, up to
   `PROCUREMENT_QUOTATION_LIMIT` quotations, above it a tender. The limits have no default: until both are set, approval
-  is 422 `purchase_limits_not_configured` (decided on #129). A tender may use a stricter method than its indents need,
+  is 422 `purchase_limits_not_configured` (decided by the owner; see #335). A tender may use a stricter method than its indents need,
   never a looser one, judged on their combined value too. Only direct-purchase indents become an order directly, and
   only while their combined estimate and the order's own total stay within the direct limit (422 `tender_required`), so
   a purchase can't be split into direct orders or priced above what was approved.
 - **An indent belongs to one open tender or order at a time.** Indents combined into one tender or order share one line.
   The indents are locked while checked, so two requests for the same indent take turns. When an order is cancelled
-  with nothing received, its indents can be ordered again. A tender that can no longer be awarded (a draft past its
-  closing date, or one that closed without a quote) lets its indents go; the contract has no way to cancel a tender.
+  with nothing received, its indents can be ordered again. A tender that can no longer be awarded lets its indents
+  go: a draft past its closing date, or a closed tender none of whose quotes can be awarded (each expired, unpriced or
+  from a vendor no longer approved); the contract has no way to cancel a tender. A suspension can be lifted, so such a
+  tender may become awardable again: its award locks and checks its indents first, and answers 409 `indent_in_use`
+  when another tender or order took them meanwhile.
+- **An order that was never issued can be cancelled.** A draft or returned order is cancelled with a reason, without an
+  event (nothing was committed), and its indents can be ordered again; a submitted order is decided first (409
+  `not_cancellable` otherwise).
+- **Order dates follow the order.** `delivery_by` can't be before today (on create, edit and submit, so a draft left
+  past its date is corrected before it goes out), and `received_on` can't be before the order was issued or after
+  today (422 `invalid_date`).
 - **Blacklisting is final** (409 `vendor_blacklisted`), as `procurement.vendor.blacklisted` says.
 - **Only approved vendors** are invited, quote, are awarded and are issued orders. Quotes are recorded while a tender
-  is published and before it closes. It is awarded after it closes; an award other than the lowest valid quote needs
-  a justification, and drafts the order from the quote's priced items. A quote is valid through its `valid_until`
-  date (IST) and expired from the next day: an expired quote is 409 `quote_expired` (decided on #129).
-- **Business dates are Indian** (decided on #129). "Today" is the date in Asia/Kolkata (UTC+05:30, a fixed offset:
+  is published and before it closes, priced item by item, and its total must equal the items' total including tax
+  (422 `quote_total_mismatch`), so ranking, the lowest-quote check and the order use one amount. It is awarded after
+  it closes; an award other than the lowest awardable quote needs a justification, and drafts the order from the
+  quote's items, which then stay fixed: an awarded order changes only its delivery date, address and terms (422
+  `awarded_order`). A closed tender holds its indents only while a quote can still be awarded (unexpired, priced, from a
+  vendor still approved). A quote is valid through its `valid_until`
+  date (IST) and expired from the next day: an expired quote is 409 `quote_expired` (decided by the owner; see #335).
+- **Business dates are Indian** (decided by the owner; see #335). "Today" is the date in Asia/Kolkata (UTC+05:30, a fixed offset:
   India has no daylight saving, and tzdata is not on the approved stack). It decides receipt, invoice and payment
   dates that can't be in the future, when an order becomes overdue, quote expiry, the delivery date drafted at award
   and the date an order started waiting in the report. Timestamps are stored in UTC.
@@ -78,7 +91,7 @@ Rules the code keeps:
   receipts plus `PROCUREMENT_INVOICE_MATCH_TOLERANCE_PERCENT`. A mismatch is approved only with a note. Payment is
   recorded with its date, reference and TDS deducted (an amount, not computed).
 - **Bank account numbers are never stored.** Only the last four digits and the IFSC are kept, because no encryption
-  library is on the approved stack yet (decided on #129). Vendor bodies are validated in the module, so a 422 never
+  library is on the approved stack yet (decided by the owner; see #335). Vendor bodies are validated in the module, so a 422 never
   echoes the request (and the account number) back. Payment itself happens outside Education OS.
 - **A value taken concurrently is 409, never 500:** running numbers, GSTIN and PAN, one quote per vendor and a
   vendor's invoice number, whether the database refuses it at a flush or at the commit. Ids are length-checked, so an
@@ -108,18 +121,22 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   mounts the router at `/api/v1/procurement`; `py-setup.sh`, the API image, CI and the auto-deploy install it, run its
   tests and upgrade its chain from that entry.
 - **budget-grants:** set `PROCUREMENT_BUDGET_GRANTS_URL`. Management approves indents and orders, so management needs
-  `budget-grants:availability:read` (a separate budget-grants PR) and `budget-grants:budget:read` (it has it); department
+  `budget-grants:availability:read` (granted in #292) and `budget-grants:budget:read` (it has it); department
   admins already have availability.
 - **Overspend outside procurement:** the per-line lock serialises procurement's own approvals. Manual spend and
   payroll recorded in budget-grants at the same moment are not covered by it; budget-grants records them as real spend
   and alerts at 80% and 100%.
 - **Events:** budget-grants applies `purchase-order.issued`, `purchase-order.cancelled` and `vendor-invoice.paid`
-  through its `consumers.handle`, but until the event bus exists nothing delivers them. A relay must read the outbox and
-  call it. Until then, commitments and spend do not reach budget-grants on a server. The same holds for notification.
+  through its `consumers.handle`. The event-bus relay (#356, `python -m eos_event_bus`) delivers outbox events to the
+  handlers a module registers under the `eos.event_consumers` entry point, but budget-grants does not register them
+  yet and no deployment runs the relay. Until both are done, commitments and spend do not reach budget-grants on a
+  server. The same holds for notification.
 
 ### Assumptions to revisit
-- **Departments:** an indent approver sees every indent of the organisation; departments are not available to
-  modules yet, so "one's department" can't be applied. `department_id` filters the list.
+- **Departments: not enforced.** The contract allows an indent approver to be limited to their department, but
+  identity issues no department claim yet, so procurement cannot apply it: anyone with `procurement:indent:approve`
+  sees and decides every indent of the organisation. `department_id` only filters the list. This is enforced once
+  identity provides the claim.
 - **Names:** `requested_by_name` is empty until identity names are available.
 - **Documents:** an issued order has no PDF (`document_id` is null) until the documents SDK exists.
 - **Delivery date of an award:** the drafted order is due `delivery_days` after the award (the award day when the
