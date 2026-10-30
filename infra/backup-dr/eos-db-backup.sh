@@ -59,19 +59,35 @@ mv "$tmp" "$file"
 chmod 600 "$file"
 (cd "$(dirname "$file")" && sha256sum "$(basename "$file")" >"$(basename "$file").sha256")
 
-# Keycloak's database, only while its service is up (the profile is off on a host without OIDC).
+# Keycloak's database, whenever the `oidc` profile is on (COMPOSE_PROFILES in .env.api) or kc-db runs. With
+# the profile on, kc-db not running is a failure, not a skip: the API's dump is still kept, pruned and copied,
+# then the run ends "FAILED" and last-success is not updated, so the staleness check notices too.
 kc_file=""
-if [ -n "$(compose ps -q --status running kc-db 2>/dev/null)" ]; then
-  kc_file="$BACKUP_DIR/daily/keycloak-$stamp.dump"
-  kc_tmp="$kc_file.partial"
-  trap 'rm -f "$tmp" "$kc_tmp"' EXIT
-  compose exec -T kc-db pg_dump -U keycloak -d keycloak --format=custom --compress=6 >"$kc_tmp" ||
-    fail "pg_dump of the keycloak database returned an error"
-  [ -s "$kc_tmp" ] || fail "pg_dump of the keycloak database wrote nothing"
-  compose exec -T kc-db pg_restore --list <"$kc_tmp" >/dev/null || fail "the keycloak dump is not a readable archive"
-  mv "$kc_tmp" "$kc_file"
-  chmod 600 "$kc_file"
-  (cd "$(dirname "$kc_file")" && sha256sum "$(basename "$kc_file")" >"$(basename "$kc_file").sha256")
+kc_error=""
+kc_running="$(compose ps -q --status running kc-db 2>/dev/null || true)"
+if [ -n "$kc_running" ] || compose config --services 2>/dev/null | grep -qx kc-db; then
+  if [ -z "$kc_running" ]; then
+    kc_error="the oidc profile is on but kc-db is not running, so the keycloak database was not dumped"
+  else
+    kc_file="$BACKUP_DIR/daily/keycloak-$stamp.dump"
+    kc_tmp="$kc_file.partial"
+    trap 'rm -f "$tmp" "$kc_tmp"' EXIT
+    if ! compose exec -T kc-db pg_dump -U keycloak -d keycloak --format=custom --compress=6 >"$kc_tmp"; then
+      kc_error="pg_dump of the keycloak database returned an error"
+    elif [ ! -s "$kc_tmp" ]; then
+      kc_error="pg_dump of the keycloak database wrote nothing"
+    elif ! compose exec -T kc-db pg_restore --list <"$kc_tmp" >/dev/null; then
+      kc_error="the keycloak dump is not a readable archive"
+    else
+      mv "$kc_tmp" "$kc_file"
+      chmod 600 "$kc_file"
+      (cd "$(dirname "$kc_file")" && sha256sum "$(basename "$kc_file")" >"$(basename "$kc_file").sha256")
+    fi
+    if [ -n "$kc_error" ]; then
+      rm -f "$kc_tmp"
+      kc_file=""
+    fi
+  fi
 fi
 
 # Sunday's dump is also kept as the weekly copy (a hard link: no extra space).
@@ -92,12 +108,15 @@ for name in eos keycloak; do
 done
 
 size="$(du -h "$file" | cut -f1)"
-echo "$stamp $size $(basename "$file")" >"$BACKUP_DIR/last-success"
+[ -n "$kc_error" ] || echo "$stamp $size $(basename "$file")" >"$BACKUP_DIR/last-success"
 
 if [ -n "$OFFSITE" ]; then
   # No --delete: a wiped local disk must never wipe the second copy. Prune the destination there.
   rsync -a "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly" "$BACKUP_DIR/last-success" "$OFFSITE" ||
-    fail "local backup ok ($file), but the copy to $OFFSITE failed"
+    fail "local backup ok ($file), but the copy to $OFFSITE failed${kc_error:+; also: $kc_error}"
+fi
+[ -z "$kc_error" ] || fail "$kc_error (the API's $(basename "$file") is kept${OFFSITE:+ and copied to $OFFSITE})"
+if [ -n "$OFFSITE" ]; then
   log "ok: $(basename "$file") ($size)${kc_file:+ + $(basename "$kc_file")}, copied to $OFFSITE"
 else
   log "ok: $(basename "$file") ($size)${kc_file:+ + $(basename "$kc_file")}. Local copy only: set EOS_BACKUP_OFFSITE for a second location"

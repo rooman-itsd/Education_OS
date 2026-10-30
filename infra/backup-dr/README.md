@@ -17,7 +17,9 @@ database every night at about 02:30 with a systemd timer.
 
 Backups land in `/var/backups/eos/daily/eos-<UTC time>.dump`; each Sunday's is also kept in `weekly/`.
 When Keycloak runs (ADR-0006, compose profile `oidc`), its own database is dumped in the same run as
-`keycloak-<UTC time>.dump`, kept and pruned the same way. `eos-db-restore` restores the API's database
+`keycloak-<UTC time>.dump`, kept and pruned the same way. With the profile on and `kc-db` not running (or its
+dump failing), the run still keeps and copies the API's dump, then logs `FAILED: ...` and exits 1 without
+updating `last-success`, so a missing Keycloak backup is never silent. `eos-db-restore` restores the API's database
 only; to restore Keycloak's, stop the `keycloak` service and run
 `docker compose ... exec -T kc-db pg_restore -U keycloak -d keycloak --clean --if-exists < keycloak-<time>.dump`,
 then start it again.
