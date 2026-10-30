@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { SUPER_ADMIN } from "../stack";
 
 /**
@@ -15,6 +16,14 @@ export interface DashboardUser {
   password: string;
   /** The user's API token, for checks the journey makes outside the browser. */
   token: string;
+}
+
+/**
+ * A run id for emails and slugs: the time plus a random suffix, so workers registering in the same millisecond do
+ * not collide (409). `e2e-` + 8 time chars + `-` + 6 hex stays well within the slug rules (lowercase, digits, hyphens, 40).
+ */
+function runId(): string {
+  return `${Date.now().toString(36)}-${randomUUID().replace(/-/g, "").slice(0, 6)}`;
 }
 
 async function ok<T>(response: Awaited<ReturnType<APIRequestContext["post"]>>): Promise<T> {
@@ -44,7 +53,7 @@ export async function organisationWithUser(
   request: APIRequestContext,
   { academyType, role, extraRoles = [] }: { academyType: string; role: string; extraRoles?: string[] },
 ): Promise<DashboardUser> {
-  const run = Date.now().toString(36);
+  const run = runId();
   const admin = { name: "E2E Admin", email: `admin@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
 
   const org = await ok<{ id: string; name: string; slug: string; verification_token: string }>(
@@ -80,7 +89,7 @@ export async function organisationWithUser(
 
 /** Register, verify and approve an organisation and return its admin (the `org-admin` role) signed in. */
 export async function organisationAdmin(request: APIRequestContext, { academyType }: { academyType: string }): Promise<DashboardUser> {
-  const run = Date.now().toString(36);
+  const run = runId();
   const admin = { name: "E2E Admin", email: `admin@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
   const org = await ok<{ id: string; name: string; slug: string; verification_token: string }>(
     await request.post("/api/v1/tenancy/register", {
