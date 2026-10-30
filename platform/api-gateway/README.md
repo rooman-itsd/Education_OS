@@ -20,7 +20,7 @@ organisation. Two middlewares (`eos_api_gateway.SecurityHeaders`, `eos_api_gatew
   an invalid, expired or platform token) draws from its client address's bucket. Sign-in and sign-up
   (`POST /identity/auth/login`, `POST /tenancy/register`) and every module's anonymous public routes
   (`/api/v1/<module>/public/...`, e.g. the admissions application form) also draw from a stricter bucket
-  per address, and sign-in from one more per account (the `email` of the body). Over the limit: `429`,
+  per address, and sign-in from one more per account and address (the `email` of the body; only a refused sign-in uses up an attempt). Over the limit: `429`,
   `Retry-After: <seconds>`, body `{"detail", "code": "rate_limited", "scope": "ip" | "organisation" |
   "auth" | "login", "retry_after"}`. `GET /api/v1/health` is never limited.
 - Buckets live in the API process by default; with `EOS_REDIS_URL` set they live in Redis and every API
@@ -42,7 +42,7 @@ deployment:
 | `EOS_RATE_LIMIT_IP_PER_MINUTE` / `_BURST` | 1200 / 1200 | per client address, requests without an organisation token |
 | `EOS_RATE_LIMIT_ORG_PER_MINUTE` / `_BURST` | 3000 / 3000 | per organisation, all of its signed-in users together |
 | `EOS_RATE_LIMIT_AUTH_PER_MINUTE` / `_BURST` | 60 / 60 | sign-in, sign-up and public routes, per client address |
-| `EOS_RATE_LIMIT_LOGIN_PER_MINUTE` / `_BURST` | 10 / 10 | sign-in, per account (email), from any address |
+| `EOS_RATE_LIMIT_LOGIN_PER_MINUTE` / `_BURST` | 10 / 10 | sign-in, per account and client address (email digest + address); only 401/403 answers count |
 | `EOS_TRUSTED_PROXIES` | loopback | which peers' `X-Forwarded-For` is believed (below); **set it in production** |
 | `EOS_REDIS_URL` | empty | share the buckets between API processes |
 | `EOS_RATE_LIMIT_ENABLED`, `EOS_SECURITY_HEADERS` | `true` | the emergency switch (below); `false` for test suites that hammer one address |
@@ -64,9 +64,19 @@ class signs in at the same moment when a lesson starts. The defaults follow from
   not for one person; a single abusive client is still held to 20 requests a second.
 - **Sign-in per address (60 a minute, burst 60)** lets a lab of 40 sign in together, with room for typos,
   while bulk sign-ups and broad password spraying from one address stay slow.
-- **Sign-in per account (10 a minute)** is what stops guessing one person's password: whichever addresses
-  the attempts come from, one account gets ten a minute. A lab signing in is 40 accounts, one attempt each,
-  so it never meets this bucket. The key is a digest of the email, so neither Redis nor the logs hold it.
+- **Sign-in per account and address (10 a minute)** is what stops guessing one person's password from one
+  place: the bucket is keyed on the email and the client address together, and only an answer of 401 or 403
+  uses up an attempt (a successful sign-in, or a malformed request, is given back). So ten wrong passwords
+  for one email from one address meet a 429 for that pair, while the account's owner, signing in from
+  elsewhere, is untouched; an attacker naming a known admin's email cannot keep the admin out. Guessing
+  from many addresses is bounded by the per-address buckets above and, in production, by the proxy. A lab
+  signing in is 40 accounts, one attempt each, so it never meets this bucket. The key is a digest of the
+  email, so neither Redis nor the logs hold it. At most 16 KiB of a sign-in body are read to find the email
+  (chunked bodies included); a larger or unreadable one is held to the address buckets only.
+
+Behind a reverse proxy set `EOS_TRUSTED_PROXIES`: while it is unset every anonymous request, sign-ins
+included, keys on the proxy's address and shares one bucket, and the API logs a warning at start-up
+(outside `EOS_DEV_MODE`).
 
 Raise `EOS_RATE_LIMIT_AUTH_*` for a campus that signs in more than 60 people within a minute, and
 `EOS_RATE_LIMIT_ORG_*` for a large organisation (refusals are logged as `rate limited scope=...`).

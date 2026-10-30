@@ -1,7 +1,7 @@
 """Token bucket arithmetic and the settings that feed it."""
 
 import pytest
-from eos_api_gateway.domain.bucket import Limit, retry_after, take
+from eos_api_gateway.domain.bucket import Limit, give_back, retry_after, take
 from eos_api_gateway.infrastructure import MemoryStore
 from eos_api_gateway.settings import DEFAULT_TRUSTED_PROXIES, GatewaySettings
 
@@ -83,3 +83,22 @@ def test_settings_from_env_reads_every_key_and_keeps_defaults():
 def test_settings_refuse_a_limit_that_is_not_a_positive_number(env):
     with pytest.raises(RuntimeError, match="EOS_RATE_LIMIT_"):
         GatewaySettings.from_env(env)
+
+
+def test_giving_a_token_back_undoes_a_take_and_never_exceeds_the_burst():
+    limit = Limit(60, 3)
+    bucket, _ = take(None, 100.0, limit)
+    assert bucket.tokens == pytest.approx(2.0)
+    assert give_back(bucket, 100.0, limit).tokens == pytest.approx(3.0)
+    assert give_back(give_back(bucket, 100.0, limit), 100.0, limit).tokens == pytest.approx(3.0)  # capped
+    assert give_back(None, 100.0, limit).tokens == pytest.approx(3.0)
+
+
+def test_the_memory_store_refunds_what_it_took():
+    store, limit = MemoryStore(), Limit(60, 2)
+    assert store.take("k", limit, 0.0) is None and store.take("k", limit, 0.0) is None
+    assert store.take("k", limit, 0.0) is not None  # empty
+    store.refund("k", limit, 0.0)
+    assert store.take("k", limit, 0.0) is None  # the refunded token
+    store.refund("missing", limit, 0.0)  # nothing to give back to: no error, no bucket made
+    assert "missing" not in store._buckets

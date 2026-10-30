@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import threading
 
-from ..domain.bucket import Bucket, Limit, take
+from ..domain.bucket import Bucket, Limit, give_back, take
 
 _PRUNE_EVERY = 4096
 
@@ -28,6 +28,13 @@ class MemoryStore:
             if self._ops % _PRUNE_EVERY == 0:
                 self._prune(now)
             return wait
+
+    def refund(self, key: str, limit: Limit, now: float) -> None:
+        with self._lock:
+            current = self._buckets.get(key)
+            if current is None:
+                return  # pruned (full again): nothing to give back
+            self._buckets[key] = (give_back(current[0], now, limit), now + limit.seconds_to_full)
 
     def _prune(self, now: float) -> None:
         for key in [k for k, (_, full_at) in self._buckets.items() if full_at <= now]:

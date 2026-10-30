@@ -1,6 +1,7 @@
 """The service alone: a small app with the routes the gateway treats specially, a fake clock and the in-process
 store. No database."""
 
+import json
 import os
 
 os.environ.setdefault("EOS_JWT_SECRET", "test-secret-test-secret-test-secret-32b")
@@ -9,7 +10,7 @@ import pytest
 from eos_api_gateway import GatewaySettings, RateLimit, SecurityHeaders
 from eos_api_gateway.domain.bucket import Limit
 from eos_api_gateway.infrastructure import MemoryStore
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.testclient import TestClient
 
@@ -49,8 +50,19 @@ def make_app(settings: GatewaySettings, clock: FakeClock | None = None, store: M
         return HTMLResponse("<form></form>", headers={"Content-Security-Policy": HANDOFF_CSP})
 
     @app.post("/api/v1/identity/auth/login")
-    def login():
-        return {"token": "x"}
+    async def login(request: Request):
+        """Like identity's: 401 for a wrong password (here: the password "wrong"), 200 otherwise, 422 for
+        {"password": "malformed"}. Reads the whole body, so a test can tell the route got it intact."""
+        try:
+            body = json.loads(await request.body() or b"null")
+        except ValueError:
+            body = None
+        password = body.get("password") if isinstance(body, dict) else None
+        if password == "wrong":
+            return JSONResponse({"detail": "invalid credentials"}, status_code=401)
+        if password == "malformed":
+            return JSONResponse({"detail": "invalid"}, status_code=422)
+        return {"token": "x", "body_bytes": len(json.dumps(body)) if body is not None else 0}
 
     @app.post("/api/v1/tenancy/register")
     def register():
@@ -60,7 +72,9 @@ def make_app(settings: GatewaySettings, clock: FakeClock | None = None, store: M
     def docs():
         return HTMLResponse("<html>docs</html>")
 
-    app.add_middleware(RateLimit, settings=settings, store=store or MemoryStore(), clock=clock or FakeClock())
+    app.add_middleware(
+        RateLimit, settings=settings, store=store if store is not None else MemoryStore(), clock=clock or FakeClock()
+    )
     app.add_middleware(SecurityHeaders, settings=settings)
     return app
 

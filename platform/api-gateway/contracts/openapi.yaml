@@ -17,7 +17,8 @@ info:
     **Rate limits** (token buckets): a request with a valid bearer token carrying an `org` claim draws from
     that organisation's bucket only; any other request from its client address's bucket. `POST
     /identity/auth/login`, `POST /tenancy/register` and every `/{module}/public/...` route also draw from a
-    stricter bucket per client address, and sign-in from one per account (the body's `email`).
+    stricter bucket per client address, and sign-in from one per account and address (the body's `email`; only a
+    refused sign-in, 401 or 403, uses up an attempt).
     `GET /health` is exempt. Over the limit: `429` with `Retry-After` and the body below.
 
     A route that serves a page sets its own `Content-Security-Policy`, which is kept (e.g. the SBI ePay

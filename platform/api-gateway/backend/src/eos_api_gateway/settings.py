@@ -79,6 +79,13 @@ class GatewaySettings:
     login_paths: tuple[str, ...] = DEFAULT_LOGIN_PATHS
     redis_url: str | None = None
 
+    @property
+    def proxies_unset(self) -> bool:
+        """True while `trusted_proxies` is still the loopback default (the variable is unset, empty, or the
+        compose file's own default filled in): behind a reverse proxy every anonymous request then keys on the
+        proxy's address."""
+        return self.trusted_proxies == DEFAULT_TRUSTED_PROXIES
+
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> GatewaySettings:
         env = os.environ if env is None else env

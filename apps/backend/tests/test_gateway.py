@@ -109,3 +109,31 @@ def test_the_plan_user_limit_refuses_the_user_past_it_and_usage_shows_it(client)
     # another organisation on the trial plan (25 users) is not affected
     b = register_and_login(client, slug="limits-other", academy_type="music-academy")
     assert client.get("/api/v1/billing/usage", headers=auth(b["token"])).json()["limits"]["users"] == 25
+
+
+def test_start_up_warns_once_when_trusted_proxies_is_unset_outside_dev_mode(monkeypatch, caplog):
+    import logging
+    from dataclasses import replace
+
+    from eos_backend import main
+
+    monkeypatch.setenv("EOS_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.delenv("EOS_TRUSTED_PROXIES", raising=False)
+    monkeypatch.setattr(main, "settings", replace(main.settings, dev_mode=False))
+    with caplog.at_level(logging.WARNING, logger="eos.api"):
+        create_app()
+    assert [r.getMessage() for r in caplog.records if "EOS_TRUSTED_PROXIES is not set" in r.getMessage()] != []
+    assert sum("EOS_TRUSTED_PROXIES is not set" in r.getMessage() for r in caplog.records) == 1
+
+    caplog.clear()
+    monkeypatch.setenv("EOS_TRUSTED_PROXIES", "10.0.0.5")  # named: no warning
+    with caplog.at_level(logging.WARNING, logger="eos.api"):
+        create_app()
+    assert not any("EOS_TRUSTED_PROXIES" in r.getMessage() for r in caplog.records)
+
+    caplog.clear()
+    monkeypatch.delenv("EOS_TRUSTED_PROXIES")
+    monkeypatch.setattr(main, "settings", replace(main.settings, dev_mode=True))  # dev mode: quiet
+    with caplog.at_level(logging.WARNING, logger="eos.api"):
+        create_app()
+    assert not any("EOS_TRUSTED_PROXIES" in r.getMessage() for r in caplog.records)

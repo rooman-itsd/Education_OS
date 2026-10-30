@@ -157,22 +157,72 @@ def test_a_lab_of_forty_signs_in_together_under_the_default_limits(clock):
         assert r.status_code == 200, (i, r.text)
 
 
-def test_one_account_gets_ten_guesses_a_minute_whatever_the_address(clock):
-    settings = GatewaySettings(trusted_proxies=())
-    app = make_app(settings, clock)
-    body = {"email": "Head@School.example.com", "password": "guess"}
-    for i in range(10):
-        address = TestClient(app, client=(f"198.51.100.{i + 1}", 1))
-        assert address.post("/api/v1/identity/auth/login", json=body).status_code == 200
-    other = TestClient(app, client=("198.51.100.99", 1))
-    r = other.post("/api/v1/identity/auth/login", json={**body, "email": "head@school.example.com"})
+WRONG = {"email": "Head@School.example.com", "password": "wrong"}
+RIGHT = {**WRONG, "password": "right"}
+
+
+def test_ten_failed_attempts_at_one_account_from_one_address_stop_that_pair(clock):
+    app = make_app(GatewaySettings(trusted_proxies=()), clock)
+    attacker = TestClient(app, client=("198.51.100.1", 1))
+    for _ in range(10):
+        assert attacker.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401
+    r = attacker.post("/api/v1/identity/auth/login", json={**WRONG, "email": "head@school.example.com"})
     assert r.status_code == 429 and r.json()["scope"] == "login"
-    assert r.json()["detail"].startswith("too many requests for sign-in to this account")
+    assert r.json()["detail"].startswith("too many requests for sign-in to this account from this address")
     assert r.headers["retry-after"] == "6"  # 10 a minute: one every 6 s
+    # even the right password is held back for that pair, until a token has refilled
+    assert attacker.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 429
     # another account from the same address is not affected
-    assert other.post("/api/v1/identity/auth/login", json={"email": "pupil@school.example.com"}).status_code == 200
+    assert attacker.post("/api/v1/identity/auth/login", json={"email": "pupil@school.example.com"}).status_code == 200
     clock.advance(6.0)
-    assert other.post("/api/v1/identity/auth/login", json=body).status_code == 200
+    assert attacker.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 200
+
+
+def test_an_attacker_cannot_lock_the_account_out_for_its_owner_at_another_address(clock):
+    app = make_app(GatewaySettings(trusted_proxies=()), clock)
+    attacker = TestClient(app, client=("198.51.100.1", 1))
+    owner = TestClient(app, client=("203.0.113.77", 1))
+    for _ in range(10):
+        assert attacker.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401
+    assert attacker.post("/api/v1/identity/auth/login", json=WRONG).status_code == 429  # the pair is shut
+    for _ in range(10):  # the owner, from elsewhere, signs in as often as they like
+        assert owner.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 200
+    # and the attacker's refused attempts keep the pair shut without ever touching the owner's pair
+    for _ in range(5):
+        assert attacker.post("/api/v1/identity/auth/login", json=WRONG).status_code == 429
+        assert owner.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 200
+
+
+def test_successful_sign_ins_do_not_use_up_attempts(clock):
+    app = make_app(GatewaySettings(trusted_proxies=()), clock)
+    campus = TestClient(app, client=("198.51.100.1", 1))
+    for _ in range(30):  # three times the bucket, the same account from the same address
+        assert campus.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 200
+    # and the nine failures that still fit before the tenth are all that this pair has used
+    for _ in range(10):
+        assert campus.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401
+    assert campus.post("/api/v1/identity/auth/login", json=WRONG).status_code == 429
+
+
+def test_only_a_refused_sign_in_counts_not_a_malformed_one(clock):
+    app = make_app(GatewaySettings(trusted_proxies=()), clock)
+    client = TestClient(app, client=("198.51.100.1", 1))
+    for _ in range(15):
+        assert client.post("/api/v1/identity/auth/login", json={**WRONG, "password": "malformed"}).status_code == 422
+    for _ in range(10):
+        assert client.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401
+    assert client.post("/api/v1/identity/auth/login", json=WRONG).status_code == 429
+
+
+def test_a_success_in_the_middle_does_not_refill_what_failures_took(clock):
+    app = make_app(GatewaySettings(trusted_proxies=()), clock)
+    client = TestClient(app, client=("198.51.100.1", 1))
+    for _ in range(9):
+        assert client.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401
+    for _ in range(5):
+        assert client.post("/api/v1/identity/auth/login", json=RIGHT).status_code == 200
+    assert client.post("/api/v1/identity/auth/login", json=WRONG).status_code == 401  # the tenth
+    assert client.post("/api/v1/identity/auth/login", json=WRONG).status_code == 429
 
 
 def test_a_login_body_that_cannot_be_read_still_meets_the_address_bucket(settings, clock):
@@ -196,6 +246,7 @@ def test_the_account_key_is_a_digest_not_the_address(clock):
     keys = list(store._buckets)
     assert not any("school" in k.lower() for k in keys), keys
     assert sum(k.startswith("login:") for k in keys) == 1
+    assert all(k.endswith(":1.1.1.1") for k in keys if k.startswith("login:"))  # the account at that address
 
 
 def test_public_module_routes_share_the_auth_bucket(settings, clock):
@@ -278,3 +329,70 @@ def test_the_redis_client_has_short_timeouts_and_no_retries():
     kwargs = store._client.connection_pool.connection_kwargs
     assert kwargs["socket_connect_timeout"] == CONNECT_TIMEOUT <= 0.1 and kwargs["socket_timeout"] <= 0.25
     assert store.take("ip:y", Limit(60, 1), 0.0) is None  # connection refused: allowed
+
+
+# Review of PR 363 (Srujan): the body read for the per-account bucket is bounded, chunked or not.
+
+PREFIX = b'{"email": "head@school.example.com", "password": "guess", "pad": "'
+
+
+def _chunks(total: int):
+    """A JSON sign-in body of `total` bytes of padding, sent chunked (no Content-Length)."""
+    yield PREFIX
+    for _ in range(total // 1024):
+        yield b"x" * 1024
+    yield b'"}'
+
+
+def _chunked_app(clock, store):
+    from eos_api_gateway import RateLimit
+    from fastapi import FastAPI, Request
+
+    app = FastAPI()
+    received: list[int] = []
+
+    @app.post("/api/v1/identity/auth/login")
+    async def login(request: Request):
+        received.append(len(await request.body()))
+        return {}
+
+    app.add_middleware(RateLimit, settings=GatewaySettings(trusted_proxies=()), store=store, clock=clock)
+    return app, received
+
+
+def test_a_small_chunked_login_body_is_keyed_on_its_email(clock):
+    store = MemoryStore()
+    app, received = _chunked_app(clock, store)
+    r = TestClient(app, client=PEER).post("/api/v1/identity/auth/login", content=_chunks(2048))
+    assert r.status_code == 200
+    assert sum(k.startswith("login:") for k in store._buckets) == 1
+    assert received == [len(PREFIX) + 2048 + 2]
+
+
+def test_a_chunked_login_body_past_16_kib_falls_back_to_the_address_and_reaches_the_route_whole(clock):
+    store = MemoryStore()
+    app, received = _chunked_app(clock, store)
+    total = 200 * 1024
+    r = TestClient(app, client=PEER).post("/api/v1/identity/auth/login", content=_chunks(total))
+    assert r.status_code == 200
+    assert not any(k.startswith("login:") for k in store._buckets)  # not parsed, no account bucket
+    assert any(k.startswith("auth:") for k in store._buckets)  # the address bucket still applies
+    assert received == [len(PREFIX) + total + 2]  # the route got every byte
+
+
+def test_the_login_body_reader_stops_at_the_limit(clock):
+    import asyncio
+
+    from eos_api_gateway.api.middleware import _LOGIN_BODY_LIMIT, _login_email
+    from starlette.requests import Request
+
+    sent = 0
+
+    async def receive():
+        nonlocal sent
+        sent += 1024
+        return {"type": "http.request", "body": b"x" * 1024, "more_body": True}  # never ends
+
+    scope = {"type": "http", "method": "POST", "headers": [], "path": "/api/v1/identity/auth/login"}
+    assert asyncio.run(_login_email(Request(scope, receive))) is None
+    assert _LOGIN_BODY_LIMIT < sent <= _LOGIN_BODY_LIMIT + 1024  # one chunk past the limit, then it stopped

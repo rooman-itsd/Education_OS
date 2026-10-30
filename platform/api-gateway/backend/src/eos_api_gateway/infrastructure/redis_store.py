@@ -44,11 +44,28 @@ redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
 return {allowed, tostring(wait)}
 """
 
+# Gives one token back (a take that did not count), up to the burst. KEYS[1] bucket; ARGV: burst, rate, now, ttl.
+_REFUND = """
+local tokens = tonumber(redis.call('HGET', KEYS[1], 'tokens'))
+local updated = tonumber(redis.call('HGET', KEYS[1], 'updated'))
+if tokens == nil or updated == nil then
+  return 0
+end
+local burst, rate, now = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
+local elapsed = now - updated
+if elapsed < 0 then elapsed = 0 end
+tokens = math.min(burst, math.min(burst, tokens + elapsed * rate) + 1)
+redis.call('HSET', KEYS[1], 'tokens', tokens, 'updated', now)
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+return 1
+"""
+
 
 class RedisStore:
     def __init__(self, client, clock: Callable[[], float] = time.monotonic) -> None:
         self._client = client
         self._take = client.register_script(_TAKE)
+        self._refund = client.register_script(_REFUND)
         self._clock = clock
         self._down_until = 0.0
 
@@ -78,3 +95,13 @@ class RedisStore:
             log.warning("rate limit store unavailable, allowing requests for %.0fs: %s", RETRY_AFTER_FAILURE, e)
             return None
         return None if int(allowed) == 1 else float(wait)
+
+    def refund(self, key: str, limit: Limit, now: float) -> None:
+        if self._clock() < self._down_until:
+            return
+        ttl = int(limit.seconds_to_full) + 1
+        try:
+            self._refund(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
+        except Exception as e:  # same policy as take: fail open, say so, leave Redis alone for a while
+            self._down_until = self._clock() + RETRY_AFTER_FAILURE
+            log.warning("rate limit store unavailable, allowing requests for %.0fs: %s", RETRY_AFTER_FAILURE, e)

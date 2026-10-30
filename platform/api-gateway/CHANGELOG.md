@@ -3,6 +3,14 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Review of PR 363 (Srujan): the per-account sign-in bucket is keyed on the email digest and the client
+  address, so ten failed guesses from one address no longer lock the account out for its owner elsewhere,
+  and it is charged only for a refused sign-in (401 or 403): the middleware gives the attempt back (new
+  `BucketStore.refund`, in memory and in Redis) for any other answer. The per-address auth bucket stays the
+  broad limit. `_login_email` reads at most 16 KiB of the body, chunked or not, and replays what it read to
+  the route; past that it falls back to the address buckets. `apps/backend` logs one warning at start-up
+  when `EOS_TRUSTED_PROXIES` is unset (still the loopback default) outside dev mode. `RateLimit` no longer
+  discards a store passed in while it is empty.
 - Review of PR 363: signed-in requests are charged to their organisation's bucket only, not to the client
   address; defaults raised for schools behind one NAT address (IP 1200/min, sign-in 60/min per address) and a
   per-account sign-in bucket (`EOS_RATE_LIMIT_LOGIN_*`, 10/min, keyed by a digest of the email) added;

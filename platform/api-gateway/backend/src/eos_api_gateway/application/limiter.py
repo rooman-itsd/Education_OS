@@ -24,6 +24,9 @@ class BucketStore(Protocol):
     def take(self, key: str, limit: Limit, now: float) -> float | None:
         """Take one token from the bucket at `key`. None when allowed, else the seconds until the next token."""
 
+    def refund(self, key: str, limit: Limit, now: float) -> None:
+        """Give back a token `take` charged for a request that should not have counted."""
+
 
 @dataclass(frozen=True)
 class Denied:
@@ -94,6 +97,17 @@ class RateLimiter:
     def is_login_path(self, path: str) -> bool:
         return path in self.settings.login_paths
 
+    def login_key(self, ip: str, email: str) -> str:
+        """The per-account bucket's key: the account and the address it is tried from. Keyed on both, someone
+        guessing from one address runs out of attempts there and cannot lock the account's owner out from
+        another; guessing from many addresses is what the per-address auth bucket and the proxy are for."""
+        return f"login:{_account_key(email)}:{ip}"
+
+    def refund_login(self, *, peer: str | None, forwarded_for: str | None, email: str) -> None:
+        """Give back the attempt a sign-in was charged once it is known not to have been a failed one."""
+        key = self.login_key(self.client_ip(peer, forwarded_for), email)
+        self.store.refund(key, self.settings.login, self.clock())
+
     def check(
         self,
         *,
@@ -105,7 +119,7 @@ class RateLimiter:
     ) -> Denied | None:
         """Which buckets the request draws from:
         - sign-in, sign-up and public routes: the auth bucket of the client address, and on sign-in also the
-          bucket of the account (`login_email`, from the body);
+          bucket of that account from that address (`login_email`, from the body; see `login_key`);
         - a valid token with an organisation: that organisation's bucket only. Its users behind one campus
           NAT address do not use up the address's bucket, and the organisation's bucket bounds them instead;
         - anything else (no token, an invalid one, a platform token): the client address's bucket."""
@@ -117,7 +131,7 @@ class RateLimiter:
             ip = self.client_ip(peer, forwarded_for)
             checks.append(("auth", f"auth:{ip}", self.settings.auth))
             if login_email and self.is_login_path(path):
-                checks.append(("login", f"login:{_account_key(login_email)}", self.settings.login))
+                checks.append(("login", self.login_key(ip, login_email), self.settings.login))
         org = self.organisation(authorization)
         if org:
             checks.append(("organisation", f"org:{org}", self.settings.organisation))

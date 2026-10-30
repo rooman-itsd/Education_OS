@@ -65,6 +65,12 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
     # the security headers on every response, the refusals included. platform/api-gateway/README.md has the
     # settings; they are read here, once, so tests may build an app under other values.
     gateway = GatewaySettings.from_env()
+    if gateway.rate_limit and gateway.proxies_unset and not settings.dev_mode:
+        log.warning(
+            "EOS_TRUSTED_PROXIES is not set: X-Forwarded-For is ignored, so behind a reverse proxy every anonymous "
+            "request, sign-ins included, counts against the proxy's address and one bucket. Set it to the proxy's "
+            "address (platform/api-gateway/README.md)."
+        )
     app.add_middleware(EntitlementGate)
     app.add_middleware(RateLimit, settings=gateway)
     app.add_middleware(

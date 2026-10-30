@@ -53,6 +53,16 @@ def take(bucket: Bucket | None, now: float, limit: Limit) -> tuple[Bucket, float
     return Bucket(tokens, now), (1.0 - tokens) / limit.refill_per_second
 
 
+def give_back(bucket: Bucket | None, now: float, limit: Limit) -> Bucket:
+    """Refill `bucket` up to `now` and return one token to it (never past `burst`): the undo of a `take` for a
+    request that turned out not to count."""
+    if bucket is None:
+        return Bucket(float(limit.burst), now)
+    elapsed = max(0.0, now - bucket.updated)
+    tokens = min(float(limit.burst), bucket.tokens + elapsed * limit.refill_per_second)
+    return Bucket(min(float(limit.burst), tokens + 1.0), now)
+
+
 def retry_after(wait: float) -> int:
     """The Retry-After header value: whole seconds, at least one."""
     return max(1, math.ceil(wait))

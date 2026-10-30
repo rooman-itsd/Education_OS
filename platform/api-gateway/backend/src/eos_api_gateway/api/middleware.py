@@ -9,6 +9,7 @@ from collections.abc import Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import Message
 
 from ..application.limiter import BucketStore, RateLimiter
 from ..infrastructure import store_for
@@ -20,7 +21,10 @@ CSP = "default-src 'none'; frame-ancestors 'none'"
 CSP_EXEMPT = ("/docs", "/docs/oauth2-redirect", "/redoc")
 PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 API_PREFIX = "/api/"
-# A sign-in body is an email, a password and a slug; anything larger is not read for the per-account bucket.
+# A sign-in body is an email, a password and a slug; at most this much is read for the per-account bucket.
+# Sign-in answers with one of these when the credentials were wrong; any other answer (200, 422, 5xx) is not a
+# failed guess and does not use up an attempt.
+_FAILED_LOGIN = (401, 403)
 _LOGIN_BODY_LIMIT = 16 * 1024
 
 
@@ -34,18 +38,45 @@ def _is_https(request: Request) -> bool:
 
 
 async def _login_email(request: Request) -> str | None:
-    """The `email` of a sign-in body, for the per-account bucket. Starlette keeps the body it read here for the
-    route. Anything unreadable (not JSON, too large, no email) is None: the route answers it, and the
-    per-address bucket still applies."""
+    """The `email` of a sign-in body, for the per-account bucket. At most 16 KiB are read, chunk by chunk, so a
+    body without a Content-Length (chunked) cannot make the gateway buffer a large upload; past that, or when
+    the body is not JSON or names no email, the answer is None, the route answers the request and the
+    per-address bucket still applies. Every message read here is replayed to the route, which sees the whole
+    body either way."""
     if request.method != "POST":
         return None
     try:
         if int(request.headers.get("content-length") or 0) > _LOGIN_BODY_LIMIT:
             return None
-        body = json.loads(await request.body() or b"null")
+    except ValueError:
+        return None
+    original = request.receive
+    seen: list[Message] = []
+    body = bytearray()
+    complete = False
+    while True:
+        message = await original()
+        seen.append(message)
+        if message["type"] != "http.request":
+            break  # the client went away
+        body += message.get("body", b"")
+        if len(body) > _LOGIN_BODY_LIMIT:
+            break  # stop reading: the rest stays unread for the route
+        if not message.get("more_body", False):
+            complete = True
+            break
+
+    async def replay() -> Message:
+        return seen.pop(0) if seen else await original()
+
+    request._receive = replay  # noqa: SLF001 (Starlette has no public way to put back what was read)
+    if not complete:
+        return None
+    try:
+        parsed = json.loads(bytes(body) or b"null")
     except (ValueError, UnicodeDecodeError):
         return None
-    email = body.get("email") if isinstance(body, dict) else None
+    email = parsed.get("email") if isinstance(parsed, dict) else None
     return email if isinstance(email, str) and email.strip() else None
 
 
@@ -79,8 +110,8 @@ class SecurityHeaders(BaseHTTPMiddleware):
 
 class RateLimit(BaseHTTPMiddleware):
     """429 with Retry-After and {"code": "rate_limited"} when a client address, an organisation, sign-in from an
-    address or sign-in to one account is over its bucket. Sits inside CORS (a browser must be allowed to read
-    the 429) and outside the entitlement gate (a refused request costs no database query)."""
+    address or sign-in to one account from an address is over its bucket. Sits inside CORS (a browser must be
+    allowed to read the 429) and outside the entitlement gate (a refused request costs no database query)."""
 
     def __init__(
         self,
@@ -92,26 +123,33 @@ class RateLimit(BaseHTTPMiddleware):
     ) -> None:
         super().__init__(app)
         settings = settings or GatewaySettings.from_env()
-        self.limiter = RateLimiter(settings, store or store_for(settings), clock)
+        self.limiter = RateLimiter(settings, store if store is not None else store_for(settings), clock)
 
     async def dispatch(self, request: Request, call_next):
         if not self.limiter.enabled:
             return await call_next(request)
         path = request.url.path
+        peer = request.client.host if request.client else None
+        forwarded_for = request.headers.get("x-forwarded-for")
+        email = await _login_email(request) if self.limiter.is_login_path(path) else None
         denied = self.limiter.check(
             path=path,
-            peer=request.client.host if request.client else None,
-            forwarded_for=request.headers.get("x-forwarded-for"),
+            peer=peer,
+            forwarded_for=forwarded_for,
             authorization=request.headers.get("authorization"),
-            login_email=await _login_email(request) if self.limiter.is_login_path(path) else None,
+            login_email=email,
         )
         if denied is None:
-            return await call_next(request)
+            response = await call_next(request)
+            if email and response.status_code not in _FAILED_LOGIN:
+                # check() charged the account's bucket up front; only a refused sign-in is an attempt
+                self.limiter.refund_login(peer=peer, forwarded_for=forwarded_for, email=email)
+            return response
         noun = {
             "ip": "this address",
             "organisation": "your organisation",
             "auth": "sign-in from this address",
-            "login": "sign-in to this account",
+            "login": "sign-in to this account from this address",
         }
         return JSONResponse(
             {
