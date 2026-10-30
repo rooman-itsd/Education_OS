@@ -1,6 +1,6 @@
 # Outbox relay — design
 
-Status: proposed, week 1 (issue #61). Owner: Himanshu (@himanshu-rooman).
+Status: built (#316; proposed in week 1, issue #61). Owner: Himanshu (@himanshu-rooman).
 Reviewer: Faizan (@faizanrooman), because it asks for a change to `packages/core`.
 
 This is the design for the missing half of the transactional outbox. It is written here rather
