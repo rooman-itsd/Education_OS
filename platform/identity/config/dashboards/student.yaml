@@ -2,6 +2,12 @@
 # Order is display order. The shell hides widgets the viewer lacks permission for.
 role: student
 title: "Student"
+module_roles:
+  - lms-student
+  - library-member
+  - transport-rider
+  - timetable-attendance-student
+  - examinations-student
 widgets:
   - timetable-attendance.today
   - timetable-attendance.attendance-summary

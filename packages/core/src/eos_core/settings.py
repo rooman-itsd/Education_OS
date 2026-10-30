@@ -34,6 +34,16 @@ class Settings:
     cors_origins: list[str] = field(
         default_factory=lambda: [o for o in os.environ.get("EOS_CORS_ORIGINS", "http://localhost:5173").split(",") if o]
     )
+    # ADR-0006: Keycloak behind the public proxy. Empty means no OIDC: only the API's own tokens are accepted.
+    # Realm issuers are `<base>/realms/<organisation slug>`.
+    oidc_issuer_base: str = field(default_factory=lambda: os.environ.get("EOS_OIDC_ISSUER_BASE", "").rstrip("/"))
+    oidc_client_id: str = field(default_factory=lambda: os.environ.get("EOS_OIDC_CLIENT_ID", "education-os-web"))
+    # Slugs whose realm exists (comma-separated), or `*` once every organisation gets one at approval.
+    oidc_realms: str = field(default_factory=lambda: os.environ.get("EOS_OIDC_REALMS", ""))
+    oidc_jwks_ttl_seconds: int = field(default_factory=lambda: int(os.environ.get("EOS_OIDC_JWKS_TTL_SECONDS", "3600")))
+    oidc_http_timeout: float = field(default_factory=lambda: float(os.environ.get("EOS_OIDC_HTTP_TIMEOUT", "5")))
+    # The JWKS fetch runs inside a request: short, so a slow or unreachable Keycloak refuses quickly.
+    oidc_jwks_timeout: float = field(default_factory=lambda: float(os.environ.get("EOS_OIDC_JWKS_TIMEOUT", "2")))
 
     @property
     def is_postgres(self) -> bool:

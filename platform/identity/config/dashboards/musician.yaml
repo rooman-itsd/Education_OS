@@ -3,6 +3,9 @@
 role: musician
 title: "Musician"
 extends: student
+module_roles:
+  - portfolio-learner
+  - skill-progress-viewer
 widgets:
   - portfolio.my-portfolio
   - facility-booking.my-bookings

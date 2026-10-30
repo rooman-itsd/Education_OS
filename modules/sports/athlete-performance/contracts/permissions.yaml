@@ -86,3 +86,60 @@ roles:
       - athlete-performance:catalogue:read
       - athlete-performance:athlete:read
       - athlete-performance:report:read
+  # The sports-college profile's own roles (platform/identity/config/profiles/sports-college.yaml), so the people an
+  # institution creates there can use this module without also holding an athlete-performance-* role.
+  - name: coach
+    description: Coach (profile role); same access as athlete-performance-coach
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:athlete:write
+      - athlete-performance:result:read
+      - athlete-performance:result:record
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:benchmark:read
+      - athlete-performance:benchmark:write
+      - athlete-performance:clearance:read
+      - athlete-performance:report:read
+  - name: medical-staff
+    description: Medical Staff (profile role); same access as athlete-performance-medical
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:result:read
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:clearance:read
+      - athlete-performance:clearance:write
+  - name: athlete
+    description: Athlete (profile role); their own data only, same as athlete-performance-athlete
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:result:read
+      - athlete-performance:assessment:read
+      - athlete-performance:benchmark:read
+      - athlete-performance:clearance:read
+  - name: management
+    description: Management (profile role); reads performance summaries, same as athlete-performance-viewer
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:report:read
+  - name: org-admin
+    description: Organisation Admin (profile role); full administration, same as athlete-performance-admin
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:catalogue:write
+      - athlete-performance:athlete:read
+      - athlete-performance:athlete:write
+      - athlete-performance:result:read
+      - athlete-performance:result:record
+      - athlete-performance:assessment:read
+      - athlete-performance:assessment:record
+      - athlete-performance:benchmark:read
+      - athlete-performance:benchmark:write
+      - athlete-performance:clearance:read
+      - athlete-performance:clearance:write
+      - athlete-performance:report:read

@@ -3,6 +3,8 @@
 role: chef-instructor
 title: "Chef / Operations Instructor"
 extends: faculty
+module_roles:
+  - skill-progress-evaluator
 widgets:
   - skill-progress.assessments-due
   - facility-booking.bookings-today

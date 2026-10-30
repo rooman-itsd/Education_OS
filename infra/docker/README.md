@@ -6,7 +6,8 @@ Dockerfiles and compose files for local and deployment.
 |---|---|
 | `web.Dockerfile` | Builds `apps/frontend` with pnpm and serves the static output with nginx |
 | `nginx.web.conf` | SPA fallback, asset caching, placeholder for the API proxy |
-| `api.Dockerfile`, `docker-compose.api.yml`, `.env.api.example` | The API host and Postgres on a Docker host. See "API" below |
+| `api.Dockerfile`, `docker-compose.api.yml`, `.env.api.example` | The API host and Postgres on a Docker host, plus Keycloak behind the `oidc` profile. See "API" and "Keycloak" below |
+| `wire-api-proxy.sh` | Run inside the nginx container: points the public vhost's `/api/` at the API and `/auth/` at Keycloak |
 | `nginx.static-vhost.conf` | Vhost for serving the build as static files from an existing nginx container on port 8080 |
 | `docker-compose.yml` | Runs the `eos-web` image on the deployment host. `.env` beside it is written by the deploy script and git-ignored |
 
@@ -140,14 +141,31 @@ succeeded; it does, in order (`migrate.sh`):
 
 1. `db-roles.py`: creates or updates `eos_app`, with row access on every table and on tables `eos` creates later
 2. `stamp-chains.py`: only for a database whose tables the API created before migrations existed
-3. `alembic upgrade head` for every chain `apps/backend/config/modules.enabled.yaml` enables
-4. `init_db()` for `outbox_event`, the one table without a chain yet
+3. `alembic upgrade head` for every chain `apps/backend/config/modules.enabled.yaml` enables (every table
+   has one; `outbox_event` belongs to platform/event-bus)
 
 The auto-deploy runs the same service. By hand:
 
 ```
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api run --rm migrate
 ```
+
+**The relay.** Modules write events to `outbox_event` in the same transaction as their change; the `relay`
+service (`python -m eos_event_bus`, platform/event-bus) delivers them to the consumers modules declare, each
+in its event's organisation with row-level security on. Notification's mail (trial reminders, approvals) is
+sent from there, so the relay gets the same settings as the API (`x-app-environment` in the compose file).
+It starts after `migrate`, like the API, and restarts on its own. Without it events pile up undelivered and
+nothing reacts to them. Its log:
+
+```
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api logs --tail 20 relay
+```
+
+**Mail.** With `EOS_DEV_MODE=true` nothing is sent and the verification token comes back in the register
+response. With dev mode off, `NOTIFICATION_TRANSPORT=memory` is refused and registration answers 503, so a
+production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_PROVIDERS_SMTP_*` relay
+(`.env.api.example` lists them). Every one of these is optional in the compose file: a host whose
+`.env.api` lacks them keeps deploying.
 
 **Settings applied only once.** Editing `.env.api` and running `up -d` changes most settings
 (`EOS_DEV_MODE`, `EOS_JWT_SECRET`, which signs everyone out). Two do not:
@@ -213,6 +231,52 @@ In the order below, so SSH is allowed before anything is blocked. In the web UI,
 Check: the live site's `/api/v1/health` still answers, SSH still works, and from a laptop
 `curl -m 5 http://<container-ip>:8000/api/v1/health` now times out. If SSH is lost, set
 `Firewall` back to `No` under Firewall → Options in the Proxmox UI.
+
+### Keycloak (ADR-0006)
+
+The OpenID Connect provider runs on the same Docker host as two more services in `docker-compose.api.yml`,
+`keycloak` (`quay.io/keycloak/keycloak`, the official image; `KEYCLOAK_VERSION` pins it, default `26.0`)
+and `kc-db` (its own Postgres 16, volume `eos-kcdata`). Both carry the Compose profile `oidc`, so a host
+whose `.env.api` predates them keeps running the API alone; nothing starts until the settings are filled in.
+With the profile on and a setting still empty, `keycloak` exits at once and `docker compose ... logs keycloak`
+says which.
+The public proxy serves it under `https://educationos.futureacad.ae/auth/` (`KC_HTTP_RELATIVE_PATH=/auth`);
+realm issuers are `<that URL>/realms/<organisation slug>`.
+
+Switch it on, on the API host:
+
+```
+cd /opt/education-os/infra/docker
+sed -i "s|^KEYCLOAK_DB_PASSWORD=.*|KEYCLOAK_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
+nano .env.api   # COMPOSE_PROFILES=oidc, KEYCLOAK_ADMIN_PASSWORD, KC_HOSTNAME=https://educationos.futureacad.ae/auth,
+                # EOS_OIDC_ISSUER_BASE=https://educationos.futureacad.ae/auth (the same value), EOS_OIDC_REALMS=<pilot slug>
+cd /opt/education-os
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps   # keycloak healthy after ~1 min
+curl -s http://$(grep ^KEYCLOAK_BIND= infra/docker/.env.api | cut -d= -f2):8080/auth/realms/master | head -c 120
+```
+
+Keycloak's port is published on `KEYCLOAK_BIND` only (the container's LAN address, which
+`deploy-api-lxc.sh` writes into `.env.api`; unset, `127.0.0.1`), never on all interfaces. The container is
+capped at 1 GB (`mem_limit`) with a 512 MB Java heap (`JAVA_OPTS_KC_HEAP`), so it cannot starve the API and
+the databases beside it. On the host itself, check it at `http://$KEYCLOAK_BIND:8080/auth/realms/master`.
+
+Then in the nginx container re-run `wire-api-proxy.sh <api-host-ip>` (it now adds the `/auth/` location
+beside `/api/`; `tools/scripts/deploy-api-lxc.sh` does this), and check
+`curl -s https://educationos.futureacad.ae/auth/realms/pilot | head -c 120` for a realm you created. The
+proxy answers `/auth/admin/` (admin console and Admin API) and `/auth/realms/master/` (where administrators
+sign in) only from LAN addresses (127.0.0.1, 10/8, 172.16/12, 192.168/16) and 404 for everyone else, so
+from outside the office the master realm and console are not reachable. The admin console is at
+`/auth/admin/` on the office network with `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD`; those two are read
+only at the first start (change the password in the console afterwards). `KEYCLOAK_DB_PASSWORD`, like
+`EOS_DB_PASSWORD`, is read by Postgres only when it creates its volume.
+
+Create an organisation's realm with `tools/scripts/keycloak-realm.sh <slug>` from the office network, or
+on the API host with `KEYCLOAK_URL=http://<KEYCLOAK_BIND>:8080/auth` (platform/identity's README explains
+what it sets up), add the slug to `EOS_OIDC_REALMS` and `up -d` again. The nightly backup dumps
+the Keycloak database beside the API's when the service runs (`../backup-dr/README.md`). Allow port 8080
+only from the proxy, as for port 8000 above (a second rule, dest. port `8080`, source `<nginx-container-ip>`);
+it is only ever reached through `/auth/`.
 
 ### Local check
 

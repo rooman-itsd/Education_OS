@@ -5,7 +5,7 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "SSO (SAML / OAuth2 / OIDC), RBAC with fine-grained permissions, MFA, session management."
 owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
 
