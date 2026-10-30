@@ -7,7 +7,7 @@ dashboard is an edit here, not code.
 ```yaml
 role: athlete            # must match a role id in packages/contracts/src/roles.ts
 title: "Athlete"
-extends: student         # optional: that role's widgets come first
+extends: student         # optional: that role's widgets come first, and its permissions are inherited
 widgets:
   - athlete-performance.training-schedule   # <module>.<widget>, exported by that module
 ```
@@ -26,5 +26,8 @@ Rules
 - The shell hides any widget whose permission key the viewer does not hold. Two roles may
   share a layout and still see different cards.
 - `extends` is one level deep. Do not chain.
+- `extends` also gives the role every permission key of the role it extends, on top of its own
+  (`eos_core.config.permissions_for`, ADR-0004 "Role inheritance"). Extend only `student` or
+  `faculty`-like roles: never `org-admin`, `super-admin` or `service` (a host test refuses it).
 - Owner of this folder: Architecture and platform lead. A dashboard owner edits their own
   role's file in the same PR as the widgets.
