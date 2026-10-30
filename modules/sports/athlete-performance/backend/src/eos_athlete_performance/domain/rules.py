@@ -9,7 +9,9 @@ from datetime import date, datetime, timedelta
 HIGHER = "higher_is_better"
 LOWER = "lower_is_better"
 # Athlete fields whose change publishes athlete-performance.athlete.updated (contracts/events.yaml).
-TRACKED_ATHLETE_FIELDS = frozenset({"primary_discipline_id", "discipline_ids", "coach_id", "squad", "status"})
+TRACKED_ATHLETE_FIELDS = frozenset(
+    {"primary_discipline_id", "discipline_ids", "coach_id", "squad", "status", "user_id"}
+)
 
 
 class RuleViolationError(Exception):
