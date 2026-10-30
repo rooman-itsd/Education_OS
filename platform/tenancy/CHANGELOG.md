@@ -3,6 +3,11 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `organisation_name(db, organisation_id)`, published on the `eos.organisation_directory` entry point, so a
+  platform service that may not import tenancy can render an organisation's display name (#316).
+  platform/notification needs it for every organisation-facing template. An entry point rather than a hook
+  wired by `apps/backend`, because the event-bus relay and the scheduler run as their own processes and never
+  execute the API's lifespan.
 - Organisation export and deletion with retention (contract 0.2.0, DPDP): `GET /admin/organisations/{id}/export`
   downloads one JSON document with the organisation record and, for every table that carries `organisation_id`
   (found by reflection, so modules need no code) its rows, plus document references; `DELETE
