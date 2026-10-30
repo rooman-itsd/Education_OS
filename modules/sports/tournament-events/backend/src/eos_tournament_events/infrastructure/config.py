@@ -5,12 +5,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import UTC, timedelta, timezone, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-# Zones that need no time-zone database: a host without one (Windows without tzdata, which is not on the approved
-# stack) still resolves them. Asia/Kolkata has kept UTC+05:30 without daylight saving since 1945.
-FIXED_ZONES = {"UTC": UTC, "Asia/Kolkata": timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")}
+from datetime import UTC, tzinfo
+from zoneinfo import ZoneInfo
 
 
 @dataclass(frozen=True)
@@ -19,13 +15,8 @@ class ModuleSettings:
 
     @property
     def tz(self) -> tzinfo:
-        """The institution's timezone. Any IANA name works where the host has a time-zone database."""
-        try:
-            return ZoneInfo(self.timezone)
-        except ZoneInfoNotFoundError:
-            if self.timezone in FIXED_ZONES:
-                return FIXED_ZONES[self.timezone]
-            raise
+        """The institution's timezone, an IANA name resolved from the host's time-zone database."""
+        return UTC if self.timezone.upper() == "UTC" else ZoneInfo(self.timezone)
 
 
 def _env(key: str, default: str) -> str:

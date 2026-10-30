@@ -528,7 +528,7 @@ def test_officials(client, org):
 
     _, coach = org.user(COACH)
     listed = client.get(f"{url}?limit=1", headers=coach).json()
-    assert listed["total"] == 2 and listed["items"][0]["id"] == o["id"]
+    assert listed["total"] == 2 and listed["items"][0]["id"] in {o["id"], whole["id"]}  # same created_at: either
     assert client.delete(f"{url}/{o['id']}", headers=coach).status_code == 403
     r = client.delete(f"{url}/{o['id']}", headers=org.admin)
     assert r.status_code == 204 and r.content == b""

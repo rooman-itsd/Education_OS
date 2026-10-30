@@ -142,10 +142,10 @@ def test_travel():
     assert _code(rules.check_travel, None, None, -1) == "invalid_count"
 
 
-def test_the_institution_timezone_resolves_without_a_time_zone_database():
+def test_the_institution_timezone_is_a_named_zone():
     from eos_tournament_events.infrastructure.config import ModuleSettings
 
     assert ModuleSettings("Asia/Kolkata").tz.utcoffset(NOW) == timedelta(hours=5, minutes=30)
-    assert ModuleSettings("UTC").tz.utcoffset(NOW) == timedelta(0)
+    assert ModuleSettings("UTC").tz is UTC
     with pytest.raises(Exception):  # noqa: B017 - ZoneInfoNotFoundError, or ValueError for a malformed key
         _ = ModuleSettings("Nowhere/Atlantis").tz
