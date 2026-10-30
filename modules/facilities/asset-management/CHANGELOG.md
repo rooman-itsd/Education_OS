@@ -17,3 +17,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Widget `asset-management.audit-due` (GET /verifications/due) with loading, empty and error states following the
   widget error convention; typed API client in `frontend/src/api/client.ts`; vitest widget tests.
 - `docs/user-stories.md`.
+- Contract: the `facility-staff` profile role gets the grants of `asset-management-manager`, so the Facility / Inventory
+  Staff dashboard (#6) can read this module's data.

@@ -15,6 +15,7 @@ paths:
       summary: List disciplines
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: listDisciplines
+      x-permission: athlete-performance:catalogue:read
       parameters:
       - name: active
         in: query
@@ -54,6 +55,7 @@ paths:
       summary: Create discipline
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: createDiscipline
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -83,6 +85,7 @@ paths:
       summary: Get discipline
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: getDiscipline
+      x-permission: athlete-performance:catalogue:read
       responses:
         '200':
           description: Discipline
@@ -98,6 +101,7 @@ paths:
       summary: Update discipline
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: updateDiscipline
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -122,6 +126,7 @@ paths:
       summary: List metric definitions
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: listMetrics
+      x-permission: athlete-performance:catalogue:read
       parameters:
       - name: discipline_id
         in: query
@@ -162,6 +167,7 @@ paths:
       summary: Create metric definition
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: createMetric
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -191,6 +197,7 @@ paths:
       summary: Get metric definition
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: getMetric
+      x-permission: athlete-performance:catalogue:read
       responses:
         '200':
           description: Metric definition
@@ -206,6 +213,7 @@ paths:
       summary: Update metric definition
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: updateMetric
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -231,6 +239,7 @@ paths:
       description: 'Athletes see only their own profile; coaches and staff see the athletes of their organisation. Permission:
         `athlete-performance:athlete:read`.'
       operationId: listAthletes
+      x-permission: athlete-performance:athlete:read
       parameters:
       - name: discipline_id
         in: query
@@ -293,6 +302,7 @@ paths:
       summary: Create athlete profile
       description: 'Permission: `athlete-performance:athlete:write`.'
       operationId: createAthlete
+      x-permission: athlete-performance:athlete:write
       requestBody:
         required: true
         content:
@@ -322,6 +332,7 @@ paths:
       summary: Get athlete profile
       description: 'Permission: `athlete-performance:athlete:read`.'
       operationId: getAthlete
+      x-permission: athlete-performance:athlete:read
       responses:
         '200':
           description: Athlete profile
@@ -337,6 +348,7 @@ paths:
       summary: Update athlete profile
       description: 'Permission: `athlete-performance:athlete:write`.'
       operationId: updateAthlete
+      x-permission: athlete-performance:athlete:write
       requestBody:
         required: true
         content:
@@ -361,6 +373,7 @@ paths:
       summary: List performance results
       description: 'Permission: `athlete-performance:result:read`.'
       operationId: listResults
+      x-permission: athlete-performance:result:read
       parameters:
       - name: athlete_id
         in: query
@@ -424,6 +437,7 @@ paths:
       summary: Record a performance result
       description: 'Permission: `athlete-performance:result:record`.'
       operationId: recordResult
+      x-permission: athlete-performance:result:record
       requestBody:
         required: true
         content:
@@ -453,6 +467,7 @@ paths:
       summary: Get performance result
       description: 'Permission: `athlete-performance:result:read`.'
       operationId: getResult
+      x-permission: athlete-performance:result:read
       responses:
         '200':
           description: Performance result
@@ -468,6 +483,7 @@ paths:
       summary: Correct a performance result
       description: 'Permission: `athlete-performance:result:record`.'
       operationId: updateResult
+      x-permission: athlete-performance:result:record
       requestBody:
         required: true
         content:
@@ -492,6 +508,7 @@ paths:
       summary: List fitness tests
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: listFitnessTests
+      x-permission: athlete-performance:catalogue:read
       parameters:
       - name: limit
         in: query
@@ -527,6 +544,7 @@ paths:
       summary: Create fitness test
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: createFitnessTest
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -556,6 +574,7 @@ paths:
       summary: Get fitness test
       description: 'Permission: `athlete-performance:catalogue:read`.'
       operationId: getFitnessTest
+      x-permission: athlete-performance:catalogue:read
       responses:
         '200':
           description: Fitness test
@@ -571,6 +590,7 @@ paths:
       summary: Update fitness test
       description: 'Permission: `athlete-performance:catalogue:write`.'
       operationId: updateFitnessTest
+      x-permission: athlete-performance:catalogue:write
       requestBody:
         required: true
         content:
@@ -595,6 +615,7 @@ paths:
       summary: List fitness assessments
       description: 'Permission: `athlete-performance:assessment:read`.'
       operationId: listAssessments
+      x-permission: athlete-performance:assessment:read
       parameters:
       - name: athlete_id
         in: query
@@ -650,6 +671,7 @@ paths:
       summary: Record a fitness assessment
       description: 'Permission: `athlete-performance:assessment:record`.'
       operationId: recordAssessment
+      x-permission: athlete-performance:assessment:record
       requestBody:
         required: true
         content:
@@ -679,6 +701,7 @@ paths:
       summary: Get fitness assessment
       description: 'Permission: `athlete-performance:assessment:read`.'
       operationId: getAssessment
+      x-permission: athlete-performance:assessment:read
       responses:
         '200':
           description: Fitness assessment
@@ -695,6 +718,7 @@ paths:
       summary: List benchmarks
       description: 'Permission: `athlete-performance:benchmark:read`.'
       operationId: listBenchmarks
+      x-permission: athlete-performance:benchmark:read
       parameters:
       - name: metric_id
         in: query
@@ -740,6 +764,7 @@ paths:
       summary: Create benchmark
       description: 'Permission: `athlete-performance:benchmark:write`.'
       operationId: createBenchmark
+      x-permission: athlete-performance:benchmark:write
       requestBody:
         required: true
         content:
@@ -769,6 +794,7 @@ paths:
       summary: Get benchmark
       description: 'Permission: `athlete-performance:benchmark:read`.'
       operationId: getBenchmark
+      x-permission: athlete-performance:benchmark:read
       responses:
         '200':
           description: Benchmark
@@ -784,6 +810,7 @@ paths:
       summary: Update benchmark
       description: 'Permission: `athlete-performance:benchmark:write`.'
       operationId: updateBenchmark
+      x-permission: athlete-performance:benchmark:write
       requestBody:
         required: true
         content:
@@ -816,6 +843,7 @@ paths:
       description: 'Results and assessment measurements over time, with the matching benchmark if one exists. Permission:
         `athlete-performance:result:read`.'
       operationId: getPerformanceHistory
+      x-permission: athlete-performance:result:read
       parameters:
       - name: metric_id
         in: query
@@ -856,6 +884,7 @@ paths:
       summary: Compare an athlete's latest results with benchmarks
       description: 'Permission: `athlete-performance:benchmark:read`.'
       operationId: compareWithBenchmarks
+      x-permission: athlete-performance:benchmark:read
       parameters:
       - name: level
         in: query
@@ -891,6 +920,7 @@ paths:
       summary: Get an athlete's fitness clearance
       description: 'Whether the athlete is cleared to train and compete. Permission: `athlete-performance:clearance:read`.'
       operationId: getClearance
+      x-permission: athlete-performance:clearance:read
       responses:
         '200':
           description: Current clearance
@@ -906,6 +936,7 @@ paths:
       summary: Set an athlete's fitness clearance
       description: 'Set by medical staff after an assessment. Permission: `athlete-performance:clearance:write`.'
       operationId: setClearance
+      x-permission: athlete-performance:clearance:write
       requestBody:
         required: true
         content:
@@ -931,6 +962,7 @@ paths:
       description: 'Latest result per key metric and trend for each athlete in a squad, discipline or coach group. Permission:
         `athlete-performance:report:read`.'
       operationId: getSquadSummary
+      x-permission: athlete-performance:report:read
       parameters:
       - name: discipline_id
         in: query
