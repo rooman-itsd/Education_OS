@@ -18,22 +18,24 @@ operations:
       organisation_id: uuid       # for attribution and per-academy rate reasoning
       channel: string             # email | sms | whatsapp
       to: string                  # address or E.164 phone number
-      from: string                # sending identity; platform-level in v1
+      sender: string              # sending identity; platform-level in v1. Not "from": a Python keyword
       subject: string             # email only, null otherwise
       body: string                # already rendered by notification
       body_html: string           # optional, email only
       attachments: array          # { document_id, filename }, fetched from platform/documents
       metadata: object            # opaque, echoed back on receipts
+      reply_to: string            # optional; passed only when capabilities.supports_reply_to is true
     output:
       accepted: boolean
       provider_message_id: string # null when rejected
       reason: string              # null when accepted
       retryable: boolean          # whether notification should try again
+      retry_after_s: integer      # null unless throttled and the provider gave a hint (SMTP never does)
     errors:
       - transport_unavailable     # provider unreachable; retryable
       - rejected                  # provider refused the message; not retryable
       - throttled                 # rate limited; retryable after retry_after_s
-      - invalid_recipient         # malformed address; not retryable
+      - invalid_recipient         # malformed or refused address; not retryable
 
   - name: capabilities
     description: What this provider supports, so notification can validate before sending.
@@ -42,7 +44,8 @@ operations:
       max_body_bytes: integer
       supports_attachments: boolean
       supports_html: boolean
-      rate_limit_per_minute: integer
+      rate_limit_per_minute: integer  # 0 when the provider imposes no limit this adapter knows of
+      supports_reply_to: boolean      # false when absent, so a provider that predates it keeps working
 
   - name: healthcheck
     description: >-
