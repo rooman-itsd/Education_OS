@@ -127,10 +127,11 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   payroll recorded in budget-grants at the same moment are not covered by it; budget-grants records them as real spend
   and alerts at 80% and 100%.
 - **Events:** budget-grants applies `purchase-order.issued`, `purchase-order.cancelled` and `vendor-invoice.paid`
-  through its `consumers.handle`. The event-bus relay (#356, `python -m eos_event_bus`) delivers outbox events to the
-  handlers a module registers under the `eos.event_consumers` entry point, but budget-grants does not register them
-  yet and no deployment runs the relay. Until both are done, commitments and spend do not reach budget-grants on a
-  server. The same holds for notification.
+  through its `consumers.handle`. The event-bus relay (#356) runs as the `relay` service in the API deployment (#367)
+  and delivers outbox events to the handlers a module registers under the `eos.event_consumers` entry point, but
+  budget-grants does not register its handlers yet, and notification has none for procurement. Until budget-grants
+  registers them, commitments and spend do not reach budget-grants on a server, and no procurement event leads to a
+  notification.
 
 ### Assumptions to revisit
 - **Departments: not enforced.** The contract allows an indent approver to be limited to their department, but

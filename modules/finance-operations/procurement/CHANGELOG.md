@@ -92,4 +92,4 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   test dependencies came in their own PR.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/procurement`) and
   `apps/frontend/config/modules.enabled.yaml`; the README documents the widget, and its events note names what is
-  still missing now that the event-bus relay exists (budget-grants registering its consumers, a deployment running it).
+  still missing now that the event-bus relay runs: budget-grants registering its consumers.
