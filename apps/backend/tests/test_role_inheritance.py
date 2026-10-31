@@ -75,13 +75,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "management-student alumni.mentoring",
         ],
     ),
-    # athlete-performance: no role fits (athlete-performance module, batch #329)
-    "athlete-performance": (
-        NAMED,
-        [
-            "nutritionist athlete-performance.body-composition-trend",
-        ],
-    ),
     # placement-career: empty catalogue (placement-career module, batch #337)
     "placement-career": (
         EMPTY,
