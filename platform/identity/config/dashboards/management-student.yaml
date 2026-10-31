@@ -6,6 +6,7 @@ extends: student
 module_roles:
   - projects-member
   - field-training-trainee
+  - alumni-mentee
 widgets:
   - productions.upcoming
   - projects.my-projects
