@@ -481,10 +481,14 @@ class SelectionProcessService:
 
     def _serialize_candidate(self, c: CandidateModel, actor: Actor | None = None) -> dict:
         decisions = repo.list_decisions_for_candidate(self.db, c.organisation_id, c.id)
-        if actor and c.person_id == actor.user_id and not (
-            actor.can(CANDIDATE_READ_ALL)
-            or actor.can(PROCESS_MANAGE)
-            or self._is_panelist_on_process(actor, c.process_id)
+        if (
+            actor
+            and c.person_id == actor.user_id
+            and not (
+                actor.can(CANDIDATE_READ_ALL)
+                or actor.can(PROCESS_MANAGE)
+                or self._is_panelist_on_process(actor, c.process_id)
+            )
         ):
             decisions = [d for d in decisions if d.decided_by == actor.user_id]
 

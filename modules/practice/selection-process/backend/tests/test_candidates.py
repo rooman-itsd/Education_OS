@@ -139,7 +139,7 @@ def test_candidate_access_and_decision_privacy(client, org):
     cand2_id, cand2_h = org.user("actor")
 
     c1 = client.post(f"{BASE}/processes/{p['id']}/candidates", json={"person_id": cand1_id}, headers=coord).json()
-    c2 = client.post(f"{BASE}/processes/{p['id']}/candidates", json={"person_id": cand2_id}, headers=coord).json()
+    client.post(f"{BASE}/processes/{p['id']}/candidates", json={"person_id": cand2_id}, headers=coord)
 
     # Judge records decision for candidate 1
     dec_res = client.post(
