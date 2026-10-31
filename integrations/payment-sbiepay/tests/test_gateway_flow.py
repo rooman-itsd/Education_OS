@@ -121,15 +121,35 @@ def test_the_redirect_page_brings_a_policy_that_lets_its_script_run_and_its_form
     # the one inline script carries the nonce the policy allows; no inline event handler (a nonce cannot allow it)
     nonce = re.search(r'<script nonce="([^"]+)">document\.forms\[0\]\.submit\(\)</script>', page.text).group(1)
     assert directives["script-src"] == f"'nonce-{nonce}'" and "onload" not in page.text
-    assert directives["form-action"] == "'self'"  # the mock gateway posts back to this host
+    # the mock gateway posts back to this host, which 303s to return_url: form-action covers both hops
+    assert directives["form-action"] == "'self' https:"
+    # the host's no-referrer would strip Referer and make Origin null on the POST to the gateway
+    assert page.headers["referrer-policy"] == "strict-origin-when-cross-origin"
     again = client.get(start(client, org.admin)["payment_url"])
     assert again.headers["content-security-policy"] != csp  # a fresh nonce per page
 
 
-def test_the_redirect_policy_allows_the_gateway_origin_only():
-    csp = service.handoff_csp("https://www.sbiepay.sbi/secure/AggregatorHostedListener?x=1", "n0nce")
-    assert "form-action https://www.sbiepay.sbi;" in csp and "script-src 'nonce-n0nce';" in csp
-    assert "form-action 'self'" in service.handoff_csp("/api/v1/payment-sbiepay/callbacks/sbiepay", "n")
+def _form_action(csp: str) -> str:
+    return dict(d.strip().split(" ", 1) for d in csp.split(";"))["form-action"]
+
+
+def test_the_redirect_policy_lets_the_post_follow_redirects_to_other_origins():
+    """Chromium enforces form-action on the redirect chain after the POST, so the policy cannot name the gateway's
+    origin alone: its listener may redirect to a bank or 3-D Secure page, and the mock callback redirects to
+    return_url. Any HTTPS origin and this host are allowed; a plain-HTTP origin only when it is named."""
+    live = service.handoff_csp(
+        "https://www.sbiepay.sbi/secure/AggregatorHostedListener?x=1", "n0nce", "https://college.example.com/r"
+    )
+    assert _form_action(live) == "'self' https:" and "script-src 'nonce-n0nce';" in live
+    assert "default-src 'none';" in live and "base-uri 'none'" in live
+    mock = service.handoff_csp("/api/v1/payment-sbiepay/callbacks/sbiepay", "n", "https://college.example.com/r")
+    assert _form_action(mock) == "'self' https:"
+    # local development: the frontend's return_url over plain HTTP is named, and nothing else over HTTP is
+    dev = service.handoff_csp("/api/v1/payment-sbiepay/callbacks/sbiepay", "n", "http://localhost:5173/billing?x=1")
+    assert _form_action(dev) == "'self' https: http://localhost:5173"
+    assert _form_action(service.handoff_csp("http://gw.local:8080/pay", "n", "http://gw.local:8080/r")) == (
+        "'self' https: http://gw.local:8080"
+    )
 
 
 def test_unreadable_or_unknown_gateway_responses(client):

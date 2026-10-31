@@ -113,8 +113,11 @@ def redirect(reference: str, db: Session = Depends(get_db)):
         page = service.redirect_page(db, reference)
     except PaymentError as e:
         raise _err(e) from e
-    # Its own policy, kept by the host's security headers (they only fill in what a response lacks).
-    return HTMLResponse(page.html, headers={"Content-Security-Policy": page.content_security_policy})
+    # Its own policies, kept by the host's security headers (they only fill in what a response lacks).
+    return HTMLResponse(
+        page.html,
+        headers={"Content-Security-Policy": page.content_security_policy, "Referrer-Policy": page.referrer_policy},
+    )
 
 
 @router.post("/payments/{reference}/verify")
