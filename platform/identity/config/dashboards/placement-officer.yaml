@@ -3,8 +3,8 @@
 role: placement-officer
 title: "Placement Officer"
 module_roles:
-  - placement-career-officer
   - field-training-coordinator
+  - placement-career-officer
 widgets:
   - field-training.placements-open
   - placement-career.openings
