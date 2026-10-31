@@ -81,4 +81,3 @@ class Review(Base, TenantMixin):
 
 
 TABLES = [m.__table__ for m in (ItemType, Item, ItemMedia, Review)]
-

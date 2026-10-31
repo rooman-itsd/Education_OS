@@ -46,4 +46,3 @@ def test_process_type_crud_and_conflicts(client, org):
     # Delete unused type
     del_res = client.delete(f"{BASE}/process-types/{ptype['id']}", headers=coord)
     assert del_res.status_code == 204
-

@@ -1,2 +1,1 @@
 """Portfolio application package."""
-

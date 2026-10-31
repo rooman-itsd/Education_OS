@@ -65,4 +65,3 @@ def allowed_actions(status: str, is_owner: bool, is_reviewer: bool, is_manager: 
     if (is_reviewer or is_manager) and status in (ItemStatus.SUBMITTED, ItemStatus.UNDER_REVIEW):
         can.append("review")
     return can
-

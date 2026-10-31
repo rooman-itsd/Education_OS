@@ -73,4 +73,3 @@ def test_process_lifecycle_and_stages(client, org):
     close_res = client.post(f"{BASE}/processes/{proc['id']}/close", headers=coord)
     assert close_res.status_code == 200
     assert close_res.json()["status"] == "closed"
-

@@ -9,11 +9,7 @@ from .models import Item, ItemMedia, ItemType, Review
 
 
 def find_item_types(db: Session, organisation_id: str) -> list[ItemType]:
-    stmt = (
-        select(ItemType)
-        .where(ItemType.organisation_id == organisation_id)
-        .order_by(ItemType.name.asc())
-    )
+    stmt = select(ItemType).where(ItemType.organisation_id == organisation_id).order_by(ItemType.name.asc())
     return list(db.scalars(stmt).all())
 
 
@@ -34,10 +30,7 @@ def get_item_type_by_name(db: Session, organisation_id: str, name: str) -> ItemT
 
 
 def count_items_by_type(db: Session, organisation_id: str, type_id: str) -> int:
-    stmt = (
-        select(func.count(Item.id))
-        .where(Item.organisation_id == organisation_id, Item.type_id == type_id)
-    )
+    stmt = select(func.count(Item.id)).where(Item.organisation_id == organisation_id, Item.type_id == type_id)
     return db.scalar(stmt) or 0
 
 
@@ -81,13 +74,7 @@ def find_items(
     count_stmt = select(func.count(Item.id)).where(*base_where)
     total = db.scalar(count_stmt) or 0
 
-    stmt = (
-        select(Item)
-        .where(*base_where)
-        .order_by(Item.updated_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
+    stmt = select(Item).where(*base_where).order_by(Item.updated_at.desc()).offset(offset).limit(limit)
     items = list(db.scalars(stmt).all())
     return items, total
 
@@ -152,4 +139,3 @@ def create_review(db: Session, review: Review) -> Review:
     db.add(review)
     db.flush()
     return review
-

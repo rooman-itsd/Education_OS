@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -147,4 +148,3 @@ class FinalizeInput(BaseModel):
 class ConflictError(BaseModel):
     code: str
     message: str
-

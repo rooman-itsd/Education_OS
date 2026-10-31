@@ -1,6 +1,7 @@
 """Verify that all paths declared in contracts/openapi.yaml exist on the router."""
 
 from pathlib import Path
+
 import yaml
 from eos_selection_process.api.router import router
 
@@ -19,4 +20,3 @@ def test_contract_paths_implemented():
 
     missing = contract_paths - router_paths
     assert not missing, f"Router is missing routes defined in openapi.yaml: {missing}"
-

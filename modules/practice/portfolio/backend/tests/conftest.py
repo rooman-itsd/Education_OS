@@ -57,4 +57,3 @@ def org() -> Org:
 @pytest.fixture
 def other_org() -> Org:
     return Org()
-

@@ -33,4 +33,3 @@ def test_permission_gates(client, org):
         headers=coord,
     )
     assert ok_create.status_code == 201
-

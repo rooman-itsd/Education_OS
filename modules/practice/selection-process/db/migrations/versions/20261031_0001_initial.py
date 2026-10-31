@@ -60,7 +60,9 @@ def upgrade() -> None:
         "selection_process_stage",
         _id(),
         sa.Column("organisation_id", sa.String(36), nullable=False),
-        sa.Column("process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("name", sa.String(120), nullable=False),
         sa.Column("sequence", sa.Integer, nullable=False),
         sa.Column("description", sa.Text, nullable=True),
@@ -72,8 +74,12 @@ def upgrade() -> None:
         "selection_process_panel",
         _id(),
         sa.Column("organisation_id", sa.String(36), nullable=False),
-        sa.Column("process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True),
+        sa.Column(
+            "process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True
+        ),
         sa.Column("name", sa.String(120), nullable=False),
         sa.Column("member_person_ids", sa.JSON, nullable=False),
         _ts("created_at"),
@@ -83,9 +89,16 @@ def upgrade() -> None:
         "selection_process_candidate",
         _id(),
         sa.Column("organisation_id", sa.String(36), nullable=False),
-        sa.Column("process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("person_id", sa.String(36), nullable=False),
-        sa.Column("current_stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "current_stage_id",
+            sa.String(36),
+            sa.ForeignKey("selection_process_stage.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("status", sa.String(30), nullable=False, server_default="registered"),
         sa.Column("source", sa.JSON, nullable=True),
         _ts("registered_at"),
@@ -97,24 +110,44 @@ def upgrade() -> None:
         "selection_process_decision",
         _id(),
         sa.Column("organisation_id", sa.String(36), nullable=False),
-        sa.Column("candidate_id", sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("panel_id", sa.String(36), sa.ForeignKey("selection_process_panel.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "candidate_id",
+            sa.String(36),
+            sa.ForeignKey("selection_process_candidate.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "panel_id", sa.String(36), sa.ForeignKey("selection_process_panel.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("decided_by", sa.String(36), nullable=False),
         sa.Column("outcome", sa.String(30), nullable=False),
         sa.Column("score", sa.Float, nullable=True),
         sa.Column("comments", sa.Text, nullable=True),
         _ts("decided_at"),
-        sa.UniqueConstraint("organisation_id", "candidate_id", "stage_id", "decided_by", name="uq_selection_decision_panelist"),
+        sa.UniqueConstraint(
+            "organisation_id", "candidate_id", "stage_id", "decided_by", name="uq_selection_decision_panelist"
+        ),
     )
 
     op.create_table(
         "selection_process_slot",
         _id(),
         sa.Column("organisation_id", sa.String(36), nullable=False),
-        sa.Column("process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True),
-        sa.Column("candidate_id", sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "process_id", sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False
+        ),
+        sa.Column(
+            "stage_id", sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True
+        ),
+        sa.Column(
+            "candidate_id",
+            sa.String(36),
+            sa.ForeignKey("selection_process_candidate.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("title", sa.String(200), nullable=False),
         _ts("starts_at"),
         _ts("ends_at"),
@@ -127,7 +160,9 @@ def upgrade() -> None:
     op.create_index("ix_selection_process_organisation_id", "selection_process", ["organisation_id"])
     op.create_index("ix_selection_process_stage_organisation_id", "selection_process_stage", ["organisation_id"])
     op.create_index("ix_selection_process_panel_organisation_id", "selection_process_panel", ["organisation_id"])
-    op.create_index("ix_selection_process_candidate_organisation_id", "selection_process_candidate", ["organisation_id"])
+    op.create_index(
+        "ix_selection_process_candidate_organisation_id", "selection_process_candidate", ["organisation_id"]
+    )
     op.create_index("ix_selection_process_decision_organisation_id", "selection_process_decision", ["organisation_id"])
     op.create_index("ix_selection_process_slot_organisation_id", "selection_process_slot", ["organisation_id"])
 
@@ -136,7 +171,9 @@ def upgrade() -> None:
     op.create_index("ix_selection_process_stage_process", "selection_process_stage", ["process_id"])
     op.create_index("ix_selection_process_panel_process", "selection_process_panel", ["process_id"])
     op.create_index("ix_selection_process_candidate_process", "selection_process_candidate", ["process_id"])
-    op.create_index("ix_selection_process_candidate_person", "selection_process_candidate", ["organisation_id", "person_id"])
+    op.create_index(
+        "ix_selection_process_candidate_person", "selection_process_candidate", ["organisation_id", "person_id"]
+    )
     op.create_index("ix_selection_process_decision_candidate", "selection_process_decision", ["candidate_id"])
     op.create_index("ix_selection_process_slot_process", "selection_process_slot", ["process_id"])
     op.create_index("ix_selection_process_slot_candidate", "selection_process_slot", ["candidate_id"])
@@ -159,4 +196,3 @@ def downgrade() -> None:
     op.drop_table("selection_process_stage")
     op.drop_table("selection_process")
     op.drop_table("selection_process_type")
-

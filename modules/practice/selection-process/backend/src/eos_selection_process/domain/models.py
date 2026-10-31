@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ProcessStatus(str, Enum):
+class ProcessStatus(StrEnum):
     DRAFT = "draft"
     OPEN = "open"
     CLOSED = "closed"
 
 
-class CandidateStatus(str, Enum):
+class CandidateStatus(StrEnum):
     REGISTERED = "registered"
     IN_PROGRESS = "in_progress"
     SELECTED = "selected"
@@ -28,19 +28,19 @@ FINAL_CANDIDATE_STATUSES = {
 }
 
 
-class DecisionOutcome(str, Enum):
+class DecisionOutcome(StrEnum):
     ADVANCE = "advance"
     HOLD = "hold"
     REJECT = "reject"
 
 
-class FinalizeOutcome(str, Enum):
+class FinalizeOutcome(StrEnum):
     SELECTED = "selected"
     WAITLISTED = "waitlisted"
     REJECTED = "rejected"
 
 
-class SlotStatus(str, Enum):
+class SlotStatus(StrEnum):
     SCHEDULED = "scheduled"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -94,4 +94,3 @@ class NotFoundError(DomainError):
 class ConflictError(DomainError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(code, message, status_code=409)
-

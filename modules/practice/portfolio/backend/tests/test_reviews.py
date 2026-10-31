@@ -68,7 +68,9 @@ def test_review_lifecycle(client, org):
     assert "submit" in item_after["can"]
 
     # Learner edits and resubmits
-    client.patch(f"{BASE}/items/{item_id}", json={"type_id": itype["id"], "title": "Bronze Figure - Final"}, headers=learner)
+    client.patch(
+        f"{BASE}/items/{item_id}", json={"type_id": itype["id"], "title": "Bronze Figure - Final"}, headers=learner
+    )
     client.post(f"{BASE}/items/{item_id}/submit", headers=learner)
 
     # Reviewer approves

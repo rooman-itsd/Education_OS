@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session, joinedload
@@ -17,8 +17,8 @@ from .models import (
     StageModel,
 )
 
-
 # --- Process Types ---
+
 
 def get_process_type(db: Session, organisation_id: str, type_id: str) -> ProcessTypeModel | None:
     return (
@@ -64,6 +64,7 @@ def count_processes_for_type(db: Session, organisation_id: str, type_id: str) ->
 
 
 # --- Processes ---
+
 
 def get_process(db: Session, organisation_id: str, process_id: str) -> ProcessModel | None:
     return (
@@ -124,6 +125,7 @@ def count_candidates_for_process(db: Session, organisation_id: str, process_id: 
 
 # --- Stages ---
 
+
 def list_stages_for_process(db: Session, organisation_id: str, process_id: str) -> list[StageModel]:
     return (
         db.query(StageModel)
@@ -149,6 +151,7 @@ def get_stage(db: Session, organisation_id: str, stage_id: str) -> StageModel | 
 
 # --- Panels ---
 
+
 def get_panel(db: Session, organisation_id: str, panel_id: str) -> PanelModel | None:
     return (
         db.query(PanelModel)
@@ -173,6 +176,7 @@ def list_panels_for_process(db: Session, organisation_id: str, process_id: str) 
 
 
 # --- Candidates ---
+
 
 def get_candidate(db: Session, organisation_id: str, candidate_id: str) -> CandidateModel | None:
     return (
@@ -275,6 +279,7 @@ def list_candidates_for_panelist(
 
 # --- Decisions ---
 
+
 def get_decision_by_panelist(
     db: Session, organisation_id: str, candidate_id: str, stage_id: str, decided_by: str
 ) -> DecisionModel | None:
@@ -290,9 +295,7 @@ def get_decision_by_panelist(
     )
 
 
-def list_decisions_for_candidate(
-    db: Session, organisation_id: str, candidate_id: str
-) -> list[DecisionModel]:
+def list_decisions_for_candidate(db: Session, organisation_id: str, candidate_id: str) -> list[DecisionModel]:
     return (
         db.query(DecisionModel)
         .filter(
@@ -306,6 +309,7 @@ def list_decisions_for_candidate(
 
 # --- Slots ---
 
+
 def list_upcoming_slots(
     db: Session,
     organisation_id: str,
@@ -313,14 +317,10 @@ def list_upcoming_slots(
     candidate_id: str | None = None,
     limit: int = 10,
 ) -> list[SlotModel]:
-    query = (
-        db.query(SlotModel)
-        .filter(
-            SlotModel.organisation_id == organisation_id,
-            SlotModel.status == "scheduled",
-        )
+    query = db.query(SlotModel).filter(
+        SlotModel.organisation_id == organisation_id,
+        SlotModel.status == "scheduled",
     )
     if candidate_id:
         query = query.filter(SlotModel.candidate_id == candidate_id)
     return query.order_by(SlotModel.starts_at.asc()).limit(limit).all()
-

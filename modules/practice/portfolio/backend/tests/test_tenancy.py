@@ -24,7 +24,12 @@ def test_no_cross_tenant_leak(client, org, other_org):
     b_headers = {"Authorization": f"Bearer {token_b}"}
     assert client.get(f"{BASE}/item-types/{type_a['id']}", headers=b_headers).status_code in (404, 405)
     assert client.get(f"{BASE}/items/{item_a['id']}", headers=b_headers).status_code == 404
-    assert client.patch(f"{BASE}/items/{item_a['id']}", json={"type_id": type_a["id"], "title": "Hacked"}, headers=b_headers).status_code == 404
+    assert (
+        client.patch(
+            f"{BASE}/items/{item_a['id']}", json={"type_id": type_a["id"], "title": "Hacked"}, headers=b_headers
+        ).status_code
+        == 404
+    )
     assert client.delete(f"{BASE}/items/{item_a['id']}", headers=b_headers).status_code == 404
     assert client.post(f"{BASE}/items/{item_a['id']}/submit", headers=b_headers).status_code == 404
     assert client.post(f"{BASE}/items/{item_a['id']}/withdraw", headers=b_headers).status_code == 404
@@ -32,4 +37,3 @@ def test_no_cross_tenant_leak(client, org, other_org):
     # Cross-tenant item creation with other org's type_id should return 404 (type not found in org)
     cross = client.post(f"{BASE}/items", json={"type_id": type_a["id"], "title": "Cross Org"}, headers=b_headers)
     assert cross.status_code == 404
-

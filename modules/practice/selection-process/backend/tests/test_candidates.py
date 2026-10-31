@@ -1,6 +1,7 @@
 """Candidate registration and withdrawal test suite."""
 
 import uuid
+
 from conftest import BASE
 
 COORDINATOR = "selection-process-coordinator"
@@ -110,4 +111,3 @@ def test_candidate_listing_scopes(client, org):
     all_res = client.get(f"{BASE}/processes/{p['id']}/candidates?scope=managed", headers=coord)
     assert all_res.status_code == 200
     assert len(all_res.json()["items"]) == 2
-

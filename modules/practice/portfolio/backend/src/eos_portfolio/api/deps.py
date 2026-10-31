@@ -44,4 +44,3 @@ def require(*permissions: str):
         return actor
 
     return dep
-

@@ -23,12 +23,16 @@ def test_permission_gates(client, org):
 
     # Reviewer cannot create items (needs portfolio:item:write)
     itype = client.post(f"{BASE}/item-types", json={"name": "Type1"}, headers=mgr).json()
-    assert client.post(f"{BASE}/items", json={"type_id": itype["id"], "title": "T"}, headers=reviewer).status_code == 403
+    assert (
+        client.post(f"{BASE}/items", json={"type_id": itype["id"], "title": "T"}, headers=reviewer).status_code == 403
+    )
 
     # Learner can create item
     item = client.post(f"{BASE}/items", json={"type_id": itype["id"], "title": "My Item"}, headers=learner).json()
     assert item["status"] == "draft"
 
     # Learner cannot review item
-    assert client.post(f"{BASE}/items/{item['id']}/reviews", json={"decision": "approved"}, headers=learner).status_code == 403
-
+    assert (
+        client.post(f"{BASE}/items/{item['id']}/reviews", json={"decision": "approved"}, headers=learner).status_code
+        == 403
+    )

@@ -22,7 +22,7 @@ from ..application.service import (
 )
 from ..domain.models import DomainError
 from . import schemas as s
-from .deps import current_actor, require
+from .deps import require
 
 router = APIRouter(tags=["selection-process"])
 
@@ -40,6 +40,7 @@ def _run(fn, *args, **kwargs):
 # ------------------------------------------------------------------
 # Process Types
 # ------------------------------------------------------------------
+
 
 @router.get("/process-types")
 def list_process_types(
@@ -85,6 +86,7 @@ def delete_process_type(
 # ------------------------------------------------------------------
 # Processes
 # ------------------------------------------------------------------
+
 
 @router.get("/processes")
 def list_processes(
@@ -185,6 +187,7 @@ def close_process(
 # Panels
 # ------------------------------------------------------------------
 
+
 @router.get("/processes/{id}/panels")
 def list_panels(
     id: str,
@@ -231,6 +234,7 @@ def delete_panel(
 # ------------------------------------------------------------------
 # Candidates
 # ------------------------------------------------------------------
+
 
 @router.get("/processes/{id}/candidates")
 def list_candidates(
@@ -289,6 +293,7 @@ def withdraw_candidate(
 # Decisions & Finalize
 # ------------------------------------------------------------------
 
+
 @router.get("/candidates/{id}/decisions")
 def list_decisions(
     id: str,
@@ -325,6 +330,7 @@ def finalize_candidate(
 # Slots (Upcoming Events)
 # ------------------------------------------------------------------
 
+
 @router.get("/slots/upcoming")
 def list_upcoming_slots(
     candidate_id: str | None = Query(default=None),
@@ -334,4 +340,3 @@ def list_upcoming_slots(
 ):
     svc = SelectionProcessService(db)
     return _run(svc.list_upcoming_slots, actor, candidate_id=candidate_id, limit=limit)
-

@@ -32,7 +32,9 @@ def test_no_cross_tenant_leak(client, org, other_org):
     b_headers = {"Authorization": f"Bearer {token_b}"}
     assert client.get(f"{BASE}/process-types/{type_a['id']}", headers=b_headers).status_code in (404, 405)
     assert client.get(f"{BASE}/processes/{proc_a['id']}", headers=b_headers).status_code == 404
-    assert client.patch(f"{BASE}/processes/{proc_a['id']}", json={"title": "Hacked"}, headers=b_headers).status_code == 404
+    assert (
+        client.patch(f"{BASE}/processes/{proc_a['id']}", json={"title": "Hacked"}, headers=b_headers).status_code == 404
+    )
     assert client.delete(f"{BASE}/processes/{proc_a['id']}", headers=b_headers).status_code == 404
 
     # Cross-tenant process creation with other org's type_id should return 404
@@ -42,4 +44,3 @@ def test_no_cross_tenant_leak(client, org, other_org):
         headers=b_headers,
     )
     assert cross.status_code == 404
-

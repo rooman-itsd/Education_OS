@@ -45,4 +45,3 @@ def test_reviewer_profile_roles_access(client, org):
         grants = permissions_for([role])
         assert "portfolio:item:read" in grants, f"{role} missing portfolio:item:read"
         assert "portfolio:review:write" in grants, f"{role} missing portfolio:review:write"
-

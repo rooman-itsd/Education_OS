@@ -5,7 +5,7 @@ multi-panelist decision uniqueness, and emits events."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 
 from eos_core import events
 from eos_core.db import utcnow
@@ -88,14 +88,16 @@ class SelectionProcessService:
         result = []
         for t in types:
             count = repo.count_processes_for_type(self.db, actor.organisation_id, t.id)
-            result.append({
-                "id": t.id,
-                "organisation_id": t.organisation_id,
-                "name": t.name,
-                "description": t.description,
-                "process_count": count,
-                "created_at": iso(t.created_at),
-            })
+            result.append(
+                {
+                    "id": t.id,
+                    "organisation_id": t.organisation_id,
+                    "name": t.name,
+                    "description": t.description,
+                    "process_count": count,
+                    "created_at": iso(t.created_at),
+                }
+            )
         return result
 
     def create_process_type(self, actor: Actor, data: dict) -> dict:
@@ -112,9 +114,9 @@ class SelectionProcessService:
         self.db.add(model)
         try:
             self.db.commit()
-        except IntegrityError:
+        except IntegrityError as err:
             self.db.rollback()
-            raise ConflictError("name_conflict", "Process type name already in use")
+            raise ConflictError("name_conflict", "Process type name already in use") from err
 
         self.db.refresh(model)
         return {
@@ -138,9 +140,9 @@ class SelectionProcessService:
 
         try:
             self.db.commit()
-        except IntegrityError:
+        except IntegrityError as err:
             self.db.rollback()
-            raise ConflictError("name_conflict", "Process type name already in use")
+            raise ConflictError("name_conflict", "Process type name already in use") from err
 
         self.db.refresh(t)
         count = repo.count_processes_for_type(self.db, actor.organisation_id, t.id)
@@ -523,9 +525,9 @@ class SelectionProcessService:
 
         try:
             self.db.flush()
-        except IntegrityError:
+        except IntegrityError as err:
             self.db.rollback()
-            raise DuplicateCandidateError()
+            raise DuplicateCandidateError() from err
 
         # Emit registered event
         _publish(
@@ -665,9 +667,7 @@ class SelectionProcessService:
         stage_id = c.current_stage_id
 
         # Panelist decision uniqueness check
-        existing = repo.get_decision_by_panelist(
-            self.db, actor.organisation_id, candidate_id, stage_id, actor.user_id
-        )
+        existing = repo.get_decision_by_panelist(self.db, actor.organisation_id, candidate_id, stage_id, actor.user_id)
         if existing:
             raise AlreadyDecidedError()
 
@@ -760,9 +760,9 @@ class SelectionProcessService:
 
         try:
             self.db.commit()
-        except IntegrityError:
+        except IntegrityError as err:
             self.db.rollback()
-            raise AlreadyDecidedError()
+            raise AlreadyDecidedError() from err
 
         self.db.refresh(dec_model)
         return {
@@ -837,7 +837,9 @@ class SelectionProcessService:
             stage_id=data.get("stage_id"),
             candidate_id=data.get("candidate_id"),
             title=data["title"],
-            starts_at=datetime.fromisoformat(data["starts_at"]) if isinstance(data["starts_at"], str) else data["starts_at"],
+            starts_at=datetime.fromisoformat(data["starts_at"])
+            if isinstance(data["starts_at"], str)
+            else data["starts_at"],
             ends_at=datetime.fromisoformat(data["ends_at"]) if isinstance(data["ends_at"], str) else data["ends_at"],
             status=data.get("status", SlotStatus.SCHEDULED.value),
             location=data.get("location"),
@@ -857,4 +859,3 @@ class SelectionProcessService:
             "status": slot.status,
             "location": slot.location,
         }
-

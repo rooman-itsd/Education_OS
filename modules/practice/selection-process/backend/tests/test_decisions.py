@@ -147,4 +147,3 @@ def test_direct_finalize_outcome(client, org):
     body = fin_again.json()
     detail = body.get("detail", body)
     assert detail["code"] == "candidate_finalized"
-

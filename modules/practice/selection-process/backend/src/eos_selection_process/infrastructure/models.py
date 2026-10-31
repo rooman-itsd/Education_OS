@@ -37,9 +37,7 @@ class ProcessTypeModel(Base):
 
     processes = relationship("ProcessModel", back_populates="type")
 
-    __table_args__ = (
-        sa.UniqueConstraint("organisation_id", "name", name="uq_selection_process_type_org_name"),
-    )
+    __table_args__ = (sa.UniqueConstraint("organisation_id", "name", name="uq_selection_process_type_org_name"),)
 
 
 class ProcessModel(Base):
@@ -56,7 +54,9 @@ class ProcessModel(Base):
     updated_at = sa.Column(sa.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     type = relationship("ProcessTypeModel", back_populates="processes")
-    stages = relationship("StageModel", back_populates="process", cascade="all, delete-orphan", order_by="StageModel.sequence")
+    stages = relationship(
+        "StageModel", back_populates="process", cascade="all, delete-orphan", order_by="StageModel.sequence"
+    )
     panels = relationship("PanelModel", back_populates="process", cascade="all, delete-orphan")
     candidates = relationship("CandidateModel", back_populates="process", cascade="all, delete-orphan")
     slots = relationship("SlotModel", back_populates="process", cascade="all, delete-orphan")
@@ -67,7 +67,9 @@ class StageModel(Base):
 
     id = sa.Column(sa.String(36), primary_key=True, default=_id)
     organisation_id = sa.Column(sa.String(36), nullable=False, index=True)
-    process_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True)
+    process_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = sa.Column(sa.String(120), nullable=False)
     sequence = sa.Column(sa.Integer, nullable=False)
     description = sa.Column(sa.Text, nullable=True)
@@ -86,8 +88,12 @@ class PanelModel(Base):
 
     id = sa.Column(sa.String(36), primary_key=True, default=_id)
     organisation_id = sa.Column(sa.String(36), nullable=False, index=True)
-    process_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True)
-    stage_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True, index=True)
+    process_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stage_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     name = sa.Column(sa.String(120), nullable=False)
     member_person_ids = sa.Column(sa.JSON, nullable=False, default=list)
     created_at = sa.Column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
@@ -101,16 +107,22 @@ class CandidateModel(Base):
 
     id = sa.Column(sa.String(36), primary_key=True, default=_id)
     organisation_id = sa.Column(sa.String(36), nullable=False, index=True)
-    process_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True)
+    process_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     person_id = sa.Column(sa.String(36), nullable=False, index=True)
-    current_stage_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="SET NULL"), nullable=True)
+    current_stage_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="SET NULL"), nullable=True
+    )
     status = sa.Column(sa.String(30), nullable=False, default=CandidateStatus.REGISTERED.value, index=True)
     source = sa.Column(sa.JSON, nullable=True)
     registered_at = sa.Column(sa.DateTime(timezone=True), default=utcnow, nullable=False)
     decided_at = sa.Column(sa.DateTime(timezone=True), nullable=True)
 
     process = relationship("ProcessModel", back_populates="candidates")
-    decisions = relationship("DecisionModel", back_populates="candidate", cascade="all, delete-orphan", order_by="DecisionModel.decided_at")
+    decisions = relationship(
+        "DecisionModel", back_populates="candidate", cascade="all, delete-orphan", order_by="DecisionModel.decided_at"
+    )
     slots = relationship("SlotModel", back_populates="candidate")
 
     __table_args__ = (
@@ -123,8 +135,12 @@ class DecisionModel(Base):
 
     id = sa.Column(sa.String(36), primary_key=True, default=_id)
     organisation_id = sa.Column(sa.String(36), nullable=False, index=True)
-    candidate_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="CASCADE"), nullable=False, index=True)
-    stage_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=False, index=True)
+    candidate_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stage_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     panel_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_panel.id", ondelete="SET NULL"), nullable=True)
     decided_by = sa.Column(sa.String(36), nullable=False, index=True)
     outcome = sa.Column(sa.String(30), nullable=False)
@@ -135,7 +151,9 @@ class DecisionModel(Base):
     candidate = relationship("CandidateModel", back_populates="decisions")
 
     __table_args__ = (
-        sa.UniqueConstraint("organisation_id", "candidate_id", "stage_id", "decided_by", name="uq_selection_decision_panelist"),
+        sa.UniqueConstraint(
+            "organisation_id", "candidate_id", "stage_id", "decided_by", name="uq_selection_decision_panelist"
+        ),
     )
 
 
@@ -144,9 +162,13 @@ class SlotModel(Base):
 
     id = sa.Column(sa.String(36), primary_key=True, default=_id)
     organisation_id = sa.Column(sa.String(36), nullable=False, index=True)
-    process_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True)
+    process_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     stage_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_stage.id", ondelete="CASCADE"), nullable=True)
-    candidate_id = sa.Column(sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="SET NULL"), nullable=True, index=True)
+    candidate_id = sa.Column(
+        sa.String(36), sa.ForeignKey("selection_process_candidate.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     title = sa.Column(sa.String(200), nullable=False)
     starts_at = sa.Column(sa.DateTime(timezone=True), nullable=False, index=True)
     ends_at = sa.Column(sa.DateTime(timezone=True), nullable=False)
@@ -167,4 +189,3 @@ TABLES = [
     DecisionModel,
     SlotModel,
 ]
-
