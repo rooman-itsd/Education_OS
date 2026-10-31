@@ -49,6 +49,18 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+## Dashboard widgets
+`frontend/src/widgets/index.ts` exports the widgets the role layouts in `platform/identity/config/dashboards/` name:
+
+| Widget | Layout | Permission | Endpoints |
+|---|---|---|---|
+| `training-video-analysis.reviews-pending` | coach | `video:read` | `GET /videos?annotated=false&limit=6` |
+
+The contract has no review status on a video, so a video waits for review while it has no annotation.
+`GET /videos?annotated=false` lists those, most recently recorded first, and its `total` (every such video, not only
+the rows shown) is the "Waiting for review" count. The coach's `session-plan` and the athlete's
+`training-schedule` are not built here yet: their layout ids still name athlete-performance.
+
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its
 tests, `packages/testing`. The backend is `eos_training_video_analysis.api.router:router`; its Alembic chain is `db/`;
