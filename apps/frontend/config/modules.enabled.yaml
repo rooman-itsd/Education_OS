@@ -18,6 +18,7 @@ modules:
   - facilities/inventory-equipment
   - facilities/maintenance
   - finance-operations/budget-grants
+  - finance-operations/e-office
   - finance-operations/fees-accounts
   - finance-operations/procurement
   - student-lifecycle/enrolment-registration
