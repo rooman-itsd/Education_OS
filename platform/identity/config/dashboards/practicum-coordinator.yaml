@@ -3,6 +3,7 @@
 role: practicum-coordinator
 title: "Practicum Coordinator"
 module_roles:
+  - placement-career-officer
   - field-training-coordinator
   - skill-progress-viewer
 widgets:
