@@ -1,11 +1,54 @@
 # Permission catalogue for workflow. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: workflow
-permissions: []
-#  - key: workflow:record:read
-#    description: ...
-#  - key: workflow:record:write
-#    description: ...
-roles: []
-#  - name: workflow-admin
-#    grants: [workflow:record:read, workflow:record:write]
+permissions:
+  - key: workflow:chain:read
+    description: View configured approval chains
+  - key: workflow:chain:write
+    description: Create and modify approval chains
+  - key: workflow:request:create
+    description: Submit a new request into an approval chain
+  - key: workflow:request:read
+    description: View approval requests and pending queues
+  - key: workflow:approval:action
+    description: Approve, reject, or delegate a pending approval step
+  - key: platform:workflow:read
+    description: Super admin only. Cross-organisation workflow monitoring
+
+roles:
+  - name: department-admin
+    description: >-
+      Department Admin / HoD: views pending approvals widget and acts on department workflow items.
+    grants:
+      - workflow:request:read
+      - workflow:approval:action
+
+  - name: org-admin
+    description: >-
+      Organisation Admin: configures approval chains, views all requests, and holds approval authority.
+    grants:
+      - workflow:chain:read
+      - workflow:chain:write
+      - workflow:request:create
+      - workflow:request:read
+      - workflow:approval:action
+
+  - name: faculty
+    description: Faculty members can submit workflow requests (e.g. leave, purchase requests).
+    grants:
+      - workflow:request:create
+      - workflow:request:read
+
+  - name: student
+    description: Students can submit workflow requests (e.g. club approval, leave).
+    grants:
+      - workflow:request:create
+      - workflow:request:read
+
+  - name: super-admin
+    description: >-
+      Super admin: cross-organisation workflow monitoring and platform oversight.
+    grants:
+      - workflow:chain:read
+      - workflow:request:read
+      - platform:workflow:read

@@ -2,12 +2,13 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** planned
+**Status:** in-progress
 
-Document and media management: storage abstraction, versioning, access control.
+Document and media management: storage abstraction, presigned upload/download URLs, metadata catalog, access control.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+- **Responsible for:** Document metadata catalog (`Document`); storage port abstraction (`StoragePort`) with MinIO and in-memory test implementations; presigned upload intent (`/upload-intent`) and confirmation (`/{id}/confirm`); presigned download URL generation (`/{id}/download-url`); document listing and filtering by entity/status; soft deletion and storage object purging; outbox event publishing (`documents.document.uploaded`, `documents.document.deleted`); organisation-level tenant isolation enforced by PostgreSQL RLS (`documents_document`); MIME type validation and executable extension blocking; frontend typed API client and helpers (`@eos/documents`).
+- **Explicitly NOT:** Document content parsing or OCR extraction; document version diffing; approval lifecycle or signature chains (`platform/workflow`); event audit trails (`platform/audit`); arbitrary filesystem access or bypassing storage authorization.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

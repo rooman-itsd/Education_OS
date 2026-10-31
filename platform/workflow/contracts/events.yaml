@@ -1,9 +1,16 @@
 # Domain events published by workflow.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
+# Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
 module: workflow
 version: 1
-events: []
-#  - name: workflow.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: workflow.request.submitted
+    description: A workflow request was submitted into an approval chain.
+  - name: workflow.step.advanced
+    description: An intermediate approval step was approved and the request advanced to the next step.
+  - name: workflow.request.approved
+    description: A workflow request received final approval and completed successfully.
+  - name: workflow.request.rejected
+    description: A workflow request was rejected at an approval step.
+  - name: workflow.request.delegated
+    description: An approval step was delegated to another user.
