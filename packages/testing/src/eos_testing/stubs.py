@@ -103,8 +103,9 @@ class FakeAudit:
 class FakeNotification:
     """platform/notification sendMessage, plus the eos_core.notify email stub the platform uses today.
 
-    `messages` holds sendMessage calls; `emails` reads eos_core.notify.sent, so verification and approval
-    mails sent by tenancy are visible too.
+    `messages` holds sendMessage calls; `emails` reads eos_core.notify.sent, where tenancy still sends its approval,
+    rejection and status mails. The registration verification mail is not there: since #361 it goes through
+    platform/notification itself.
     """
 
     def __init__(self) -> None:
