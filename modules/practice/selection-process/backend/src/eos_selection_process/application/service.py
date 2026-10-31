@@ -479,6 +479,10 @@ class SelectionProcessService:
         panels = repo.list_panels_for_process(self.db, actor.organisation_id, process_id)
         return any(actor.user_id in (p.member_person_ids or []) for p in panels)
 
+    def _get_panelist_process_ids(self, actor: Actor) -> set[str]:
+        panels = self.db.query(PanelModel).filter(PanelModel.organisation_id == actor.organisation_id).all()
+        return {p.process_id for p in panels if actor.user_id in (p.member_person_ids or [])}
+
     def _serialize_candidate(self, c: CandidateModel, actor: Actor | None = None) -> dict:
         decisions = repo.list_decisions_for_candidate(self.db, c.organisation_id, c.id)
         if (
@@ -700,6 +704,9 @@ class SelectionProcessService:
         if not c:
             raise NotFoundError("Candidate not found")
 
+        if c.person_id == actor.user_id:
+            raise ForbiddenError("Cannot decide on own candidacy")
+
         if c.status in FINAL_CANDIDATE_STATUSES:
             raise CandidateFinalizedError()
 
@@ -827,6 +834,9 @@ class SelectionProcessService:
         if not c:
             raise NotFoundError("Candidate not found")
 
+        if c.person_id == actor.user_id:
+            raise ForbiddenError("Cannot finalize own candidacy")
+
         if c.status in FINAL_CANDIDATE_STATUSES:
             raise CandidateFinalizedError()
 
@@ -855,13 +865,37 @@ class SelectionProcessService:
     # ------------------------------------------------------------------
 
     def list_upcoming_slots(self, actor: Actor, candidate_id: str | None = None, limit: int = 10) -> list[dict]:
-        slots = repo.list_upcoming_slots(self.db, actor.organisation_id, candidate_id=candidate_id, limit=limit)
+        is_manager = actor.can(CANDIDATE_READ_ALL) or actor.can(PROCESS_MANAGE)
+        own_candidate_ids: set[str] = set()
+
+        if not is_manager:
+            own_candidates, _ = repo.list_candidates(self.db, actor.organisation_id, person_id=actor.user_id)
+            own_candidate_ids = {c.id for c in own_candidates}
+            panel_process_ids = self._get_panelist_process_ids(actor)
+
+            if candidate_id is not None:
+                cand = repo.get_candidate(self.db, actor.organisation_id, candidate_id)
+                if not cand or (cand.id not in own_candidate_ids and cand.process_id not in panel_process_ids):
+                    raise NotFoundError("Candidate not found")
+                slots = repo.list_upcoming_slots(self.db, actor.organisation_id, candidate_id=candidate_id, limit=limit)
+            else:
+                all_slots = repo.list_upcoming_slots(self.db, actor.organisation_id, limit=limit * 10)
+                slots = [
+                    s
+                    for s in all_slots
+                    if (s.candidate_id and s.candidate_id in own_candidate_ids) or s.process_id in panel_process_ids
+                ][:limit]
+        else:
+            slots = repo.list_upcoming_slots(self.db, actor.organisation_id, candidate_id=candidate_id, limit=limit)
+
         return [
             {
                 "id": s.id,
                 "process_id": s.process_id,
                 "stage_id": s.stage_id,
-                "candidate_id": s.candidate_id if actor.can(CANDIDATE_READ_ALL) or actor.can(PROCESS_MANAGE) else None,
+                "candidate_id": (
+                    s.candidate_id if (is_manager or (s.candidate_id and s.candidate_id in own_candidate_ids)) else None
+                ),
                 "title": s.title,
                 "starts_at": iso(s.starts_at),
                 "ends_at": iso(s.ends_at),

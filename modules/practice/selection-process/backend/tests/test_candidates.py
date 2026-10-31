@@ -176,3 +176,73 @@ def test_candidate_access_and_decision_privacy(client, org):
     judge_decs = client.get(f"{BASE}/candidates/{c1['id']}/decisions", headers=judge_h).json()
     assert len(judge_decs) == 1
     assert judge_decs[0]["score"] == 95.0
+
+
+def test_upcoming_slots_privacy(client, org):
+    from datetime import UTC, datetime, timedelta
+
+    from eos_core.db import SessionLocal
+    from eos_selection_process.infrastructure.models import SlotModel
+
+    _, coord = org.user(COORDINATOR)
+    t = client.post(f"{BASE}/process-types", json={"name": "Audition Slots"}, headers=coord).json()
+
+    p = client.post(
+        f"{BASE}/processes",
+        json={
+            "type_id": t["id"],
+            "title": "Drama Stage Auditions",
+            "stages": [{"name": "Round 1", "sequence": 1}],
+        },
+        headers=coord,
+    ).json()
+    client.post(f"{BASE}/processes/{p['id']}/open", headers=coord)
+
+    cand1_id, cand1_h = org.user("actor")
+    cand2_id, cand2_h = org.user("actor")
+
+    c1 = client.post(f"{BASE}/processes/{p['id']}/candidates", json={"person_id": cand1_id}, headers=coord).json()
+    c2 = client.post(f"{BASE}/processes/{p['id']}/candidates", json={"person_id": cand2_id}, headers=coord).json()
+
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        slot1 = SlotModel(
+            organisation_id=org.id,
+            process_id=p["id"],
+            candidate_id=c1["id"],
+            title="Candidate 1 Audition Slot",
+            starts_at=now + timedelta(days=1),
+            ends_at=now + timedelta(days=1, hours=1),
+            status="scheduled",
+            location="Room 101",
+        )
+        slot2 = SlotModel(
+            organisation_id=org.id,
+            process_id=p["id"],
+            candidate_id=c2["id"],
+            title="Candidate 2 Audition Slot",
+            starts_at=now + timedelta(days=2),
+            ends_at=now + timedelta(days=2, hours=1),
+            status="scheduled",
+            location="Room 102",
+        )
+        db.add_all([slot1, slot2])
+        db.commit()
+
+    # Candidate 2 attempts to query upcoming slots for Candidate 1 -> 404 Not Found
+    res_foreign = client.get(f"{BASE}/slots/upcoming?candidate_id={c1['id']}", headers=cand2_h)
+    assert res_foreign.status_code == 404
+
+    # Candidate 2 queries upcoming slots without candidate_id -> only sees own slot
+    res_cand2 = client.get(f"{BASE}/slots/upcoming", headers=cand2_h)
+    assert res_cand2.status_code == 200
+    cand2_titles = [s["title"] for s in res_cand2.json()]
+    assert "Candidate 2 Audition Slot" in cand2_titles
+    assert "Candidate 1 Audition Slot" not in cand2_titles
+
+    # Coordinator can query upcoming slots -> sees all slots
+    res_coord = client.get(f"{BASE}/slots/upcoming", headers=coord)
+    assert res_coord.status_code == 200
+    coord_titles = [s["title"] for s in res_coord.json()]
+    assert "Candidate 1 Audition Slot" in coord_titles
+    assert "Candidate 2 Audition Slot" in coord_titles

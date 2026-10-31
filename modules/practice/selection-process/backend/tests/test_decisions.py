@@ -219,3 +219,61 @@ def test_unassigned_panelist_cannot_record_decision(client, org):
         headers=panelist_stage1_h,
     )
     assert res_assigned.status_code == 201
+
+
+def test_self_judging_forbidden(client, org):
+    _, coord = org.user(COORDINATOR)
+    t = client.post(f"{BASE}/process-types", json={"name": "Solo Performance"}, headers=coord).json()
+
+    p = client.post(
+        f"{BASE}/processes",
+        json={
+            "type_id": t["id"],
+            "title": "Recital Auditions",
+            "stages": [{"name": "Audition", "sequence": 1}],
+        },
+        headers=coord,
+    ).json()
+
+    stage_id = p["stages"][0]["id"]
+    judge_id, judge_h = org.user(PANELIST)
+
+    client.post(
+        f"{BASE}/processes/{p['id']}/panels",
+        json={"name": "Audition Panel", "stage_id": stage_id, "member_person_ids": [judge_id]},
+        headers=coord,
+    )
+    client.post(f"{BASE}/processes/{p['id']}/open", headers=coord)
+
+    # Panelist is registered as a candidate
+    c_judge = client.post(
+        f"{BASE}/processes/{p['id']}/candidates",
+        json={"person_id": judge_id},
+        headers=coord,
+    ).json()
+
+    # Panelist attempts to record decision on own candidacy -> 403 Forbidden
+    res_self_dec = client.post(
+        f"{BASE}/candidates/{c_judge['id']}/decisions",
+        json={"outcome": "advance", "score": 100.0},
+        headers=judge_h,
+    )
+    assert res_self_dec.status_code == 403
+    assert res_self_dec.json()["detail"]["code"] == "forbidden"
+
+    # Coordinator is registered as a candidate
+    coord_id, coord_h = org.user(COORDINATOR)
+    c_coord = client.post(
+        f"{BASE}/processes/{p['id']}/candidates",
+        json={"person_id": coord_id},
+        headers=coord,
+    ).json()
+
+    # Coordinator attempts to finalize own candidacy -> 403 Forbidden
+    res_self_fin = client.post(
+        f"{BASE}/candidates/{c_coord['id']}/finalize",
+        json={"outcome": "selected"},
+        headers=coord_h,
+    )
+    assert res_self_fin.status_code == 403
+    assert res_self_fin.json()["detail"]["code"] == "forbidden"
