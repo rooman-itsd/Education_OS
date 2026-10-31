@@ -35,14 +35,17 @@ SLOW_MS="${EOS_MONITOR_SLOW_MS:-2000}"
 MAX_SLOW="${EOS_MONITOR_MAX_SLOW:-10}"
 DISK_PATH="${EOS_MONITOR_DISK_PATH:-/}"
 DISK_MAX_PCT="${EOS_MONITOR_DISK_MAX_PCT:-85}"
+DOCKER_TIMEOUT_S="${EOS_MONITOR_DOCKER_TIMEOUT_S:-20}"
 
 log() {
   echo "$*"
   # Under systemd the line above already reaches the journal; send it once more only for a manual run.
   if [ -z "${INVOCATION_ID:-}" ] && command -v logger >/dev/null; then logger -t eos-monitor "$*"; fi
 }
-compose() { docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+# Bounded, so a hung Docker daemon fails the check instead of the whole run being killed by systemd.
+compose() { timeout "$DOCKER_TIMEOUT_S" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
 
+# Returns non-zero when the webhook did not take the alert, so the caller keeps its state and retries next run.
 alert() {
   local text="[$LABEL] $*"
   log "ALERT: $text"
@@ -51,34 +54,47 @@ alert() {
   escaped="$(printf '%s' "$text" | sed 's/\\/\\\\/g; s/"/\\"/g')"
   # The URL goes through stdin, not the command line: it holds the webhook's secret, and `ps` shows arguments.
   curl -fsS -m 10 -o /dev/null -H 'Content-Type: application/json' -d "{\"text\": \"$escaped\"}" -K - \
-    <<<"url = \"$WEBHOOK\"" ||
-    log "the alert could not be posted to the webhook (it is in the journal above)"
+    <<<"url = \"$WEBHOOK\"" && return 0
+  log "the alert could not be posted to the webhook (it is in the journal above); retrying next run"
+  return 1
 }
 
 # One check's result: "" when it passes, else what is wrong. Remembers when it last alerted (a file per
-# check in STATE_DIR), so an alert goes out on a change and as a reminder, not every minute.
+# check in STATE_DIR), so an alert goes out on a change and as a reminder, not every minute. The state changes
+# only once the alert was delivered.
 failing=0
 report() {
-  local name="$1" problem="$2" mark="$STATE_DIR/$1" now
+  local name="$1" problem="$2" mark="$STATE_DIR/$1" now last
   now="$(date +%s)"
   if [ -n "$problem" ]; then
     failing=$((failing + 1))
     if [ ! -f "$mark" ]; then
-      alert "FAILING $name: $problem"
-      echo "$now" >"$mark"
-    elif [ $((now - $(cat "$mark"))) -ge $((REMIND_MIN * 60)) ]; then
-      alert "STILL FAILING $name: $problem"
-      echo "$now" >"$mark"
+      alert "FAILING $name: $problem" && echo "$now" >"$mark"
+      return
+    fi
+    # An empty or damaged mark (a full disk can leave one) counts as "alerted long ago", not as an error.
+    last="$(cat "$mark" 2>/dev/null)"
+    case "$last" in '' | *[!0-9]*) last=0 ;; esac
+    if [ $((now - last)) -ge $((REMIND_MIN * 60)) ]; then
+      alert "STILL FAILING $name: $problem" && echo "$now" >"$mark"
     else
       log "failing $name: $problem (alerted already)"
     fi
   elif [ -f "$mark" ]; then
-    alert "RECOVERED $name"
-    rm -f "$mark"
+    alert "RECOVERED $name" && rm -f "$mark"
   fi
 }
 
 mkdir -p "$STATE_DIR"
+
+# The settings file is read as shell, so an unquoted webhook URL with `&` in it (Google Chat's has two) runs
+# in the background and leaves the setting empty. Never silently: that is a failing check of its own.
+problem=""
+if [ -z "$WEBHOOK" ] && [ -f "$CONFIG" ] &&
+  grep -Eq '^EOS_MONITOR_WEBHOOK_URL=([^"[:space:]]|"[^"])' "$CONFIG"; then
+  problem="EOS_MONITOR_WEBHOOK_URL in $CONFIG did not load, so alerts reach the journal only: put the URL in double quotes"
+fi
+report config "$problem"
 
 # The API answers. Asked twice before failing: an auto-deploy restarts it for a few seconds.
 health() {
@@ -92,10 +108,14 @@ report health "$problem"
 
 # Every service runs (a stopped relay means no event is acted on, a stopped scheduler no job runs).
 problem=""
-if running="$(compose ps --status running --services 2>&1)"; then
+running="$(compose ps --status running --services 2>&1)"
+rc=$?
+if [ "$rc" = 0 ]; then
   missing=""
   for s in $SERVICES; do printf '%s\n' "$running" | grep -qx "$s" || missing="$missing $s"; done
   [ -z "$missing" ] || problem="not running:$missing"
+elif [ "$rc" = 124 ]; then
+  problem="docker did not answer within ${DOCKER_TIMEOUT_S}s"
 else
   problem="docker compose ps failed: ${running:0:120}"
 fi
