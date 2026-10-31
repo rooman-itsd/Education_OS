@@ -1,11 +1,14 @@
-# Modules composed into this app, as <domain>/<module> under modules/, and platform services by name
-# under platform/. The dashboard shell registers each listed one's frontend/src/widgets/index.ts.
+# Modules composed into this app, as <domain>/<module> under modules/, platform services by name under
+# platform/, and integrations by name under integrations/. The dashboard shell registers each listed one's
+# frontend/src/widgets/index.ts.
 # Example:
 #   modules:
 #     - academics/lms
 #     - finance-operations/fees-accounts
 #   platform:
 #     - billing
+#   integrations:
+#     - payment-sbiepay
 modules:
   - academics/academic-management
   - academics/examinations

@@ -12,6 +12,7 @@ double verification, refund, and reconcile settlements. Used by `platform/billin
   - `infrastructure/notifier.py`: signed notifications to `notify_url`.
   - `infrastructure/config.py`: reads `PAYMENT_SBIEPAY_*`.
   - `api/router.py`: the HTTP surface, mounted at `/api/v1/payment-sbiepay`.
+- `frontend/` is the Finance Staff dashboard widget (package `@eos/payment-sbiepay`); see [Frontend](#frontend).
 - `config/env.example` documents every setting.
 - `tests/` covers the flow end to end on the mock gateway, plus the cross-tenant leak test.
 
@@ -60,6 +61,18 @@ These are plain functions that `platform/scheduler` will call. They aren't wired
 - **`sandbox`** (the default) and **`live`**: use `SbiepayGateway`. Both need `PAYMENT_SBIEPAY_CALLBACK_BASE_URL`, so `payment_url` and the gateway's return URL are absolute. Without it, payment calls answer `503`. The gateway can't talk to SBIePay yet; see the limitations below.
 - **`mock`**: an in-memory gateway for development and tests. The redirect form posts straight back to the callback. It must be set explicitly (`PAYMENT_SBIEPAY_MODE=mock`) and is refused unless `EOS_DEV_MODE=true`, so a missing setting never selects it.
 
+## In the host app
+
+`apps/backend/config/modules.enabled.yaml` lists `payment-sbiepay` under `integrations:`, so the API mounts the router at
+`/api/v1/payment-sbiepay`, and `py-setup.sh`, the API image, CI and the auto-deploy install it, run its tests and upgrade
+its chain.
+- **Who reaches it:** the entitlement gate treats it like a module. An organisation reaches it only when its profile and
+  its plan both include `payment-sbiepay`. Every profile does, and so do the standard and premium plans; the trial plan
+  doesn't, so a trial organisation gets `403 module_not_entitled`.
+- **Without settings:** the API starts with no `PAYMENT_SBIEPAY_*` set, because settings are read per call. The read
+  endpoints (payments, the reconciliation summary and runs) work. Starting a payment, verify, refunds and reconciliation
+  runs answer `503` until the gateway settings exist (see Modes).
+
 ## Migrations
 
 `db/` holds this adapter's own Alembic chain:
@@ -84,6 +97,27 @@ pytest integrations/payment-sbiepay
 
 The tests mount only this adapter's router and issue tokens with `eos_core.security`, so they need no other module.
 
+## Frontend
+
+`frontend/src/widgets/index.ts` exports the dashboard widget. The Finance Staff layout in
+`platform/identity/config/dashboards/finance-staff.yaml` places it, and the `integrations:` list in `apps/frontend`
+registers it (a separate PR).
+
+| Widget | Dashboard | Endpoint | Permission |
+|---|---|---|---|
+| `payment-sbiepay.reconciliation` | Finance Staff | `GET /reconciliation/summary` | `payment-sbiepay:payment:read` |
+
+- **Online payments reconciliation:** today's payments through SBIePay: succeeded, settled and pending, each with its
+  count and amount, and failed with its count. Under them, the latest settlement reconciliation for the day: a danger
+  badge with the number of mismatches, or "No mismatches", with "Last reconciled <date, time>" in the viewer's time
+  zone; "Not reconciled yet" when no run exists for the day. Read-only: runs are started through `POST /reconciliation/runs`.
+- **Data:** the widget reads through `src/api/client.ts`, a hand-written typed client that the generated client will
+  replace. It asks for no `date`, so the adapter summarises today in UTC (see the limitations).
+- **States:** loading; empty ("No online payments today") when every count is zero and the day has no run; and error
+  with a retry when trying again can help. Until the adapter is mounted, the error reads "Payment data is not available yet."
+- **Tests:** `cd integrations/payment-sbiepay/frontend && pnpm test` (vitest and Testing Library), or
+  `corepack pnpm --filter @eos/payment-sbiepay test` from the repo root.
+
 ## Known limitations (tracked on #97)
 
 - **Starting a payment needs only the payer's token.** A payer could start a payment for the right module but someone else's invoice, or a different amount. Consumers must check `amount` and `source_reference` against their own record before acting on `payment-sbiepay.payment.succeeded`. Service-to-service authentication is the platform's decision (raised on #97).
@@ -96,4 +130,5 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
   - Reconciling subscription payments against the platform account is a platform task.
 - **Days use UTC.** That applies to the summary, reconciliation and list filters.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
-- **Not mounted in `apps/backend` and not run in CI yet.** Those files belong to other owners.
+- **The reconciliation summary's default day is UTC,** while the contract says the organisation's time zone. Pass `date` to choose the day.
+- **The Finance Staff widget `payment-sbiepay.reconciliation` (#376) isn't on the dashboard yet.** `apps/frontend` must read an `integrations:` list (#375) and list `payment-sbiepay` in it (a follow-up PR).
