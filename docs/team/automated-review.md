@@ -19,9 +19,9 @@ Himanshu); review drafts.
 
 ## Setup (repository admin, once)
 Settings → Secrets and variables → Actions:
-- `ANTHROPIC_API_KEY`: an Anthropic API key (API billing). Alternative that uses the subscription instead:
-  `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`, and change the action input in the workflow to
-  `claude_code_oauth_token`.
+- `CLAUDE_CODE_OAUTH_TOKEN`: the long-lived token `claude setup-token` prints (uses Faizan's Claude subscription,
+  so reviews count against the same usage as his own sessions). Alternative with separate API billing:
+  `ANTHROPIC_API_KEY`, and change the action input in the workflow to `anthropic_api_key`.
 - `FAIZAN_REVIEW_TOKEN`: a fine-grained personal access token of @faizanrooman, repository
   `rooman-itsd/Education_OS`, permission "Pull requests: Read and write" only, one-year expiry. Rotate it when it expires.
 

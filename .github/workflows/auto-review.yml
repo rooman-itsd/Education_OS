@@ -7,9 +7,9 @@
 # Every new commit on the PR triggers a fresh review; an in-flight review of an older commit is cancelled.
 #
 # Secrets (repository settings → Secrets and variables → Actions):
-#   ANTHROPIC_API_KEY     Anthropic API key used by the review (API billing, separate from any subscription).
-#                         Alternative: CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` (uses the subscription);
-#                         swap the `anthropic_api_key` input below for `claude_code_oauth_token`.
+#   CLAUDE_CODE_OAUTH_TOKEN  Long-lived token from `claude setup-token` (uses Faizan's Claude subscription).
+#                            Alternative: ANTHROPIC_API_KEY (API billing); swap the `claude_code_oauth_token`
+#                            input below for `anthropic_api_key`.
 #   FAIZAN_REVIEW_TOKEN   A fine-grained personal access token of @faizanrooman with "Pull requests: write"
 #                         on this repository. The review is posted with it, nothing else.
 name: auto-review
@@ -78,7 +78,7 @@ jobs:
       - name: Review with Claude Code
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are reviewing pull request #${{ github.event.pull_request.number }} of ${{ github.repository }}
             on behalf of the repository lead (Faizan). The PR branch is checked out in the working directory;
