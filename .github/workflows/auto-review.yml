@@ -1,17 +1,17 @@
 # Automatic review on the lead's behalf (docs/team/automated-review.md).
 #
 # When a pull request asks @faizanrooman for a review, or touches a path he is a code owner of, Claude Code
-# checks the branch out, runs the suites and the repository checks, and writes a verdict. A separate step
-# then posts that verdict as a GitHub review from Faizan's own token (so it counts as a code owner's
-# approval): "request changes" with the findings, or "approve". The merge watcher merges approved PRs.
-# Every new commit on the PR triggers a fresh review; an in-flight review of an older commit is cancelled.
+# checks the branch out, runs the suites and the repository checks, and writes a verdict, which is posted as a
+# comment review by the workflow's own token: "Verdict: approve" with follow-ups, or "Verdict: changes" with
+# the findings. The review is ADVISORY: it never approves. This job runs code from the PR (its tests, its
+# install scripts), so nothing in it may hold a credential that could approve or merge; a human code owner
+# reads the verdict and approves, and the merge watcher merges. Every new commit triggers a fresh review and
+# cancels an in-flight one.
 #
-# Secrets (repository settings → Secrets and variables → Actions):
+# Secret (repository settings → Secrets and variables → Actions):
 #   CLAUDE_CODE_OAUTH_TOKEN  Long-lived token from `claude setup-token` (uses Faizan's Claude subscription).
 #                            Alternative: ANTHROPIC_API_KEY (API billing); swap the `claude_code_oauth_token`
 #                            input below for `anthropic_api_key`.
-#   FAIZAN_REVIEW_TOKEN   A fine-grained personal access token of @faizanrooman with "Pull requests: write"
-#                         on this repository. The review is posted with it, nothing else.
 name: auto-review
 
 on:
@@ -43,7 +43,7 @@ jobs:
           CORE: '^(platform/(identity|tenancy|billing|api-gateway)/|packages/|apps/backend/src/)'
         run: |
           files=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json files --jq '.files[].path')
-          requested=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json reviewRequests --jq '[.reviewRequests[].requestedReviewer.login] | index("faizanrooman") != null')
+          requested=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json reviewRequests --jq '[.reviewRequests[].login] | index("faizanrooman") != null')
           owned=$(echo "$files" | grep -Eq "$OWNED" && echo true || echo false)
           core=$(echo "$files" | grep -Eq "$CORE" && echo true || echo false)
           if [ "$requested" = true ] || [ "$owned" = true ]; then echo "review=true" >> "$GITHUB_OUTPUT"; else echo "review=false" >> "$GITHUB_OUTPUT"; fi
@@ -110,23 +110,18 @@ jobs:
             --model ${{ needs.decide.outputs.model }}
             --max-turns 80
             --allowedTools "Bash,Read,Grep,Glob,Write(${{ runner.temp }}/verdict.json)"
-      - name: Post the verdict as Faizan's review
+      - name: Post the verdict as a comment review
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.FAIZAN_REVIEW_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           MODEL: ${{ needs.decide.outputs.model }}
           VERDICT: ${{ runner.temp }}/verdict.json
         run: |
-          if [ -z "$GH_TOKEN" ]; then echo "FAIZAN_REVIEW_TOKEN is not set; nothing posted"; exit 0; fi
           if ! jq -e '.verdict' "$VERDICT" >/dev/null 2>&1; then
-            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review on Faizan's behalf could not complete on ${HEAD:0:7} (see the auto-review run); a human review follows."
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review (advisory) could not complete on ${HEAD:0:7}; see the auto-review run. A human review follows."
             exit 0
           fi
-          body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"Automated review on Faizan'"'"'s behalf (" + $m + ", head " + $h + "). " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nEvery new commit is reviewed again; approved PRs are merged by the watcher."' "$VERDICT")
-          if [ "$(jq -r .verdict "$VERDICT")" = approve ]; then
-            gh pr review "$PR" -R "$GITHUB_REPOSITORY" --approve --body "$body"
-          else
-            gh pr review "$PR" -R "$GITHUB_REPOSITORY" --request-changes --body "$body"
-          fi
+          body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"**Automated review (advisory, " + $m + ", head " + $h + "). Verdict: " + .verdict + ".** " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nThis review does not approve: a code owner reads it and approves. Every new commit is reviewed again."' "$VERDICT")
+          gh pr review "$PR" -R "$GITHUB_REPOSITORY" --comment --body "$body"
