@@ -100,6 +100,15 @@ def test_athlete_profile_lifecycle_publishes_events(client, org):
     r = client.patch(f"{BASE}/athletes/{a['id']}", json={"primary_discipline_id": jumps["id"]}, headers=org.admin)
     assert r.json()["discipline_ids"] == [jumps["id"], sprints["id"]]
 
+    # changing user_id publishes athlete.updated with changed_fields == ["user_id"] and the new user_id
+    new_user = "33333333-3333-3333-3333-333333333333"
+    r = client.patch(f"{BASE}/athletes/{a['id']}", json={"user_id": new_user}, headers=org.admin)
+    assert r.status_code == 200 and r.json()["user_id"] == new_user
+    events = outbox(org.id, "athlete-performance.athlete.updated")
+    assert len(events) == 3
+    assert events[2].payload["changed_fields"] == ["user_id"]
+    assert events[2].payload["user_id"] == new_user
+
 
 def test_athlete_filters_and_refusals(client, org):
     sprints, jumps = org.discipline(), org.discipline("Athletics (jumps)")
@@ -454,7 +463,8 @@ def test_an_expired_clearance_reads_as_not_cleared(client, org, monkeypatch):
     )
     assert client.get(f"{BASE}/athletes/{a['id']}/clearance", headers=medic).json()["status"] == "cleared"
 
-    monkeypatch.setattr(service, "clock", lambda: datetime(2026, 10, 31, 9, 0, tzinfo=UTC))  # valid_until has passed
+    # 19:00 UTC on 30 Oct is 00:30 IST on 31 Oct: lapses by the institution's local date
+    monkeypatch.setattr(service, "clock", lambda: datetime(2026, 10, 30, 19, 0, 0, tzinfo=UTC))
     lapsed = client.get(f"{BASE}/athletes/{a['id']}/clearance", headers=medic).json()
     assert lapsed["status"] == "not_cleared"
     assert lapsed["valid_until"] == "2026-10-30" and lapsed["set_by"] == medic_id  # when it ran out stays visible

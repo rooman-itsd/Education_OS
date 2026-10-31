@@ -16,10 +16,11 @@ modules:
   - facilities/maintenance
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
+  - finance-operations/procurement
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
   - student-lifecycle/web-portal-cms
   - support/helpdesk
-integrations: []
+integrations: [messaging-providers, payment-sbiepay]
 platform: [identity, tenancy, billing, notification, event-bus, scheduler]

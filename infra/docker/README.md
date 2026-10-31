@@ -161,6 +161,13 @@ nothing reacts to them. Its log:
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api logs --tail 20 relay
 ```
 
+**The scheduler.** The `scheduler` service (`python -m eos_scheduler`, platform/scheduler) checks every 30
+seconds for schedules that are due, such as billing's nightly trial expiry and its 7/3/1-day reminders, and
+publishes `scheduler.job.due`; the relay hands that to the module that owns the job, which reports back and
+closes the run. A run nobody closes fails after `SCHEDULER_RUN_TIMEOUT_S`. It needs no Redis (the plain loop).
+**Run exactly one**: a second one is safe (due schedules are claimed `FOR UPDATE SKIP LOCKED`) but pointless,
+and the API never runs the loop. Its log: `... logs --tail 20 scheduler`.
+
 **Mail.** With `EOS_DEV_MODE=true` nothing is sent and the verification token comes back in the register
 response. With dev mode off, `NOTIFICATION_TRANSPORT=memory` is refused and registration answers 503, so a
 production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_PROVIDERS_SMTP_*` relay
