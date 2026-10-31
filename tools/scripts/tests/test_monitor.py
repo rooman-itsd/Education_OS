@@ -24,6 +24,7 @@ pytestmark = pytest.mark.skipif(
 
 # The fakes read what to answer from files in $FAKE_DIR, so a test can change the host between runs.
 FAKE_DOCKER = """#!/bin/sh
+[ -f "$FAKE_DIR/docker-hangs" ] && exec sleep 30
 case "$*" in
   *"ps --status running --services"*) cat "$FAKE_DIR/running" ;;
   *"logs --no-log-prefix --since"*) cat "$FAKE_DIR/logs" 2>/dev/null || true ;;
@@ -32,7 +33,8 @@ esac
 """
 FAKE_CURL = """#!/bin/sh
 case "$*" in
-  *"-K -"*)  # the webhook: record the URL (from stdin) and the body
+  *"-K -"*)  # the webhook: record the URL (from stdin) and the body; refuse while webhook-down exists
+    [ -f "$FAKE_DIR/webhook-down" ] && { cat >/dev/null; echo "curl: (22) 503" >&2; exit 22; }
     { cat; for a in "$@"; do printf 'ARG %s\\n' "$a"; done; } >>"$FAKE_DIR/posted" ;;
   *)
     [ -f "$FAKE_DIR/api-down" ] && { echo "curl: (7) Failed to connect" >&2; exit 7; }
@@ -174,3 +176,69 @@ def test_without_a_webhook_alerts_stay_in_the_log(box):
     r = _run(box)
     assert len(_alerts(r)) == 1
     assert not (box["fake"] / "posted").exists()
+
+
+@pytest.mark.parametrize("content", ["", "garbage\n", "17000000xx\n"])
+def test_an_empty_or_damaged_mark_counts_as_alerted_long_ago(box, content):
+    """A full disk can leave an empty mark: the run must not stop there, and every later check must still run."""
+    (box["fake"] / "running").write_text("db\napi\nrelay\n", newline="\n")
+    (box["tmp"] / "state").mkdir()
+    (box["tmp"] / "state" / "containers").write_text(content)
+    box["mark"].unlink()  # a later check that must still run and alert
+    r = _run(box)
+    assert "syntax error" not in r.stderr, r.stderr
+    alerts = _alerts(r)
+    assert "ALERT: [staging] STILL FAILING containers: not running: scheduler" in alerts
+    assert any("FAILING backup:" in a for a in alerts)
+    assert (box["tmp"] / "state" / "containers").read_text().strip().isdigit()
+
+
+def test_an_unquoted_webhook_url_is_reported_not_silently_dropped(box):
+    config = box["tmp"] / "monitor.env"
+    config.write_text("EOS_MONITOR_WEBHOOK_URL=https://chat.example.invalid/v1/spaces/X/messages?key=K&token=T\n")
+    r = _run(box, EOS_MONITOR_CONFIG=str(config))
+    alerts = _alerts(r)
+    assert len(alerts) == 1 and "FAILING config: EOS_MONITOR_WEBHOOK_URL" in alerts[0]
+    assert "double quotes" in alerts[0]
+
+
+def test_a_quoted_webhook_url_with_ampersands_loads(box):
+    config = box["tmp"] / "monitor.env"
+    url = "https://chat.example.invalid/v1/spaces/X/messages?key=K&token=T"
+    config.write_text(f'EOS_MONITOR_WEBHOOK_URL="{url}"\nEOS_MONITOR_LABEL=staging\n')
+    (box["fake"] / "api-down").write_text("")
+    r = _run(box, EOS_MONITOR_CONFIG=str(config))
+    assert not any("config" in a for a in _alerts(r))
+    assert f'url = "{url}"' in (box["fake"] / "posted").read_text()
+
+
+def test_an_alert_the_webhook_refused_is_sent_again_next_run(box):
+    url = "https://hooks.example.invalid/services/SECRET"
+    (box["fake"] / "api-down").write_text("")
+    (box["fake"] / "webhook-down").write_text("")
+    first = _run(box, EOS_MONITOR_WEBHOOK_URL=url)
+    assert len(_alerts(first)) == 1 and "retrying next run" in first.stdout
+    assert not (box["tmp"] / "state" / "health").exists()  # not recorded as sent
+
+    (box["fake"] / "webhook-down").unlink()
+    second = _run(box, EOS_MONITOR_WEBHOOK_URL=url)
+    assert _alerts(second) == [_alerts(first)[0]]  # the same FAILING alert, delivered now
+    assert (box["tmp"] / "state" / "health").exists()
+
+    # A recovery the webhook refused is retried too, not lost.
+    (box["fake"] / "api-down").unlink()
+    (box["fake"] / "webhook-down").write_text("")
+    assert _alerts(_run(box, EOS_MONITOR_WEBHOOK_URL=url)) == ["ALERT: [staging] RECOVERED health"]
+    (box["fake"] / "webhook-down").unlink()
+    assert _alerts(_run(box, EOS_MONITOR_WEBHOOK_URL=url)) == ["ALERT: [staging] RECOVERED health"]
+    assert _alerts(_run(box, EOS_MONITOR_WEBHOOK_URL=url)) == []
+
+
+def test_a_hung_docker_fails_the_check_instead_of_the_run(box):
+    (box["fake"] / "docker-hangs").write_text("")
+    started = time.monotonic()
+    r = _run(box, EOS_MONITOR_DOCKER_TIMEOUT_S="1")
+    assert time.monotonic() - started < 15
+    alerts = _alerts(r)
+    assert "ALERT: [staging] FAILING containers: docker did not answer within 1s" in alerts
+    assert any("FAILING errors: the api logs could not be read" in a for a in alerts)

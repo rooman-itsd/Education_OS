@@ -10,25 +10,34 @@ alerts when something breaks and when it recovers. The API's own logs and Sentry
 
 | Check | Fails when (defaults; all in `/etc/eos/monitor.env`) |
 |---|---|
+| `config` | `EOS_MONITOR_WEBHOOK_URL` is in the settings file but did not load (an unquoted URL with `&`) |
 | `health` | `http://127.0.0.1:8000/api/v1/health` does not answer `ok` within 5 s, twice 10 s apart |
-| `containers` | one of the compose services `db api relay scheduler` is not running |
+| `containers` | one of the compose services `db api relay scheduler` is not running, or Docker does not answer in 20 s |
 | `backup` | `/var/backups/eos/last-success` (written by `eos-db-backup` on success) is missing or 26 h old |
 | `errors` | more than 5 API answers with status 5xx in the last 5 minutes, or the API's logs cannot be read |
 | `slow` | more than 10 API requests slower than 2000 ms in the last 5 minutes |
 | `disk` | `/` is 85 % full or more |
 
-`errors` and `slow` count the API's JSON `request` lines (`EOS_LOG_FORMAT=json`, the default); with the console
-format they see nothing.
+`errors` and `slow` count the API's JSON `request` lines (`EOS_LOG_FORMAT=json`, the default; #379); before
+those are deployed, or with the console format, they always pass.
+
+**What it cannot see.** `/api/v1/health` is static: it answers `ok` while the API process runs, without asking
+the database (the `containers` and `errors` checks cover that). And this runs **on** the API host, so when the
+whole host is down, nothing alerts: that needs a check from outside (phase 2, or a free external uptime check
+on the public URL).
 
 ## Alerts
 
 - An alert is sent when a check **starts failing**, again **every 60 minutes** while it keeps failing, and once
-  when it **recovers**; never every minute. `/var/lib/eos-monitor/<check>` holds when it last alerted.
+  when it **recovers**; never every minute. `/var/lib/eos-monitor/<check>` holds when it last alerted. An
+  alert the webhook did not take is sent again the next minute, recoveries included.
 - Alerts always go to the journal: `journalctl -t eos-monitor`. Each starts with `ALERT: [<label>]`.
 - With `EOS_MONITOR_WEBHOOK_URL` set, each alert is also posted as `{"text": "..."}`. Slack, Mattermost and
   Google Chat incoming webhooks take that as is; for a Telegram bot use
   `https://api.telegram.org/bot<token>/sendMessage?chat_id=<chat id>`. The URL is a secret: it stays in
   `/etc/eos/monitor.env` (mode 600), never in git, and is passed to curl on stdin, not on its command line.
+  **Put it in double quotes**, `EOS_MONITOR_WEBHOOK_URL="https://...?key=K&token=T"`: the file is read as
+  shell, and without quotes the `&` cuts the line (the `config` check then fails).
 - Alerts carry counts, service names and paths only, never log lines, so nothing personal leaves the host.
 
 ## Install (once per API host, as root)
@@ -42,7 +51,7 @@ Re-run `install.sh` after `eos-monitor.sh` changes (the copy in `/usr/local/bin`
 settings in `/etc/eos/monitor.env` are kept. To set the webhook or a label:
 
 ```
-nano /etc/eos/monitor.env          # EOS_MONITOR_WEBHOOK_URL=..., EOS_MONITOR_LABEL=staging
+nano /etc/eos/monitor.env          # EOS_MONITOR_WEBHOOK_URL="...", EOS_MONITOR_LABEL=staging
 systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
 ```
 
