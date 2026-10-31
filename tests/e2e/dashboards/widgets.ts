@@ -28,6 +28,12 @@ export interface LayoutWidget {
   unavailable?: string;
   /** The wording when the API refuses the role (the probe answers 403). */
   forbidden?: string;
+  /**
+   * Statuses other than 200 that the widget shows as its empty state for a new organisation, because its client
+   * reads them as "nothing yet" (academic-management answers 404 active_term_not_found while no term is active, and
+   * course roster says "No courses this term"). The probe accepts them for an enabled module.
+   */
+  emptyWhen?: number[];
 }
 
 export const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -113,7 +119,8 @@ export async function standardPlan(request: APIRequestContext, organisationId: s
 export async function probe(request: APIRequestContext, user: DashboardUser, w: LayoutWidget): Promise<number> {
   const r = await request.get(`/api/v1${w.probe}`, { headers: { Authorization: `Bearer ${user.token}` } });
   if (backendEnabled(w.module)) {
-    expect(r.status(), `${w.id}: ${w.module} is enabled in apps/backend/config/modules.enabled.yaml, so ${w.probe} must answer 200 (got ${r.status()} ${await r.text()})`).toBe(200);
+    const empty = [200, ...(w.emptyWhen ?? [])];
+    expect(empty, `${w.id}: ${w.module} is enabled in apps/backend/config/modules.enabled.yaml, so ${w.probe} must answer ${empty.join(" or ")} (got ${r.status()} ${await r.text()})`).toContain(r.status());
   }
   return r.status();
 }
@@ -123,7 +130,7 @@ export async function expectBody(page: Page, w: LayoutWidget, status: number) {
   const panel = widget(page, w.title!);
   if (backendEnabled(w.module)) {
     // enabled in the backend: data or the empty state, never the "not available yet" or "no access" wording
-    expect(status, `${w.id}: ${w.module} is enabled in the backend, its probe must answer 200`).toBe(200);
+    expect([200, ...(w.emptyWhen ?? [])], `${w.id}: ${w.module} is enabled in the backend, its probe must answer 200`).toContain(status);
     await expect(panel.getByText(w.empty!, { exact: true })).toBeVisible();
     return;
   }
