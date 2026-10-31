@@ -1,0 +1,86 @@
+# End-to-end journeys (tests/e2e, Playwright): the suite starts its own API and web dev server on a fresh SQLite
+# database and walks every journey in Chromium, as it does on a laptop (tests/e2e/README.md). Runs after every merge
+# to main, on pull requests that change the journeys, the frontend or the dashboard layouts, and by hand.
+# A second job, by hand only, runs the read-only smoke checks against a deployed site.
+name: system
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "tests/e2e/**"
+      - "apps/frontend/**"
+      - "platform/identity/config/dashboards/**"
+      - ".github/workflows/system.yml"
+  workflow_dispatch:
+    inputs:
+      smoke_url:
+        description: "Also run the smoke checks against this site (e.g. https://educationos.futureacad.ae); empty: skip"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: system-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true" # playwright.config.ts: one retry, and test.only fails the run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: tools/scripts/py-setup.sh
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Journeys (tests/e2e)
+        run: pnpm --filter e2e e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            tests/e2e/.cache/playwright-report
+            tests/e2e/.cache/test-results
+          retention-days: 7
+
+  smoke:
+    if: github.event_name == 'workflow_dispatch' && inputs.smoke_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CI: "true"
+      E2E_BASE_URL: ${{ inputs.smoke_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium for Playwright
+        run: pnpm --filter e2e exec playwright install --with-deps chromium
+      - name: Smoke checks (tests/e2e/smoke, read-only)
+        run: pnpm --filter e2e e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-report
+          path: tests/e2e/.cache
+          retention-days: 7

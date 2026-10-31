@@ -53,6 +53,8 @@ const localStack = [
 export default defineConfig({
   testDir: ".",
   testMatch: deployed ? "smoke/**/*.spec.ts" : "**/*.spec.ts",
+  // Signs in once so the dev server has compiled every module before the journeys start (warmup.ts).
+  globalSetup: "./warmup.ts",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
