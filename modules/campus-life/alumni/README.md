@@ -2,20 +2,27 @@
 
 **Domain:** campus-life
 **Kind:** feature
-**Status:** planned
+**Status:** in-progress (contracts)
 
-Alumni directory, events, donations, engagement campaigns.
+Alumni directory and mentoring.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+- **In (v1.0):** a directory of alumni kept by staff (alumni have no login), a mentor flag, assignment of a mentor
+  to a student, optional mentoring sessions, and the student's own view of their mentor (widget `alumni.mentoring`).
+- **Not in v1.0:** alumni logins or self-registration, students browsing the directory, automatic matching, alumni
+  events, donations and engagement campaigns (v1.1).
+
+Product requirements and the owner's decisions: [docs/prd.md](docs/prd.md). Stories: [docs/user-stories.md](docs/user-stories.md).
 
 ## Public surface
-- API: [contracts/openapi.yaml](contracts/openapi.yaml)
+- API: [contracts/openapi.yaml](contracts/openapi.yaml), base `/api/v1/alumni`
 - Events: [contracts/events.yaml](contracts/events.yaml)
-- Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
+- Permissions: [contracts/permissions.yaml](contracts/permissions.yaml). Module roles `alumni-coordinator` and
+  `alumni-mentee`; management-institute maps `placement-officer` and `management-student` onto them in their layouts.
 
 ## Dependencies
-See `module.yaml`. This module must not import code from any other module under `modules/`.
+See `module.yaml`: platform identity and audit, through `packages/sdk`. This module must not import code from any
+other module under `modules/`.
 
 ## Layout
 | Path | Purpose |

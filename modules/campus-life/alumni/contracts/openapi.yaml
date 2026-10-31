@@ -2,9 +2,299 @@ openapi: 3.1.0
 info:
   title: alumni API
   version: 0.1.0
-  description: "Alumni directory, events, donations, engagement campaigns."
+  description: |-
+    Alumni directory and mentoring (v1.0). An alumnus is a directory record created by staff; alumni have no login.
+    A record created by staff is verified (verified_by and verified_at are the creator and the creation time). Staff
+    flag an alumnus as a mentor, assign a mentor to a student, and may record mentoring sessions. A student sees only
+    their own mentor, with the mentor's contact details, and their own upcoming sessions (GET /me/mentoring); students
+    do not browse the directory. Events, donations and engagement campaigns are not in v1.0. Timestamps are UTC.
+
+    Errors answer {"detail": {"code", "message", "field"?}}. 401 without a valid token, 403 `forbidden` without the
+    operation's permission, 404 `not_found` for a record not in the caller's organisation. Every other code, by status:
+    - 400 `invalid_cursor`: a list cursor that is not one this API returned.
+    - 409 (the state does not allow it): `alumnus_archived` (an archived record is not edited or assigned),
+      `not_archived` (only an archived record is restored), `not_a_mentor` (the alumnus is not flagged as a mentor),
+      `mentor_has_active_assignments` (archiving a mentor, or clearing is_mentor, while they mentor someone),
+      `student_already_assigned` (the student already has an active mentor), `assignment_not_active` (an ended
+      assignment is not ended again and gets no new sessions), `session_not_scheduled` (only a scheduled session is
+      edited, completed or cancelled).
+    - 422 (the request is not acceptable): `invalid_name`, `invalid_graduation_year`, `invalid_email`, `invalid_phone`,
+      `invalid_url`, `invalid_date` (an end date before the start date), `invalid_scheduled_at` (a session before the
+      assignment started), `invalid_duration`.
 servers:
   - url: /api/v1/alumni
-paths: {}
+paths:
+  /directory:
+    get:
+      summary: >-
+        Alumni records, newest first; archived records only with status=archived. Includes contact details.
+        Permission alumni:directory:read.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/AlumnusStatus" } }
+        - { name: is_mentor, in: query, schema: { type: boolean } }
+        - { name: graduation_year, in: query, schema: { type: integer } }
+        - { name: programme, in: query, schema: { type: string } }
+        - { name: q, in: query, description: "Matches name, company or designation", schema: { type: string } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AlumnusPage" } } } }
+        "400": { description: "invalid_cursor" }
+    post:
+      summary: >-
+        Add an alumnus. The record is verified by its creator (verified_by, verified_at). Publishes
+        alumni.alumnus.added. Permission alumni:directory:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AlumnusInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Alumnus" } } } }
+        "422": { description: "invalid_name, invalid_graduation_year, invalid_email, invalid_phone or invalid_url" }
+  /directory/{id}:
+    get:
+      summary: One alumnus. Permission alumni:directory:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Alumnus" } } } } }
+    put:
+      summary: >-
+        Edit an active alumnus. Clearing is_mentor while the alumnus mentors someone is refused. Permission
+        alumni:directory:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AlumnusInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Alumnus" } } } }
+        "409": { description: "alumnus_archived, or mentor_has_active_assignments when is_mentor is cleared" }
+        "422": { description: "invalid_name, invalid_graduation_year, invalid_email, invalid_phone or invalid_url" }
+  /directory/{id}/archive:
+    post:
+      summary: >-
+        Archive an alumnus; nothing is deleted. A mentor with an active assignment is not archived until it is ended.
+        Publishes alumni.alumnus.archived. Permission alumni:directory:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Alumnus" } } } }
+        "409": { description: "alumnus_archived (already archived) or mentor_has_active_assignments" }
+  /directory/{id}/restore:
+    post:
+      summary: Make an archived alumnus active again. Permission alumni:directory:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Alumnus" } } } }
+        "409": { description: "not_archived" }
+  /mentoring/assignments:
+    get:
+      summary: Mentoring assignments, active first, then newest. Permission alumni:mentoring:read.
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/AssignmentStatus" } }
+        - { name: mentor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: student_id, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AssignmentPage" } } } }
+        "400": { description: "invalid_cursor" }
+    post:
+      summary: >-
+        Assign an active alumnus flagged as a mentor to a student. A student has at most one active assignment; a mentor
+        may have several. Publishes alumni.mentoring-assignment.started. Permission alumni:mentoring:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AssignmentInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Assignment" } } } }
+        "404": { description: "not_found: the mentor is not a record of this organisation" }
+        "409": { description: "alumnus_archived, not_a_mentor or student_already_assigned" }
+        "422": { description: "invalid_date" }
+  /mentoring/assignments/{id}:
+    get:
+      summary: One assignment with its mentor's details. Permission alumni:mentoring:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Assignment" } } } } }
+  /mentoring/assignments/{id}/end:
+    post:
+      summary: >-
+        End an active assignment (default today). Its scheduled sessions are cancelled. Publishes
+        alumni.mentoring-assignment.ended. Permission alumni:mentoring:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { ended_on: { type: string, format: date }, reason: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Assignment" } } } }
+        "409": { description: "assignment_not_active" }
+        "422": { description: "invalid_date (before started_on)" }
+  /mentoring/assignments/{id}/sessions:
+    get:
+      summary: Sessions of one assignment, soonest first. Permission alumni:mentoring:read.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Session" } } } } } }
+    post:
+      summary: >-
+        Schedule a session on an active assignment. Sessions are optional records. Publishes
+        alumni.mentoring-session.scheduled. Permission alumni:mentoring:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SessionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "409": { description: "assignment_not_active" }
+        "422": { description: "invalid_scheduled_at or invalid_duration" }
+  /mentoring/sessions/{id}:
+    put:
+      summary: Reschedule or edit a scheduled session. Permission alumni:mentoring:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SessionInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "409": { description: "session_not_scheduled" }
+        "422": { description: "invalid_scheduled_at or invalid_duration" }
+  /mentoring/sessions/{id}/complete:
+    post:
+      summary: Record that a scheduled session took place. Publishes alumni.mentoring-session.completed. Permission alumni:mentoring:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { notes: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "409": { description: "session_not_scheduled" }
+  /mentoring/sessions/{id}/cancel:
+    post:
+      summary: Cancel a scheduled session. Publishes alumni.mentoring-session.cancelled. Permission alumni:mentoring:manage.
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        "409": { description: "session_not_scheduled" }
+  /me/mentoring:
+    get:
+      summary: >-
+        The caller's active mentoring assignment, with the mentor's contact details, and its next five scheduled
+        sessions, soonest first. assignment is null when the caller has no active mentor. Only the assigned student
+        sees the mentor's contact details here; ended assignments are not shown. Backs the widget alumni.mentoring.
+        Permission alumni:self:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyMentoring" } } } } }
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  schemas:
+    AlumnusStatus: { type: string, enum: [active, archived] }
+    AlumnusInput:
+      type: object
+      required: [full_name, graduation_year]
+      properties:
+        full_name: { type: string, minLength: 1, maxLength: 200 }
+        graduation_year: { type: integer, minimum: 1900, description: "Not later than the current year" }
+        programme: { type: string, nullable: true, description: "The programme graduated from, as the institution names it" }
+        current_company: { type: string, nullable: true }
+        current_designation: { type: string, nullable: true }
+        industry: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        email: { type: string, format: email, nullable: true, description: "Contact detail: staff and the assigned mentee only" }
+        phone: { type: string, nullable: true, description: "Contact detail: staff and the assigned mentee only" }
+        linkedin_url: { type: string, format: uri, nullable: true, description: "Contact detail: staff and the assigned mentee only" }
+        is_mentor: { type: boolean, default: false, description: "Available to be assigned as a mentor" }
+        notes: { type: string, nullable: true, description: "Staff only; never shown to students" }
+    Alumnus:
+      allOf:
+        - { $ref: "#/components/schemas/AlumnusInput" }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
+            status: { $ref: "#/components/schemas/AlumnusStatus" }
+            active_mentees: { type: integer, readOnly: true, description: "Active assignments where this alumnus is the mentor" }
+            created_by: { type: string, format: uuid, readOnly: true }
+            created_at: { type: string, format: date-time, readOnly: true }
+            verified_by: { type: string, format: uuid, nullable: true, readOnly: true, description: "In v1.0 the creator: a record created by staff is verified" }
+            verified_at: { type: string, format: date-time, nullable: true, readOnly: true }
+            archived_at: { type: string, format: date-time, nullable: true, readOnly: true }
+            archive_reason: { type: string, nullable: true, readOnly: true }
+    AlumnusPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Alumnus" } }
+        next_cursor: { type: string, nullable: true }
+    MentorCard:
+      type: object
+      description: The mentor as their assigned mentee sees them, contact details included.
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: string }
+        graduation_year: { type: integer }
+        programme: { type: string, nullable: true }
+        current_company: { type: string, nullable: true }
+        current_designation: { type: string, nullable: true }
+        industry: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        email: { type: string, format: email, nullable: true }
+        phone: { type: string, nullable: true }
+        linkedin_url: { type: string, format: uri, nullable: true }
+    AssignmentStatus: { type: string, enum: [active, ended] }
+    AssignmentInput:
+      type: object
+      required: [mentor_id, student_id]
+      properties:
+        mentor_id: { type: string, format: uuid, description: "An active alumnus with is_mentor" }
+        student_id: { type: string, format: uuid, description: "The student's identity user id" }
+        student_name: { type: string, nullable: true, description: "Display name kept for staff lists" }
+        started_on: { type: string, format: date, description: "Defaults to today" }
+        focus: { type: string, nullable: true, description: "What the mentoring is about, e.g. finance careers; shown to the student" }
+    Assignment:
+      allOf:
+        - { $ref: "#/components/schemas/AssignmentInput" }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
+            status: { $ref: "#/components/schemas/AssignmentStatus" }
+            mentor: { $ref: "#/components/schemas/MentorCard" }
+            ended_on: { type: string, format: date, nullable: true }
+            end_reason: { type: string, nullable: true }
+            assigned_by: { type: string, format: uuid }
+            next_session_at: { type: string, format: date-time, nullable: true }
+    AssignmentPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+        next_cursor: { type: string, nullable: true }
+    SessionMode: { type: string, enum: [in_person, online, phone] }
+    SessionStatus: { type: string, enum: [scheduled, completed, cancelled] }
+    SessionInput:
+      type: object
+      required: [scheduled_at, mode]
+      properties:
+        scheduled_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, minimum: 1, maximum: 480, nullable: true }
+        mode: { $ref: "#/components/schemas/SessionMode" }
+        location: { type: string, nullable: true, description: "A room, an address or a meeting link" }
+        topic: { type: string, nullable: true }
+    Session:
+      allOf:
+        - { $ref: "#/components/schemas/SessionInput" }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organisation_id: { type: string, format: uuid, readOnly: true, description: "The owning organisation (row-level security)" }
+            assignment_id: { type: string, format: uuid }
+            status: { $ref: "#/components/schemas/SessionStatus" }
+            notes: { type: string, nullable: true, description: "Staff only; never shown to students" }
+            cancel_reason: { type: string, nullable: true }
+            created_by: { type: string, format: uuid }
+    MySession:
+      type: object
+      description: A session as the mentee sees it (no staff notes).
+      properties:
+        id: { type: string, format: uuid }
+        scheduled_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, nullable: true }
+        mode: { $ref: "#/components/schemas/SessionMode" }
+        location: { type: string, nullable: true }
+        topic: { type: string, nullable: true }
+    MyMentoring:
+      type: object
+      required: [assignment, upcoming_sessions]
+      properties:
+        assignment:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            started_on: { type: string, format: date }
+            focus: { type: string, nullable: true }
+            mentor: { $ref: "#/components/schemas/MentorCard" }
+        upcoming_sessions: { type: array, maxItems: 5, items: { $ref: "#/components/schemas/MySession" } }
