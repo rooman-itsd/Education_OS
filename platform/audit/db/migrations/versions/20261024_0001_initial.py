@@ -4,7 +4,7 @@ On PostgreSQL a trigger refuses every UPDATE and DELETE, except the two docs/prd
 tombstone (only before/after/redacted change, and redacted only goes false -> true), and a retention prune
 (a DELETE inside a transaction that set app-local `audit.pruning` to 'on'). TRUNCATE is refused outright,
 because row triggers do not fire for it. The database role is shared by every module, so per-table grants
-cannot express "insert and select only"; the trigger can, and it binds superusers too.
+cannot express "insert and select only"; the trigger guards against application-level mutations.
 
 Revision ID: audit_0001
 Revises:

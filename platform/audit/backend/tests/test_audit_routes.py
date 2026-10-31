@@ -54,7 +54,8 @@ def test_writing_is_not_a_privilege_a_user_holds(audit_client, org):
 def test_the_catalogue_gives_each_role_what_its_dashboard_needs():
     assert READ in permissions_for(["org-admin"])
     assert {READ, PLATFORM_READ, "platform:audit:redact"} <= permissions_for(["super-admin"], super_admin=True)
-    for role in ("org-admin", "super-admin"):
+    assert WRITE in permissions_for(["service"])
+    for role in ("org-admin", "super-admin", "member"):
         assert WRITE not in permissions_for([role], super_admin=role == "super-admin")
 
 
@@ -124,6 +125,12 @@ def test_history_through_the_api_is_oldest_first(audit_client, org):
     _post(audit_client, org, org.writer, action="application.accepted", entity_id="app-1")
     story = audit_client.get(f"{PREFIX}/entities/application/app-1/history", headers=org.headers(org.admin)).json()
     assert [r["action"] for r in story["items"]] == ["application.created", "application.accepted"]
+    assert story["total"] == 2
+    offset_story = audit_client.get(
+        f"{PREFIX}/entities/application/app-1/history", params={"offset": 1}, headers=org.headers(org.admin)
+    ).json()
+    assert [r["action"] for r in offset_story["items"]] == ["application.accepted"]
+    assert offset_story["total"] == 2
 
 
 def test_a_page_larger_than_the_contract_allows_is_refused(audit_client, org):

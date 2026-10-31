@@ -64,8 +64,9 @@ def _audit_loggers_enabled():
 
 @pytest.fixture(autouse=True)
 def _audit_writer_role(monkeypatch):
-    """audit:record:write is held by no person in any catalogue, by design (modules write through the SDK). The
-    route still has to be exercised, so the tests grant it to a role that exists only here, in memory."""
+    """audit:record:write is granted only to the `service` block, which no person may hold (platform/
+    identity is to refuse it on a user), so the HTTP write route is exercised through one test-only role instead
+    of a user carrying `service`. The real catalogue is otherwise untouched."""
     real = core_config.load_role_grants()
     grants = {name: set(keys) for name, keys in real.items()}
     grants[WRITER_ROLE] = {WRITE}

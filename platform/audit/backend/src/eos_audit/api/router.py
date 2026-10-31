@@ -125,8 +125,11 @@ def entity_history(
     entity_type: str,
     entity_id: str,
     limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     p: Principal = Depends(require(READ)),
     db: Session = Depends(get_db),
 ):
     scope = _reading_scope(p, None)
-    return service.history(db, organisation_id=scope, entity_type=entity_type, entity_id=entity_id, limit=limit)
+    return service.history(
+        db, organisation_id=scope, entity_type=entity_type, entity_id=entity_id, limit=limit, offset=offset
+    )

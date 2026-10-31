@@ -43,3 +43,10 @@ roles:
       - audit:record:read
       - platform:audit:read
       - platform:audit:redact
+
+  - name: service
+    description: >-
+      Not a person. Gives audit:record:write a holder, so the key is not orphaned. No profile
+      lists this role, and platform/identity is to refuse it on a user.
+    grants:
+      - audit:record:write

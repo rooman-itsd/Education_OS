@@ -257,12 +257,22 @@ def view(db: Session, rec: AuditRecord) -> dict:
     return _page(db, [rec])[0]
 
 
-def history(db: Session, *, organisation_id: str | None, entity_type: str, entity_id: str, limit: int = 100) -> dict:
+def history(
+    db: Session,
+    *,
+    organisation_id: str | None,
+    entity_type: str,
+    entity_id: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
     """Every recorded change to one entity, oldest first: the "who changed this" view."""
     with _scope(organisation_id):
         q = _base(db, organisation_id).where(AuditRecord.entity_type == entity_type, AuditRecord.entity_id == entity_id)
         total = db.scalar(select(func.count()).select_from(q.subquery()))
-        rows = db.scalars(q.order_by(AuditRecord.occurred_at.asc(), AuditRecord.id.asc()).limit(limit)).all()
+        rows = db.scalars(
+            q.order_by(AuditRecord.occurred_at.asc(), AuditRecord.id.asc()).offset(offset).limit(limit)
+        ).all()
         return {"items": _page(db, rows), "total": total}
 
 
