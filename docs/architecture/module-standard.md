@@ -114,5 +114,8 @@ Set `portable: true` in `module.yaml` only when all of these pass:
 | `contracts/` | OpenAPI 3.1 → Pydantic + TS types via `packages/contracts` | — |
 | `tests/e2e` | pytest (API) + Playwright (UI) against platform stubs | — |
 
-`apps/backend` includes every enabled module's `router` under `/api/v1/<module>`.
+`apps/backend` includes every enabled module's `router` under `/api/v1/<module>`. A service that has no routes
+on purpose (middleware only, such as `platform/api-gateway`) declares `router: false` in its `module.yaml`;
+the host then mounts nothing for it. Any other enabled entry without `api/router.py` stops start-up, so a
+renamed or deleted router never leaves its routes quietly answering 404.
 `apps/frontend` mounts every enabled module's `routes` and registers its `widgets` with the dashboard shell.
