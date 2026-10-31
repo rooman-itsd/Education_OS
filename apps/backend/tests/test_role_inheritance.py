@@ -75,13 +75,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "management-student alumni.mentoring",
         ],
     ),
-    # athlete-performance: no role fits (athlete-performance module, batch #329)
-    "athlete-performance": (
-        NAMED,
-        [
-            "nutritionist athlete-performance.body-composition-trend",
-        ],
-    ),
     # placement-career: empty catalogue (placement-career module, batch #337)
     "placement-career": (
         EMPTY,
@@ -148,13 +141,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "law-student selection-process.upcoming",
             "musician selection-process.upcoming",
             "research-scholar selection-process.my-applications",
-        ],
-    ),
-    # workflow: empty catalogue (workflow module, batch #317)
-    "workflow": (
-        EMPTY,
-        [
-            "department-admin workflow.approvals-pending",
         ],
     ),
 }
