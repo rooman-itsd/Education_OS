@@ -34,6 +34,24 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+## Dashboard widgets
+`frontend/src/widgets/index.ts` exports the widgets the role layouts in `platform/identity/config/dashboards/` name:
+
+| Widget | Layout | Permission | Endpoints |
+|---|---|---|---|
+| `athlete-performance.squad-overview` | coach | `report:read` | `GET /reports/squad-summary`, `GET /metrics` |
+| `athlete-performance.fitness-clearances` | medical-staff | `clearance:read` | `GET /reports/clearances` |
+| `athlete-performance.performance-trend` | athlete | `result:read` | `GET /athletes` (own profile), `GET /metrics`, `GET /results`, `GET /assessments`, `GET /athletes/{id}/history` for up to 4 metrics |
+| `athlete-performance.body-composition-trend` | nutritionist | `report:read` | `GET /reports/squad-summary`, `GET /metrics`, `GET /fitness-tests` |
+
+`GET /reports/clearances` lists every active athlete's clearance most urgent first (not cleared, restricted,
+lapsing within `lapsing_within_days`, cleared) with counts over all of them; an athlete gets only their own row.
+The `nutritionist` profile role reads athletes and summaries (`report:read`) for the body-composition widget, but
+not clearances. Metrics have no category: a metric is body composition when a fitness test
+whose name mentions body composition measures it, or its name does (body fat, weight, BMI, lean or muscle mass,
+skinfolds, waist). The coach's `session-plan` and the athlete's `training-schedule` belong to training-video-analysis
+(plans and sessions), not here.
+
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its
 tests, `packages/testing`. The backend is `eos_athlete_performance.api.router:router`; its Alembic chain is `db/`. This module must not import code from any other module under `modules/`.
