@@ -1,12 +1,12 @@
 # Automatic review on the lead's behalf (docs/team/automated-review.md).
 #
 # When a pull request asks @faizanrooman for a review, or touches a path he is a code owner of, Claude Code
-# checks the branch out, runs the suites and the repository checks, and writes a verdict, which is posted as a
-# comment review by the workflow's own token: "Verdict: approve" with follow-ups, or "Verdict: changes" with
-# the findings. The review is ADVISORY: it never approves. This job runs code from the PR (its tests, its
-# install scripts), so nothing in it may hold a credential that could approve or merge; a human code owner
-# reads the verdict and approves, and the merge watcher merges. Every new commit triggers a fresh review and
-# cancels an in-flight one.
+# checks the branch out, runs the suites and the repository checks, and writes a verdict, posted here as a
+# comment review by the workflow's own token ("Verdict: approve" with follow-ups, or "Verdict: changes" with
+# the findings) and uploaded as an artifact. This job runs code from the PR (its tests, its install scripts),
+# so it holds NO credential that could approve or merge. auto-approve.yml, which never runs PR code, reads the
+# artifact and posts the approval or the change request on Faizan's behalf (docs/team/automated-review.md).
+# Every new commit triggers a fresh review and cancels an in-flight one.
 #
 # Secret (repository settings → Secrets and variables → Actions):
 #   CLAUDE_CODE_OAUTH_TOKEN  Long-lived token from `claude setup-token` (uses Faizan's Claude subscription).
@@ -110,6 +110,18 @@ jobs:
             --model ${{ needs.decide.outputs.model }}
             --max-turns 80
             --allowedTools "Bash,Read,Grep,Glob,Write(${{ runner.temp }}/verdict.json)"
+      - name: Keep the verdict for auto-approve.yml
+        if: always()
+        run: |
+          mkdir -p "${{ runner.temp }}/verdict"
+          cp "${{ runner.temp }}/verdict.json" "${{ runner.temp }}/verdict/verdict.json" 2>/dev/null || echo '{}' > "${{ runner.temp }}/verdict/verdict.json"
+          printf '{"pr": %s, "head": "%s", "model": "%s"}\n' "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}" "${{ needs.decide.outputs.model }}" > "${{ runner.temp }}/verdict/meta.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verdict-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/verdict/
+          retention-days: 7
       - name: Post the verdict as a comment review
         if: always()
         env:
@@ -123,5 +135,5 @@ jobs:
             gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review (advisory) could not complete on ${HEAD:0:7}; see the auto-review run. A human review follows."
             exit 0
           fi
-          body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"**Automated review (advisory, " + $m + ", head " + $h + "). Verdict: " + .verdict + ".** " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nThis review does not approve: a code owner reads it and approves. Every new commit is reviewed again."' "$VERDICT")
+          body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"**Automated review (advisory, " + $m + ", head " + $h + "). Verdict: " + .verdict + ".** " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nThe approval or change request follows from auto-approve.yml on Faizan'"'"'s behalf (deployment-critical paths keep a human approval). Every new commit is reviewed again."' "$VERDICT")
           gh pr review "$PR" -R "$GITHUB_REPOSITORY" --comment --body "$body"
