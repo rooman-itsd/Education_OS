@@ -19,3 +19,4 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   the same keys as the matching module roles (non-breaking).
 - Config: `TRAINING_VIDEO_ANALYSIS_TIMEZONE`.
 - Tests: domain, API, athlete self-scope, consumers, cross-tenant leak, migration and contract-drift tests.
+- API: `GET /videos?annotated=false` lists videos with no annotation yet (waiting for review); `true` the reviewed ones.

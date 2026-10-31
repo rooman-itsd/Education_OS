@@ -27,7 +27,7 @@ from zoneinfo import ZoneInfo
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -635,6 +635,10 @@ def list_videos(db: Session, actor: Actor, filters: dict, limit: int, offset: in
     for name in ("session_id", "uploader_id"):
         if filters.get(name):
             q = q.where(getattr(Video, name) == filters[name])
+    if filters.get("annotated") is not None:
+        # Any annotation counts, whoever wrote it: a video with none is waiting for review.
+        has = select(Annotation.id).where(Annotation.video_id == Video.id).exists()
+        q = q.where(has if filters["annotated"] else ~has)
     rows, total = repo.page(db, q, (Video.recorded_at.desc(), Video.id), limit, offset)
     return _page([video_out(v) for v in rows], total)
 

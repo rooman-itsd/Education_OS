@@ -395,6 +395,11 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: annotated
+          in: query
+          description: true for videos with at least one annotation, false for videos with none (waiting for review).
+          schema:
+            type: boolean
         - name: limit
           in: query
           schema:

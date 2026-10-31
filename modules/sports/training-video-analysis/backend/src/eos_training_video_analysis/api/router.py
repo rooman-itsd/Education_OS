@@ -152,12 +152,14 @@ def update_drill(
 def list_training_videos(
     session_id: str | None = _id(),
     uploader_id: str | None = _id(),
+    annotated: bool | None = None,
     limit: int = LIMIT,
     offset: int = OFFSET,
     a: Actor = Depends(require(svc.VIDEO_READ)),
     db: Session = Depends(get_db),
 ):
-    return svc.list_videos(db, a, {"session_id": session_id, "uploader_id": uploader_id}, limit, offset)
+    filters = {"session_id": session_id, "uploader_id": uploader_id, "annotated": annotated}
+    return svc.list_videos(db, a, filters, limit, offset)
 
 
 @router.post("/videos", status_code=201)

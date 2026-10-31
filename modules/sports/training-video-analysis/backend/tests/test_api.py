@@ -295,6 +295,11 @@ def test_video_registration_and_metadata(client, org):
     assert org.get("/videos").json()["total"] == 2
     assert [x["id"] for x in org.get(f"/videos?session_id={s['id']}").json()["items"]] == [v["id"]]
     assert org.get(f"/videos?uploader_id={org.admin_id}").json()["total"] == 2
+    # a video with no annotation is waiting for review
+    org.annotation(v["id"])
+    waiting = org.get("/videos?annotated=false").json()
+    assert waiting["total"] == 1 and waiting["items"][0]["id"] != v["id"]
+    assert [x["id"] for x in org.get("/videos?annotated=true").json()["items"]] == [v["id"]]
 
     r = org.patch(f"/videos/{v['id']}", {"title": "Cam A", "thumbnail_url": "https://files.example.com/t.jpg"})
     assert r.status_code == 200 and r.json()["thumbnail_url"] == "https://files.example.com/t.jpg"
