@@ -42,9 +42,7 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Nutrition and health data is not available yet.",
   },
   {
-    // athlete-performance's contract grants nothing to the nutritionist profile role today (only coach, medical-staff,
-    // athlete, management and org-admin), so once enabled this probe may answer 403 and the panel say
-    // "You do not have access to this." until the contract grants report:read to nutritionist.
+    // The nutritionist profile role reads athlete-performance's summary reports (report:read, granted in PR #385).
     id: "athlete-performance.body-composition-trend",
     module: "sports/athlete-performance",
     batch: "#330",
