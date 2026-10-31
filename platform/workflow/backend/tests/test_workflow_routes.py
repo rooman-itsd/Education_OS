@@ -153,3 +153,132 @@ def test_request_detail_and_history(workflow_client, workflow_db):
     assert len(body["history"]) == 1
     assert body["history"][0]["action"] == "rejected"
     assert body["history"][0]["comments"] == "Supplier not empanelled"
+
+
+def test_requester_cannot_approve_reject_or_delegate_over_http(workflow_client, workflow_db):
+    org = Org(workflow_db)
+    chain_data = sample_chain("self_http")
+    service.create_chain(
+        workflow_db,
+        org.id,
+        code=chain_data["code"],
+        title=chain_data["title"],
+        description=chain_data["description"],
+        steps_data=chain_data["steps"],
+    )
+    workflow_db.commit()
+
+    # Org admin submits a request
+    res = workflow_client.post(
+        "/api/v1/workflow/requests",
+        json={
+            "chain_code": "self_http",
+            "entity_type": "capex",
+            "entity_id": "cx-1",
+            "title": "Admin Equipment",
+        },
+        headers=org.headers(org.admin),
+    )
+    assert res.status_code == 201
+    req_id = res.json()["id"]
+
+    # Org admin attempts to approve own request -> 403
+    res = workflow_client.post(
+        f"/api/v1/workflow/requests/{req_id}/approve",
+        headers=org.headers(org.admin),
+    )
+    assert res.status_code == 403
+    assert "Requesters cannot" in res.json()["detail"]
+
+    # Org admin attempts to reject own request -> 403
+    res = workflow_client.post(
+        f"/api/v1/workflow/requests/{req_id}/reject",
+        headers=org.headers(org.admin),
+    )
+    assert res.status_code == 403
+
+    # Org admin attempts to delegate own request -> 403
+    res = workflow_client.post(
+        f"/api/v1/workflow/requests/{req_id}/delegate",
+        json={"delegate_to_user_id": org.dept_admin.id},
+        headers=org.headers(org.admin),
+    )
+    assert res.status_code == 403
+
+
+def test_student_and_faculty_scoped_to_own_requests(workflow_client, workflow_db):
+    org = Org(workflow_db)
+    chain_data = sample_chain("scoped_read")
+    service.create_chain(
+        workflow_db,
+        org.id,
+        code=chain_data["code"],
+        title=chain_data["title"],
+        description=chain_data["description"],
+        steps_data=chain_data["steps"],
+    )
+    workflow_db.commit()
+
+    # Student 1 submits request
+    res1 = workflow_client.post(
+        "/api/v1/workflow/requests",
+        json={
+            "chain_code": "scoped_read",
+            "entity_type": "club",
+            "entity_id": "c-1",
+            "title": "Robotics Club",
+        },
+        headers=org.headers(org.student),
+    )
+    assert res1.status_code == 201
+    req1_id = res1.json()["id"]
+
+    # Faculty submits request
+    res2 = workflow_client.post(
+        "/api/v1/workflow/requests",
+        json={
+            "chain_code": "scoped_read",
+            "entity_type": "grant",
+            "entity_id": "g-1",
+            "title": "Research Grant",
+        },
+        headers=org.headers(org.faculty),
+    )
+    assert res2.status_code == 201
+    req2_id = res2.json()["id"]
+
+    # Student listing requests only sees student's own request
+    res = workflow_client.get(
+        "/api/v1/workflow/requests",
+        headers=org.headers(org.student),
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] == 1
+    assert data["items"][0]["id"] == req1_id
+
+    # Student trying to get faculty request -> 404
+    res = workflow_client.get(
+        f"/api/v1/workflow/requests/{req2_id}",
+        headers=org.headers(org.student),
+    )
+    assert res.status_code == 404
+
+    # Faculty trying to get student request -> 404
+    res = workflow_client.get(
+        f"/api/v1/workflow/requests/{req1_id}",
+        headers=org.headers(org.faculty),
+    )
+    assert res.status_code == 404
+
+    # Admin listing requests sees both
+    res = workflow_client.get(
+        "/api/v1/workflow/requests",
+        headers=org.headers(org.admin),
+    )
+    assert res.status_code == 200
+    assert res.json()["total"] == 2
+
+    # Admin can get either request -> 200
+    assert workflow_client.get(f"/api/v1/workflow/requests/{req1_id}", headers=org.headers(org.admin)).status_code == 200
+    assert workflow_client.get(f"/api/v1/workflow/requests/{req2_id}", headers=org.headers(org.admin)).status_code == 200

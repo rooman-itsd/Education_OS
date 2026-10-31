@@ -1,5 +1,7 @@
 """Application service tests for workflow: multi-step progression, delegation, outbox events, and idempotency."""
 
+import uuid
+
 import pytest
 from eos_core.events import OutboxEvent
 from eos_workflow.application import service
@@ -211,7 +213,7 @@ def test_delegation_flow(workflow_db):
         entity_type="leave",
         entity_id="l-200",
         title="Leave for delegation",
-        requester_id=org.faculty.id,
+        requester_id=org.student.id,
     )
     workflow_db.commit()
 
@@ -422,3 +424,114 @@ def test_event_publishing_and_transactional_rollback(workflow_db):
     # Event must be gone after rollback
     events_after_rollback = len(list(workflow_db.execute(select(OutboxEvent)).scalars().all()))
     assert events_after_rollback == initial_events
+
+
+def test_requester_cannot_approve_reject_or_delegate_own_request(workflow_db):
+    org = Org(workflow_db)
+    chain_data = sample_chain("self_app")
+    service.create_chain(
+        workflow_db,
+        org.id,
+        code=chain_data["code"],
+        title=chain_data["title"],
+        description=chain_data["description"],
+        steps_data=chain_data["steps"],
+    )
+    workflow_db.commit()
+
+    # Org admin submits a request
+    req, _ = service.create_request(
+        workflow_db,
+        org.id,
+        chain_code="self_app",
+        entity_type="expense",
+        entity_id="exp-1",
+        title="Admin Expense",
+        requester_id=org.admin.id,
+    )
+    workflow_db.commit()
+
+    # Org admin tries to approve own request -> 403
+    with pytest.raises(WorkflowError) as exc:
+        service.approve_request(
+            workflow_db,
+            org.id,
+            req.id,
+            actor_id=org.admin.id,
+            actor_roles=["org-admin"],
+        )
+    assert exc.value.status == 403
+    assert "Requesters cannot" in str(exc.value)
+
+    # Org admin tries to reject own request -> 403
+    with pytest.raises(WorkflowError) as exc:
+        service.reject_request(
+            workflow_db,
+            org.id,
+            req.id,
+            actor_id=org.admin.id,
+            actor_roles=["org-admin"],
+        )
+    assert exc.value.status == 403
+
+    # Org admin tries to delegate own request -> 403
+    with pytest.raises(WorkflowError) as exc:
+        service.delegate_request(
+            workflow_db,
+            org.id,
+            req.id,
+            actor_id=org.admin.id,
+            delegate_to_user_id=org.dept_admin.id,
+            actor_roles=["org-admin"],
+        )
+    assert exc.value.status == 403
+
+
+def test_delegation_target_validation(workflow_db):
+    org1 = Org(workflow_db)
+    org2 = Org(workflow_db)
+    chain_data = sample_chain("target_val")
+    service.create_chain(
+        workflow_db,
+        org1.id,
+        code=chain_data["code"],
+        title=chain_data["title"],
+        description=chain_data["description"],
+        steps_data=chain_data["steps"],
+    )
+    workflow_db.commit()
+
+    req, _ = service.create_request(
+        workflow_db,
+        org1.id,
+        chain_code="target_val",
+        entity_type="req",
+        entity_id="r-1",
+        title="Sample",
+        requester_id=org1.student.id,
+    )
+    workflow_db.commit()
+
+    # Delegate to user from other organisation -> 422
+    with pytest.raises(WorkflowError) as exc:
+        service.delegate_request(
+            workflow_db,
+            org1.id,
+            req.id,
+            actor_id=org1.dept_admin.id,
+            delegate_to_user_id=org2.faculty.id,
+            actor_roles=["department-admin"],
+        )
+    assert exc.value.status == 422
+
+    # Delegate to non-existent user id -> 422
+    with pytest.raises(WorkflowError) as exc:
+        service.delegate_request(
+            workflow_db,
+            org1.id,
+            req.id,
+            actor_id=org1.dept_admin.id,
+            delegate_to_user_id=str(uuid.uuid4()),
+            actor_roles=["department-admin"],
+        )
+    assert exc.value.status == 422

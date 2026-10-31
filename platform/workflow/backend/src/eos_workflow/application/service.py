@@ -7,7 +7,8 @@ from datetime import UTC, timedelta
 from eos_core import events
 from eos_core.db import scoped, utcnow
 from eos_core.tenant import organisation_scope
-from sqlalchemy import func, select
+from eos_identity.application.service import get_user
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..domain.models import (
@@ -33,6 +34,13 @@ class WorkflowError(Exception):
 
 def _scope(organisation_id: str):
     return organisation_scope(organisation_id)
+
+
+def resolve_user_name(db: Session, user_id: str | None) -> str | None:
+    if not user_id:
+        return None
+    u = get_user(db, user_id)
+    return u.name if u else None
 
 
 def create_chain(
@@ -167,6 +175,8 @@ def create_request(
     first_step = sorted_steps[0]
     now = utcnow()
     deadline = now + timedelta(hours=first_step.sla_hours) if first_step.sla_hours else None
+    if not requester_name:
+        requester_name = resolve_user_name(db, requester_id)
 
     req = WorkflowRequest(
         organisation_id=organisation_id,
@@ -258,24 +268,37 @@ def list_pending(
 
     with _scope(organisation_id):
         q = scoped(db, select(WorkflowRequest), WorkflowRequest).where(WorkflowRequest.status == STATUS_PENDING)
-        items = list(db.execute(q.order_by(WorkflowRequest.submitted_at.desc())).scalars().all())
+        count_q = scoped(db, select(func.count(WorkflowRequest.id)), WorkflowRequest).where(
+            WorkflowRequest.status == STATUS_PENDING
+        )
 
-        filtered = []
-        for req in items:
-            if is_admin:
-                filtered.append(req)
-                continue
-            if req.delegated_to and user_id and req.delegated_to == user_id:
-                filtered.append(req)
-                continue
-            # Check current step approver_role
-            step = _current_step(req)
-            if step and step.approver_role in roles:
-                filtered.append(req)
+        if not is_admin:
+            q = q.outerjoin(
+                ApprovalStep,
+                (ApprovalStep.chain_id == WorkflowRequest.chain_id)
+                & (ApprovalStep.step_order == WorkflowRequest.current_step_order),
+            )
+            count_q = count_q.outerjoin(
+                ApprovalStep,
+                (ApprovalStep.chain_id == WorkflowRequest.chain_id)
+                & (ApprovalStep.step_order == WorkflowRequest.current_step_order),
+            )
+            conditions = []
+            if user_id:
+                conditions.append(WorkflowRequest.delegated_to == user_id)
+            if roles:
+                conditions.append(ApprovalStep.approver_role.in_(roles))
+            if conditions:
+                cond = or_(*conditions)
+                q = q.where(cond)
+                count_q = count_q.where(cond)
+            else:
+                return [], 0
 
-        total = len(filtered)
-        paginated = filtered[offset : offset + limit]
-        return paginated, total
+        total = db.execute(count_q).scalar() or 0
+        q = q.order_by(WorkflowRequest.submitted_at.desc()).limit(limit).offset(offset)
+        items = list(db.execute(q).scalars().all())
+        return items, total
 
 
 def _current_step(req: WorkflowRequest) -> ApprovalStep | None:
@@ -290,6 +313,9 @@ def _current_step(req: WorkflowRequest) -> ApprovalStep | None:
 def _check_approver_auth(req: WorkflowRequest, actor_id: str, actor_roles: list[str] | None) -> ApprovalStep:
     if req.status != STATUS_PENDING:
         raise WorkflowError(409, f"Request is already {req.status}")
+
+    if actor_id == req.requester_id:
+        raise WorkflowError(403, "Requesters cannot approve, reject, or delegate their own requests")
 
     step = _current_step(req)
     if not step:
@@ -320,6 +346,9 @@ def approve_request(
         raise WorkflowError(404, "Workflow request not found")
 
     step = _check_approver_auth(req, actor_id, actor_roles)
+
+    if not actor_name:
+        actor_name = resolve_user_name(db, actor_id)
 
     # Record action
     action = WorkflowAction(
@@ -402,6 +431,9 @@ def reject_request(
 
     step = _check_approver_auth(req, actor_id, actor_roles)
 
+    if not actor_name:
+        actor_name = resolve_user_name(db, actor_id)
+
     action = WorkflowAction(
         organisation_id=organisation_id,
         request_id=req.id,
@@ -462,6 +494,13 @@ def delegate_request(
         raise WorkflowError(422, "delegate_to_user_id is required")
     if delegate_to_user_id == actor_id:
         raise WorkflowError(422, "Cannot delegate to yourself")
+
+    target_user = get_user(db, delegate_to_user_id.strip())
+    if not target_user or target_user.organisation_id != organisation_id or target_user.status != "active":
+        raise WorkflowError(422, "Delegation target must be an active member of this organisation")
+
+    if not actor_name:
+        actor_name = resolve_user_name(db, actor_id)
 
     req.delegated_to = delegate_to_user_id.strip()
 

@@ -29,6 +29,12 @@ CHAIN_WRITE = "workflow:chain:write"
 REQUEST_CREATE = "workflow:request:create"
 REQUEST_READ = "workflow:request:read"
 APPROVAL_ACTION = "workflow:approval:action"
+PLATFORM_READ = "platform:workflow:read"
+APPROVER_OR_ADMIN_PERMISSIONS = {APPROVAL_ACTION, CHAIN_WRITE, PLATFORM_READ}
+
+
+def _is_elevated_reader(p: Principal) -> bool:
+    return bool(p.super_admin or (p.permissions & APPROVER_OR_ADMIN_PERMISSIONS))
 
 
 class NewStepInput(BaseModel):
@@ -119,12 +125,13 @@ def search_requests(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
+    effective_requester_id = requester_id if _is_elevated_reader(p) else p.user_id
     items, total = service.list_requests(
         db,
         p.organisation_id,
         status=status,
         entity_type=entity_type,
-        requester_id=requester_id,
+        requester_id=effective_requester_id,
         limit=limit,
         offset=offset,
     )
@@ -189,7 +196,7 @@ def get_request(id: str, p: Principal = Depends(require(REQUEST_READ)), db: Sess
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
     req = service.get_request(db, p.organisation_id, id)
-    if not req:
+    if not req or (not _is_elevated_reader(p) and req.requester_id != p.user_id):
         raise HTTPException(404, "Workflow request not found")
     return service.view_request_detail(req)
 
