@@ -147,3 +147,69 @@ export function describeFailure(e: unknown, what: string): Failure {
   if (e.status === 403) return { title: "You do not have access to this.", retry: false };
   return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
 }
+
+/** contract SubscriptionReport (0.2.0), as GET /admin/reports/subscriptions answers it. Money as decimal strings. */
+export interface PlanReport {
+  plan: string;
+  title: string;
+  currency: string;
+  subscriptions: Record<SubscriptionStatus, number>;
+  total: number;
+  /** Active subscriptions x the plan's monthly price, e.g. "12500.00". */
+  monthly_recurring: string;
+  /** Paid invoices issued in the last paid_window_days. */
+  paid_last_30_days: string;
+}
+export interface ExpiringTrial {
+  organisation_id: string;
+  organisation_name: string | null;
+  plan: string;
+  trial_ends_at: string;
+  days_left: number;
+}
+export interface SubscriptionReport {
+  generated_at: string;
+  plans: PlanReport[];
+  trials_expiring: ExpiringTrial[];
+  trial_window_days: number;
+  paid_window_days: number;
+}
+
+/** GET /admin/reports/subscriptions. Permission platform:revenue:read (super admin only). */
+export const getSubscriptionReport = (signal?: AbortSignal) => request<SubscriptionReport>("/billing/admin/reports/subscriptions", {}, signal);
+
+/** "12500.00" -> 1250000 (paise/cents), so sums are exact; anything unparsable counts as 0. */
+export function cents(amount: string): number {
+  const n = Math.round(Number(amount) * 100);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Monthly recurring revenue summed per currency, in cents, currencies in first-seen order. */
+export function recurringByCurrency(plans: PlanReport[]): Array<{ currency: string; cents: number }> {
+  const totals = new Map<string, number>();
+  for (const p of plans) totals.set(p.currency, (totals.get(p.currency) ?? 0) + cents(p.monthly_recurring));
+  return [...totals.entries()].map(([currency, c]) => ({ currency, cents: c }));
+}
+
+/** Subscription statuses in the order the widgets list them, with their words. */
+export const SUBSCRIPTION_STATUSES: Array<{ status: SubscriptionStatus; label: string }> = [
+  { status: "trialing", label: "trialing" },
+  { status: "active", label: "active" },
+  { status: "past_due", label: "past due" },
+  { status: "read_only", label: "read-only" },
+  { status: "cancelled", label: "cancelled" },
+];
+
+/** "4 trialing · 2 active · 1 read-only": only the statuses that have subscriptions. */
+export function statusBreakdown(counts: Partial<Record<SubscriptionStatus, number>>): string {
+  return SUBSCRIPTION_STATUSES.filter(({ status }) => (counts[status] ?? 0) > 0)
+    .map(({ status, label }) => `${counts[status]} ${label}`)
+    .join(" · ");
+}
+
+/** "ends today", "ends tomorrow", "ends in 5 days". */
+export function endsIn(daysLeft: number): string {
+  if (daysLeft <= 0) return "ends today";
+  if (daysLeft === 1) return "ends tomorrow";
+  return `ends in ${daysLeft} days`;
+}
