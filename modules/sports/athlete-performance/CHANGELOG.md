@@ -18,3 +18,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   keep the order they were recorded; dates may be one day ahead of UTC; benchmark matching documented in the README.
 - Event: publish athlete.updated with user_id when an athlete's user changes.
 - Clearance: lapses by the institution's local date (ATHLETE_PERFORMANCE_TIMEZONE) rather than the UTC date.
+- Frontend: dashboard widgets `squad-overview` (coach; squad summary with metric names and units),
+  `fitness-clearances` (medical staff; every active athlete's clearance, most urgent first, lapsing within 14 days
+  flagged), `performance-trend` (athlete; own results over time for the four most recently
+  measured metrics, with the matching benchmark) and `body-composition-trend` (nutritionist; body-composition
+  metrics, by fitness test name or metric name, from the squad summary). API client, vitest unit tests.
+- API: `GET /reports/clearances` (`clearance:read`): every active athlete's clearance, most urgent first, with counts;
+  athletes see their own row. Replaces one request per athlete in the clearance widget.
+- Permissions: the sports-college `nutritionist` profile role reads the catalogue, athletes and summary reports.
