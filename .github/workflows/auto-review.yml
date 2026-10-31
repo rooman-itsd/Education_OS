@@ -142,7 +142,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           MODEL: ${{ needs.decide.outputs.model }}
-          VERDICT: ${{ runner.temp }}/verdict.json
+          VERDICT: ${{ runner.temp }}/verdict/verdict.json
         run: |
           if ! jq -e '.verdict' "$VERDICT" >/dev/null 2>&1; then
             gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review could not complete on ${HEAD:0:7}; see the auto-review run. A human review follows."
