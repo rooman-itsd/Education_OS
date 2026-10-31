@@ -16,6 +16,8 @@ modules:
   - facilities/maintenance
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
+  - practice/portfolio
+  - practice/selection-process
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
