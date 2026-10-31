@@ -72,8 +72,9 @@ cd modules/facilities/sports-facilities/db && alembic upgrade head   # uses EOS_
 
 ### Needs from the host repo
 - `packages/core` (`eos_core`) and, for tests, `packages/testing` (`eos_testing`).
-- `facilities/sports-facilities` in `apps/backend/config/modules.enabled.yaml`, which mounts
-  `eos_sports_facilities.api.router:router` under `/api/v1/sports-facilities`.
+- `facilities/sports-facilities` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts
+  `eos_sports_facilities.api.router:router` under `/api/v1/sports-facilities` behind the entitlement gate, and in
+  `apps/frontend/config/modules.enabled.yaml` (its widgets list is empty).
 - Users hold the sports-college profile roles granted in `contracts/permissions.yaml` (`facility-staff`, `org-admin`,
   `coach`, `athlete`) or the module roles.
 
