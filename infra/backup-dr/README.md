@@ -60,12 +60,13 @@ Live data is not touched. A backup is only proven by a restore.
 1. Pick the backup: the newest one from before the problem (`ls /var/backups/eos/daily/ weekly/`).
 2. `eos-db-restore --check <file>` first, to see that it holds what you expect.
 3. `eos-db-restore <file>` and type `restore eos` when asked. It takes a safety backup of the current
-   database, stops the API, replaces the database, prints the row counts and starts the API again.
+   database, stops the API, the relay and the scheduler, replaces the database, prints the row counts, runs
+   the migrations (a backup from older code is brought up to this checkout) and starts them again.
 4. Open `/api/v1/health` and sign in to confirm. Everything written after that backup is gone; tell
    the affected organisations.
 
-From another machine (the host itself is lost): deploy the API on a new host (`infra/docker/README.md`),
-copy the dump from the second location, then step 3.
+From another machine (the host itself is lost): follow [DR.md](DR.md), the timed rebuild on a new container,
+which is also drilled every quarter.
 
 ### Second location
 
