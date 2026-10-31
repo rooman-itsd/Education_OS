@@ -1,14 +1,15 @@
 [project]
 name = "eos-documents"
 version = "0.1.0"
-description = "Education OS module: documents (backend)"
+description = "Education OS platform service: documents (backend)"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi",
   "sqlalchemy>=2",
   "alembic",
+  "minio",
   "eos-core",
-  "eos-sdk",
+  "eos-identity",
 ]
 
 [tool.pytest.ini_options]
