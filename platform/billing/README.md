@@ -22,5 +22,19 @@ Not in scope: deciding what an organisation may use (`platform/tenancy` computes
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+## Super admin report and dashboard widgets
+`GET /admin/reports/subscriptions` (`platform:revenue:read`, super admin only; `application/reports.py`) reads every
+organisation in platform scope and answers, per plan, the subscriptions in each status, the **monthly recurring
+revenue** (active subscriptions × the plan's monthly price) and what was **paid in the last 30 days** (paid
+invoices issued in that window), plus the **trials ending in the next 14 days**, soonest first. Money is computed
+with `Decimal` and returned as two-decimal strings. Organisation names come from the `eos.organisation_directory`
+entry point that tenancy publishes (`application/organisations.py`), so billing never imports tenancy; without it
+a trial is listed without a name.
+
+| Widget | Dashboard | Permission |
+|---|---|---|
+| `billing.plan-and-trial`, `billing.usage-vs-limits`, `billing.invoices` | Organisation Admin | `billing:subscription:read` |
+| `billing.trials-expiring`, `billing.revenue-by-plan`, `billing.subscriptions-by-plan` | Super Admin | `platform:revenue:read` |
+
 ## Porting this module to another repo
 Follow [docs/architecture/module-standard.md](../../docs/architecture/module-standard.md#portability-checklist).

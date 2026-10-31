@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: billing API
-  version: 0.1.1
+  version: 0.2.0
   description: "Plans, trials, subscriptions, upgrades and invoices. See ADR-0005."
 servers:
   - url: /api/v1/billing
@@ -33,6 +33,10 @@ paths:
       summary: Payment adapter callback. Confirms an upgrade and activates the subscription.
       security: []
       responses: { "204": { description: Processed } }
+  /admin/reports/subscriptions:
+    get:
+      summary: "Super admin (platform:revenue:read): subscriptions per plan and status, monthly recurring revenue (active subscriptions x the plan's monthly price), paid invoices of the last 30 days, and trials ending in the next 14 days, soonest first. Money as decimal strings."
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionReport" } } } } }
   /admin/plans:
     get:
       summary: All plans including unpublished. Super admin (platform:plans:manage).
@@ -59,6 +63,42 @@ paths:
       responses: { "200": { description: OK } }
 components:
   schemas:
+    SubscriptionReport:
+      type: object
+      properties:
+        generated_at: { type: string, format: date-time }
+        trial_window_days: { type: integer, example: 14 }
+        paid_window_days: { type: integer, example: 30 }
+        plans:
+          type: array
+          items:
+            type: object
+            properties:
+              plan: { type: string }
+              title: { type: string }
+              currency: { type: string, example: INR }
+              subscriptions:
+                type: object
+                description: Count per subscription status.
+                properties:
+                  trialing: { type: integer }
+                  active: { type: integer }
+                  past_due: { type: integer }
+                  read_only: { type: integer }
+                  cancelled: { type: integer }
+              total: { type: integer }
+              monthly_recurring: { type: string, description: "Decimal, two places: active subscriptions x price_per_month", example: "12500.00" }
+              paid_last_30_days: { type: string, description: "Decimal, two places: paid invoices issued in the window", example: "25000.00" }
+        trials_expiring:
+          type: array
+          items:
+            type: object
+            properties:
+              organisation_id: { type: string, format: uuid }
+              organisation_name: { type: string, nullable: true }
+              plan: { type: string }
+              trial_ends_at: { type: string, format: date-time }
+              days_left: { type: integer, minimum: 0 }
     Plan:
       type: object
       properties:
