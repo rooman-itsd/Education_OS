@@ -1,0 +1,132 @@
+# Automatic review on the lead's behalf (docs/team/automated-review.md).
+#
+# When a pull request asks @faizanrooman for a review, or touches a path he is a code owner of, Claude Code
+# checks the branch out, runs the suites and the repository checks, and writes a verdict. A separate step
+# then posts that verdict as a GitHub review from Faizan's own token (so it counts as a code owner's
+# approval): "request changes" with the findings, or "approve". The merge watcher merges approved PRs.
+# Every new commit on the PR triggers a fresh review; an in-flight review of an older commit is cancelled.
+#
+# Secrets (repository settings → Secrets and variables → Actions):
+#   ANTHROPIC_API_KEY     Anthropic API key used by the review (API billing, separate from any subscription).
+#                         Alternative: CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` (uses the subscription);
+#                         swap the `anthropic_api_key` input below for `claude_code_oauth_token`.
+#   FAIZAN_REVIEW_TOKEN   A fine-grained personal access token of @faizanrooman with "Pull requests: write"
+#                         on this repository. The review is posted with it, nothing else.
+name: auto-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, review_requested]
+
+concurrency:
+  group: auto-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  decide:
+    if: github.event.pull_request.draft == false && github.event.pull_request.user.login != 'faizanrooman'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+      contents: read
+    outputs:
+      review: ${{ steps.pick.outputs.review }}
+      model: ${{ steps.pick.outputs.model }}
+    steps:
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          # Paths the lead is a code owner of (.github/CODEOWNERS); a PR touching one needs his review.
+          OWNED: '^(platform/(identity|tenancy|billing|api-gateway)/|packages/|docs/architecture/|docs/team/|\.github/|tools/|infra/|apps/|tests/)'
+          # Platform core gets the stronger model.
+          CORE: '^(platform/(identity|tenancy|billing|api-gateway)/|packages/|apps/backend/src/)'
+        run: |
+          files=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json files --jq '.files[].path')
+          requested=$(gh pr view "$PR" -R "$GITHUB_REPOSITORY" --json reviewRequests --jq '[.reviewRequests[].requestedReviewer.login] | index("faizanrooman") != null')
+          owned=$(echo "$files" | grep -Eq "$OWNED" && echo true || echo false)
+          core=$(echo "$files" | grep -Eq "$CORE" && echo true || echo false)
+          if [ "$requested" = true ] || [ "$owned" = true ]; then echo "review=true" >> "$GITHUB_OUTPUT"; else echo "review=false" >> "$GITHUB_OUTPUT"; fi
+          if [ "$core" = true ]; then echo "model=claude-opus-5-5" >> "$GITHUB_OUTPUT"; else echo "model=claude-sonnet-5-5" >> "$GITHUB_OUTPUT"; fi
+          echo "requested=$requested owned=$owned core=$core"
+
+  review:
+    needs: decide
+    if: needs.decide.outputs.review == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: tools/scripts/py-setup.sh
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Review with Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are reviewing pull request #${{ github.event.pull_request.number }} of ${{ github.repository }}
+            on behalf of the repository lead (Faizan). The PR branch is checked out in the working directory;
+            `.venv` holds every enabled package installed from this checkout (`source .venv/bin/activate`), and
+            `pnpm install` has run. Read `.claude/CLAUDE.md` and `docs/team/RULES.md` first: the rules are
+            enforced (one module per PR, module boundaries, `organisation_id` + RLS on every table, approved
+            stack only, catalogue permission keys on every route, nothing at the top of the repository,
+            conventional commits).
+
+            Do: `gh pr view ${{ github.event.pull_request.number }}` and `gh pr diff ${{ github.event.pull_request.number }}`;
+            read every changed file in full; run each affected test directory with its own pytest invocation
+            (`python -m pytest <dir> -q`), `ruff check --config tools/config/ruff.toml <touched paths>`,
+            `python tools/scripts/check-root.py`, `check-boundaries.py`, `check-migrations.py`, `check-stack.py`,
+            `check-manifests.py`; for frontend changes `pnpm --filter <package> typecheck` and `test`.
+            Look for the traps this team has hit: a module whose `contracts/permissions.yaml` grants no role
+            (unreachable in production); tests that mint tokens with a custom `perms` claim; PATCH with an
+            explicit null; check-then-insert races on uniqueness; self-approval in approval workflows; money
+            as float; cross-tenant leaks (every query scoped by organisation, 404 for foreign rows); duplicate
+            entries in `apps/backend/config/modules.enabled.yaml`; secrets or personal data in logs or events;
+            a widget's permission key not granted to the dashboard's role. Reproduce any bug you claim with a
+            throwaway test before reporting it; delete the throwaway afterwards.
+
+            Do not post anything on GitHub, do not push, do not commit. When finished, write exactly one file,
+            `${{ runner.temp }}/verdict.json`, of the form
+            {"verdict": "approve" | "changes", "summary": "<one paragraph for the author: what you verified and the verbatim test summary lines>", "findings": [{"severity": "high|medium|low", "where": "file:line", "what": "...", "fix": "..."}]}
+            Use "changes" only for findings a reviewer would block on (a bug, a security or tenancy gap, a rule
+            violation, red tests); everything else goes in the summary as follow-ups with "approve".
+          claude_args: |
+            --model ${{ needs.decide.outputs.model }}
+            --max-turns 80
+            --allowedTools "Bash,Read,Grep,Glob,Write(${{ runner.temp }}/verdict.json)"
+      - name: Post the verdict as Faizan's review
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.FAIZAN_REVIEW_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          MODEL: ${{ needs.decide.outputs.model }}
+          VERDICT: ${{ runner.temp }}/verdict.json
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "FAIZAN_REVIEW_TOKEN is not set; nothing posted"; exit 0; fi
+          if ! jq -e '.verdict' "$VERDICT" >/dev/null 2>&1; then
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review on Faizan's behalf could not complete on ${HEAD:0:7} (see the auto-review run); a human review follows."
+            exit 0
+          fi
+          body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"Automated review on Faizan'"'"'s behalf (" + $m + ", head " + $h + "). " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nEvery new commit is reviewed again; approved PRs are merged by the watcher."' "$VERDICT")
+          if [ "$(jq -r .verdict "$VERDICT")" = approve ]; then
+            gh pr review "$PR" -R "$GITHUB_REPOSITORY" --approve --body "$body"
+          else
+            gh pr review "$PR" -R "$GITHUB_REPOSITORY" --request-changes --body "$body"
+          fi
