@@ -5,6 +5,362 @@ info:
   description: "Configurable workflow and approval engine (state machines, SLAs, delegation)."
 servers:
   - url: /api/v1/workflow
-paths: {}
+
+paths:
+  /chains:
+    get:
+      summary: List approval chains
+      operationId: listChains
+      responses:
+        "200":
+          description: List of configured approval chains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalChain"
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      summary: Create approval chain
+      operationId: createChain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewChain"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalChain"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /chains/{id}:
+    get:
+      summary: Get approval chain details
+      operationId: getChain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Chain with its steps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalChain"
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /requests:
+    get:
+      summary: Search workflow requests
+      operationId: listRequests
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected, cancelled] }
+        - name: entity_type
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Page of requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestPage"
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      summary: Submit workflow request
+      operationId: createRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewRequest"
+      responses:
+        "201":
+          description: Request created and placed in Step 1
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequest"
+        "200":
+          description: Existing request returned (idempotency token match)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequest"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /requests/pending:
+    get:
+      summary: Get pending approval requests for current viewer
+      operationId: getPendingApprovals
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Pending requests awaiting approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestPage"
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /requests/{id}:
+    get:
+      summary: Get request details and action history
+      operationId: getRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Request details with history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequestDetail"
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /requests/{id}/approve:
+    post:
+      summary: Approve current step of request
+      operationId: approveRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionInput"
+      responses:
+        "200":
+          description: Step approved; request advanced or finalized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequest"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /requests/{id}/reject:
+    post:
+      summary: Reject request
+      operationId: rejectRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionInput"
+      responses:
+        "200":
+          description: Request rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequest"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /requests/{id}/delegate:
+    post:
+      summary: Delegate current step of request
+      operationId: delegateRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DelegateInput"
+      responses:
+        "200":
+          description: Step delegated to designated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRequest"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
 components:
-  schemas: {}
+  responses:
+    BadRequest:
+      description: Invalid payload or request parameters
+    Forbidden:
+      description: Caller lacks required permission
+    NotFound:
+      description: Resource not found
+    Conflict:
+      description: Request has already been resolved or action cannot be applied
+
+  schemas:
+    NewStep:
+      type: object
+      required: [step_order, name, approver_role]
+      properties:
+        step_order: { type: integer, minimum: 1 }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        approver_role: { type: string, minLength: 1, maxLength: 64 }
+        sla_hours: { type: integer, minimum: 1, nullable: true }
+        is_final: { type: boolean, default: false }
+
+    NewChain:
+      type: object
+      required: [code, title, steps]
+      properties:
+        code: { type: string, minLength: 1, maxLength: 64 }
+        title: { type: string, minLength: 1, maxLength: 128 }
+        description: { type: string, nullable: true }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/NewStep" }
+          minItems: 1
+
+    ApprovalStep:
+      type: object
+      required: [id, chain_id, step_order, name, approver_role, is_final, created_at]
+      properties:
+        id: { type: string }
+        chain_id: { type: string }
+        step_order: { type: integer }
+        name: { type: string }
+        approver_role: { type: string }
+        sla_hours: { type: integer, nullable: true }
+        is_final: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    ApprovalChain:
+      type: object
+      required: [id, organisation_id, code, title, is_active, created_at, updated_at, steps]
+      properties:
+        id: { type: string }
+        organisation_id: { type: string }
+        code: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalStep" }
+
+    NewRequest:
+      type: object
+      required: [chain_code, entity_type, entity_id, title]
+      properties:
+        chain_code: { type: string, minLength: 1, maxLength: 64 }
+        entity_type: { type: string, minLength: 1, maxLength: 64 }
+        entity_id: { type: string, minLength: 1, maxLength: 64 }
+        title: { type: string, minLength: 1, maxLength: 255 }
+        description: { type: string, nullable: true }
+        client_token: { type: string, nullable: true }
+        context: { type: object, default: {} }
+
+    ActionInput:
+      type: object
+      properties:
+        comments: { type: string, nullable: true }
+
+    DelegateInput:
+      type: object
+      required: [delegate_to_user_id]
+      properties:
+        delegate_to_user_id: { type: string }
+        comments: { type: string, nullable: true }
+
+    WorkflowAction:
+      type: object
+      required: [id, request_id, step_order, step_name, actor_id, action, occurred_at]
+      properties:
+        id: { type: string }
+        request_id: { type: string }
+        step_order: { type: integer }
+        step_name: { type: string }
+        actor_id: { type: string }
+        actor_name: { type: string, nullable: true }
+        action: { type: string, enum: [approved, rejected, delegated] }
+        comments: { type: string, nullable: true }
+        occurred_at: { type: string, format: date-time }
+
+    WorkflowRequest:
+      type: object
+      required: [id, organisation_id, chain_id, entity_type, entity_id, title, requester_id, current_step_order, status, submitted_at]
+      properties:
+        id: { type: string }
+        organisation_id: { type: string }
+        chain_id: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: string }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        requester_id: { type: string }
+        requester_name: { type: string, nullable: true }
+        current_step_order: { type: integer }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
+        submitted_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+        current_step_deadline: { type: string, format: date-time, nullable: true }
+        is_overdue: { type: boolean }
+        delegated_to: { type: string, nullable: true }
+        client_token: { type: string, nullable: true }
+        context: { type: object }
+
+    WorkflowRequestDetail:
+      allOf:
+        - $ref: "#/components/schemas/WorkflowRequest"
+        - type: object
+          properties:
+            history:
+              type: array
+              items: { $ref: "#/components/schemas/WorkflowAction" }
+
+    RequestPage:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WorkflowRequest" }
+        total: { type: integer }
