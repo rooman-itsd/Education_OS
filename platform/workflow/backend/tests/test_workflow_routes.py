@@ -280,5 +280,9 @@ def test_student_and_faculty_scoped_to_own_requests(workflow_client, workflow_db
     assert res.json()["total"] == 2
 
     # Admin can get either request -> 200
-    assert workflow_client.get(f"/api/v1/workflow/requests/{req1_id}", headers=org.headers(org.admin)).status_code == 200
-    assert workflow_client.get(f"/api/v1/workflow/requests/{req2_id}", headers=org.headers(org.admin)).status_code == 200
+    assert (
+        workflow_client.get(f"/api/v1/workflow/requests/{req1_id}", headers=org.headers(org.admin)).status_code == 200
+    )
+    assert (
+        workflow_client.get(f"/api/v1/workflow/requests/{req2_id}", headers=org.headers(org.admin)).status_code == 200
+    )
