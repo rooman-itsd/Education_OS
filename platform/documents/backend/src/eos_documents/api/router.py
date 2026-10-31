@@ -16,8 +16,13 @@ from ..application.service import DocumentError
 router = APIRouter(tags=["documents"])
 
 DOCUMENT_READ = "documents:document:read"
+DOCUMENT_READ_ANY = "documents:document:read-any"
 DOCUMENT_WRITE = "documents:document:write"
 DOCUMENT_DELETE = "documents:document:delete"
+
+
+def _is_elevated_reader(p: Principal) -> bool:
+    return bool(p.super_admin or p.can(DOCUMENT_READ_ANY))
 
 
 class UploadIntentInput(BaseModel):
@@ -114,6 +119,9 @@ def get_download_url(
 ):
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    doc = service.get_document(db, p.organisation_id, id)
+    if not doc or doc.status == service.STATUS_DELETED or (not _is_elevated_reader(p) and doc.uploaded_by != p.user_id):
+        raise HTTPException(404, detail={"code": "not_found", "message": "Document not found"})
     try:
         doc, url, exp = service.get_download_url(db, p.organisation_id, p.user_id, id)
         return {
@@ -134,7 +142,7 @@ def get_document(
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     doc = service.get_document(db, p.organisation_id, id)
-    if not doc or doc.status == service.STATUS_DELETED:
+    if not doc or doc.status == service.STATUS_DELETED or (not _is_elevated_reader(p) and doc.uploaded_by != p.user_id):
         raise HTTPException(404, detail={"code": "not_found", "message": "Document not found"})
     return service.view_document(doc)
 
@@ -144,6 +152,7 @@ def list_documents(
     status: str | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,
+    uploaded_by: str | None = None,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     p: Principal = Depends(require(DOCUMENT_READ)),
@@ -151,12 +160,14 @@ def list_documents(
 ):
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    effective_uploaded_by = uploaded_by if _is_elevated_reader(p) else p.user_id
     items, total = service.list_documents(
         db,
         p.organisation_id,
         status=status,
         entity_type=entity_type,
         entity_id=entity_id,
+        uploaded_by=effective_uploaded_by,
         limit=limit,
         offset=offset,
     )

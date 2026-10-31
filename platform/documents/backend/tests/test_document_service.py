@@ -49,13 +49,14 @@ def test_upload_intent_and_idempotency(db, org, memory_storage):
 
 
 def test_confirm_upload_lifecycle(db, org, memory_storage):
+    payload = b"%PDF-1.4 simulated pdf"
     doc, _, _, _ = service.request_upload_intent(
         db,
         org.id,
         actor_id=org.student_id,
         filename="assignment.pdf",
         mime_type="application/pdf",
-        size_bytes=4096,
+        size_bytes=len(payload),
         storage=memory_storage,
     )
     db.commit()
@@ -65,7 +66,7 @@ def test_confirm_upload_lifecycle(db, org, memory_storage):
         service.confirm_upload(db, org.id, org.student_id, doc.id, storage=memory_storage)
 
     # Put object in storage simulating client PUT
-    memory_storage.put_object(doc.bucket, doc.storage_path, b"%PDF-1.4 simulated pdf", doc.mime_type)
+    memory_storage.put_object(doc.bucket, doc.storage_path, payload, doc.mime_type)
 
     # Confirm succeeds
     doc = service.confirm_upload(db, org.id, org.student_id, doc.id, storage=memory_storage)
@@ -85,13 +86,14 @@ def test_confirm_upload_lifecycle(db, org, memory_storage):
 
 
 def test_download_url_generation(db, org, memory_storage):
+    notes_data = b"test notes content"
     doc, _, _, _ = service.request_upload_intent(
         db,
         org.id,
         actor_id=org.faculty_id,
         filename="notes.pdf",
         mime_type="application/pdf",
-        size_bytes=1024,
+        size_bytes=len(notes_data),
         storage=memory_storage,
     )
     db.commit()
@@ -101,7 +103,7 @@ def test_download_url_generation(db, org, memory_storage):
         service.get_download_url(db, org.id, org.faculty_id, doc.id, storage=memory_storage)
 
     # Complete upload
-    memory_storage.put_object(doc.bucket, doc.storage_path, b"test", doc.mime_type)
+    memory_storage.put_object(doc.bucket, doc.storage_path, notes_data, doc.mime_type)
     service.confirm_upload(db, org.id, org.faculty_id, doc.id, storage=memory_storage)
     db.commit()
 

@@ -154,10 +154,38 @@ def confirm_upload(
     if doc.status == STATUS_DELETED:
         raise DocumentError("Document has been deleted", status=400)
 
-    # In production, check object exists in storage
-    if not store.object_exists(doc.bucket, doc.storage_path):
+    # Restrict confirmation to original uploader
+    if doc.uploaded_by and doc.uploaded_by != actor_id:
+        raise DocumentError("Only the original uploader can confirm this upload", status=403)
+
+    # Idempotent no-op if already available
+    if doc.status == STATUS_AVAILABLE:
+        return doc
+
+    # Check object exists and verify upload integrity
+    stat = store.stat_object(doc.bucket, doc.storage_path)
+    if stat is None:
         raise DocumentError("Document file was not found in storage. Upload may not have completed.", status=400)
 
+    cfg = load_settings()
+    if stat.size > cfg.max_file_size_bytes:
+        store.delete_object(doc.bucket, doc.storage_path)
+        raise DocumentError(f"Uploaded file exceeds maximum allowed size ({cfg.max_file_size_bytes} bytes)", status=400)
+
+    if doc.size_bytes and doc.size_bytes > 0 and stat.size != doc.size_bytes:
+        store.delete_object(doc.bucket, doc.storage_path)
+        raise DocumentError(
+            f"Uploaded file size ({stat.size} bytes) does not match declared size ({doc.size_bytes} bytes)", status=400
+        )
+
+    if stat.content_type and not stat.content_type.startswith(doc.mime_type):
+        store.delete_object(doc.bucket, doc.storage_path)
+        raise DocumentError(
+            f"Uploaded content type ({stat.content_type}) does not match declared mime-type ({doc.mime_type})",
+            status=400,
+        )
+
+    doc.size_bytes = stat.size
     doc.status = STATUS_AVAILABLE
     doc.updated_at = utcnow()
 

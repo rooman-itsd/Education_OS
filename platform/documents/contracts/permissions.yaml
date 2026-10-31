@@ -4,6 +4,8 @@ module: documents
 permissions:
   - key: documents:document:read
     description: "View document metadata and generate presigned download URLs"
+  - key: documents:document:read-any
+    description: "Read any document within the organisation regardless of uploader"
   - key: documents:document:write
     description: "Request upload URLs and confirm document uploads"
   - key: documents:document:delete
@@ -16,6 +18,7 @@ roles:
     description: "Organisation Admin: manages institution documents and upload authorizations."
     grants:
       - documents:document:read
+      - documents:document:read-any
       - documents:document:write
       - documents:document:delete
 
@@ -23,6 +26,7 @@ roles:
     description: "Department Admin: upload and view departmental documents."
     grants:
       - documents:document:read
+      - documents:document:read-any
       - documents:document:write
 
   - name: faculty

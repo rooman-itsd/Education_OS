@@ -35,7 +35,6 @@ ALLOWED_MIME_TYPES = frozenset(
         "image/jpeg",
         "image/png",
         "image/webp",
-        "image/svg+xml",
         # Archives
         "application/zip",
         "application/x-zip-compressed",

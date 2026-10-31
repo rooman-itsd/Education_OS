@@ -79,9 +79,11 @@ class OrgHelper:
             self.admin = _create_test_user(db, self.id, ["org-admin"], "admin")
             self.faculty = _create_test_user(db, self.id, ["faculty"], "faculty")
             self.student = _create_test_user(db, self.id, ["student"], "student")
+            self.student2 = _create_test_user(db, self.id, ["student"], "student2")
         self.admin_id = self.admin.id
         self.faculty_id = self.faculty.id
         self.student_id = self.student.id
+        self.student2_id = self.student2.id
 
     def auth_headers(self, user) -> dict[str, str]:
         token = create_token(
@@ -102,6 +104,10 @@ class OrgHelper:
     @property
     def student_headers(self) -> dict[str, str]:
         return self.auth_headers(self.student)
+
+    @property
+    def student2_headers(self) -> dict[str, str]:
+        return self.auth_headers(self.student2)
 
 
 @pytest.fixture

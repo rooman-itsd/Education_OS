@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 
@@ -12,6 +13,12 @@ from minio import Minio
 from .config import DocumentsSettings, load_settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ObjectStat:
+    size: int
+    content_type: str | None
 
 
 class StoragePort(Protocol):
@@ -39,6 +46,10 @@ class StoragePort(Protocol):
 
     def object_exists(self, bucket: str, key: str) -> bool:
         """Check whether an object exists in storage."""
+        ...
+
+    def stat_object(self, bucket: str, key: str) -> ObjectStat | None:
+        """Get object metadata (size, content_type) or None if object does not exist."""
         ...
 
 
@@ -103,11 +114,14 @@ class MinioStorage:
         self.client.remove_object(bucket, key)
 
     def object_exists(self, bucket: str, key: str) -> bool:
+        return self.stat_object(bucket, key) is not None
+
+    def stat_object(self, bucket: str, key: str) -> ObjectStat | None:
         try:
-            self.client.stat_object(bucket, key)
-            return True
+            stat = self.client.stat_object(bucket, key)
+            return ObjectStat(size=stat.size, content_type=stat.content_type)
         except Exception:
-            return False
+            return None
 
 
 class MemoryStorage:
@@ -136,6 +150,12 @@ class MemoryStorage:
 
     def object_exists(self, bucket: str, key: str) -> bool:
         return (bucket, key) in self.objects
+
+    def stat_object(self, bucket: str, key: str) -> ObjectStat | None:
+        item = self.objects.get((bucket, key))
+        if item is None:
+            return None
+        return ObjectStat(size=len(item[0]), content_type=item[1])
 
 
 _storage_singleton: StoragePort | None = None
