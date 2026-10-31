@@ -191,8 +191,10 @@ production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_P
 the defaults in `.env.api.example`. Two matter on the server:
 
 - `EOS_TRUSTED_PROXIES` must be the nginx container's address as the API container sees it, so the API
-  believes the proxy's `X-Forwarded-For`. Left at loopback, every visitor counts as the proxy and shares
-  one bucket. `tools/scripts/deploy-api-lxc.sh` writes it (the `PROXY_CTID` container's address).
+  believes the proxy's `X-Forwarded-For`. Left empty (the example's value) or at loopback, every visitor
+  counts as the proxy and shares one bucket, and the API logs a warning at start-up.
+  `tools/scripts/deploy-api-lxc.sh` writes it (the `PROXY_CTID` container's address), replacing an empty or
+  loopback value; a value naming another address is kept.
 - If the limits refuse legitimate traffic, switch them off without a code change: set
   `EOS_RATE_LIMIT_ENABLED=false` in `.env.api`, then
   `docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d`
