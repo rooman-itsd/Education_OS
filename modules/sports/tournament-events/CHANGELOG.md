@@ -4,6 +4,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
 - Module scaffolded.
+- Frontend: dashboard widgets `upcoming` (athlete; ongoing and upcoming published tournaments with the athlete's own
+  entries or whether entries are open, and their next fixtures) and `calendar` (coach; the next four weeks'
+  tournaments and fixtures from `GET /calendar`). API client, vitest unit tests.
 - Backend: domain rules (tournament lifecycle with ongoing/completed read from the dates in the institution's local
   date, entries open from publishing until the registration deadline, one live entry per athlete and category, entry
   and fixture state machines, fixtures on the tournament's days with its own non-withdrawn entries, results only for
