@@ -91,6 +91,11 @@ class NotFoundError(DomainError):
         super().__init__("not_found", message, status_code=404)
 
 
+class ForbiddenError(DomainError):
+    def __init__(self, message: str = "Forbidden") -> None:
+        super().__init__("forbidden", message, status_code=403)
+
+
 class ConflictError(DomainError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(code, message, status_code=409)

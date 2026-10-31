@@ -147,3 +147,75 @@ def test_direct_finalize_outcome(client, org):
     body = fin_again.json()
     detail = body.get("detail", body)
     assert detail["code"] == "candidate_finalized"
+
+
+def test_unassigned_panelist_cannot_record_decision(client, org):
+    _, coord = org.user(COORDINATOR)
+    t = client.post(f"{BASE}/process-types", json={"name": "Drama Audition"}, headers=coord).json()
+
+    p = client.post(
+        f"{BASE}/processes",
+        json={
+            "type_id": t["id"],
+            "title": "Macbeth Casting",
+            "stages": [
+                {"name": "Stage 1", "sequence": 1},
+                {"name": "Stage 2", "sequence": 2},
+            ],
+        },
+        headers=coord,
+    ).json()
+
+    stage1_id = p["stages"][0]["id"]
+    stage2_id = p["stages"][1]["id"]
+
+    panelist_stage1_id, panelist_stage1_h = org.user(PANELIST)
+    panelist_stage2_id, panelist_stage2_h = org.user(PANELIST)
+    unassigned_panelist_id, unassigned_panelist_h = org.user(PANELIST)
+
+    # Panel 1 is for Stage 1 only
+    client.post(
+        f"{BASE}/processes/{p['id']}/panels",
+        json={"name": "Panel Stage 1", "stage_id": stage1_id, "member_person_ids": [panelist_stage1_id]},
+        headers=coord,
+    )
+    # Panel 2 is for Stage 2 only
+    client.post(
+        f"{BASE}/processes/{p['id']}/panels",
+        json={"name": "Panel Stage 2", "stage_id": stage2_id, "member_person_ids": [panelist_stage2_id]},
+        headers=coord,
+    )
+
+    client.post(f"{BASE}/processes/{p['id']}/open", headers=coord)
+
+    candidate_user_id, _ = org.user("actor")
+    cand = client.post(
+        f"{BASE}/processes/{p['id']}/candidates",
+        json={"person_id": candidate_user_id},
+        headers=coord,
+    ).json()
+    assert cand["current_stage_id"] == stage1_id
+
+    # Panelist for Stage 2 tries to record decision on Stage 1 -> 403 Forbidden
+    res_other_panel = client.post(
+        f"{BASE}/candidates/{cand['id']}/decisions",
+        json={"outcome": "advance", "score": 90.0},
+        headers=panelist_stage2_h,
+    )
+    assert res_other_panel.status_code == 403
+
+    # Unassigned panelist tries to record decision -> 403 Forbidden
+    res_unassigned = client.post(
+        f"{BASE}/candidates/{cand['id']}/decisions",
+        json={"outcome": "advance", "score": 90.0},
+        headers=unassigned_panelist_h,
+    )
+    assert res_unassigned.status_code == 403
+
+    # Assigned panelist for Stage 1 can record decision -> 201 Created
+    res_assigned = client.post(
+        f"{BASE}/candidates/{cand['id']}/decisions",
+        json={"outcome": "advance", "score": 95.0},
+        headers=panelist_stage1_h,
+    )
+    assert res_assigned.status_code == 201

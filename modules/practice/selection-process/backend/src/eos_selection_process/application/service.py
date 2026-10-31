@@ -20,6 +20,7 @@ from ..domain.models import (
     ConflictError,
     DecisionOutcome,
     DuplicateCandidateError,
+    ForbiddenError,
     NoStagesError,
     NotFoundError,
     ProcessNotDraftError,
@@ -375,6 +376,9 @@ class SelectionProcessService:
         if not p:
             raise NotFoundError("Process not found")
 
+        if p.status != ProcessStatus.OPEN.value:
+            raise ProcessNotOpenError("Process is not open")
+
         p.status = ProcessStatus.CLOSED.value
         p.updated_at = utcnow()
         self.db.commit()
@@ -440,7 +444,12 @@ class SelectionProcessService:
         if "name" in data and data["name"] is not None:
             panel.name = data["name"]
         if "stage_id" in data:
-            panel.stage_id = data["stage_id"]
+            stage_id = data["stage_id"]
+            if stage_id:
+                stage = repo.get_stage(self.db, actor.organisation_id, stage_id)
+                if not stage or stage.process_id != panel.process_id:
+                    raise NotFoundError("Stage not found on process")
+            panel.stage_id = stage_id
         if "member_person_ids" in data and data["member_person_ids"] is not None:
             panel.member_person_ids = data["member_person_ids"]
 
@@ -466,8 +475,19 @@ class SelectionProcessService:
     # Candidates
     # ------------------------------------------------------------------
 
-    def _serialize_candidate(self, c: CandidateModel) -> dict:
+    def _is_panelist_on_process(self, actor: Actor, process_id: str) -> bool:
+        panels = repo.list_panels_for_process(self.db, actor.organisation_id, process_id)
+        return any(actor.user_id in (p.member_person_ids or []) for p in panels)
+
+    def _serialize_candidate(self, c: CandidateModel, actor: Actor | None = None) -> dict:
         decisions = repo.list_decisions_for_candidate(self.db, c.organisation_id, c.id)
+        if actor and c.person_id == actor.user_id and not (
+            actor.can(CANDIDATE_READ_ALL)
+            or actor.can(PROCESS_MANAGE)
+            or self._is_panelist_on_process(actor, c.process_id)
+        ):
+            decisions = [d for d in decisions if d.decided_by == actor.user_id]
+
         return {
             "id": c.id,
             "process_id": c.process_id,
@@ -543,7 +563,7 @@ class SelectionProcessService:
 
         self.db.commit()
         self.db.refresh(cand)
-        return self._serialize_candidate(cand)
+        return self._serialize_candidate(cand, actor=actor)
 
     def list_candidates(
         self,
@@ -591,7 +611,7 @@ class SelectionProcessService:
                 )
 
         return {
-            "items": [self._serialize_candidate(c) for c in items],
+            "items": [self._serialize_candidate(c, actor=actor) for c in items],
             "total": total,
             "page": page,
             "page_size": limit,
@@ -601,7 +621,15 @@ class SelectionProcessService:
         c = repo.get_candidate(self.db, actor.organisation_id, candidate_id)
         if not c:
             raise NotFoundError("Candidate not found")
-        return self._serialize_candidate(c)
+
+        is_self = c.person_id == actor.user_id
+        is_manager = actor.can(CANDIDATE_READ_ALL) or actor.can(PROCESS_MANAGE)
+        is_panelist = self._is_panelist_on_process(actor, c.process_id)
+
+        if not (is_self or is_manager or is_panelist):
+            raise NotFoundError("Candidate not found")
+
+        return self._serialize_candidate(c, actor=actor)
 
     def withdraw_candidate(self, actor: Actor, candidate_id: str) -> dict:
         c = repo.get_candidate(self.db, actor.organisation_id, candidate_id)
@@ -626,7 +654,7 @@ class SelectionProcessService:
 
         self.db.commit()
         self.db.refresh(c)
-        return self._serialize_candidate(c)
+        return self._serialize_candidate(c, actor=actor)
 
     # ------------------------------------------------------------------
     # Decisions & Stage Progression
@@ -637,7 +665,17 @@ class SelectionProcessService:
         if not c:
             raise NotFoundError("Candidate not found")
 
+        is_self = c.person_id == actor.user_id
+        is_manager = actor.can(CANDIDATE_READ_ALL) or actor.can(PROCESS_MANAGE)
+        is_panelist = self._is_panelist_on_process(actor, c.process_id)
+
+        if not (is_self or is_manager or is_panelist):
+            raise NotFoundError("Candidate not found")
+
         decisions = repo.list_decisions_for_candidate(self.db, actor.organisation_id, candidate_id)
+        if is_self and not (is_manager or is_panelist):
+            decisions = [d for d in decisions if d.decided_by == actor.user_id]
+
         return [
             {
                 "id": d.id,
@@ -683,6 +721,9 @@ class SelectionProcessService:
                 if p.stage_id == stage_id or p.stage_id is None:
                     matching_panel_id = p.id
                     break
+
+        if matching_panel_id is None and not actor.can(DECISION_MANAGE):
+            raise ForbiddenError("Caller is not a panelist for this stage")
 
         dec_model = DecisionModel(
             organisation_id=actor.organisation_id,
@@ -816,7 +857,7 @@ class SelectionProcessService:
                 "id": s.id,
                 "process_id": s.process_id,
                 "stage_id": s.stage_id,
-                "candidate_id": s.candidate_id,
+                "candidate_id": s.candidate_id if actor.can(CANDIDATE_READ_ALL) or actor.can(PROCESS_MANAGE) else None,
                 "title": s.title,
                 "starts_at": iso(s.starts_at),
                 "ends_at": iso(s.ends_at),
