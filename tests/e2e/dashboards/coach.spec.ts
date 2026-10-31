@@ -13,9 +13,8 @@ import { dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFo
  *   state, or says its data is not available while the backend is missing (the coach holds the faculty role's
  *   permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- *   facility-booking is enabled but exports facility-booking.bookings-today, not the facility-booking.bookings the
- *   layout lists, so that widget skips until sprint batch #331; athlete-performance.session-plan and wearables.alerts
- *   are not built in v1 (see NOT_BUILT);
+ *   facility-booking.bookings (upcoming bookings on the resources the coach approves) is checked by its empty state;
+ *   athlete-performance.session-plan and wearables.alerts are not built in v1 (see NOT_BUILT);
  * - the data journeys are fixme: each needs a sports module enabled, and the coach's scoping in tournament-events
  *   and training-video-analysis needs the athlete-performance.athlete.registered event.
  *
@@ -64,13 +63,12 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Training video data is not available yet.",
   },
   {
-    // Texts of facility-booking.bookings-today, the widget the module exports today (BookingsTodayWidget.tsx).
     id: "facility-booking.bookings",
     module: "facilities/facility-booking",
     batch: "#331",
-    title: "Bookings today",
-    probe: "/facility-booking/summary",
-    empty: "No bookings today",
+    title: "Upcoming bookings",
+    probe: "/facility-booking/bookings?scope=managed&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
   // An integration, not a module: listed by its folder so the skip names where it lives.
@@ -176,9 +174,8 @@ test.describe("with sports data", () => {
   });
 
   test.fixme("facility-booking.bookings lists a booking made for later today", async () => {
-    // facilities/facility-booking is enabled, but the layout's facility-booking.bookings is not exported (the module
-    // exports facility-booking.bookings-today; sprint batch #331 builds or renames it). Then, as in
-    // facility-staff.spec.ts: a resource type and a resource the coach manages, a booking later today
-    // (POST /facility-booking/resource-types, /resources, /bookings), and expect its time window and resource name.
+    // Follow-up: as in facility-staff.spec.ts, facility staff create a resource type and a resource the coach
+    // approves (approver_user_ids), and a booking later today (POST /facility-booking/resource-types, /resources,
+    // /bookings); expect its "Today" row with the time window and resource name in "Upcoming bookings".
   });
 });

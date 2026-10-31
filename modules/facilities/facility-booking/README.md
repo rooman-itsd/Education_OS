@@ -83,6 +83,8 @@ place them by id, and the shell titles them with the academy's vocabulary.
   `bookings` covers the resources the viewer approves; `my-bookings` the viewer's own, booked by or for them.
 - **States:** loading, empty, and error with a retry when trying again can help; until the backend answers, the error
   reads "Booking data is not available yet." 401 and 403 offer no retry.
+- **Read-only for now:** the cancel and check-in actions the PRD lists for these rows (driven by `Booking.can`), and
+  whether `bookings` also shows the viewer's own bookings, come in #421.
 - **Data:** `src/api/client.ts`, a hand-written typed client that the generated client will replace.
 - **Tests:** `cd modules/facilities/facility-booking/frontend && pnpm test` (vitest and Testing Library).
 
