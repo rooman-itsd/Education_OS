@@ -258,10 +258,18 @@ def submit_run(db: Session, actor: Actor, run_id: str) -> dict:
 
 def decide_run(db: Session, actor: Actor, run_id: str, decision: str, note: str | None) -> dict:
     """Approve (locks the run; payslips become visible to employees) or return to review with a note. Nobody who
-    started, adjusted or submitted the run decides it."""
+    started, adjusted or submitted the run decides it, and nobody decides a run that holds their own payslip (decided
+    by the owner on #336)."""
     run = get(db, PayrollRun, run_id, "payroll run", lock=True)
     if actor.user_id in (run.preparers or []):
         raise forbidden("you prepared this run; someone else decides it")
+    own = (
+        q(db, Payslip)
+        .join(Employee, Employee.id == Payslip.employee_id)
+        .where(Payslip.run_id == run.id, Employee.user_id == actor.user_id)
+    )
+    if db.scalars(own.limit(1)).first() is not None:
+        raise conflict("own_payslip_in_run", "the run holds your own payslip; someone else decides it")
     if run.status != "submitted":
         raise conflict("run_not_submitted", f"the run is {run.status}, not submitted")
     note = text(note) or None

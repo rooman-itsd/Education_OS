@@ -220,14 +220,15 @@ paths:
   /payroll-runs/{id}/decision:
     post:
       summary: >-
-        Approve or return a submitted run. Nobody who started, adjusted or submitted the run decides it (403). Approval
+        Approve or return a submitted run. Nobody who started, adjusted or submitted the run decides it (403), and nobody
+        decides a run that holds their own payslip (409). Approval
         locks the run, makes its payslips visible to employees and publishes hr-payroll.payroll-run.approved; a return
         needs a note and puts the run back in review. Permission hr-payroll:payroll:approve.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [approved, returned] }, note: { type: string } } } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PayrollRun" } } } }
-        "409": { description: "Run is not submitted (`run_not_submitted`)" }
+        "409": { description: "Run is not submitted (`run_not_submitted`), or it holds the caller's own payslip (`own_payslip_in_run`)" }
         "422": { description: "A return without a note (`note_required`)" }
   /payroll-runs/{id}/mark-paid:
     post:

@@ -182,6 +182,23 @@ def test_the_preparer_never_approves(client, org):
     )
 
 
+def test_nobody_decides_a_run_with_their_own_payslip(client, org):
+    """Decided by the owner on #336: an approver who is also an employee in the run cannot approve or return it."""
+    e = employee(client, org)
+    approver = employee(client, org, who="finance")
+    for x in (e, approver):
+        salary(client, org, x)
+    run = start_run(client, org).json()
+    assert client.post(f"{BASE}/payroll-runs/{run['id']}/submit", headers=org.hr).status_code == 200
+    url = f"{BASE}/payroll-runs/{run['id']}/decision"
+    for body in ({"decision": "approved"}, {"decision": "returned", "note": "check"}):
+        r = client.post(url, json=body, headers=org.finance)
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "own_payslip_in_run"
+    assert client.get(f"{BASE}/payroll-runs/{run['id']}", headers=org.hr).json()["status"] == "submitted"
+    r = client.post(url, json={"decision": "approved"}, headers=org.manager)
+    assert r.status_code == 200 and r.json()["approved_by"] == org.ids["manager"]
+
+
 def test_nobody_adjusts_their_own_payslip(client, org):
     me_ = employee(client, org, who="hr")
     salary(client, org, me_, who="hr2")
