@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from eos_core.db import Base, TenantMixin, new_id, utcnow
-from sqlalchemy import JSON, Boolean, DateTime, Index, String
+from sqlalchemy import JSON, Boolean, DateTime, Index, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 STATUS_PENDING = "pending"
@@ -39,7 +39,7 @@ class ReportDefinition(TenantMixin, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (
-        Index("ix_reporting_definition_org_code", "organisation_id", "code"),
+        UniqueConstraint("organisation_id", "code", name="uq_reporting_definition_org_code"),
         Index("ix_reporting_definition_category", "category"),
     )
 
@@ -62,7 +62,14 @@ class ReportExecution(TenantMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
-        Index("ix_reporting_execution_org_client_token", "organisation_id", "client_token"),
+        Index(
+            "uq_reporting_execution_org_client_token",
+            "organisation_id",
+            "client_token",
+            unique=True,
+            postgresql_where=text("client_token IS NOT NULL"),
+            sqlite_where=text("client_token IS NOT NULL"),
+        ),
         Index("ix_reporting_execution_def_status", "report_definition_id", "status"),
     )
 

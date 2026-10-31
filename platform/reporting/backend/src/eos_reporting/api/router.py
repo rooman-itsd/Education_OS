@@ -6,7 +6,7 @@ from typing import Any
 
 from eos_core.db import get_db
 from eos_identity.api.deps import Principal, require
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..application import service
 from ..application.service import ReportingError
+from ..domain.models import STATUS_COMPLETED
 
 router = APIRouter(tags=["reporting"])
 
@@ -197,6 +198,32 @@ def export_report(
         return res
     except ReportingError as e:
         db.rollback()
+        raise _err(e) from e
+
+
+@router.get("/executions/{id}/download")
+def download_execution_export(
+    id: str,
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    p: Principal = Depends(require(REPORT_READ)),
+    db: Session = Depends(get_db),
+):
+    if not p.organisation_id:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    execution = service.get_execution(db, p.organisation_id, id)
+    if not execution:
+        raise HTTPException(404, detail={"code": "not_found", "message": f"Execution '{id}' not found"})
+    if execution.status != STATUS_COMPLETED:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "Execution is not completed"})
+
+    try:
+        filename, content_bytes, media_type = service.get_execution_export_content(execution, format)
+        return Response(
+            content=content_bytes,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ReportingError as e:
         raise _err(e) from e
 
 

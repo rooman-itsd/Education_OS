@@ -46,9 +46,9 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("organisation_id", "code", name="uq_reporting_definition_org_code"),
     )
     op.create_index("ix_reporting_definition_organisation_id", DEFINITIONS, ["organisation_id"])
-    op.create_index("ix_reporting_definition_org_code", DEFINITIONS, ["organisation_id", "code"])
     op.create_index("ix_reporting_definition_category", DEFINITIONS, ["category"])
     enable_rls(DEFINITIONS)
 
@@ -69,7 +69,14 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index("ix_reporting_execution_organisation_id", EXECUTIONS, ["organisation_id"])
-    op.create_index("ix_reporting_execution_org_client_token", EXECUTIONS, ["organisation_id", "client_token"])
+    op.create_index(
+        "uq_reporting_execution_org_client_token",
+        EXECUTIONS,
+        ["organisation_id", "client_token"],
+        unique=True,
+        postgresql_where=sa.text("client_token IS NOT NULL"),
+        sqlite_where=sa.text("client_token IS NOT NULL"),
+    )
     op.create_index("ix_reporting_execution_def_status", EXECUTIONS, ["report_definition_id", "status"])
     enable_rls(EXECUTIONS)
 

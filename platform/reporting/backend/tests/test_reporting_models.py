@@ -70,3 +70,55 @@ def test_metric_snapshot():
     assert s.department_id == "dept-cs"
     assert s.period == "2026-10"
     assert s.data["present"] == 92
+
+
+def test_unique_constraint_on_definition_org_code(db):
+    d1 = ReportDefinition(
+        id=new_id(),
+        organisation_id="org-unique",
+        code="unique-code",
+        name="Unique 1",
+    )
+    db.add(d1)
+    db.commit()
+
+    d2 = ReportDefinition(
+        id=new_id(),
+        organisation_id="org-unique",
+        code="unique-code",
+        name="Unique 2",
+    )
+    db.add(d2)
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+
+def test_unique_constraint_on_execution_client_token(db):
+    e1 = ReportExecution(
+        id=new_id(),
+        organisation_id="org-unique",
+        report_definition_id="def-1",
+        requested_by="user-1",
+        client_token="tok-123",
+    )
+    db.add(e1)
+    db.commit()
+
+    e2 = ReportExecution(
+        id=new_id(),
+        organisation_id="org-unique",
+        report_definition_id="def-1",
+        requested_by="user-2",
+        client_token="tok-123",
+    )
+    db.add(e2)
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()

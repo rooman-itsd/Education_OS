@@ -28,4 +28,3 @@ platform:
   - tenancy
   - identity
   - audit
-  - reporting

@@ -32,6 +32,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 from eos_identity.application.service import create_user
+from eos_reporting.application import service
 from eos_reporting.domain.models import MetricSnapshot, ReportDefinition, ReportExecution
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -93,6 +94,8 @@ class OrgHelper:
     def __init__(self, db: Session, org_id: str | None = None):
         self.id = org_id or str(uuid.uuid4())
         with organisation_scope(self.id):
+            service.ensure_standard_definitions(db, self.id)
+            db.commit()
             self.admin = _create_test_user(db, self.id, ["org-admin"], "admin")
             self.dept_admin = _create_test_user(db, self.id, ["department-admin"], "dept-admin")
             self.management = _create_test_user(db, self.id, ["management"], "management")

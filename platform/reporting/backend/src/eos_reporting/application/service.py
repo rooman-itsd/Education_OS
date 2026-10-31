@@ -10,6 +10,7 @@ from typing import Any
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
+from sqlalchemy.exc import IntegrityError
 
 try:
     from eos_documents.application import service as documents_service
@@ -25,6 +26,7 @@ from ..domain.models import (
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_PENDING,
+    MetricSnapshot,
     ReportDefinition,
     ReportExecution,
 )
@@ -105,7 +107,6 @@ def ensure_standard_definitions(db: Session, organisation_id: str) -> None:
         .scalars()
         .all()
     )
-    added = False
     for def_data in STANDARD_DEFINITIONS:
         if def_data["code"] not in existing_codes:
             now = utcnow()
@@ -122,10 +123,12 @@ def ensure_standard_definitions(db: Session, organisation_id: str) -> None:
                 created_at=now,
                 updated_at=now,
             )
-            db.add(report_def)
-            added = True
-    if added:
-        db.flush()
+            try:
+                with db.begin_nested():
+                    db.add(report_def)
+                    db.flush()
+            except IntegrityError:
+                pass
 
 
 def list_definitions(
@@ -134,8 +137,7 @@ def list_definitions(
     category: str | None = None,
     is_active: bool | None = None,
 ) -> list[ReportDefinition]:
-    """List report definitions for an organisation with optional filtering."""
-    ensure_standard_definitions(db, organisation_id)
+    """List report definitions for an organisation with optional filtering (read-only)."""
     stmt = select(ReportDefinition).where(ReportDefinition.organisation_id == organisation_id)
     if category:
         stmt = stmt.where(ReportDefinition.category == category)
@@ -146,8 +148,7 @@ def list_definitions(
 
 
 def get_definition(db: Session, organisation_id: str, def_id_or_code: str) -> ReportDefinition | None:
-    """Find a report definition by ID or unique code."""
-    ensure_standard_definitions(db, organisation_id)
+    """Find a report definition by ID or unique code (read-only)."""
     stmt = select(ReportDefinition).where(
         ReportDefinition.organisation_id == organisation_id,
         (ReportDefinition.id == def_id_or_code) | (ReportDefinition.code == def_id_or_code),
@@ -256,6 +257,9 @@ def run_report(
 
     definition = get_definition(db, organisation_id, definition_id)
     if not definition:
+        ensure_standard_definitions(db, organisation_id)
+        definition = get_definition(db, organisation_id, definition_id)
+    if not definition:
         raise ReportingError(f"Report definition '{definition_id}' not found", status=404)
     if not definition.is_active:
         raise ReportingError(f"Report definition '{definition.name}' is inactive", status=400)
@@ -297,118 +301,60 @@ def run_report(
     except Exception as exc:
         logger.exception("Report execution %s failed: %s", execution.id, exc)
         execution.status = STATUS_FAILED
-        execution.error_message = str(exc)
+        execution.error_message = _sanitize_error_message(exc)
         execution.completed_at = utcnow()
 
     return execution, True
 
 
+def _sanitize_error_message(exc: Exception) -> str:
+    """Return a safe error message without leaking sensitive internal details."""
+    msg = str(exc).strip().split("\n")[0]
+    return f"Report computation failed: {msg[:200]}"
+
+
 def _compute_report_data(db: Session, organisation_id: str, code: str, params: dict) -> dict[str, Any]:
-    """Compute reporting aggregate summary based on code and parameters."""
+    """Compute reporting aggregate summary based on real MetricSnapshot data for this organisation."""
     dept_id = params.get("department_id")
+    period = params.get("period") or utcnow().strftime("%Y-%m")
 
-    if code == "department-attendance":
-        departments = [
-            {
-                "department_id": "dept-cs",
-                "department_name": "Computer Science",
-                "attendance_rate": 88.5,
-                "total_sessions": 240,
-            },
-            {
-                "department_id": "dept-ee",
-                "department_name": "Electrical Engineering",
-                "attendance_rate": 82.1,
-                "total_sessions": 210,
-            },
-            {
-                "department_id": "dept-me",
-                "department_name": "Mechanical Engineering",
-                "attendance_rate": 74.3,
-                "total_sessions": 195,
-            },
+    stmt = select(MetricSnapshot).where(
+        MetricSnapshot.organisation_id == organisation_id,
+        MetricSnapshot.metric_type == code,
+    )
+    if dept_id:
+        stmt = stmt.where(MetricSnapshot.department_id == dept_id)
+    if period:
+        stmt = stmt.where(MetricSnapshot.period == period)
+
+    snapshots = list(db.execute(stmt.order_by(MetricSnapshot.captured_at.desc())).scalars().all())
+
+    if snapshots:
+        items = [s.data for s in snapshots if isinstance(s.data, dict)]
+        avg_val = 0.0
+        rates = [
+            float(item.get("attendance_rate", item.get("rate", 0)))
+            for item in items
+            if "attendance_rate" in item or "rate" in item
         ]
-        if dept_id:
-            departments = [d for d in departments if d["department_id"] == dept_id]
+        if rates:
+            avg_val = round(sum(rates) / len(rates), 1)
+        avg_key = "average_attendance" if "attendance" in code else "average_metric"
         return {
-            "title": "Department Attendance Analysis",
-            "period": params.get("period", "2026-10"),
-            "average_attendance": 81.6,
-            "items": departments,
+            "title": f"Report: {code}",
+            "period": period,
+            avg_key: avg_val,
+            "items": items,
         }
 
-    if code == "exam-results-summary":
-        results = [
-            {"department_id": "dept-cs", "department_name": "Computer Science", "pass_rate": 94.2, "average_cgpa": 8.1},
-            {
-                "department_id": "dept-ee",
-                "department_name": "Electrical Engineering",
-                "pass_rate": 87.5,
-                "average_cgpa": 7.6,
-            },
-            {
-                "department_id": "dept-me",
-                "department_name": "Mechanical Engineering",
-                "pass_rate": 79.0,
-                "average_cgpa": 7.2,
-            },
-        ]
-        if dept_id:
-            results = [r for r in results if r["department_id"] == dept_id]
-        return {
-            "title": "Examination Results Summary",
-            "overall_pass_rate": 86.9,
-            "items": results,
-        }
-
-    if code == "faculty-workload":
-        workloads = [
-            {
-                "department_id": "dept-cs",
-                "faculty_name": "Dr. Alan Turing",
-                "teaching_hours_per_week": 16.0,
-                "status": "optimal",
-            },
-            {
-                "department_id": "dept-ee",
-                "faculty_name": "Dr. Nikola Tesla",
-                "teaching_hours_per_week": 20.0,
-                "status": "overloaded",
-            },
-            {
-                "department_id": "dept-me",
-                "faculty_name": "Dr. James Watt",
-                "teaching_hours_per_week": 14.0,
-                "status": "available",
-            },
-        ]
-        if dept_id:
-            workloads = [w for w in workloads if w["department_id"] == dept_id]
-        return {
-            "title": "Faculty Workload Distribution",
-            "average_workload_hours": 16.7,
-            "items": workloads,
-        }
-
-    if code == "fee-collection-summary":
-        return {
-            "title": "Fee Collection and Dues",
-            "total_invoiced_inr": 12500000,
-            "total_collected_inr": 10750000,
-            "collection_rate_pct": 86.0,
-            "items": [
-                {"category": "Tuition Fee", "invoiced": 10000000, "collected": 8800000, "dues": 1200000},
-                {"category": "Hostel Fee", "invoiced": 2000000, "collected": 1650000, "dues": 350000},
-                {"category": "Lab & Library", "invoiced": 500000, "collected": 300000, "dues": 200000},
-            ],
-        }
-
-    # Custom or generic report:
+    # If no snapshots have been ingested yet for this tenant, return real empty structure
+    avg_key = "average_attendance" if "attendance" in code else "average_metric"
     return {
-        "title": f"Custom Report: {code}",
-        "generated_at": utcnow().isoformat(),
+        "title": f"Report: {code}",
+        "period": period,
         "parameters": params,
-        "items": [{"metric": "general_metric", "value": 100}],
+        avg_key: 0.0,
+        "items": [],
     }
 
 
@@ -502,35 +448,55 @@ def export_report(
     }
 
 
+def _sanitize_csv_cell(val: Any) -> Any:
+    """Guard against CSV formula injection (=, +, -, @, tab, CR)."""
+    if isinstance(val, str) and val.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{val}"
+    return val
+
+
 def _generate_csv(summary: dict[str, Any]) -> bytes:
-    """Format report summary items into standard tabular CSV bytes."""
+    """Format report summary items into standard tabular CSV bytes with formula injection protection."""
     output = io.StringIO()
     items = summary.get("items")
     if items and isinstance(items, list) and isinstance(items[0], dict):
-        fieldnames = list(items[0].keys())
-        writer = csv.DictWriter(output, fieldnames=fieldnames)
-        writer.writeheader()
+        fieldnames = [_sanitize_csv_cell(k) for k in items[0].keys()]
+        writer = csv.writer(output)
+        writer.writerow(fieldnames)
         for item in items:
-            writer.writerow(item)
+            writer.writerow([_sanitize_csv_cell(v) for v in item.values()])
     else:
         # Fallback to key-value rows
         writer = csv.writer(output)
         writer.writerow(["Metric", "Value"])
         for k, v in summary.items():
             if k != "items":
-                writer.writerow([k, str(v)])
+                writer.writerow([_sanitize_csv_cell(k), _sanitize_csv_cell(str(v))])
     return output.getvalue().encode("utf-8")
+
+
+def get_execution_export_content(execution: ReportExecution, export_format: str) -> tuple[str, bytes, str]:
+    """Return (filename, content_bytes, media_type) for direct download of an execution."""
+    fmt = export_format.lower().strip()
+    if fmt not in ("csv", "json"):
+        raise ReportingError(f"Unsupported export format '{export_format}'. Must be 'csv' or 'json'", status=400)
+    filename = f"report_{execution.id[:8]}.{fmt}"
+    if fmt == "csv":
+        content = _generate_csv(execution.result_summary or {})
+        media_type = "text/csv"
+    else:
+        content = json.dumps(execution.result_summary or {}, indent=2).encode("utf-8")
+        media_type = "application/json"
+    return filename, content, media_type
 
 
 def get_department_reports_widget_data(
     db: Session, organisation_id: str, department_id: str | None = None
 ) -> dict[str, Any]:
-    """Retrieve operational metrics for the department-admin dashboard widget."""
-    ensure_standard_definitions(db, organisation_id)
-    dept_id = department_id or "dept-cs"
-    dept_name = "Computer Science" if dept_id == "dept-cs" else f"Department {dept_id}"
+    """Retrieve operational metrics for department-admin widget from real MetricSnapshot data (read-only)."""
+    dept_id = department_id or ""
 
-    # Sample recent executions
+    # Real recent executions
     recent_runs = list(
         db.execute(
             select(ReportExecution)
@@ -541,78 +507,73 @@ def get_department_reports_widget_data(
         .scalars()
         .all()
     )
-
     recent_reports = [
         {
             "id": run.id,
             "code": run.report_definition_id,
-            "title": "Department MIS Run",
+            "title": f"Report Execution ({run.id[:8]})",
             "generated_at": run.executed_at.isoformat(),
         }
         for run in recent_runs
     ]
-    if not recent_reports:
-        recent_reports = [
-            {
-                "id": "rep-1",
-                "code": "department-attendance",
-                "title": "Monthly Attendance Report",
-                "generated_at": utcnow().isoformat(),
-            },
-            {
-                "id": "rep-2",
-                "code": "exam-results-summary",
-                "title": "Midterm Examination Summary",
-                "generated_at": utcnow().isoformat(),
-            },
-        ]
+
+    # Query real metrics from MetricSnapshot
+    stmt = select(MetricSnapshot).where(
+        MetricSnapshot.organisation_id == organisation_id,
+    )
+    if dept_id:
+        stmt = stmt.where(MetricSnapshot.department_id == dept_id)
+    latest_snapshot = db.execute(stmt.order_by(MetricSnapshot.captured_at.desc()).limit(1)).scalar_one_or_none()
+
+    data = latest_snapshot.data if latest_snapshot and isinstance(latest_snapshot.data, dict) else {}
+    dept_name = data.get("department_name", f"Department {dept_id}" if dept_id else "General Department")
+    attendance_rate = float(data.get("attendance_rate", 0.0))
+    exam_pass_rate = float(data.get("pass_rate", data.get("exam_pass_rate", 0.0)))
+    faculty_load = float(data.get("faculty_load_average", 0.0))
 
     return {
         "department_id": dept_id,
         "department_name": dept_name,
-        "attendance_rate": 88.5,
-        "exam_pass_rate": 94.2,
-        "faculty_load_average": 16.0,
+        "attendance_rate": attendance_rate,
+        "exam_pass_rate": exam_pass_rate,
+        "faculty_load_average": faculty_load,
         "recent_reports": recent_reports,
     }
 
 
 def get_attendance_and_results_widget_data(db: Session, organisation_id: str) -> dict[str, Any]:
-    """Retrieve cross-department comparison for the management dashboard widget."""
-    ensure_standard_definitions(db, organisation_id)
-    departments = [
-        {
-            "department_id": "dept-cs",
-            "department_name": "Computer Science",
-            "attendance_rate": 88.5,
-            "pass_rate": 94.2,
-            "total_students": 320,
-            "is_attendance_low": False,
-        },
-        {
-            "department_id": "dept-ee",
-            "department_name": "Electrical Engineering",
-            "attendance_rate": 82.1,
-            "pass_rate": 87.5,
-            "total_students": 240,
-            "is_attendance_low": False,
-        },
-        {
-            "department_id": "dept-me",
-            "department_name": "Mechanical Engineering",
-            "attendance_rate": 74.3,
-            "pass_rate": 79.0,
-            "total_students": 280,
-            "is_attendance_low": True,
-        },
-    ]
+    """Retrieve cross-department comparison from real MetricSnapshot data for management widget (read-only)."""
+    stmt = select(MetricSnapshot).where(
+        MetricSnapshot.organisation_id == organisation_id,
+        MetricSnapshot.metric_type.in_(["department_summary", "attendance", "exam_results"]),
+    )
+    snapshots = list(db.execute(stmt.order_by(MetricSnapshot.captured_at.desc())).scalars().all())
 
-    total_students = sum(d["total_students"] for d in departments)
-    avg_attendance = round(sum(d["attendance_rate"] * d["total_students"] for d in departments) / total_students, 1)
-    avg_pass = round(sum(d["pass_rate"] * d["total_students"] for d in departments) / total_students, 1)
+    departments = []
+    seen_depts = set()
+    for s in snapshots:
+        d = s.data if isinstance(s.data, dict) else {}
+        d_id = s.department_id or d.get("department_id", "default")
+        if d_id not in seen_depts:
+            seen_depts.add(d_id)
+            att = float(d.get("attendance_rate", 0.0))
+            pass_r = float(d.get("pass_rate", d.get("exam_pass_rate", 0.0)))
+            departments.append(
+                {
+                    "department_id": d_id,
+                    "department_name": d.get("department_name", f"Department {d_id}"),
+                    "attendance_rate": att,
+                    "pass_rate": pass_r,
+                    "total_students": int(d.get("total_students", 0)),
+                    "is_attendance_low": att < 75.0 if att > 0 else False,
+                }
+            )
+
+    avg_att = round(sum(d["attendance_rate"] for d in departments) / len(departments), 1) if departments else 0.0
+    avg_pass = round(sum(d["pass_rate"] for d in departments) / len(departments), 1) if departments else 0.0
 
     return {
-        "institution_average_attendance": avg_attendance,
+        "institution_average_attendance": avg_att,
         "institution_average_pass_rate": avg_pass,
         "departments": departments,
     }

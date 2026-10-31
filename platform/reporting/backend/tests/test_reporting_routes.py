@@ -75,7 +75,15 @@ def test_export_and_widgets_via_api(client, org, memory_storage):
     r_exp = client.get(f"/api/v1/reporting/executions/{exec_id}/export?format=csv", headers=org.admin_headers)
     assert r_exp.status_code == 200
     assert r_exp.json()["format"] == "csv"
+    download_url = r_exp.json()["download_url"]
     assert "download_url" in r_exp.json()
+
+    # Verify that the download URL returns valid file content
+    r_dl = client.get(download_url, headers=org.admin_headers)
+    assert r_dl.status_code == 200
+    assert "text/csv" in r_dl.headers.get("content-type", "")
+    assert "attachment" in r_dl.headers.get("content-disposition", "")
+    assert len(r_dl.content) > 0
 
     # Department widget route
     r_dept = client.get("/api/v1/reporting/widgets/department-reports", headers=org.dept_admin_headers)

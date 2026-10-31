@@ -135,6 +135,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ExportResponse"
 
+  /executions/{id}/download:
+    get:
+      summary: Download exported report data directly
+      operationId: downloadExport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [csv, json], default: csv }
+      responses:
+        "200":
+          description: File content
+          content:
+            text/csv:
+              schema: { type: string }
+            application/json:
+              schema: { type: string }
+        "404":
+          description: Execution not found
+
   /widgets/department-reports:
     get:
       summary: Snapshot for Department Admin widget
