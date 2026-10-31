@@ -14,10 +14,6 @@ _Owner fills in: what this module is responsible for, and what it explicitly is 
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
-## Dashboard Widgets
-- `audit.recent-activity`: Displays recent organization-scoped audit records for administrators.
-- `audit.super-admin-actions`: Displays platform-level audit records. Note that this list contains audit's own `audit_trail.read` cross-organisation access trail records, until other platform services (such as tenancy organisation approve/suspend/impersonate) emit platform-level audit records.
-
 ## Dependencies
 See `module.yaml`. This module must not import code from any other module under `modules/`.
 
