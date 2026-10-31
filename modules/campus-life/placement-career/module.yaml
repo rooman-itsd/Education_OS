@@ -5,11 +5,12 @@ kind: feature              # feature | platform | integration
 domain: campus-life
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Placement drives, companies, applications, offers, career services."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+status: in-progress       # planned | in-progress | stable | deprecated
+description: "Campus placement for jobs: company records, drives, job openings, applications and offers."
+owners: [gokulalakshmirooman-source]                # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
+# identity: the caller and their roles. audit: every state change. Internships are field-training's, not here (#337).
 depends_on:
   platform: [identity, audit]
   integrations: []
