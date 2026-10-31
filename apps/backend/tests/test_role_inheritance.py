@@ -138,19 +138,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "management reporting.attendance-and-results-by-department",
         ],
     ),
-    # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
-    "selection-process": (
-        LEARNER_GAP,
-        [
-            "actor selection-process.upcoming",
-            "artist selection-process.upcoming",
-            "dancer selection-process.upcoming",
-            "designer selection-process.upcoming",
-            "law-student selection-process.upcoming",
-            "musician selection-process.upcoming",
-            "research-scholar selection-process.my-applications",
-        ],
-    ),
     # workflow: empty catalogue (workflow module, batch #317)
     "workflow": (
         EMPTY,

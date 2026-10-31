@@ -21,7 +21,15 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
 const TITLE = "Research Office";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "selection-process.open-calls", module: "practice/selection-process", batch: "#322" },
+  {
+    id: "selection-process.open-calls",
+    module: "practice/selection-process",
+    batch: "#322",
+    title: "Open Calls",
+    probe: "/selection-process/processes?status=open&page_size=6",
+    empty: "No open calls right now",
+    unavailable: "Open calls are not available yet.",
+  },
   { id: "projects.active", module: "practice/projects", batch: "#339" },
   {
     id: "budget-grants.budget-vs-spend",
