@@ -58,7 +58,11 @@ Failures keep a screenshot and a trace in `tests/e2e/.cache/test-results/`
 | `E2E_API_PORT`, `E2E_WEB_PORT` | `8100`, `5180` | Ports for the suite's own servers |
 
 The script is `e2e`, not `test`, on purpose: `web.yml` runs every package's `test` script on each PR,
-and this suite needs browsers and both servers. CI runs it on merge to `main` once that job exists.
+and this suite needs browsers and both servers. CI runs it in `.github/workflows/system.yml`: after every merge to
+`main`, on PRs that change the journeys, `apps/frontend` or the dashboard layouts, and by hand (Actions → system →
+Run workflow; a URL there also runs the smoke checks against that site). A failed run keeps the report as the
+`e2e-report` artifact. Before the journeys start, `warmup.ts` signs in once so the dev server has compiled every
+module (a cold first dashboard load used to outlast the assertions).
 
 ## Adding a journey
 
