@@ -25,6 +25,20 @@ Not in scope: plans, prices, subscriptions and payments (`platform/billing`); us
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+## Dashboard widgets
+`frontend/src/widgets/index.ts`, placed by the role layouts in `platform/identity/config/dashboards/`:
+
+| Widget | Dashboard | Permission | Shows |
+|---|---|---|---|
+| `tenancy.enabled-modules` | Organisation Admin | `tenancy:organisation:read` | The modules on now, by suite, and how many a higher plan unlocks |
+| `tenancy.approval-queue` | Super Admin | `platform:organisations:read` | Registrations in `pending_approval` and package changes (`requested_academy_type`), oldest first, with the count |
+| `tenancy.organisations-by-status` | Super Admin | `platform:organisations:read` | How many organisations are in each status, every status listed |
+| `tenancy.recent-registrations` | Super Admin | `platform:organisations:read` | The five newest organisations: package, plan, status |
+
+The three Super Admin widgets read `GET /admin/organisations` and count in the browser; they only display, and
+approving happens on the super admin screens (#95). The list looks up each organisation's subscription, so once
+there are hundreds of organisations a counting endpoint should replace the full list.
+
 ## Export and deletion (DPDP)
 Both are super admin operations under `/admin/organisations/{id}`, keys `platform:organisation:export` and
 `platform:organisation:delete`, and every step leaves an outbox event (`tenancy.organisation.exported`,
