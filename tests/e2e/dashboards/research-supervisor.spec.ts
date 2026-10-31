@@ -43,7 +43,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "projects.to-review", module: "practice/projects", batch: "#339" },
   { id: "projects.active", module: "practice/projects", batch: "#339" },
   { id: "selection-process.to-judge", module: "practice/selection-process", batch: "#322" },
-  { id: "portfolio.reviews-pending", module: "practice/portfolio", batch: "#322" },
+  {
+    id: "portfolio.reviews-pending",
+    module: "practice/portfolio",
+    batch: "#322",
+    title: "Reviews Pending",
+    probe: "/portfolio/items?scope=managed&status=submitted,under_review",
+    empty: "No reviews pending",
+    unavailable: "Portfolio review data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
