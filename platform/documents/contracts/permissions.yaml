@@ -1,11 +1,44 @@
 # Permission catalogue for documents. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: documents
-permissions: []
-#  - key: documents:record:read
-#    description: ...
-#  - key: documents:record:write
-#    description: ...
-roles: []
-#  - name: documents-admin
-#    grants: [documents:record:read, documents:record:write]
+permissions:
+  - key: documents:document:read
+    description: "View document metadata and generate presigned download URLs"
+  - key: documents:document:write
+    description: "Request upload URLs and confirm document uploads"
+  - key: documents:document:delete
+    description: "Delete documents from storage and metadata catalog"
+  - key: platform:documents:read
+    description: "Super admin only. Cross-organisation document oversight and metrics"
+
+roles:
+  - name: org-admin
+    description: "Organisation Admin: manages institution documents and upload authorizations."
+    grants:
+      - documents:document:read
+      - documents:document:write
+      - documents:document:delete
+
+  - name: department-admin
+    description: "Department Admin: upload and view departmental documents."
+    grants:
+      - documents:document:read
+      - documents:document:write
+
+  - name: faculty
+    description: "Faculty: upload and access educational and research documents."
+    grants:
+      - documents:document:read
+      - documents:document:write
+
+  - name: student
+    description: "Student: upload and view personal academic documents and submissions."
+    grants:
+      - documents:document:read
+      - documents:document:write
+
+  - name: super-admin
+    description: "Super admin: platform-wide document monitoring and storage audit."
+    grants:
+      - documents:document:read
+      - platform:documents:read
