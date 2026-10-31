@@ -29,3 +29,42 @@ roles:
   - name: portfolio-manager
     description: Runs the portfolio register for the organisation — configures types and may act on or review any item.
     grants: [portfolio:item-type:read, portfolio:item-type:manage, portfolio:item:read, portfolio:item:read-all, portfolio:item:write, portfolio:item:manage, portfolio:review:write, portfolio:review:manage]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards)
+  # Learner and creator roles: my-portfolio widget. Same grants as portfolio-learner.
+  - name: actor
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: artist
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: designer
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: filmmaker
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item-type:read, portfolio:item:write]
+  - name: musician
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: research-scholar
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  - name: teacher-trainee
+    description: Profile role, creative learner. Same grants as portfolio-learner.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:item:write]
+  # Reviewer and mentor roles: reviews-pending widget. Same grants as portfolio-reviewer.
+  - name: design-mentor
+    description: Profile role, creative reviewer. Same grants as portfolio-reviewer.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
+  - name: mentor-teacher
+    description: Profile role, creative reviewer. Same grants as portfolio-reviewer.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
+  - name: music-teacher
+    description: Profile role, creative reviewer. Same grants as portfolio-reviewer.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
+  - name: research-supervisor
+    description: Profile role, creative reviewer. Same grants as portfolio-reviewer.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
+  - name: studio-instructor
+    description: Profile role, creative reviewer. Same grants as portfolio-reviewer.
+    grants: [portfolio:item-type:read, portfolio:item:read, portfolio:review:write]
