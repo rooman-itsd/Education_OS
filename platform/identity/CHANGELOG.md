@@ -3,6 +3,20 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Plan user limit. `create_user` refuses the person who would take the organisation past its plan's `users`
+  limit with `PlanLimitReachedError`, before anything is written; `POST /users` answers `409` with
+  `{"code": "plan_limit_reached", "limit": "users", "allowed", "used"}`. The limit comes through the new
+  `hooks.user_limit(db, organisation_id)` (None, the default, is no limit), which apps/backend wires to
+  billing's `user_limit`, so identity imports nothing. New `count_staff_users(db, organisation_id)`, the
+  figure the limit and billing's usage count. On Postgres the count and the insert run under a
+  per-organisation advisory lock (`lock_user_seats`, `pg_advisory_xact_lock`), so two requests at the limit
+  minus one cannot both pass (review of PR 363).
+- Second review of PR 363: the plan's `users` limit counts staff accounts only. New `is_learner(roles)`: a
+  person is a learner when any role is `student` or `applicant`, or extends one through its dashboard layout
+  (`eos_core.config.expand_roles`, e.g. `law-student`). Learners are not counted by `count_staff_users`
+  (formerly `count_active_users`) and `create_user` never refuses one on the limit, so the 26th student on
+  the trial plan (25 users) is admitted. The test file is now `tests/test_identity_plan_limits.py` (billing
+  has its own `test_plan_limits.py`).
 - Every dashboard layout lists the module roles its profile role holds in `module_roles` (`projects-member`,
   `portfolio-learner`, `lms-instructor`, `field-training-coordinator`, ...), and the base `student` and `faculty`
   layouts list the roles of lms, library, transport, timetable-attendance and examinations. 221 of 278

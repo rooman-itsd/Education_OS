@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: billing API
-  version: 0.1.1
+  version: 0.1.2
   description: "Plans, trials, subscriptions, upgrades and invoices. See ADR-0005."
 servers:
   - url: /api/v1/billing
@@ -24,6 +24,10 @@ paths:
     post:
       summary: Cancel at the end of the current period. Permission billing:subscription:manage.
       responses: { "204": { description: Scheduled } }
+  /usage:
+    get:
+      summary: Usage against the plan's limits. Users counted by identity; students and storage null until a module counts them. Permission billing:subscription:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Usage" } } } } }
   /invoices:
     get:
       summary: Invoices of the caller's organisation, newest first; one per paid period. Permission billing:subscription:read.
@@ -46,7 +50,9 @@ paths:
       summary: Edit a plan. Changes apply to existing subscribers at their next period. Super admin.
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Plan" } } } }
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "422": { description: "A limit that is not a whole number of at least 0 (\"unlimited\", \"50\", -1), or an unknown limit." }
   /admin/subscriptions/{organisation_id}:
     put:
       summary: Set an organisation's plan, extend a trial, or comp a subscription. Super admin (platform:subscriptions:manage).
@@ -59,6 +65,32 @@ paths:
       responses: { "200": { description: OK } }
 components:
   schemas:
+    PlanLimits:
+      type: object
+      additionalProperties: false
+      description: >-
+        A plan's limits. Each is a whole number of at least 0; absent, null or 0 is no limit. `users` are staff
+        accounts: learners (students, applicants and every role whose dashboard layout extends student) are
+        never counted as users and never refused on it. `students` are the learners (not counted yet), and
+        `storage_gb` stored files (not counted yet).
+      properties:
+        users: { type: [integer, "null"], minimum: 0, description: Active staff accounts. }
+        students: { type: [integer, "null"], minimum: 0, description: Active learners. }
+        storage_gb: { type: [integer, "null"], minimum: 0, description: Stored files, in GB. }
+      examples: [{ users: 25, students: 500, storage_gb: 2 }]
+    Usage:
+      type: object
+      required: [plan, limits, usage, at_limit]
+      properties:
+        plan: { type: string, examples: [trial] }
+        limits: { $ref: "#/components/schemas/PlanLimits" }
+        usage:
+          type: object
+          properties:
+            users: { type: integer, description: Active staff accounts (learners are not counted). }
+            students: { type: [integer, "null"], description: "Null until a module counts learners." }
+            storage_gb: { type: [number, "null"] }
+        at_limit: { type: array, items: { type: string }, description: Limits whose usage has reached them. }
     Plan:
       type: object
       properties:
@@ -72,7 +104,7 @@ components:
         modules: { type: array, items: { type: string } }
         specialized_suites: { oneOf: [{ type: integer }, { type: string, enum: [all] }] }
         integrations: { type: array, items: { type: string } }
-        limits: { type: object, properties: { users: { type: integer }, students: { type: integer }, storage_gb: { type: integer } } }
+        limits: { $ref: "#/components/schemas/PlanLimits" }
         published: { type: boolean }
     Subscription:
       type: object

@@ -11,6 +11,7 @@ from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..domain.limits import PlanLimits
 from ..domain.models import Invoice, Plan, Subscription
 
 
@@ -35,7 +36,8 @@ def seed_plans(db: Session) -> None:
                     modules=p.get("modules", []),
                     specialized_suites=str(p.get("specialized_suites", 0)),
                     integrations=p.get("integrations", []),
-                    limits=p.get("limits", {}),
+                    # typed and strict: a malformed config/plans.yaml stops start-up rather than a request
+                    limits=PlanLimits.model_validate(p.get("limits") or {}).stored(),
                     after_trial=p.get("after_trial", "read_only"),
                 )
             )
@@ -61,10 +63,39 @@ def get_subscription(db: Session, organisation_id: str) -> Subscription | None:
         return db.scalar(scoped(db, select(Subscription), Subscription).order_by(Subscription.created_at.desc()))
 
 
-def current_plan(db: Session, organisation_id: str) -> dict:
+def _plan_of(db: Session, organisation_id: str) -> Plan:
     sub = get_subscription(db, organisation_id)
-    plan = get_plan(db, sub.plan_id if sub else "trial")
-    return plan.to_rule()
+    return get_plan(db, sub.plan_id if sub else "trial")
+
+
+def current_plan(db: Session, organisation_id: str) -> dict:
+    return _plan_of(db, organisation_id).to_rule()
+
+
+def plan_limits(db: Session, organisation_id: str) -> PlanLimits:
+    """The organisation's plan limits, typed (domain/limits.py: `users` are staff accounts, `students` learners).
+    A value stored before limits were typed that is not a whole number >= 0 reads as no limit, with a log line."""
+    plan = _plan_of(db, organisation_id)
+    return PlanLimits.read(plan.limits, plan_id=plan.id)
+
+
+def user_limit(db: Session, organisation_id: str) -> int | None:
+    """The ceiling on active staff accounts, or None for none. apps/backend wires this into identity's
+    `hooks.user_limit`, so create_user refuses the staff account that would exceed it (409 plan_limit_reached);
+    learners are never refused on it."""
+    return plan_limits(db, organisation_id).ceiling("users")
+
+
+def usage_vs_limits(db: Session, organisation_id: str) -> dict:
+    """What the organisation uses against what its plan allows. Users (staff accounts) are counted by identity
+    (a declared dependency); students and storage have no module counting them yet and are reported as null."""
+    from eos_identity.application.service import count_staff_users
+
+    plan = _plan_of(db, organisation_id)
+    limits = PlanLimits.read(plan.limits, plan_id=plan.id)
+    usage = {"users": count_staff_users(db, organisation_id), "students": None, "storage_gb": None}
+    at_limit = [k for k, used in usage.items() if used is not None and (c := limits.ceiling(k)) and used >= c]
+    return {"plan": plan.id, "limits": limits.stored(), "usage": usage, "at_limit": at_limit}
 
 
 def start_trial(db: Session, *, organisation_id: str) -> Subscription:

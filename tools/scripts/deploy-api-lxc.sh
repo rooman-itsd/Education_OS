@@ -96,6 +96,15 @@ EOF
   scp -q "$TMP/.env.api" "$PVE:/tmp/eos.env.api"
   pve "pct push $CTID /tmp/eos.env.api $APP/infra/docker/.env.api --perms 600 && rm -f /tmp/eos.env.api"
 fi
+# The reverse proxy (nginx container PROXY_CTID) is the only peer whose X-Forwarded-For the API believes
+# (platform/api-gateway). Written when the key is missing, empty or still loopback (the old .env.api.example
+# value, which behind the proxy puts every client in one bucket); a value naming another address is kept.
+proxy_ip="$(pve "pct exec $PROXY_CTID -- hostname -I" 2>/dev/null | awk '{print $1}' || true)"
+if [ -n "$proxy_ip" ]; then
+  in_ct "f=$APP/infra/docker/.env.api; { grep -q '^EOS_TRUSTED_PROXIES=.' \$f && ! grep -qE '^EOS_TRUSTED_PROXIES=[[:space:]]*(127\.|::1|localhost)' \$f; } || { sed -i '/^EOS_TRUSTED_PROXIES=/d' \$f; printf '\nEOS_TRUSTED_PROXIES=%s\n' $proxy_ip >> \$f; }"
+else
+  echo "   could not read the address of container $PROXY_CTID: set EOS_TRUSTED_PROXIES in .env.api by hand" >&2
+fi
 # An .env.api from before the eos_app role: give the API its own database password, generated in the container.
 in_ct "grep -q '^EOS_APP_DB_PASSWORD=.' $APP/infra/docker/.env.api || printf '\nEOS_APP_DB_PASSWORD=%s\n' \"\$(openssl rand -hex 24)\" >> $APP/infra/docker/.env.api"
 # Keycloak (profile `oidc`) publishes its port on the container's LAN address only, where the proxy reaches it.
