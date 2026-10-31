@@ -22,4 +22,11 @@ describe("registerEnabledModules", () => {
     for (const name of platform) expect(loaded).toContain(`platform/${name}`);
     for (const name of loaded.filter((n) => n.startsWith("platform/"))) expect(platform).toContain(name.slice("platform/".length));
   });
+
+  it("reads the integrations: list the same way as modules:, naming them integrations/<adapter>", async () => {
+    const loaded = await registerEnabledModules();
+    const integrations = (parse(enabledRaw) as { integrations?: string[] } | null)?.integrations ?? [];
+    for (const name of integrations) expect(loaded).toContain(`integrations/${name}`);
+    for (const name of loaded.filter((n) => n.startsWith("integrations/"))) expect(integrations).toContain(name.slice("integrations/".length));
+  });
 });

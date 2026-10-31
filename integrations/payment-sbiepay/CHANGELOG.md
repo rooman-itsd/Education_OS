@@ -11,6 +11,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contracts: payments, gateway callback, verify, refunds, reconciliation, merchant account;
   events for succeeded, failed, expired, refunded payments and reconciliation mismatches; permissions and roles.
 - PRD (`docs/prd.md`).
+- Frontend (`frontend/`, package `@eos/payment-sbiepay`): the Finance Staff widget `payment-sbiepay.reconciliation`
+  (#335) shows today's succeeded, settled, pending and failed payments with their amounts, the latest run's mismatches
+  and when the day was last reconciled, with loading, empty and error-with-retry states, and its tests.
 - Adapter implementation (`src/eos_payment_sbiepay`):
   - payments with idempotent start, redirect page, gateway callback with double verification, verify, refunds;
   - reconciliation runs and the daily summary for the Finance Staff widget; merchant account;
@@ -34,3 +37,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   - a request delivers only its own payment's notifications;
   - date-times always carry `+00:00`;
   - a negative cursor answers `400` and a token without a subject `401`.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (`integrations:`), mounted at `/api/v1/payment-sbiepay`; CI now
+  installs it, runs its tests and migrates its chain on Postgres. The README says who reaches it (profile and plan) and
+  what works without gateway settings.
