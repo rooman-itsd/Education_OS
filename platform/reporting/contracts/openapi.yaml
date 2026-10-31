@@ -5,6 +5,267 @@ info:
   description: "Dashboards, MIS reports, analytics and warehouse ETL."
 servers:
   - url: /api/v1/reporting
-paths: {}
+paths:
+  /definitions:
+    get:
+      summary: List available report definitions
+      operationId: listDefinitions
+      responses:
+        "200":
+          description: List of report definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportDefinition"
+    post:
+      summary: Create custom report definition
+      operationId: createDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDefinitionInput"
+      responses:
+        "201":
+          description: Created report definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDefinition"
+
+  /definitions/{id}:
+    get:
+      summary: Get report definition details
+      operationId: getDefinition
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Report definition details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDefinition"
+    put:
+      summary: Update report definition
+      operationId: updateDefinition
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDefinitionInput"
+      responses:
+        "200":
+          description: Updated report definition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportDefinition"
+
+  /definitions/{id}/run:
+    post:
+      summary: Execute report
+      operationId: runReport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunReportInput"
+      responses:
+        "200":
+          description: Report execution result (fresh or idempotent replay)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportExecution"
+
+  /executions/{id}:
+    get:
+      summary: Get report execution output
+      operationId: getExecution
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Execution output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportExecution"
+
+  /executions/{id}/export:
+    get:
+      summary: Export report output as CSV or JSON
+      operationId: exportReport
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [csv, json], default: csv }
+      responses:
+        "200":
+          description: Presigned download URL for export file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportResponse"
+
+  /widgets/department-reports:
+    get:
+      summary: Snapshot for Department Admin widget
+      operationId: getDepartmentReportsWidget
+      parameters:
+        - name: department_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Department report summary data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentReportsWidgetData"
+
+  /widgets/attendance-and-results:
+    get:
+      summary: Cross-department comparison for Management widget
+      operationId: getAttendanceAndResultsWidget
+      responses:
+        "200":
+          description: Cross-department attendance and results comparison
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceAndResultsWidgetData"
+
 components:
-  schemas: {}
+  schemas:
+    ReportDefinition:
+      type: object
+      required: [id, organisation_id, code, name, category, is_system, is_active, created_at, updated_at]
+      properties:
+        id: { type: string }
+        organisation_id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        parameters_schema: { type: object }
+        is_system: { type: boolean }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateDefinitionInput:
+      type: object
+      required: [code, name, category]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        parameters_schema: { type: object }
+
+    UpdateDefinitionInput:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        parameters_schema: { type: object }
+        is_active: { type: boolean }
+
+    RunReportInput:
+      type: object
+      properties:
+        parameters: { type: object }
+        client_token: { type: string }
+
+    ReportExecution:
+      type: object
+      required: [id, organisation_id, report_definition_id, requested_by, status, executed_at]
+      properties:
+        id: { type: string }
+        organisation_id: { type: string }
+        report_definition_id: { type: string }
+        requested_by: { type: string }
+        status: { type: string, enum: [pending, completed, failed] }
+        parameters: { type: object }
+        result_summary: { type: object }
+        export_file_id: { type: string, nullable: true }
+        error_message: { type: string, nullable: true }
+        client_token: { type: string, nullable: true }
+        executed_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    ExportResponse:
+      type: object
+      required: [download_url, filename, format, expires_in_seconds]
+      properties:
+        download_url: { type: string }
+        filename: { type: string }
+        format: { type: string }
+        expires_in_seconds: { type: integer }
+
+    DepartmentReportsWidgetData:
+      type: object
+      required: [department_id, department_name, attendance_rate, exam_pass_rate, faculty_load_average, recent_reports]
+      properties:
+        department_id: { type: string }
+        department_name: { type: string }
+        attendance_rate: { type: number }
+        exam_pass_rate: { type: number }
+        faculty_load_average: { type: number }
+        recent_reports:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              code: { type: string }
+              title: { type: string }
+              generated_at: { type: string }
+
+    AttendanceAndResultsWidgetData:
+      type: object
+      required: [institution_average_attendance, institution_average_pass_rate, departments]
+      properties:
+        institution_average_attendance: { type: number }
+        institution_average_pass_rate: { type: number }
+        departments:
+          type: array
+          items:
+            type: object
+            properties:
+              department_id: { type: string }
+              department_name: { type: string }
+              attendance_rate: { type: number }
+              pass_rate: { type: number }
+              total_students: { type: integer }
+              is_attendance_low: { type: boolean }
