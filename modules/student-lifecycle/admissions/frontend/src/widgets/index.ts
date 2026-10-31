@@ -13,11 +13,11 @@ import { PendingDocumentsWidget } from "./PendingDocumentsWidget";
 export const widgets: DashboardWidget[] = [
   {
     id: "admissions.application-status",
-    title: "Latest applications",
-    permission: "admissions:application:read",
+    title: "Application status",
+    permission: "admissions:self:read",
     size: "1x1",
     kind: "list",
-    subtitle: "Newest first, with their status",
+    subtitle: "Your application and offer status",
     component: ApplicationStatusWidget,
   },
   {
@@ -31,11 +31,11 @@ export const widgets: DashboardWidget[] = [
   },
   {
     id: "admissions.pending-documents",
-    title: "Documents to verify",
-    permission: "admissions:document:verify",
+    title: "Pending documents",
+    permission: "admissions:self:read",
     size: "1x1",
     kind: "list",
-    subtitle: "Longest waiting first",
+    subtitle: "Documents waiting for verification",
     component: PendingDocumentsWidget,
   },
 ];

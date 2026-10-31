@@ -60,14 +60,6 @@ LEARNER_GAP = (
     "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # admissions: no role fits (admissions module, batch #321)
-    "admissions": (
-        NAMED,
-        [
-            "applicant admissions.application-status",
-            "applicant admissions.pending-documents",
-        ],
-    ),
     # alumni: empty catalogue (alumni module, batch #337)
     "alumni": (
         EMPTY,

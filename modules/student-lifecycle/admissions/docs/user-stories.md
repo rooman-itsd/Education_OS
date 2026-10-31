@@ -10,6 +10,12 @@
 - As an applicant, I can accept or decline an offer the same way, so the whole funnel works
   without me ever holding a login.
 
+## Applicant (signed-in / dashboard)
+- As a signed-in applicant, I can link an application to my account using its reference number and email,
+  so I can track its status and any offer on my Applicant dashboard.
+- As a signed-in applicant, I can see my documents awaiting verification or rejected with notes on my
+  Applicant dashboard, so I know what needs attention.
+
 ## Admissions staff
 - As admissions staff, I can list and search applications in my organisation, so I can work
   through the queue.
@@ -32,9 +38,3 @@
 - As a registrar using `student-information`, I can create a Person record once I see (through my
   own tools, not an automatic subscription) that an application was accepted, referencing it as
   `source` — a manual, authorised action, never automatic.
-
-## Explicitly not a user story here
-- "As an applicant, I sign in to see my dashboard" is **not** a story for this module in this
-  release — submission, tracking and offer decisions are all anonymous by design (see
-  `docs/prd.md` §6). If an authenticated applicant experience is wanted later, it is a separate,
-  explicit decision and a new dependency on `platform/identity`, not something this module assumes.
