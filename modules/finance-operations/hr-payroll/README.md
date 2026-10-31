@@ -64,12 +64,16 @@ Rules the code keeps:
   (28/31): 27,096.77 + 10,838.71 − 3,251.61 = 34,683.87. An employee without a salary is listed in `exceptions` and
   gets no payslip; one without a bank account gets a payslip and an exception.
 - **Preparer ≠ approver** (PRD). Whoever started, adjusted a payslip of, or submitted a run
-  is one of its preparers and can't decide it (403), even holding `payroll:approve`. A return needs a note and puts the
+  is one of its preparers and can't decide it (403), even holding `payroll:approve`. Nobody decides a run that holds
+  their own payslip (409 `own_payslip_in_run`; decided by the owner on #336). A return needs a note and puts the
   run back in review. Nobody adjusts their own payslip or sets their own salary.
 - **An approved run is locked.** Approved and paid runs take no adjustment, decision or resubmission (409
   `run_not_in_review`). A salary effective in a month whose run is submitted, approved or paid is refused (409
-  `period_locked`), as is unpaid leave in, or an exit before, a month that is approved; corrections go into a later
-  month as arrears or deductions.
+  `period_locked`), as is unpaid leave on any day of a month that is approved or paid (every month the request
+  touches, not only its first and last), an exit whose next day falls in a month that is approved or paid and pays
+  the employee (an exit on the last day of such a month is accepted: it changes nothing), and a change of `joined_on`
+  when the earlier of the old and new dates is in or before a month that is approved or paid; corrections go into a
+  later month as arrears or deductions.
 - **Leave.** Nobody decides their own request (403). Requests are calendar days, both ends included, inside one leave
   year (`HR_PAYROLL_LEAVE_YEAR_START_MONTH`), not before today, joining or after the last working day, never
   overlapping another pending or approved request, for a type that is active and open to the employment type. A paid
@@ -140,6 +144,12 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   the month; a change mid-month is not split. Use an adjustment for the difference.
 - **Late leave decisions:** a run computes loss of pay from leave approved when it is started; unpaid leave approved
   later for that month is handled by adjusting the payslip (while in review) or in a later month.
+- **Payslips are computed once, when the run starts.** Nothing recomputes them: a run is not restarted (a second
+  start for the month is 409 `run_exists`) and a return puts it back in review with the same payslips. While the run
+  is in review, a salary set from that month, an exit recorded in it and unpaid leave approved in it are all
+  accepted and leave the payslips stale; while it is submitted the salary is refused (`period_locked`) but the exit
+  and the leave are still accepted. Only from approval are all three refused. The preparer corrects a stale payslip
+  by adjusting it while the run is in review (a submitted run is returned first), or in a later month.
 - **Leave type edits** apply to past years' balances too (they are worked out from the type as it is now).
 - **Departments and reportees: not enforced.** The contract allows leave approvers and appraisal reviewers to be
   limited to their department or reportees, but identity issues no department claim yet: anyone with
