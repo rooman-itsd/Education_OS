@@ -2,9 +2,287 @@ openapi: 3.1.0
 info:
   title: documents API
   version: 0.1.0
-  description: "Document and media management: storage abstraction, versioning, access control."
+  description: "Document and media management: storage abstraction, presigned URLs, and access control."
 servers:
   - url: /api/v1/documents
-paths: {}
+
+paths:
+  /upload-intent:
+    post:
+      summary: Request a presigned URL to upload a document
+      operationId: requestUploadIntent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadIntentInput"
+      responses:
+        "201":
+          description: Upload intent registered and presigned URL generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadIntentResult"
+        "200":
+          description: Idempotent replay of previously registered upload intent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadIntentResult"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /{id}/confirm:
+    post:
+      summary: Confirm that a document was uploaded into storage
+      operationId: confirmUpload
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Document upload confirmed and status set to available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /{id}:
+    get:
+      summary: Get document metadata
+      operationId: getDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+    delete:
+      summary: Delete a document from storage and metadata catalog
+      operationId: deleteDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Document deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  document_id: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /{id}/download-url:
+    get:
+      summary: Generate a presigned temporary download URL
+      operationId: getDownloadUrl
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Temporary presigned download URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadUrlResult"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /:
+    get:
+      summary: List and search documents
+      operationId: listDocuments
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          required: false
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          required: false
+          schema: { type: string }
+        - name: uploaded_by
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 50 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: Paginated document list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentListResult"
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  schemas:
+    UploadIntentInput:
+      type: object
+      required:
+        - filename
+        - mime_type
+        - size_bytes
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        title:
+          type: string
+          maxLength: 255
+        mime_type:
+          type: string
+          minLength: 3
+          maxLength: 128
+        size_bytes:
+          type: integer
+          minimum: 1
+        entity_type:
+          type: string
+          maxLength: 64
+        entity_id:
+          type: string
+          maxLength: 64
+        client_token:
+          type: string
+          maxLength: 120
+        tags:
+          type: array
+          items: { type: string }
+
+    UploadIntentResult:
+      type: object
+      required:
+        - document
+        - upload_url
+        - method
+        - expires_in_seconds
+      properties:
+        document:
+          $ref: "#/components/schemas/Document"
+        upload_url:
+          type: string
+        method:
+          type: string
+          example: PUT
+        expires_in_seconds:
+          type: integer
+
+    DownloadUrlResult:
+      type: object
+      required:
+        - download_url
+        - filename
+        - expires_in_seconds
+      properties:
+        download_url:
+          type: string
+        filename:
+          type: string
+        expires_in_seconds:
+          type: integer
+
+    Document:
+      type: object
+      required:
+        - id
+        - organisation_id
+        - filename
+        - title
+        - mime_type
+        - size_bytes
+        - status
+        - uploaded_by
+        - created_at
+      properties:
+        id: { type: string }
+        organisation_id: { type: string }
+        title: { type: string }
+        filename: { type: string }
+        mime_type: { type: string }
+        size_bytes: { type: integer }
+        status:
+          type: string
+          enum: [pending_upload, available, archived, deleted]
+        entity_type: { type: string, nullable: true }
+        entity_id: { type: string, nullable: true }
+        uploaded_by: { type: string }
+        client_token: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DocumentListResult:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Document"
+        total: { type: integer }
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameter
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Not entitled or insufficient permission
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

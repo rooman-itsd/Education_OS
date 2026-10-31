@@ -9,9 +9,8 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  * - always: a finance-staff user signs in and lands on their dashboard;
  * - for every widget whose module is in apps/frontend/config/modules.enabled.yaml: the panel renders by its
  *   registered title and shows its empty state, or says its data is not available while the backend is missing;
- * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it:
- *   payment-sbiepay is an integration with no frontend (apps/frontend registers widgets of modules/ and platform/
- *   only), and procurement waits for the PR that enables it;
+ * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it (every
+ *   widget of this layout is enabled now, payment-sbiepay through the `integrations:` list);
  * - data journeys for the two backends that allow it today: an invoice and the cash payment against it show in
  *   fees-accounts.collections-today and fees-accounts.outstanding-dues, and a grant finance records shows in
  *   budget-grants.budget-vs-spend (every scope: budgets and grants together).
@@ -42,8 +41,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No outstanding dues",
     unavailable: "Fee data is not available yet.",
   },
-  // An integration, not a module: listed by its folder so the skip names where it lives.
-  { id: "payment-sbiepay.reconciliation", module: "integrations/payment-sbiepay", batch: "#335" },
+  // An integration, not a module: listed by its folder, as apps/frontend lists it under `integrations:`.
+  {
+    id: "payment-sbiepay.reconciliation",
+    module: "integrations/payment-sbiepay",
+    batch: "#335",
+    title: "Online payments reconciliation",
+    probe: "/payment-sbiepay/reconciliation/summary",
+    empty: "No online payments today",
+    unavailable: "Payment data is not available yet.",
+  },
   {
     id: "budget-grants.budget-vs-spend",
     module: "finance-operations/budget-grants",
@@ -190,16 +197,14 @@ test.describe("with budget-grants data", () => {
 
 // Backend-dependent: these need their module's API to create the data through, so nothing here is faked.
 test.fixme("payment-sbiepay.reconciliation shows the day's gateway payments matched against the settlement", async () => {
-  // integrations/payment-sbiepay (sprint batch #335) has a backend but no frontend widget, and apps/frontend only
-  // registers widgets of modules/ and platform/. Its data is GET /payment-sbiepay/reconciliation/summary, and the
-  // payments it counts come only through the adapter's gateway: tests/e2e/playwright.config.ts does not enable the
-  // adapter in the API it starts or set PAYMENT_SBIEPAY_MODE=mock, so none can be created in e2e yet. Then: pay an
-  // invoice online through the mock gateway, run the reconciliation and expect the day's matched count and amount.
+  // The widget renders and shows its empty state above. Its data is GET /payment-sbiepay/reconciliation/summary, and
+  // the payments it counts come only through the adapter's gateway: tests/e2e/playwright.config.ts does not set
+  // PAYMENT_SBIEPAY_MODE=mock (nor the callback URL) for the API it starts, so none can be created in e2e yet. Then:
+  // pay an invoice online through the mock gateway, run the reconciliation and expect the day's counts and amounts.
 });
 
 test.fixme("procurement.purchase-orders-pending lists an order submitted for approval", async () => {
-  // finance-operations/procurement (sprint batch #335) is enabled by PR #298; until then its widget skips above.
-  // The journey creates a vendor, an indent that management approves and a purchase order finance submits. Approving
+  // The widget renders and shows its empty state above (procurement is enabled, PR #298). The journey creates a vendor, an indent that management approves and a purchase order finance submits. Approving
   // an indent needs PROCUREMENT_DIRECT_PURCHASE_LIMIT and PROCUREMENT_QUOTATION_LIMIT, and the order's budget check
   // calls budget-grants at PROCUREMENT_BUDGET_GRANTS_URL; tests/e2e/playwright.config.ts sets none of them for the
   // API it starts. Then: expect the order among those awaiting approval, with its vendor and amount.
