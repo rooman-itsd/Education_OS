@@ -18,6 +18,7 @@ modules:
   - finance-operations/fees-accounts
   - practice/portfolio
   - practice/selection-process
+  - finance-operations/procurement
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
