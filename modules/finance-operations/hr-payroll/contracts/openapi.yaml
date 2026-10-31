@@ -7,7 +7,7 @@ info:
     Employees sign in through platform/identity (user_id, linked by HR). Departments are referenced by id with a cached name.
     Amounts are decimal strings in rupees, exact to the paisa. Leave days are numbers in halves.
     Business dates are Indian (Asia/Kolkata, UTC+05:30): "today", "in the past" and "late" are judged on that date;
-    timestamps are UTC (decided by the owner; see #336).
+    timestamps are UTC (as procurement; decided by the owner on #335).
     Bank account numbers and PANs are never stored in full: the last four digits of the account with its IFSC and the
     last four characters of the PAN are kept; full values are validated and dropped, and a 422 never repeats them
     (decided by the owner; see #336).

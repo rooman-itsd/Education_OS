@@ -41,7 +41,7 @@ payslips, appraisals and the service book. Contract: `contracts/openapi.yaml`, `
   dropped; they are never logged, audited, published or returned, and a validation error never repeats them. No
   encryption library is on the approved stack, and salaries are paid outside Education OS from the bank's own records
   (decided by the owner; see #336).
-- Business dates are Indian: "today" is the date in Asia/Kolkata (UTC+05:30); timestamps are stored in UTC (#336).
+- Business dates are Indian: "today" is the date in Asia/Kolkata (UTC+05:30); timestamps are stored in UTC (as procurement; decided by the owner on #335).
 - Nobody approves their own leave request, sets their own salary, adjusts their own payslip or rates their own
   appraisal; nobody who started, adjusted or submitted a payroll run approves it (#336).
 - An approved payroll run is locked; corrections go into the next month as arrears or deductions.
@@ -72,7 +72,7 @@ payslips, appraisals and the service book. Contract: `contracts/openapi.yaml`, `
    Is there a base employee role in identity to grant it to once? The roles listed now are the management institute's.
 4. Staff attendance: no module records it today, so loss of pay comes from unpaid leave only.
 
-Until these are settled the backend takes the conservative option for each (decided by the owner; see #336): fixed
+Until these are settled the backend takes the conservative option for each (to be confirmed by the owner): fixed
 lines that follow the paid days like the earnings (1); HR links an existing identity user by `user_id` when adding the
 employee, and nothing is created from the event yet (2); only the roles in `permissions.yaml` hold `self:use` (3); loss
 of pay from approved unpaid leave only (4). The README lists these under "Assumptions to revisit".

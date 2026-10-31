@@ -26,7 +26,7 @@ def clock() -> datetime:
     return utcnow()
 
 
-# Business dates follow the Indian calendar (decided by the owner; see #336). Asia/Kolkata has kept UTC+05:30 without
+# Business dates follow the Indian calendar (as procurement; decided by the owner on #335). Asia/Kolkata has kept UTC+05:30 without
 # daylight saving since 1945, so a fixed offset is exact and needs no time-zone database (tzdata is not approved).
 BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
 

@@ -50,11 +50,11 @@ Rules the code keeps:
   bodies are validated by the module rather than FastAPI, so a 422 never echoes them; error messages never contain a
   submitted value; audit rows hold ids only; no event carries them. On an edit, an absent `bank_account` or `pan` (or
   `user_id`) is left as it is, `null` removes it, and a bank account sent back without its number keeps the one kept.
-- **Salary data stays with the employee and payroll readers** (decided by the owner; see #336). Salary structures and
+- **Salary data stays with the employee and payroll readers** (PRD). Salary structures and
   payslips are returned only to the employee themselves and to holders of `hr-payroll:payroll:read`; payslips reach
   the employee only once their run is approved. No event carries an individual's pay: the payroll-run events of
   `events.yaml` carry the run's net total only.
-- **Money is exact** (decided by the owner; see #336): `Decimal` throughout, `Numeric(14, 2)` in the database, decimal
+- **Money is exact** (PRD): `Decimal` throughout, `Numeric(14, 2)` in the database, decimal
   strings in the API (`invalid_amount` for more than two places). No floats.
 - **Loss of pay.** A run pays everyone on the rolls during the month: from joining (or the 1st) to the last working
   day (or the month's end). Paid days are those days less approved unpaid leave in them (half a day for a half-day
@@ -63,7 +63,7 @@ Rules the code keeps:
   full month pays the structure exactly. Example: 30,000 basic, 12,000 HRA, 3,600 PF, 3 unpaid days in October
   (28/31): 27,096.77 + 10,838.71 − 3,251.61 = 34,683.87. An employee without a salary is listed in `exceptions` and
   gets no payslip; one without a bank account gets a payslip and an exception.
-- **Preparer ≠ approver** (decided by the owner; see #336). Whoever started, adjusted a payslip of, or submitted a run
+- **Preparer ≠ approver** (PRD). Whoever started, adjusted a payslip of, or submitted a run
   is one of its preparers and can't decide it (403), even holding `payroll:approve`. A return needs a note and puts the
   run back in review. Nobody adjusts their own payslip or sets their own salary.
 - **An approved run is locked.** Approved and paid runs take no adjustment, decision or resubmission (409
@@ -78,11 +78,11 @@ Rules the code keeps:
   year leaves unused, up to the type's `carry_forward_max`, opens the next. An unpaid type has no balance and its
   approved days are loss of pay. A request is withdrawn by its employee only before it starts; an approved one returns
   its days. Leave starting after a recorded last working day is cancelled.
-- **Business dates are Indian** (decided by the owner; see #336). "Today" is the date in Asia/Kolkata, a fixed
+- **Business dates are Indian** (as procurement; decided by the owner on #335). "Today" is the date in Asia/Kolkata, a fixed
   UTC+05:30 (India has no daylight saving; tzdata is not on the approved stack). It decides leave in the past and
   started, exits due, the current run, a run's lateness, payment dates and the report's defaults. Timestamps are
   stored in UTC.
-- **Exits on the last working day** (decided by the owner; see #336). `platform/scheduler` supports module jobs, so
+- **Exits on the last working day** (PRD flow 6). `platform/scheduler` supports module jobs, so
   hr-payroll declares the platform job `hr-payroll.publish-due-exits` (default cron `30 13 * * *` UTC, 19:00 IST,
   after the working day) and handles its `scheduler.job.due`: every employee on notice whose last working day has come
   exits and `hr-payroll.employee.exited` is published, once (the job is idempotent), then it reports
