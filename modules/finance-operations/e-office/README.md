@@ -133,11 +133,6 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 - **The pendency report counts every open file**, confidential ones included, because it shows no subject.
 - **File movement stays in this module** until platform/workflow has a contract (PRD open question 1).
 
-## Frontend
-
-Not built yet. The `e-office.files-pending` widget (HR Staff dashboard) will read `GET /me/inbox`, which this backend
-serves as the contract describes; it and the pages come in a separate PR.
-
 ## Layout
 | Path | Purpose |
 |---|---|
