@@ -8,10 +8,13 @@ the **entitlement gate** (ADR-0005): a request to a feature module is refused wi
 organisation is suspended, and `read_only` for writes after a trial ends. Platform services
 (identity, tenancy, billing, ...) are always reachable and do their own permission checks.
 
-Around the gate sit `platform/api-gateway`'s middlewares: rate limits per organisation for signed-in
-requests, per client address for the rest, and for sign-in/sign-up (429 with `Retry-After`, `code: rate_limited`), CORS, and the security headers on every
-response. Settings and the proxy requirements: [platform/api-gateway/README.md](../../platform/api-gateway/README.md).
-The plan's user limit is enforced by identity through a hook wired here to billing (`409 plan_limit_reached`).
+Around the gate sit `platform/api-gateway`'s middlewares: rate limits per user and per organisation for
+signed-in requests, per client address for the rest, and for sign-in/sign-up (429 with `Retry-After`,
+`code: rate_limited`), CORS, and the security headers on every response. The limiter decodes the bearer token
+once and the gate reuses it (`eos_api_gateway.token_claims`, `request.state.token_claims`). Settings and the
+proxy requirements: [platform/api-gateway/README.md](../../platform/api-gateway/README.md).
+The plan's user limit (staff accounts; learners are not counted) is enforced by identity through a hook wired
+here to billing (`409 plan_limit_reached`).
 
 ## What it mounts: `config/modules.enabled.yaml`
 

@@ -1,5 +1,7 @@
 """Buckets in Redis, one hash per key, refilled and taken from atomically by a Lua script, so every API process
-behind the proxy counts against the same limits. Keys expire once the bucket would be full again.
+behind the proxy counts against the same limits. Keys expire once the bucket would be full again. The client is
+`redis.asyncio` (part of the `redis` package): the middleware awaits it, so a slow Redis holds that request
+only, never the event loop and every other request with it.
 
 A Redis that cannot be reached fails open: the request passes and the failure is logged. Losing rate limiting
 for a while is better than refusing every request because the cache is down. It also fails fast: a short
@@ -71,9 +73,9 @@ class RedisStore:
 
     @classmethod
     def from_url(cls, url: str) -> RedisStore:
-        import redis
+        import redis.asyncio as redis
+        from redis.asyncio.retry import Retry
         from redis.backoff import NoBackoff
-        from redis.retry import Retry
 
         return cls(
             redis.Redis.from_url(
@@ -84,24 +86,24 @@ class RedisStore:
             )
         )
 
-    def take(self, key: str, limit: Limit, now: float) -> float | None:
+    async def take(self, key: str, limit: Limit, now: float) -> float | None:
         if self._clock() < self._down_until:
             return None  # failed recently: fail open without waiting on it again
         ttl = int(limit.seconds_to_full) + 1
         try:
-            allowed, wait = self._take(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
+            allowed, wait = await self._take(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
         except Exception as e:  # any client error: fail open, say so, and leave Redis alone for a while
             self._down_until = self._clock() + RETRY_AFTER_FAILURE
             log.warning("rate limit store unavailable, allowing requests for %.0fs: %s", RETRY_AFTER_FAILURE, e)
             return None
         return None if int(allowed) == 1 else float(wait)
 
-    def refund(self, key: str, limit: Limit, now: float) -> None:
+    async def refund(self, key: str, limit: Limit, now: float) -> None:
         if self._clock() < self._down_until:
             return
         ttl = int(limit.seconds_to_full) + 1
         try:
-            self._refund(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
+            await self._refund(keys=[PREFIX + key], args=[limit.burst, limit.refill_per_second, now, ttl])
         except Exception as e:  # same policy as take: fail open, say so, leave Redis alone for a while
             self._down_until = self._clock() + RETRY_AFTER_FAILURE
             log.warning("rate limit store unavailable, allowing requests for %.0fs: %s", RETRY_AFTER_FAILURE, e)

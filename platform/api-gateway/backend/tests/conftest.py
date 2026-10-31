@@ -15,7 +15,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.testclient import TestClient
 
 PEER = ("203.0.113.5", 40000)
-HANDOFF_CSP = "default-src 'none'; script-src 'nonce-abc'; form-action https://bank.example.com"
+HANDOFF_CSP = "default-src 'none'; script-src 'nonce-abc'; form-action 'self' https:"
+HANDOFF_REFERRER = "strict-origin-when-cross-origin"
 
 
 class FakeClock:
@@ -47,7 +48,9 @@ def make_app(settings: GatewaySettings, clock: FakeClock | None = None, store: M
     @app.get("/api/v1/handoff")
     def handoff():
         """A page the API serves on purpose, with its own policy (like the payment adapter's bank hand-off)."""
-        return HTMLResponse("<form></form>", headers={"Content-Security-Policy": HANDOFF_CSP})
+        return HTMLResponse(
+            "<form></form>", headers={"Content-Security-Policy": HANDOFF_CSP, "Referrer-Policy": HANDOFF_REFERRER}
+        )
 
     @app.post("/api/v1/identity/auth/login")
     async def login(request: Request):

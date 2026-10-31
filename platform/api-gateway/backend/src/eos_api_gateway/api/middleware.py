@@ -6,6 +6,7 @@ import json
 import time
 from collections.abc import Callable
 
+import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -14,6 +15,7 @@ from starlette.types import Message
 from ..application.limiter import BucketStore, RateLimiter
 from ..infrastructure import store_for
 from ..settings import GatewaySettings
+from .claims import token_claims
 
 # An API serves JSON, never a page: nothing may load from it and nobody may frame it.
 CSP = "default-src 'none'; frame-ancestors 'none'"
@@ -21,11 +23,18 @@ CSP = "default-src 'none'; frame-ancestors 'none'"
 CSP_EXEMPT = ("/docs", "/docs/oauth2-redirect", "/redoc")
 PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 API_PREFIX = "/api/"
-# A sign-in body is an email, a password and a slug; at most this much is read for the per-account bucket.
+_BODYLESS = ("GET", "HEAD", "OPTIONS", "DELETE")
 # Sign-in answers with one of these when the credentials were wrong; any other answer (200, 422, 5xx) is not a
 # failed guess and does not use up an attempt.
 _FAILED_LOGIN = (401, 403)
-_LOGIN_BODY_LIMIT = 16 * 1024
+# A sign-in or sign-up body is an email, a password, a name and a slug: far below this. The gateway reads at most
+# this much of a body on the auth paths (to find a sign-in's email for the per-account bucket) and answers 413
+# past it, so padding a body cannot slip past the per-account bucket.
+_AUTH_BODY_LIMIT = 16 * 1024
+
+
+class BodyTooLargeError(Exception):
+    """An auth path's body is larger than `_AUTH_BODY_LIMIT`."""
 
 
 def _is_https(request: Request) -> bool:
@@ -37,19 +46,17 @@ def _is_https(request: Request) -> bool:
     return proto.split(",", 1)[0].strip().lower() == "https"
 
 
-async def _login_email(request: Request) -> str | None:
-    """The `email` of a sign-in body, for the per-account bucket. At most 16 KiB are read, chunk by chunk, so a
-    body without a Content-Length (chunked) cannot make the gateway buffer a large upload; past that, or when
-    the body is not JSON or names no email, the answer is None, the route answers the request and the
-    per-address bucket still applies. Every message read here is replayed to the route, which sees the whole
-    body either way."""
-    if request.method != "POST":
-        return None
+async def _read_bounded_body(request: Request) -> bytes | None:
+    """The body of a request on an auth path, read chunk by chunk and at most `_AUTH_BODY_LIMIT` bytes, so a body
+    without a Content-Length (chunked) cannot make the gateway buffer a large upload. Raises BodyTooLargeError past
+    the limit (by Content-Length or by what arrived); None when the client went away mid-body. Every message
+    read here is replayed to the route, which sees the whole body."""
     try:
-        if int(request.headers.get("content-length") or 0) > _LOGIN_BODY_LIMIT:
-            return None
+        declared = int(request.headers.get("content-length") or 0)
     except ValueError:
-        return None
+        declared = 0  # unreadable: count what arrives instead
+    if declared > _AUTH_BODY_LIMIT:
+        raise BodyTooLargeError
     original = request.receive
     seen: list[Message] = []
     body = bytearray()
@@ -60,8 +67,8 @@ async def _login_email(request: Request) -> str | None:
         if message["type"] != "http.request":
             break  # the client went away
         body += message.get("body", b"")
-        if len(body) > _LOGIN_BODY_LIMIT:
-            break  # stop reading: the rest stays unread for the route
+        if len(body) > _AUTH_BODY_LIMIT:
+            raise BodyTooLargeError  # stop reading: the request is refused, the rest is never read
         if not message.get("more_body", False):
             complete = True
             break
@@ -70,10 +77,16 @@ async def _login_email(request: Request) -> str | None:
         return seen.pop(0) if seen else await original()
 
     request._receive = replay  # noqa: SLF001 (Starlette has no public way to put back what was read)
-    if not complete:
+    return bytes(body) if complete else None
+
+
+def _email_of(body: bytes | None) -> str | None:
+    """The `email` of a sign-in body, for the per-account bucket; None when the body is not JSON or names no
+    email (the route answers it, and the per-address bucket still applies)."""
+    if body is None:
         return None
     try:
-        parsed = json.loads(bytes(body) or b"null")
+        parsed = json.loads(body or b"null")
     except (ValueError, UnicodeDecodeError):
         return None
     email = parsed.get("email") if isinstance(parsed, dict) else None
@@ -109,9 +122,11 @@ class SecurityHeaders(BaseHTTPMiddleware):
 
 
 class RateLimit(BaseHTTPMiddleware):
-    """429 with Retry-After and {"code": "rate_limited"} when a client address, an organisation, sign-in from an
-    address or sign-in to one account from an address is over its bucket. Sits inside CORS (a browser must be
-    allowed to read the 429) and outside the entitlement gate (a refused request costs no database query)."""
+    """429 with Retry-After and {"code": "rate_limited"} when a client address, a user, an organisation, sign-in
+    from an address or sign-in to one account from an address is over its bucket; 413 {"code": "body_too_large"}
+    for a sign-in or sign-up body past 16 KiB. Sits inside CORS (a browser must be allowed to read the 429) and
+    outside the entitlement gate (a refused request costs no database query). The bearer token is decoded here,
+    once (`claims.token_claims`), and the gate reuses it."""
 
     def __init__(
         self,
@@ -131,33 +146,42 @@ class RateLimit(BaseHTTPMiddleware):
         path = request.url.path
         peer = request.client.host if request.client else None
         forwarded_for = request.headers.get("x-forwarded-for")
-        email = await _login_email(request) if self.limiter.is_login_path(path) else None
-        denied = self.limiter.check(
-            path=path,
-            peer=peer,
-            forwarded_for=forwarded_for,
-            authorization=request.headers.get("authorization"),
-            login_email=email,
+        email = None
+        if request.method not in _BODYLESS and self.limiter.is_bounded_body_path(path):
+            try:
+                body = await _read_bounded_body(request)
+            except BodyTooLargeError:
+                return _refusal(413, f"the request body is larger than {_AUTH_BODY_LIMIT} bytes", "body_too_large", {})
+            if self.limiter.is_login_path(path):
+                email = _email_of(body)
+        try:
+            claims = await token_claims(request)
+        except jwt.PyJWTError:
+            claims = None  # an invalid token is anonymous here; the routes and the gate refuse it
+        denied = await self.limiter.check(
+            path=path, peer=peer, forwarded_for=forwarded_for, claims=claims, login_email=email
         )
         if denied is None:
             response = await call_next(request)
             if email and response.status_code not in _FAILED_LOGIN:
                 # check() charged the account's bucket up front; only a refused sign-in is an attempt
-                self.limiter.refund_login(peer=peer, forwarded_for=forwarded_for, email=email)
+                await self.limiter.refund_login(peer=peer, forwarded_for=forwarded_for, email=email)
             return response
         noun = {
             "ip": "this address",
+            "user": "your account",
             "organisation": "your organisation",
             "auth": "sign-in from this address",
             "login": "sign-in to this account from this address",
         }
-        return JSONResponse(
-            {
-                "detail": f"too many requests for {noun[denied.scope]}; retry after {denied.retry_after} seconds",
-                "code": "rate_limited",
-                "scope": denied.scope,
-                "retry_after": denied.retry_after,
-            },
-            status_code=429,
+        return _refusal(
+            429,
+            f"too many requests for {noun[denied.scope]}; retry after {denied.retry_after} seconds",
+            "rate_limited",
+            {"scope": denied.scope, "retry_after": denied.retry_after},
             headers={"Retry-After": str(denied.retry_after)},
         )
+
+
+def _refusal(status: int, detail: str, code: str, extra: dict, headers: dict[str, str] | None = None):
+    return JSONResponse({"detail": detail, "code": code, **extra}, status_code=status, headers=headers)

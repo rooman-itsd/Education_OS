@@ -6,7 +6,7 @@ domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
 status: in-progress           # planned | in-progress | stable | deprecated
-description: "Edge of the API host: security headers on every response, rate limits per client IP and per organisation."
+description: "Edge of the API host: security headers on every response, rate limits per client IP, user and organisation."
 owners: [faizanrooman]                # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else. Bearer tokens are decoded with

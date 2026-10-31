@@ -1,6 +1,6 @@
 """Every response carries the security headers; HSTS only when the request came in over HTTPS."""
 
-from conftest import HANDOFF_CSP, PEER, make_app
+from conftest import HANDOFF_CSP, HANDOFF_REFERRER, PEER, make_app
 from eos_api_gateway import GatewaySettings
 from eos_api_gateway.api.middleware import CSP
 from fastapi.testclient import TestClient
@@ -37,11 +37,12 @@ def test_a_route_that_sets_its_own_cache_control_keeps_it(client):
     assert client.get("/api/v1/cached").headers["cache-control"] == "private, max-age=60"
 
 
-def test_a_route_that_sets_its_own_csp_keeps_it_and_every_other_header(client):
+def test_a_route_that_sets_its_own_csp_and_referrer_policy_keeps_them_and_every_other_header(client):
     """Review of PR 363, point 5: the gateway's default-src 'none' would blank a page that must run a script and
     post a form (the payment hand-off), so a policy the route set wins."""
     r = client.get("/api/v1/handoff")
     assert r.headers["content-security-policy"] == HANDOFF_CSP
+    assert r.headers["referrer-policy"] == HANDOFF_REFERRER  # and its own Referrer-Policy over no-referrer
     assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
     assert client.get("/api/v1/things").headers["content-security-policy"] == CSP  # others keep the default
 

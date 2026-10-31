@@ -3,6 +3,24 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Second review of PR 363 (contract 0.2.0):
+  - a per-user bucket (`EOS_RATE_LIMIT_USER_*`, 300/min, keyed on the token's `sub` within its organisation)
+    is checked before the organisation's, so one user cannot rate-limit the whole organisation; the
+    organisation's default is raised to 12000/min, burst 12000 (500 users on a results day), and `scope`
+    gains `user`;
+  - a sign-in or sign-up body over 16 KiB answers `413 body_too_large` instead of skipping the per-account
+    bucket;
+  - `/api/v1/identity/auth/oidc/callback` and `/config` are auth paths;
+  - the Redis store uses `redis.asyncio` (the Lua scripts and the fail-open policy are unchanged), and the
+    bearer token is decoded once per request (`token_claims`, kept on `request.state.token_claims`; a realm
+    token in the thread pool), which the host's entitlement gate reuses;
+  - IPv6 clients are keyed by their /64; `MemoryStore` holds at most 50 000 buckets, dropping the least
+    recently used;
+  - `EOS_RATE_LIMIT_ENABLED` and `EOS_SECURITY_HEADERS` refuse anything but true/false, 1/0, yes/no or
+    on/off at start-up, naming the key;
+  - a request one bucket refuses is given back to the buckets already charged (on sign-in: the auth and
+    per-account buckets when the address bucket refuses);
+  - `SecurityHeaders` keeps a route's own `Referrer-Policy` like its `Content-Security-Policy` (tested).
 - Review of PR 363 (Srujan): the per-account sign-in bucket is keyed on the email digest and the client
   address, so ten failed guesses from one address no longer lock the account out for its owner elsewhere,
   and it is charged only for a refused sign-in (401 or 403): the middleware gives the attempt back (new

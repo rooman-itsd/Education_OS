@@ -22,7 +22,13 @@ DEFAULT_EXEMPT_PATHS = ("/api/v1/health",)
 # Sign-in and sign-up: the stricter bucket, per client IP, against password guessing and bulk registrations.
 # The anonymous public routes of every module (/api/v1/<module>/public/..., e.g. admissions' application
 # form) draw from the same bucket: they are the other thing a stranger can call without a token.
-DEFAULT_AUTH_PATHS = ("/api/v1/identity/auth/login", "/api/v1/tenancy/register")
+# The OIDC sign-in (ADR-0006) belongs here too: its callback exchanges a code with Keycloak on every call.
+DEFAULT_AUTH_PATHS = (
+    "/api/v1/identity/auth/login",
+    "/api/v1/identity/auth/oidc/callback",
+    "/api/v1/identity/auth/oidc/config",
+    "/api/v1/tenancy/register",
+)
 PUBLIC_SEGMENT = "public"
 
 # Sign-in, per account (the email in the body) on top of the per-address bucket: a lab of 40 behind one NAT
@@ -30,9 +36,22 @@ PUBLIC_SEGMENT = "public"
 DEFAULT_LOGIN_PATHS = ("/api/v1/identity/auth/login",)
 
 
+_TRUE = ("1", "true", "yes", "on")
+_FALSE = ("0", "false", "no", "off")
+
+
 def _bool(env: Mapping[str, str], key: str, default: bool) -> bool:
+    """A switch. Anything but a recognised yes or no stops start-up: a typo such as `ture` must not turn the
+    limiter or the headers off without a word."""
     raw = env.get(key)
-    return default if raw is None or not raw.strip() else raw.strip().lower() in ("1", "true", "yes", "on")
+    if raw is None or not raw.strip():
+        return default
+    value = raw.strip().lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    raise RuntimeError(f"{key} must be true or false (or 1/0, yes/no, on/off), not {raw!r}")
 
 
 def _int(env: Mapping[str, str], key: str, default: int | None) -> int | None:
@@ -63,14 +82,15 @@ def _csv(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class GatewaySettings:
     """Defaults sized for a school: one campus is often one NAT address, and a class signs in at once.
-    Signed-in requests are charged to their organisation only, so the IP bucket meters anonymous traffic.
-    The reasoning is in README.md (Sizing the limits)."""
+    Signed-in requests are charged to their user and their organisation, not to their address, so the IP
+    bucket meters anonymous traffic. The reasoning is in README.md (Sizing the limits)."""
 
     security_headers: bool = True
     hsts_max_age: int = 31_536_000  # one year, the usual value for a host that is HTTPS-only
     rate_limit: bool = True
     ip: Limit = Limit(1200, 1200)
-    organisation: Limit = Limit(3000, 3000)
+    user: Limit = Limit(300, 300)
+    organisation: Limit = Limit(12000, 12000)
     auth: Limit = Limit(60, 60)
     login: Limit = Limit(10, 10)
     trusted_proxies: tuple[str, ...] = DEFAULT_TRUSTED_PROXIES
@@ -94,6 +114,7 @@ class GatewaySettings:
             hsts_max_age=_int(env, "EOS_HSTS_MAX_AGE", cls.hsts_max_age),
             rate_limit=_bool(env, "EOS_RATE_LIMIT_ENABLED", True),
             ip=_limit(env, "IP", cls.ip.per_minute),
+            user=_limit(env, "USER", cls.user.per_minute),
             organisation=_limit(env, "ORG", cls.organisation.per_minute),
             auth=_limit(env, "AUTH", cls.auth.per_minute),
             login=_limit(env, "LOGIN", cls.login.per_minute),

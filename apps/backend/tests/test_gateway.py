@@ -28,19 +28,24 @@ def test_every_response_carries_the_security_headers(client):
 
 
 def test_a_page_with_its_own_csp_keeps_it_through_the_host(monkeypatch):
-    """Like the SBI ePay hand-off page: the route's policy wins over the host's JSON default."""
+    """Like the SBI ePay hand-off page: the route's policies win over the host's JSON default and no-referrer
+    (SecurityHeaders only fills in headers a response lacks)."""
     monkeypatch.setenv("EOS_RATE_LIMIT_ENABLED", "false")
     page = APIRouter()
-    policy = "default-src 'none'; script-src 'nonce-x'; form-action https://bank.example.com"
+    policy = "default-src 'none'; script-src 'nonce-x'; form-action 'self' https:"
 
     @page.get("/test-handoff")
     def handoff():
-        return HTMLResponse("<form></form>", headers={"Content-Security-Policy": policy})
+        return HTMLResponse(
+            "<form></form>",
+            headers={"Content-Security-Policy": policy, "Referrer-Policy": "strict-origin-when-cross-origin"},
+        )
 
     # mounted under a platform prefix, which the entitlement gate lets through without a token
     r = TestClient(create_app(extra_routers={"identity": page})).get("/api/v1/identity/test-handoff")
     assert r.status_code == 200
     assert r.headers["content-security-policy"] == policy and r.headers["x-frame-options"] == "DENY"
+    assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
 def test_the_host_rate_limits_per_address_and_exempts_health(monkeypatch):
@@ -137,3 +142,25 @@ def test_start_up_warns_once_when_trusted_proxies_is_unset_outside_dev_mode(monk
     with caplog.at_level(logging.WARNING, logger="eos.api"):
         create_app()
     assert not any("EOS_TRUSTED_PROXIES" in r.getMessage() for r in caplog.records)
+
+
+def test_the_gate_reuses_the_token_the_limiter_decoded(client, monkeypatch):
+    """Second review of PR 363, point 8: one decode per request, shared through request.state."""
+    from eos_api_gateway.api import claims
+
+    a = register_and_login(client, slug="decode-once", academy_type="music-academy")
+    monkeypatch.setenv("EOS_RATE_LIMIT_ENABLED", "true")
+    app = create_app(extra_routers={"fees-accounts": APIRouter()})
+    calls = []
+    real = claims.decode
+
+    async def counted(token):
+        calls.append(token)
+        return await real(token)
+
+    monkeypatch.setattr(claims, "decode", counted)
+    r = TestClient(app).get("/api/v1/fees-accounts/nothing-here", headers=auth(a["token"]))
+    assert r.status_code in (403, 404), r.text  # past the limiter and the gate, whichever answers
+    assert len(calls) == 1
+    r = TestClient(app).get("/api/v1/fees-accounts/x", headers={"Authorization": "Bearer forged"})
+    assert r.status_code == 401 and r.json()["detail"].startswith("invalid token") and len(calls) == 2
