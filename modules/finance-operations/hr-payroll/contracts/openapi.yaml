@@ -52,7 +52,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EmployeeInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Employee" } } } }
-        "409": { description: "`employee_code_taken`, `user_already_linked`" }
+        "409": { description: "`employee_code_taken`, `user_already_linked`, or a joined_on change reaching a month whose run is approved or paid (`period_locked`)" }
         "422": { description: "As on create, and `invalid_manager` (reports to themselves) or `invalid_date` (joined after the last working day)" }
   /employees/{id}/exit:
     post:
@@ -66,7 +66,7 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ExitInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Employee" } } } }
-        "409": { description: "Already exited (`employee_exited`), or an approved run pays the employee after that day (`period_locked`)" }
+        "409": { description: "Already exited (`employee_exited`), or an approved or paid run pays the employee for a day after the last working day: the month after it, or its own month unless it is the month's last day (`period_locked`)" }
         "422": { description: "Before joining (`invalid_date`)" }
   /employees/{id}/salary:
     get:

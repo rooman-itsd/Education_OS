@@ -215,6 +215,39 @@ def test_unpaid_leave_cannot_reach_a_locked_month(client, org, monkeypatch):
         headers=org.hr,
     )
     assert r.status_code == 409 and r.json()["detail"]["code"] == "period_locked"
+    # an exit inside the approved month would leave it paid in full: refused; on its last day nothing changes
+    r = client.post(
+        f"{BASE}/employees/{e['id']}/exit",
+        json={"kind": "resignation", "last_working_day": "2026-10-15"},
+        headers=org.hr,
+    )
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "period_locked"
+    assert "2026-10" in r.json()["detail"]["message"]
+    r = client.post(
+        f"{BASE}/employees/{e['id']}/exit",
+        json={"kind": "resignation", "last_working_day": "2026-10-31"},
+        headers=org.hr,
+    )
+    assert r.status_code == 200 and r.json()["status"] == "exited"
+
+
+def test_unpaid_leave_spanning_a_locked_month_is_refused(client, org, monkeypatch):
+    """The months between the first and the last day count too, not only the two ends: 30 Oct to 2 Dec touches
+    November, whose run is approved while the request is pending."""
+    from datetime import UTC, datetime
+
+    from eos_hr_payroll.application import common
+
+    e = employee(client, org)
+    salary(client, org, e)
+    unpaid = leave_type(client, org, code="LWP", days=0, paid=False)
+    r = apply(client, org, "faculty", unpaid, "2026-10-30", "2026-12-02")
+    assert r.status_code == 201, r.text
+    pending = r.json()
+    monkeypatch.setattr(common, "clock", lambda: datetime(2026, 11, 30, 6, 0, tzinfo=UTC))
+    approved_run(client, org, "2026-11")
+    r = decide(client, org, pending["id"])
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "period_locked"
 
 
 def test_current_run_and_lateness(client, org, monkeypatch):

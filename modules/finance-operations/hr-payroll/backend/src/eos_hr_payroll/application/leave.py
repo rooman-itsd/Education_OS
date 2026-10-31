@@ -225,9 +225,13 @@ def my_requests(db: Session, actor: Actor) -> list[dict]:
 
 
 def _locked_months(db: Session, start: date, end: date):
-    """An approved or paid payroll run for a month the dates touch: its loss of pay can no longer change."""
-    months = {rules.period_of(start), rules.period_of(end)}
-    query = q(db, PayrollRun).where(PayrollRun.period.in_(months), PayrollRun.status.in_(rules.LOCKED_RUN_STATUSES))
+    """An approved or paid payroll run for a month the dates touch: its loss of pay can no longer change. Every month
+    from the first to the last is checked, not only the two ends; periods are YYYY-MM strings, so a string range
+    covers the months in between."""
+    query = q(db, PayrollRun).where(
+        PayrollRun.period.between(rules.period_of(start), rules.period_of(end)),
+        PayrollRun.status.in_(rules.LOCKED_RUN_STATUSES),
+    )
     return db.scalars(query.limit(1)).first()
 
 

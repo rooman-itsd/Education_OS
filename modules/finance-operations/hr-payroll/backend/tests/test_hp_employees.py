@@ -178,6 +178,27 @@ def test_a_locked_month_keeps_its_salary(client, org):
     assert client.put(f"{BASE}/employees/{e['id']}/salary", json=body, headers=org.hr).status_code == 200
 
 
+def test_joining_cannot_move_into_or_out_of_a_locked_month(client, org):
+    """Joining decides the days paid and the leave entitlement; months whose run is approved keep both."""
+    e = employee(client, org)
+    salary(client, org, e)
+    approved_run(client, org)
+    keys = ("employee_code", "name", "joined_on", "employment_type", "designation")
+    body = {k: e[k] for k in keys}
+    r = client.put(f"{BASE}/employees/{e['id']}", json={**body, "joined_on": "2024-07-01"}, headers=org.hr)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "period_locked"
+    assert client.get(f"{BASE}/employees/{e['id']}", headers=org.hr).json()["joined_on"] == "2024-06-01"
+    # other edits of the same employee still go through
+    r = client.put(f"{BASE}/employees/{e['id']}", json={**body, "designation": "Professor"}, headers=org.hr)
+    assert r.status_code == 200, r.text
+    joiner = employee(client, org, who=None, joined_on="2026-11-02")
+    body = {k: joiner[k] for k in keys}
+    r = client.put(f"{BASE}/employees/{joiner['id']}", json={**body, "joined_on": "2026-10-20"}, headers=org.hr)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "period_locked"
+    r = client.put(f"{BASE}/employees/{joiner['id']}", json={**body, "joined_on": "2026-11-01"}, headers=org.hr)
+    assert r.status_code == 200 and r.json()["joined_on"] == "2026-11-01"
+
+
 def test_an_exit_dated_today_is_published_at_once(client, org):
     e = employee(client, org)
     r = client.post(

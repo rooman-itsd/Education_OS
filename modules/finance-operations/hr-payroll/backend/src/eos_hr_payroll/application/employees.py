@@ -5,7 +5,7 @@ rest is dropped here (decided by the owner; see #336). Nothing below logs, audit
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -216,7 +216,15 @@ def update_employee(db: Session, actor: Actor, employee_id: str, body: dict) -> 
     e = get(db, Employee, employee_id, "employee", lock=True)
     before = {f: getattr(e, f) for f in UPDATE_EVENT_FIELDS}
     old_department = e.department_name or e.department_id
+    old_joined_on = e.joined_on
     _values(db, e, body)
+    if e.joined_on != old_joined_on:
+        # Joining decides the days paid and the leave entitlement; a month whose run is approved or paid keeps both.
+        locked = locked_from(db, rules.period_of(min(old_joined_on, e.joined_on)), rules.LOCKED_RUN_STATUSES)
+        if locked is not None:
+            raise conflict(
+                "period_locked", f"the payroll for {locked.period} is {locked.status}; joined_on can no longer change"
+            )
     today = common.business_today()
     if before["department_id"] != e.department_id:
         _service_record(
@@ -291,17 +299,25 @@ def record_exit(db: Session, actor: Actor, employee_id: str, body: dict) -> dict
     last_day: date = body["last_working_day"]
     if last_day < e.joined_on:
         raise invalid("invalid_date", "the last working day cannot be before joining", "last_working_day")
-    paid_after = db.scalar(
-        common.count(db, Payslip)
-        .join(PayrollRun, PayrollRun.id == Payslip.run_id)
+    # The first day off the rolls must fall in a month that no approved or paid run has paid the employee for: an exit
+    # inside such a month would leave it paid in full, with no later payslip to recover the difference. An exit on a
+    # month's last day changes nothing that month, so only the months from the day after are checked.
+    paid_after = db.scalars(
+        q(db, PayrollRun)
+        .join(Payslip, Payslip.run_id == PayrollRun.id)
         .where(
             Payslip.employee_id == e.id,
             PayrollRun.status.in_(rules.LOCKED_RUN_STATUSES),
-            PayrollRun.period > rules.period_of(last_day),
+            PayrollRun.period >= rules.period_of(last_day + timedelta(days=1)),
         )
-    )
-    if paid_after:
-        raise conflict("period_locked", "an approved payroll run already pays the employee after that day")
+        .order_by(PayrollRun.period)
+        .limit(1)
+    ).first()
+    if paid_after is not None:
+        raise conflict(
+            "period_locked",
+            f"the payroll for {paid_after.period} is {paid_after.status} and pays the employee after that day",
+        )
     e.exit_kind, e.exit_last_working_day, e.exit_reason = body["kind"], last_day, text(body.get("reason")) or None
     e.status = "on_notice"
     _service_record(

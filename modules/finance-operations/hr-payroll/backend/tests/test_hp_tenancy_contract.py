@@ -3,6 +3,7 @@ event payloads against events.yaml, the scheduler declaration and the audit trai
 
 import re
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,7 @@ from eos_core.db import SessionLocal
 from eos_core.events import OutboxEvent
 from eos_core.tenant import platform_scope
 from eos_hr_payroll.api.router import router
-from eos_hr_payroll.application import consumers, jobs
+from eos_hr_payroll.application import common, consumers, jobs
 from eos_hr_payroll.application.access import PERMISSION_KEYS
 from eos_hr_payroll.domain import rules
 from eos_hr_payroll.infrastructure.models import PREFIX, TABLES, AuditEntry
@@ -216,7 +217,7 @@ def test_enums_match_the_contract():
     assert list(rules.APPRAISAL_STATUSES) == schemas["Appraisal"]["allOf"][1]["properties"]["status"]["enum"]
 
 
-def test_published_events_carry_exactly_the_payload_of_events_yaml(client, org):
+def test_published_events_carry_exactly_the_payload_of_events_yaml(client, org, monkeypatch):
     """Every hr-payroll.* event in the outbox, after a full run, has the keys events.yaml declares: identity,
     notification and budget-grants read these payloads. None carries an amount of an individual's pay."""
     declared = {e["name"]: set(e["payload"]) for e in _contract("events.yaml")["events"]}
@@ -233,11 +234,14 @@ def test_published_events_carry_exactly_the_payload_of_events_yaml(client, org):
     url = f"{BASE}/appraisals/{appraisal['id']}"
     client.put(url, json={"self_review": "fine", "submit": True}, headers=org.faculty)
     client.put(url, json={"rating": 3, "submit": True}, headers=org.manager)
-    client.post(
+    # October is paid, so the exit is on its last day (an exit inside it is refused); it is recorded on 1 November
+    monkeypatch.setattr(common, "clock", lambda: datetime(2026, 11, 1, 6, 0, tzinfo=UTC))
+    r = client.post(
         f"{BASE}/employees/{e['id']}/exit",
-        json={"kind": "resignation", "last_working_day": "2026-10-28"},
+        json={"kind": "resignation", "last_working_day": "2026-10-31"},
         headers=org.hr,
     )
+    assert r.status_code == 200, r.text
     with SessionLocal() as db, platform_scope():
         published = list(db.scalars(select(OutboxEvent).where(OutboxEvent.organisation_id == org.id)))
     names = {x.name for x in published}
