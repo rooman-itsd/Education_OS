@@ -87,6 +87,25 @@ export async function organisationWithUser(
   };
 }
 
+/**
+ * Register and verify an organisation and leave it waiting for the super admin's approval (pending_approval):
+ * the state the Super Admin dashboard's approval queue shows. `label` goes into the name, so a journey can find it.
+ */
+export async function pendingOrganisation(
+  request: APIRequestContext,
+  { academyType, label }: { academyType: string; label: string },
+): Promise<{ id: string; name: string; slug: string }> {
+  const run = runId();
+  const admin = { name: "E2E Admin", email: `admin@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
+  const org = await ok<{ id: string; name: string; slug: string; verification_token: string }>(
+    await request.post("/api/v1/tenancy/register", {
+      data: { organisation_name: `E2E ${label} ${run}`, slug: `e2e-${run}`, academy_type: academyType, admin, accepted_terms: true },
+    }),
+  );
+  await ok(await request.post("/api/v1/tenancy/register/verify", { data: { token: org.verification_token } }));
+  return { id: org.id, name: org.name, slug: org.slug };
+}
+
 /** Register, verify and approve an organisation and return its admin (the `org-admin` role) signed in. */
 export async function organisationAdmin(request: APIRequestContext, { academyType }: { academyType: string }): Promise<DashboardUser> {
   const run = runId();
