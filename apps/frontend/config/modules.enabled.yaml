@@ -17,6 +17,7 @@ modules:
   - facilities/facility-booking
   - facilities/inventory-equipment
   - facilities/maintenance
+  - facilities/sports-facilities
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
   - finance-operations/procurement

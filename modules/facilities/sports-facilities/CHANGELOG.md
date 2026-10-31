@@ -23,3 +23,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Alembic chain `sf_0001`: five `sports_facilities_*` tables with `organisation_id`, RLS policy on Postgres, own
   version table `sports_facilities_alembic_version`.
 - Tests: domain, API, cross-tenant leak, migration, contract drift and profile-role tests.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/sports-facilities`) and
+  `apps/frontend/config/modules.enabled.yaml` (no widgets) (#331).
