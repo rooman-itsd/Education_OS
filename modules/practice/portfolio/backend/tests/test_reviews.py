@@ -144,3 +144,63 @@ def test_managed_scope_filters_in_query_before_pagination(client, org):
     assert res_none.status_code == 200
     assert res_none.json()["total"] == 0
     assert res_none.json()["items"] == []
+
+
+def test_self_review_refused(client, org):
+    _, mgr = org.user(MANAGER)
+    dual_id, dual_headers = org.user(LEARNER, REVIEWER)
+
+    # 1. Create type with dual_id as designated reviewer
+    itype = client.post(
+        f"{BASE}/item-types",
+        json={"name": "Peer Review Type", "requires_review": True, "reviewer_person_ids": [dual_id]},
+        headers=mgr,
+    ).json()
+
+    # 2. Dual role user creates and submits own item
+    own_item = client.post(
+        f"{BASE}/items",
+        json={"type_id": itype["id"], "title": "Reviewer's Own Item"},
+        headers=dual_headers,
+    ).json()
+    own_id = own_item["id"]
+    client.post(f"{BASE}/items/{own_id}/submit", headers=dual_headers)
+
+    # Allowed actions must not include review for owner
+    item_fetched = client.get(f"{BASE}/items/{own_id}", headers=dual_headers).json()
+    assert "review" not in item_fetched["can"]
+
+    # Reviewer attempts to review own item -> 403 Forbidden with self_review
+    res = client.post(
+        f"{BASE}/items/{own_id}/reviews",
+        json={"decision": "approved", "comments": "Self approval attempt"},
+        headers=dual_headers,
+    )
+    assert res.status_code == 403
+    body = res.json()
+    detail = body.get("detail", body)
+    assert detail["code"] == "self_review"
+
+    # 3. Manager creates and submits own item
+    mgr_item = client.post(
+        f"{BASE}/items",
+        json={"type_id": itype["id"], "title": "Manager's Own Item"},
+        headers=mgr,
+    ).json()
+    mgr_id = mgr_item["id"]
+    client.post(f"{BASE}/items/{mgr_id}/submit", headers=mgr)
+
+    # Manager allowed actions must not include review for their own item
+    mgr_fetched = client.get(f"{BASE}/items/{mgr_id}", headers=mgr).json()
+    assert "review" not in mgr_fetched["can"]
+
+    # Manager attempts to review own item -> 403 Forbidden with self_review
+    mgr_rev = client.post(
+        f"{BASE}/items/{mgr_id}/reviews",
+        json={"decision": "approved", "comments": "Manager self review"},
+        headers=mgr,
+    )
+    assert mgr_rev.status_code == 403
+    mgr_body = mgr_rev.json()
+    mgr_detail = mgr_body.get("detail", mgr_body)
+    assert mgr_detail["code"] == "self_review"

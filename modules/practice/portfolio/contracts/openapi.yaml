@@ -24,7 +24,7 @@ paths:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     patch:
       summary: Update an item type. Permission portfolio:item-type:manage.
-      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ItemTypeInput" } } } }
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ItemTypePatch" } } } }
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemType" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
     delete:
       summary: Delete an item type that no item uses. Permission portfolio:item-type:manage.
@@ -62,7 +62,7 @@ paths:
         Edit an item's details. Only while it is draft or changes_requested — a submitted or
         under_review item must be withdrawn first. Owner, or portfolio:item:manage. Permission
         portfolio:item:write.
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ItemInput" } } } }
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ItemPatch" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -146,6 +146,14 @@ components:
         withdrawn are terminal for that submission cycle; a withdrawn item returns to draft and
         may be resubmitted.
 
+    ItemTypePatch:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        description: { type: string }
+        requires_review: { type: boolean }
+        reviewer_person_ids: { type: array, items: { type: string, format: uuid } }
+
     ItemTypeInput:
       type: object
       required: [name]
@@ -163,6 +171,16 @@ components:
             organisation_id: { type: string, format: uuid }
             item_count: { type: integer }
             created_at: { type: string, format: date-time }
+
+    ItemPatch:
+      type: object
+      properties:
+        type_id: { type: string, format: uuid }
+        owner_person_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        description: { type: string }
+        tags: { type: array, items: { type: string } }
+        attributes: { type: object, additionalProperties: { type: string } }
 
     ItemInput:
       type: object

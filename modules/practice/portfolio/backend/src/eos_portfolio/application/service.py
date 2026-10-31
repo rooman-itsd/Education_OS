@@ -8,6 +8,7 @@ from datetime import datetime
 
 from eos_core import events
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.models import (
@@ -160,8 +161,12 @@ def create_item_type(db: Session, actor: Actor, data: dict) -> dict:
         requires_review=data.get("requires_review", True),
         reviewer_person_ids=list(data.get("reviewer_person_ids") or []),
     )
-    repo.create_item_type(db, t)
-    db.commit()
+    try:
+        repo.create_item_type(db, t)
+        db.commit()
+    except IntegrityError as err:
+        db.rollback()
+        raise ConflictError("name_in_use", f"Item type name '{name}' is already in use") from err
     return item_type_dict(t, item_count=0)
 
 
@@ -186,7 +191,11 @@ def update_item_type(db: Session, actor: Actor, type_id: str, data: dict) -> dic
     if "reviewer_person_ids" in data:
         t.reviewer_person_ids = list(data["reviewer_person_ids"] or [])
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as err:
+        db.rollback()
+        raise ConflictError("name_in_use", f"Item type name '{t.name}' is already in use") from err
     count = repo.count_items_by_type(db, actor.organisation_id, t.id)
     return item_type_dict(t, item_count=count)
 
@@ -525,6 +534,9 @@ def add_review(db: Session, actor: Actor, item_id: str, data: dict) -> dict:
 
     if item.status not in (ItemStatus.SUBMITTED, ItemStatus.UNDER_REVIEW):
         raise ConflictError("not_under_review", "Item is not under review")
+
+    if item.owner_person_id == actor.user_id:
+        raise PortfolioError(403, "self_review", "Cannot review own portfolio item")
 
     itype = repo.get_item_type(db, actor.organisation_id, item.type_id)
     if not itype:

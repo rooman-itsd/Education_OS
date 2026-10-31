@@ -54,6 +54,59 @@ def test_update_item_type(client, org):
     assert res.json()["description"] == "New description"
 
 
+def test_patch_item_type_partial_and_null_rejection(client, org):
+    _, mgr = org.user(MANAGER)
+    created = client.post(
+        f"{BASE}/item-types",
+        json={"name": "PatchTestType", "description": "Original", "requires_review": True},
+        headers=mgr,
+    ).json()
+    type_id = created["id"]
+
+    # 1. Partial update without name: only description
+    res_desc = client.patch(
+        f"{BASE}/item-types/{type_id}",
+        json={"description": "Updated desc only"},
+        headers=mgr,
+    )
+    assert res_desc.status_code == 200
+    assert res_desc.json()["name"] == "PatchTestType"
+    assert res_desc.json()["description"] == "Updated desc only"
+
+    # 2. Partial update: only requires_review
+    res_review = client.patch(
+        f"{BASE}/item-types/{type_id}",
+        json={"requires_review": False},
+        headers=mgr,
+    )
+    assert res_review.status_code == 200
+    assert res_review.json()["requires_review"] is False
+
+    # 3. Explicit null on name -> 422
+    res_null_name = client.patch(
+        f"{BASE}/item-types/{type_id}",
+        json={"name": None},
+        headers=mgr,
+    )
+    assert res_null_name.status_code == 422
+
+    # 4. Explicit null on requires_review -> 422
+    res_null_rev = client.patch(
+        f"{BASE}/item-types/{type_id}",
+        json={"requires_review": None},
+        headers=mgr,
+    )
+    assert res_null_rev.status_code == 422
+
+    # 5. Empty/blank name -> 422
+    res_empty_name = client.patch(
+        f"{BASE}/item-types/{type_id}",
+        json={"name": "   "},
+        headers=mgr,
+    )
+    assert res_empty_name.status_code == 422
+
+
 def test_delete_item_type_prevented_if_in_use(client, org):
     _, mgr = org.user(MANAGER)
     itype = client.post(f"{BASE}/item-types", json={"name": "Film"}, headers=mgr).json()

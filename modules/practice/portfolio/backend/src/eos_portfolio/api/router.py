@@ -51,7 +51,7 @@ def create_item_type(
 @router.patch("/item-types/{id}")
 def update_item_type(
     id: str,
-    body: s.ItemTypeInput,
+    body: s.ItemTypePatch,
     actor: Actor = Depends(require(svc.ITEM_TYPE_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -119,7 +119,7 @@ def get_item(
 @router.patch("/items/{id}")
 def update_item(
     id: str,
-    body: s.ItemInput,
+    body: s.ItemPatch,
     actor: Actor = Depends(require(svc.ITEM_WRITE)),
     db: Session = Depends(get_db),
 ):

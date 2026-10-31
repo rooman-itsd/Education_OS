@@ -118,3 +118,59 @@ def test_type_without_review_approves_immediately(client, org):
     sub = client.post(f"{BASE}/items/{item['id']}/submit", headers=learner).json()
     assert sub["status"] == "approved"
     assert sub["decided_at"] is not None
+
+
+def test_patch_item_partial_and_null_rejection(client, org):
+    _, mgr = org.user(MANAGER)
+    itype = _make_type(client, mgr, "Patch Type")
+
+    _, learner = org.user(LEARNER)
+    item = client.post(
+        f"{BASE}/items",
+        json={"type_id": itype["id"], "title": "Original Title", "description": "Original Desc"},
+        headers=learner,
+    ).json()
+    item_id = item["id"]
+
+    # 1. Partial PATCH: update description only without sending title or type_id
+    res_desc = client.patch(
+        f"{BASE}/items/{item_id}",
+        json={"description": "Updated Description Only"},
+        headers=learner,
+    )
+    assert res_desc.status_code == 200
+    assert res_desc.json()["title"] == "Original Title"
+    assert res_desc.json()["description"] == "Updated Description Only"
+
+    # 2. Partial PATCH: update tags only
+    res_tags = client.patch(
+        f"{BASE}/items/{item_id}",
+        json={"tags": ["tag1", "tag2"]},
+        headers=learner,
+    )
+    assert res_tags.status_code == 200
+    assert res_tags.json()["tags"] == ["tag1", "tag2"]
+
+    # 3. Explicit null on title -> 422
+    res_null_title = client.patch(
+        f"{BASE}/items/{item_id}",
+        json={"title": None},
+        headers=learner,
+    )
+    assert res_null_title.status_code == 422
+
+    # 4. Explicit null on type_id -> 422
+    res_null_type = client.patch(
+        f"{BASE}/items/{item_id}",
+        json={"type_id": None},
+        headers=learner,
+    )
+    assert res_null_type.status_code == 422
+
+    # 5. Empty title -> 422
+    res_empty_title = client.patch(
+        f"{BASE}/items/{item_id}",
+        json={"title": "   "},
+        headers=learner,
+    )
+    assert res_empty_title.status_code == 422

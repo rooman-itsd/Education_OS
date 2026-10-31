@@ -61,7 +61,7 @@ def allowed_actions(status: str, is_owner: bool, is_reviewer: bool, is_manager: 
     # Withdraw
     if (is_owner or is_manager) and status in (ItemStatus.SUBMITTED, ItemStatus.UNDER_REVIEW):
         can.append("withdraw")
-    # Review
-    if (is_reviewer or is_manager) and status in (ItemStatus.SUBMITTED, ItemStatus.UNDER_REVIEW):
+    # Review: owners are forbidden from reviewing their own items
+    if not is_owner and (is_reviewer or is_manager) and status in (ItemStatus.SUBMITTED, ItemStatus.UNDER_REVIEW):
         can.append("review")
     return can
