@@ -79,7 +79,11 @@ string), `status`, `duration_ms`. Uvicorn's access log is replaced by it.
 - **Request id:** the caller's `X-Request-ID` when it is a plain token (letters, digits, `._-`, up to 64), else a
   new one; returned in the response's `X-Request-ID`, so a user's error report finds its lines.
 - **Sentry:** off unless `EOS_SENTRY_DSN` is set. Events carry `organisation_id` and `request_id` as tags and
-  nothing personal: no body, cookies, headers (except user agent and content type), query string, user or IP.
+  nothing personal: no body, cookies, headers (except user agent and content type), query string, user, IP,
+  local variables or source lines, and email addresses in messages and breadcrumbs become `[email]`.
+  `EOS_ENVIRONMENT` defaults to `staging`, so a host that forgets it is never reported as production.
+- **Unhandled errors** are logged as one `unhandled error` line with the traceback and both ids. An unknown
+  `EOS_LOG_LEVEL` falls back to `INFO` with a warning instead of stopping the API.
 
 On the Docker host: `docker compose ... logs --tail 50 api` (the relay and the scheduler log in their own format
 for now).

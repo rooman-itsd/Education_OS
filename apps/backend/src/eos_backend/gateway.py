@@ -5,6 +5,7 @@ they do their own permission checks."""
 from __future__ import annotations
 
 import jwt
+import structlog
 from eos_core.db import SessionLocal
 from eos_core.entitlement import PLATFORM_MODULES, module_entitled
 from eos_core.security import decode_token
@@ -33,6 +34,8 @@ class EntitlementGate(BaseHTTPMiddleware):
             return JSONResponse({"detail": f"invalid token: {e}"}, status_code=401)
         org = claims.get("org")
         request.state.organisation_id = org  # verified above; the request log line uses it (observability.py)
+        # and every line the module writes: a Keycloak token is verified only here, not in RequestContext
+        structlog.contextvars.bind_contextvars(organisation_id=org)
         if not org:
             return JSONResponse({"detail": "feature modules need an organisation user"}, status_code=403)
         from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup

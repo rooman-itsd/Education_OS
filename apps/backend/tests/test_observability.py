@@ -7,11 +7,13 @@ import logging
 
 import jwt
 import pytest
+import sentry_sdk
 import structlog
 from eos_backend.observability import REQUEST_ID, RequestContext, configure_logging, init_sentry, scrub
 from eos_core.security import create_token
 from eos_testing import register_and_login
 from eos_testing.tenancy import auth
+from sentry_sdk.transport import Transport
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -113,3 +115,96 @@ def test_sentry_gets_the_ids_and_nothing_personal():
 def test_sentry_stays_off_without_a_dsn(monkeypatch):
     monkeypatch.delenv("EOS_SENTRY_DSN", raising=False)
     assert init_sentry() is False
+
+
+class _Capture(Transport):
+    """Keeps the events Sentry would send, in this process."""
+
+    def __init__(self, options=None):
+        super().__init__(options)
+        self.events: list[dict] = []
+
+    def capture_envelope(self, envelope):
+        event = envelope.get_event()
+        if event is not None:
+            self.events.append(event)
+
+
+def test_a_password_in_local_variables_or_an_email_in_the_message_never_reaches_sentry(monkeypatch):
+    """An exception inside, say, tenancy.register() has the admin's password and email in its locals."""
+    monkeypatch.setenv("EOS_SENTRY_DSN", "https://public@sentry.example.invalid/1")
+    transport = _Capture()
+    assert init_sentry(transport=transport) is True
+    try:
+
+        def register(admin_email: str):
+            password = "Local-Passw0rd!"  # noqa: F841 (a local variable is the point)
+            raise ValueError(f"{admin_email} is already registered")
+
+        try:
+            register("someone@example.com")
+        except ValueError:
+            sentry_sdk.capture_exception()
+        logging.getLogger("eos.tenancy").error("could not mail %s", "other@example.com")
+        sentry_sdk.flush()
+    finally:
+        sentry_sdk.init()  # no DSN: off again for the other tests
+    text = json.dumps(transport.events, default=str)
+    assert transport.events, "Sentry captured nothing"
+    assert "Local-Passw0rd!" not in text
+    assert "someone@example.com" not in text and "other@example.com" not in text
+    assert "[email] is already registered" in text
+
+
+def test_a_mistyped_log_level_falls_back_to_info_and_says_so():
+    buf = io.StringIO()
+    try:
+        configure_logging(fmt="json", level="LOUD", stream=buf)
+        logging.getLogger("eos.x").info("still logging")
+    finally:
+        configure_logging(fmt="json", level="INFO")
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line.strip()]
+    assert any("EOS_LOG_LEVEL=LOUD" in r["event"] and r["level"] == "warning" for r in records)
+    assert any(r["event"] == "still logging" for r in records)
+
+
+def test_an_unhandled_error_is_logged_with_both_ids(lines):
+    def handler(request):
+        raise RuntimeError("boom")
+
+    app = Starlette(routes=[Route("/x", handler)])
+    app.add_middleware(RequestContext)
+    token = create_token(user_id="u1", organisation_id="org-1", roles=["student"])
+    with TestClient(app, raise_server_exceptions=False) as c:
+        r = c.get("/x", headers={"Authorization": f"Bearer {token}", REQUEST_ID: "req-err"})
+    assert r.status_code == 500
+    (err,) = [x for x in lines() if x.get("event") == "unhandled error"]
+    assert err["request_id"] == "req-err" and err["organisation_id"] == "org-1"
+    assert err["level"] == "error" and "RuntimeError: boom" in err["exception"]
+    assert _request_line(lines(), "/x")["status"] == 500
+
+
+def test_the_gate_puts_its_verified_organisation_on_the_modules_lines(lines, monkeypatch):
+    """A Keycloak token: RequestContext does not verify it, the gate does, and the module's lines carry the org."""
+    import eos_backend.gateway as gateway
+    import eos_backend.observability as observability
+    from eos_tenancy.application import service as tenancy
+
+    monkeypatch.setattr(observability, "_verified_organisation", lambda request: None)
+    monkeypatch.setattr(gateway, "decode_token", lambda token: {"org": "org-kc"})
+    monkeypatch.setattr(gateway, "SessionLocal", lambda: type("Db", (), {"close": lambda self: None})())
+    monkeypatch.setattr(tenancy, "entitlement", lambda db, org: {"status": "active"})
+    monkeypatch.setattr(gateway, "module_entitled", lambda ent, module: True)
+
+    def handler(request):
+        logging.getLogger("eos.somemodule").info("module line")
+        return JSONResponse({"ok": True})
+
+    app = Starlette(routes=[Route("/api/v1/somemodule/x", handler)])
+    app.add_middleware(gateway.EntitlementGate)
+    app.add_middleware(RequestContext)
+    with TestClient(app) as c:
+        assert c.get("/api/v1/somemodule/x", headers={"Authorization": "Bearer kc-token"}).status_code == 200
+    (inner,) = [r for r in lines() if r.get("event") == "module line"]
+    assert inner["organisation_id"] == "org-kc"
+    assert _request_line(lines(), "/api/v1/somemodule/x")["organisation_id"] == "org-kc"
