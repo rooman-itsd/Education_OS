@@ -16,3 +16,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     (local time, closes after opens, empty means always open) and utilisation (inclusive local dates, at most 366
     days) are written down; `listFacilitys` renamed `listFacilities`.
   - `config/env.example`: `SPORTS_FACILITIES_TIMEZONE` (default `Asia/Kolkata`).
+- Backend (#331): use cases for facilities, spaces, weekly operating hours, availability, usage records and
+  utilisation, implementing every operation of `contracts/openapi.yaml`; the four events of `contracts/events.yaml`
+  through the outbox; an audit entry for every state change; local dates in `SPORTS_FACILITIES_TIMEZONE`; ids in
+  request bodies validated as UUIDs; API router mounted under `/api/v1/sports-facilities`.
+- Alembic chain `sf_0001`: five `sports_facilities_*` tables with `organisation_id`, RLS policy on Postgres, own
+  version table `sports_facilities_alembic_version`.
+- Tests: domain, API, cross-tenant leak, migration, contract drift and profile-role tests.
