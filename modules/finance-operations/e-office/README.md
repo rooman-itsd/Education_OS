@@ -39,18 +39,18 @@ Requirements: [docs/prd.md](docs/prd.md).
 | db | `db/` | Alembic chain `e_office_0001` with its own version table `e_office_alembic_version`. It applies the `tenant_isolation` policy on Postgres. |
 
 Rules the code keeps:
-- **The note sheet and the movement history are append-only** (decided by the owner; see #336). Notings are numbered
+- **The note sheet and the movement history are append-only** (PRD). Notings are numbered
   paragraphs from 1 and are never edited or deleted: there is no route to do so. Decisions, closing, reopening,
   attached receipts and dispatches add their own paragraphs (kind `decision` or `system`). Movements are numbered per
   file too, so a decision and the forward made with it keep their order.
 - **Only the holder acts.** Noting, attaching, forwarding, deciding, closing, attaching a receipt and requesting
   dispatch need the caller to hold the open file: anyone else who can see it gets 409 `not_holder`, and a closed file
   answers 409 `file_closed`. Deciding also needs `e-office:file:decide` (403 otherwise).
-- **Who sees a file** (decided by the owner; see #336). Everyone who has held it, for good. With
+- **Who sees a file** (PRD). Everyone who has held it, for good. With
   `e-office:file:read-all`, every non-confidential file of the organisation as well. A confidential file is visible
   only to the people who have held it, read-all or not. A file the caller cannot see is 404, like one that does not
   exist, so its existence is not revealed. Reading is not holding: read-all users cannot note on a file they do not hold.
-- **Nothing private goes into events** (decided by the owner; see #336). Note text, forwarding remarks and decision
+- **Nothing private goes into events** (PRD). Note text, forwarding remarks and decision
   remarks never reach an event; a confidential file publishes an empty subject. Events go to the outbox in the same
   transaction as the change, with exactly the payloads of `events.yaml` (a test checks every published event).
 - **Every state change is audited.** An `audit_entry` row (actor, action, entity, id; never text) is written in the
@@ -59,7 +59,7 @@ Rules the code keeps:
   and calendar year (Indian date). Receipts are `IN/<year>/<sequence>` and dispatches `OUT/<year>/<sequence>`, per
   organisation and year. On Postgres an advisory lock per organisation makes concurrent writers take turns; a number
   taken concurrently anyway is 409 `number_taken`, never 500. A changed category code applies to files opened after.
-- **Business dates are Indian** (decided by the owner; see #336). "Today" is the date in Asia/Kolkata (UTC+05:30, a
+- **Business dates are Indian** (as procurement; decided by the owner on #335). "Today" is the date in Asia/Kolkata (UTC+05:30, a
   fixed offset: India has no daylight saving and tzdata is not on the approved stack). It decides file-number years,
   due dates, overdue, report ages and the dates that can't be in the future (`received_on`, `sent_on`) or the past
   (`due_on`). Timestamps are stored in UTC.
@@ -117,12 +117,12 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   are taken as given: a file forwarded to a mistyped id is stuck (read-all can still see a non-confidential one, but
   nobody holds it to act), and a receipt sent to one can only be seen by the registry, which registers it again. `UserRef.name` is empty and `designation` null until identity names are
   available.
-- **Documents are ids only** (decided by the owner; see #336). The documents service has no SDK, so nothing is uploaded
+- **Documents are ids only.** The documents service has no SDK, so nothing is uploaded
   or checked: an attachment's `document_id` is stored as given. A receipt's scan (`document_id`) is optional, and so
   nullable on the receipt and on the attachment made from it, until the documents service exists; the contract said
   required.
-- **Central registry = holders of `e-office:correspondence:manage`**, HR staff by default (decided by the owner; see
-  #336; PRD open question 3). They see every receipt and dispatch, but only the person a receipt was sent to attaches
+- **Central registry = holders of `e-office:correspondence:manage`**, HR staff by default (as the contract grants;
+  PRD open question 3). They see every receipt and dispatch, but only the person a receipt was sent to attaches
   it; another registry member gets 403.
 - **Reopening needs `e-office:file:create` and sight of the file**, as the contract says; reopening publishes no event
   (none is defined).

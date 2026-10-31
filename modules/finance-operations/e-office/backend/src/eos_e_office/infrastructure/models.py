@@ -1,6 +1,6 @@
 """Tables of e-office. One shared schema with the e_office_ prefix; every table carries organisation_id (TenantMixin)
 and gets the tenant_isolation row-level-security policy on Postgres. Nothing is deleted: the note sheet, attachments,
-movements and the list of people who have held a file only grow (decided by the owner; see #336). People are
+movements and the list of people who have held a file only grow (PRD). People are
 platform/identity user ids and documents are platform/documents ids, never foreign keys."""
 
 from __future__ import annotations

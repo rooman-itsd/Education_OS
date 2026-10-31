@@ -1,7 +1,7 @@
 """Use cases of e-office. Authenticated calls arrive with the caller's organisation pinned on the session (api/deps).
 Every state change writes an audit record and, where the contract defines one, publishes its e-office.* event to the
 eos_core outbox in the same transaction. Note text never goes into an event, and a confidential file's subject is
-never published (decided by the owner; see #336).
+never published (PRD).
 
 Visibility: a file is visible to everyone who has held it (e_office_file_holder). With e-office:file:read-all every
 non-confidential file is visible too; a confidential file stays visible to its holders only. A file the caller cannot
@@ -45,7 +45,7 @@ def clock() -> datetime:
     return utcnow()
 
 
-# Business dates are Indian (decided by the owner; see #336). Asia/Kolkata has kept UTC+05:30 without daylight saving
+# Business dates are Indian (as procurement; decided by the owner on #335). Asia/Kolkata has kept UTC+05:30 without daylight saving
 # since 1945, so a fixed offset is exact and needs no time-zone database (tzdata is not on the approved stack).
 BUSINESS_TZ = timezone(timedelta(hours=5, minutes=30), "Asia/Kolkata")
 
