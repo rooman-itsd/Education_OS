@@ -209,3 +209,51 @@ def test_svg_xml_rejected_by_upload_intent(client, org):
     )
     assert r.status_code == 400
     assert "MIME type" in r.text
+
+
+def test_client_token_isolated_per_uploader(client, org):
+    # Student 1 creates upload intent with client_token="shared-tok-1"
+    r1 = client.post(
+        "/api/v1/documents/upload-intent",
+        json={
+            "filename": "doc1.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 100,
+            "client_token": "shared-tok-1",
+        },
+        headers=org.student_headers,
+    )
+    assert r1.status_code == 201
+    doc1 = r1.json()["document"]
+    assert doc1["uploaded_by"] == org.student_id
+
+    # Student 2 creates upload intent with same client_token="shared-tok-1"
+    r2 = client.post(
+        "/api/v1/documents/upload-intent",
+        json={
+            "filename": "doc2.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 200,
+            "client_token": "shared-tok-1",
+        },
+        headers=org.student2_headers,
+    )
+    assert r2.status_code == 201
+    doc2 = r2.json()["document"]
+    assert doc2["id"] != doc1["id"]
+    assert doc2["uploaded_by"] == org.student2_id
+    assert doc2["filename"] == "doc2.pdf"
+
+    # Replay by student 1 returns 200 with doc1
+    r1_replay = client.post(
+        "/api/v1/documents/upload-intent",
+        json={
+            "filename": "doc1.pdf",
+            "mime_type": "application/pdf",
+            "size_bytes": 100,
+            "client_token": "shared-tok-1",
+        },
+        headers=org.student_headers,
+    )
+    assert r1_replay.status_code == 200
+    assert r1_replay.json()["document"]["id"] == doc1["id"]

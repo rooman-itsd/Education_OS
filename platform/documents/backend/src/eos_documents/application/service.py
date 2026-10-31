@@ -58,13 +58,20 @@ def view_document(doc: Document) -> dict[str, Any]:
     }
 
 
-def find_by_token(db: Session, organisation_id: str, client_token: str | None) -> Document | None:
+def find_by_token(
+    db: Session,
+    organisation_id: str,
+    client_token: str | None,
+    uploaded_by: str | None = None,
+) -> Document | None:
     if not client_token:
         return None
     stmt = select(Document).where(
         Document.organisation_id == organisation_id,
         Document.client_token == client_token,
     )
+    if uploaded_by:
+        stmt = stmt.where(Document.uploaded_by == uploaded_by)
     return db.execute(stmt).scalars().first()
 
 
@@ -94,7 +101,7 @@ def request_upload_intent(
 
     # Check idempotency
     if client_token:
-        existing = find_by_token(db, organisation_id, client_token)
+        existing = find_by_token(db, organisation_id, client_token, uploaded_by=actor_id)
         if existing:
             url = store.generate_upload_url(
                 existing.bucket,

@@ -75,7 +75,7 @@ def request_upload_intent(
         raise _err(e) from e
     except IntegrityError:
         db.rollback()
-        existing = service.find_by_token(db, p.organisation_id, body.client_token)
+        existing = service.find_by_token(db, p.organisation_id, body.client_token, uploaded_by=p.user_id)
         if existing:
             cfg = service.load_settings()
             store = service.get_storage(cfg)

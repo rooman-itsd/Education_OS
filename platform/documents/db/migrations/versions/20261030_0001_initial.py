@@ -47,7 +47,9 @@ def upgrade() -> None:
     op.create_index("ix_documents_document_organisation_id", DOCUMENTS, ["organisation_id"])
     op.create_index("ix_documents_document_org_status", DOCUMENTS, ["organisation_id", "status"])
     op.create_index("ix_documents_document_org_entity", DOCUMENTS, ["organisation_id", "entity_type", "entity_id"])
-    op.create_index("uq_documents_document_org_token", DOCUMENTS, ["organisation_id", "client_token"], unique=True)
+    op.create_index(
+        "uq_documents_document_org_token", DOCUMENTS, ["organisation_id", "uploaded_by", "client_token"], unique=True
+    )
     enable_rls(DOCUMENTS)
 
 
