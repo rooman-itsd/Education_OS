@@ -19,11 +19,11 @@ _Owner fills in: what this module is responsible for, and what it explicitly is 
 
 | Widget | Layout | Permission | Endpoints |
 |---|---|---|---|
-| `training-video-analysis.reviews-pending` | coach | `video:read` | `GET /videos?limit=20`, `GET /videos/{id}/annotations` for each of those |
+| `training-video-analysis.reviews-pending` | coach | `video:read` | `GET /videos?annotated=false&limit=6` |
 
-The contract has no review status on a video and no annotation count, so a video waits for review while it has no
-annotation. Finding those takes one annotations request per video, so the widget checks only the 20 most recently
-recorded videos and says how many older ones it did not check. The coach's `session-plan` and the athlete's
+The contract has no review status on a video, so a video waits for review while it has no annotation.
+`GET /videos?annotated=false` lists those, most recently recorded first, and its `total` (every such video, not only
+the rows shown) is the "Waiting for review" count. The coach's `session-plan` and the athlete's
 `training-schedule` are not built here yet: their layout ids still name athlete-performance.
 
 ## Dependencies

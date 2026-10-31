@@ -1,28 +1,21 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrainingVideo, VideoAnnotation } from "../src/api/client";
+import type { TrainingVideo } from "../src/api/client";
 import { widgets } from "../src/widgets";
 import { duration } from "../src/widgets/format";
-import { CHECKED, ReviewsPending, SHOWN } from "../src/widgets/ReviewsPending";
+import { ReviewsPending, SHOWN } from "../src/widgets/ReviewsPending";
 
 const BASE = "/api/v1/training-video-analysis";
 
 type Reply = { status: number; body: unknown };
 const ok = (body: unknown): Reply => ({ status: 200, body });
 
-/**
- * Stubs fetch: `/videos` answers the list, `/videos/{id}/annotations` answers through `annotations(id)`.
- * Any other request fails the test.
- */
-function stubApi(videos: Reply | (() => Reply), annotations: (id: string) => Reply = () => ok([])) {
+/** Stubs fetch: only `/videos` answers; any other request fails the test. */
+function stubApi(videos: Reply | (() => Reply)) {
   const fetchMock = vi.fn(async (input: string, _init?: RequestInit) => {
     const url = new URL(input, "http://localhost");
-    const path = url.pathname.slice(BASE.length);
-    const match = path.match(/^\/videos\/([^/]+)\/annotations$/);
-    let r: Reply;
-    if (path === "/videos") r = typeof videos === "function" ? videos() : videos;
-    else if (match) r = annotations(decodeURIComponent(match[1]!));
-    else throw new Error(`unexpected request ${input}`);
+    if (url.pathname.slice(BASE.length) !== "/videos") throw new Error(`unexpected request ${input}`);
+    const r = typeof videos === "function" ? videos() : videos;
     return { ok: r.status < 400, status: r.status, statusText: "", json: async () => r.body };
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -39,15 +32,6 @@ const video = (id: string, title: string, recorded_at = "2026-10-20T09:30:00Z", 
   duration_seconds,
   recorded_at,
   created_at: recorded_at,
-});
-const note = (videoId: string): VideoAnnotation => ({
-  id: `n-${videoId}`,
-  video_id: videoId,
-  author_id: "u-coach",
-  start_timestamp: 12,
-  content: "Drive the knee",
-  category: "technical",
-  created_at: "2026-10-21T10:00:00Z",
 });
 const page = <T,>(items: T[], total = items.length) => ({ items, total });
 
@@ -85,14 +69,14 @@ describe("format", () => {
 });
 
 describe("training-video-analysis.reviews-pending", () => {
+  const PENDING = `${BASE}/videos?annotated=false&limit=${SHOWN}`;
   const vids = [
     video("v-1", "Sprint mechanics cam A", "2026-10-25T07:00:00Z", 245.5),
-    video("v-2", "Match vs. Rovers, first half", "2026-10-22T16:00:00Z", 2730),
     video("v-3", "Block starts", "2026-10-20T07:00:00Z", 3729),
   ];
 
-  it("lists the recent videos nobody has annotated, in the server's order, and counts them", async () => {
-    const fetchMock = stubApi(ok(page(vids)), (id) => ok(id === "v-2" ? [note(id)] : []));
+  it("lists the unannotated videos in the server's order and counts them, in one request", async () => {
+    const fetchMock = stubApi(ok(page(vids)));
     render(<ReviewsPending role="coach" />);
     expect(screen.getByLabelText("Loading")).toBeTruthy();
     const list = await screen.findByRole("list", { name: "Videos waiting for review" });
@@ -103,46 +87,28 @@ describe("training-video-analysis.reviews-pending", () => {
     expect(items[0]?.textContent).toContain("4:06");
     expect(items[1]?.textContent).toContain("Block starts");
     expect(items[1]?.textContent).toContain("1:02:09");
-    expect(screen.getByLabelText("Review summary").textContent).toBe("Waiting for review2Reviewed1");
-    expect(urls(fetchMock).sort()).toEqual([
-      `${BASE}/videos/v-1/annotations`,
-      `${BASE}/videos/v-2/annotations`,
-      `${BASE}/videos/v-3/annotations`,
-      `${BASE}/videos?limit=${CHECKED}`,
-    ]);
+    expect(screen.getByLabelText("Review summary").textContent).toBe("Waiting for review2");
+    expect(screen.queryByText(/more$/)).toBeNull();
+    expect(urls(fetchMock)).toEqual([PENDING]);
     expect((fetchMock.mock.calls[0]?.[1] as unknown as { headers: Record<string, string> }).headers.Authorization).toBe("Bearer test-token");
   });
 
-  it(`checks at most ${CHECKED} videos, lists ${SHOWN} and says how many more and how many were not checked`, async () => {
-    const many = Array.from({ length: CHECKED }, (_, i) => video(`v-${i}`, `Video ${i}`));
-    const fetchMock = stubApi(ok(page(many, 45)));
+  it("counts every waiting video from total and says how many more than the rows shown", async () => {
+    const shown = Array.from({ length: SHOWN }, (_, i) => video(`v-${i}`, `Video ${i}`));
+    const fetchMock = stubApi(ok(page(shown, 23)));
     render(<ReviewsPending role="coach" />);
     const list = await screen.findByRole("list", { name: "Videos waiting for review" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(SHOWN);
-    expect(screen.getByText(`and ${CHECKED - SHOWN} videos more`)).toBeTruthy();
-    expect(screen.getByText(`Checked the ${CHECKED} most recent of 45 videos.`)).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1 + CHECKED);
+    expect(screen.getByLabelText("Review summary").textContent).toBe("Waiting for review23");
+    expect(screen.getByText(`and ${23 - SHOWN} videos more`)).toBeTruthy();
+    expect(urls(fetchMock)).toEqual([PENDING]);
   });
 
-  it("has an empty state when there are no videos, without asking for annotations", async () => {
+  it("has an empty state when no video is waiting", async () => {
     const fetchMock = stubApi(ok(page([])));
     render(<ReviewsPending role="coach" />);
-    expect(await screen.findByText("No training videos yet")).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("says every video is reviewed when all have an annotation", async () => {
-    stubApi(ok(page(vids)), (id) => ok([note(id)]));
-    render(<ReviewsPending role="coach" />);
-    expect(await screen.findByText("All videos reviewed")).toBeTruthy();
-  });
-
-  it("does not claim all are reviewed when older videos were not checked", async () => {
-    stubApi(ok(page(vids, 40)), (id) => ok([note(id)]));
-    render(<ReviewsPending role="coach" />);
-    expect(await screen.findByText("None of the 3 videos checked is waiting for review.")).toBeTruthy();
-    expect(screen.getByText("Checked the 3 most recent of 40 videos.")).toBeTruthy();
-    expect(screen.queryByText("All videos reviewed")).toBeNull();
+    expect(await screen.findByText("No videos waiting for review")).toBeTruthy();
+    expect(urls(fetchMock)).toEqual([PENDING]);
   });
 
   it("does not offer a retry that cannot help (403)", async () => {
@@ -175,11 +141,11 @@ describe("training-video-analysis.reviews-pending", () => {
     mounted = true;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("list", { name: "Videos waiting for review" })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledTimes(1 + 1 + vids.length);
+    expect(urls(fetchMock)).toEqual([PENDING, PENDING]);
   });
 
   it("does not show server wording for other failures", async () => {
-    stubApi(ok(page(vids)), () => ({ status: 500, body: { code: "boom", message: "Traceback ..." } }));
+    stubApi({ status: 500, body: { code: "boom", message: "Traceback ..." } });
     render(<ReviewsPending role="coach" />);
     expect(await screen.findByText("Could not load training video data.")).toBeTruthy();
     expect(screen.queryByText(/Traceback/)).toBeNull();

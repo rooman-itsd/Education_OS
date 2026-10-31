@@ -29,20 +29,6 @@ export interface TrainingVideo {
   created_at: string;
 }
 
-export type AnnotationCategory = "technical" | "tactical" | "biomechanical" | "praise" | "note";
-
-/** contract VideoAnnotation (the fields the widgets read). */
-export interface VideoAnnotation {
-  id: string;
-  video_id: string;
-  author_id: string;
-  start_timestamp: number;
-  end_timestamp?: number | null;
-  content: string;
-  category: AnnotationCategory;
-  created_at: string;
-}
-
 const API_BASE =
   ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL ?? "/api/v1") + "/training-video-analysis";
 
@@ -91,16 +77,12 @@ async function get<T>(path: string, query: Record<string, string | number | unde
 }
 
 /**
- * GET /videos, most recently recorded first. Staff see the organisation's videos; an athlete sees only the videos
- * of their sessions and the ones annotated about them. Permission training-video-analysis:video:read.
+ * GET /videos, most recently recorded first. `annotated: false` gives only the videos nobody has annotated yet,
+ * `true` only annotated ones; `total` counts every match. Staff see the organisation's videos; an athlete sees only
+ * the videos of their sessions and the ones annotated about them. Permission training-video-analysis:video:read.
  */
-export function listVideos(limit: number, signal?: AbortSignal): Promise<Page<TrainingVideo>> {
-  return get("/videos", { limit }, signal);
-}
-
-/** GET /videos/{id}/annotations, by timestamp (a plain array, not a page). Permission training-video-analysis:video:read. */
-export function listAnnotations(videoId: string, signal?: AbortSignal): Promise<VideoAnnotation[]> {
-  return get(`/videos/${encodeURIComponent(videoId)}/annotations`, {}, signal);
+export function listVideos(query: { annotated?: boolean; limit: number }, signal?: AbortSignal): Promise<Page<TrainingVideo>> {
+  return get("/videos", { annotated: query.annotated === undefined ? undefined : String(query.annotated), limit: query.limit }, signal);
 }
 
 /** Words for a failed call, for the widget's error state. */
