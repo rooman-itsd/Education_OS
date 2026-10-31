@@ -24,23 +24,22 @@ permissions:
       erasure request. Never removes the record or the fact of the action.
 
 roles:
-  - name: audit-reader
+  - name: org-admin
     description: >-
-      Reads the organisation's audit trail. Intended for an organisation admin or a governance
-      officer, not a general user.
-    grants:
-      - audit:record:read
-
-  - name: audit-officer
-    description: >-
-      Governance, IQAC or RTI role that must produce evidence: reads and exports.
+      The organisation admin reads the organisation's audit trail on their dashboard
+      (audit.recent-activity) and exports records for compliance or accreditation.
     grants:
       - audit:record:read
       - audit:record:export
 
-  - name: org-admin
+  # A super admin is given only the platform: keys that some role grants (eos_core.config.permissions_for), so
+  # without this block nobody could hold platform:audit:read or platform:audit:redact. Same pattern as
+  # platform/billing's super-admin block.
+  - name: super-admin
     description: >-
-      The organisation admin reads the organisation's audit trail on their dashboard
-      (audit.recent-activity). Same grant as audit-reader.
+      Super admin: reads records across organisations and redacts under a legal erasure request.
+      audit:record:read is included because every read route is guarded by it.
     grants:
       - audit:record:read
+      - platform:audit:read
+      - platform:audit:redact
