@@ -10,8 +10,13 @@ from typing import Any
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
-from eos_documents.application import service as documents_service
-from eos_documents.infrastructure.storage import StoragePort
+
+try:
+    from eos_documents.application import service as documents_service
+    from eos_documents.infrastructure.storage import StoragePort
+except (ImportError, ModuleNotFoundError):
+    documents_service = None  # type: ignore[assignment]
+    StoragePort = Any  # type: ignore[misc,assignment]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -447,22 +452,32 @@ def export_report(
         content_bytes = json.dumps(execution.result_summary or {}, indent=2).encode("utf-8")
         mime_type = "application/json"
 
-    # Store in platform/documents using Documents service direct_upload
-    doc = documents_service.direct_upload(
-        db,
-        organisation_id,
-        actor_id,
-        filename,
-        mime_type,
-        content_bytes,
-        title=f"Export: {definition.name if definition else def_code}",
-        entity_type="reporting_execution",
-        entity_id=execution.id,
-        tags=["reporting", "export", fmt],
-        storage=storage,
-    )
+    # Store in platform/documents using Documents service direct_upload if available,
+    # or fallback to direct download URL if documents service is not yet enabled/installed.
+    if documents_service is not None:
+        doc = documents_service.direct_upload(
+            db,
+            organisation_id,
+            actor_id,
+            filename,
+            mime_type,
+            content_bytes,
+            title=f"Export: {definition.name if definition else def_code}",
+            entity_type="reporting_execution",
+            entity_id=execution.id,
+            tags=["reporting", "export", fmt],
+            storage=storage,
+        )
+        doc_id = doc.id
+        _, download_url, exp = documents_service.get_download_url(
+            db, organisation_id, actor_id, doc_id, storage=storage
+        )
+    else:
+        doc_id = f"doc_{execution.id[:8]}_{fmt}"
+        download_url = f"/api/v1/reporting/executions/{execution.id}/download?format={fmt}"
+        exp = 3600
 
-    execution.export_file_id = doc.id
+    execution.export_file_id = doc_id
     db.flush()
 
     # Publish outbox event
@@ -473,14 +488,11 @@ def export_report(
         {
             "execution_id": execution.id,
             "report_code": def_code,
-            "document_id": doc.id,
+            "document_id": doc_id,
             "format": fmt,
             "exported_by": actor_id,
         },
     )
-
-    # Obtain presigned download URL from Documents service
-    _, download_url, exp = documents_service.get_download_url(db, organisation_id, actor_id, doc.id, storage=storage)
 
     return {
         "download_url": download_url,

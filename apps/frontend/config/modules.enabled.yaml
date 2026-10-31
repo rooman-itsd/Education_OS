@@ -28,5 +28,4 @@ platform:
   - tenancy
   - identity
   - audit
-  - workflow
   - reporting

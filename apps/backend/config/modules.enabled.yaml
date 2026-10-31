@@ -22,4 +22,4 @@ modules:
   - student-lifecycle/web-portal-cms
   - support/helpdesk
 integrations: [messaging-providers, payment-sbiepay]
-platform: [identity, tenancy, billing, notification, event-bus, scheduler, workflow, documents, reporting]
+platform: [identity, tenancy, billing, notification, event-bus, scheduler, reporting]

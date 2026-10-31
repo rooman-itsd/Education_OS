@@ -17,8 +17,20 @@ from eos_core.db import SessionLocal, init_db
 from eos_core.events import OutboxEvent
 from eos_core.security import create_token
 from eos_core.tenant import organisation_scope, platform_scope
-from eos_documents.domain.models import Document
-from eos_documents.infrastructure.storage import MemoryStorage, reset_storage
+
+try:
+    from eos_documents.domain.models import Document
+    from eos_documents.infrastructure.storage import MemoryStorage, reset_storage
+except (ImportError, ModuleNotFoundError):
+    Document = None  # type: ignore[assignment]
+
+    class MemoryStorage:  # type: ignore[no-redef]
+        pass
+
+    def reset_storage() -> None:
+        pass
+
+
 from eos_identity.application.service import create_user
 from eos_reporting.domain.models import MetricSnapshot, ReportDefinition, ReportExecution
 from fastapi import FastAPI
@@ -40,7 +52,8 @@ def _clean_tables():
         s.execute(delete(ReportExecution))
         s.execute(delete(ReportDefinition))
         s.execute(delete(MetricSnapshot))
-        s.execute(delete(Document))
+        if Document is not None:
+            s.execute(delete(Document))
         s.execute(delete(OutboxEvent))
         s.commit()
 

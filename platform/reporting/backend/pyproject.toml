@@ -9,7 +9,6 @@ dependencies = [
   "alembic",
   "eos-core",
   "eos-identity",
-  "eos-documents",
 ]
 
 [tool.pytest.ini_options]
