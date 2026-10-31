@@ -97,7 +97,7 @@ def test_the_plan_user_limit_refuses_the_user_past_it_and_usage_shows_it(client)
         "usage": {"users": 1, "students": None, "storage_gb": None},
         "at_limit": [],
     }
-    body = {"email": "two@limits-org.example.com", "name": "Two", "password": "Passw0rd!x", "roles": ["student"]}
+    body = {"email": "two@limits-org.example.com", "name": "Two", "password": "Passw0rd!x", "roles": ["faculty"]}
     assert client.post("/api/v1/identity/users", json=body, headers=admin).status_code == 201
     r = client.post("/api/v1/identity/users", json={**body, "email": "three@limits-org.example.com"}, headers=admin)
     assert r.status_code == 409, r.text
@@ -111,6 +111,11 @@ def test_the_plan_user_limit_refuses_the_user_past_it_and_usage_shows_it(client)
     usage = client.get("/api/v1/billing/usage", headers=admin).json()
     assert usage["usage"]["users"] == 2 and usage["at_limit"] == ["users"]
     assert len(client.get("/api/v1/identity/users", headers=admin).json()) == 2  # nothing was written
+    # `users` are staff accounts: learners are the plan's students and are still admitted at the limit
+    for n, role in enumerate(["student", "applicant", "law-student"]):
+        learner = {**body, "email": f"learner{n}@limits-org.example.com", "roles": [role]}
+        assert client.post("/api/v1/identity/users", json=learner, headers=admin).status_code == 201, role
+    assert client.get("/api/v1/billing/usage", headers=admin).json()["usage"]["users"] == 2
     # another organisation on the trial plan (25 users) is not affected
     b = register_and_login(client, slug="limits-other", academy_type="music-academy")
     assert client.get("/api/v1/billing/usage", headers=auth(b["token"])).json()["limits"]["users"] == 25
@@ -142,6 +147,23 @@ def test_start_up_warns_once_when_trusted_proxies_is_unset_outside_dev_mode(monk
     with caplog.at_level(logging.WARNING, logger="eos.api"):
         create_app()
     assert not any("EOS_TRUSTED_PROXIES" in r.getMessage() for r in caplog.records)
+
+
+def test_plan_limits_must_be_whole_numbers_of_at_least_zero(client):
+    """Second review of PR 363, point 5: a limit the super admin types wrong is a 422, never a stored value that
+    makes POST /users or GET /usage answer 500 for every organisation on the plan."""
+    root = client.post(
+        "/api/v1/identity/auth/login", json={"email": "root@platform.example.com", "password": "RootPassw0rd!"}
+    )
+    sa = auth(root.json()["token"])
+    plan = {"id": "typed", "title": "Typed", "suites": ["student-lifecycle"]}
+    for limits in ({"users": "unlimited"}, {"users": "50"}, {"users": -1}, {"students": 1.5}, {"seats": 3}):
+        r = client.put("/api/v1/billing/admin/plans/typed", json={**plan, "limits": limits}, headers=sa)
+        assert r.status_code == 422, (limits, r.text)
+    r = client.put(
+        "/api/v1/billing/admin/plans/typed", json={**plan, "limits": {"users": 0, "students": 100}}, headers=sa
+    )
+    assert r.status_code == 200 and r.json()["limits"] == {"users": 0, "students": 100}
 
 
 def test_the_gate_reuses_the_token_the_limiter_decoded(client, monkeypatch):

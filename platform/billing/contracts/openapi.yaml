@@ -50,7 +50,9 @@ paths:
       summary: Edit a plan. Changes apply to existing subscribers at their next period. Super admin.
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/Plan" } } } }
-      responses: { "200": { description: OK } }
+      responses:
+        "200": { description: OK }
+        "422": { description: "A limit that is not a whole number of at least 0 (\"unlimited\", \"50\", -1), or an unknown limit." }
   /admin/subscriptions/{organisation_id}:
     put:
       summary: Set an organisation's plan, extend a trial, or comp a subscription. Super admin (platform:subscriptions:manage).
@@ -63,17 +65,30 @@ paths:
       responses: { "200": { description: OK } }
 components:
   schemas:
+    PlanLimits:
+      type: object
+      additionalProperties: false
+      description: >-
+        A plan's limits. Each is a whole number of at least 0; absent, null or 0 is no limit. `users` are staff
+        accounts: learners (students, applicants and every role whose dashboard layout extends student) are
+        never counted as users and never refused on it. `students` are the learners (not counted yet), and
+        `storage_gb` stored files (not counted yet).
+      properties:
+        users: { type: [integer, "null"], minimum: 0, description: Active staff accounts. }
+        students: { type: [integer, "null"], minimum: 0, description: Active learners. }
+        storage_gb: { type: [integer, "null"], minimum: 0, description: Stored files, in GB. }
+      examples: [{ users: 25, students: 500, storage_gb: 2 }]
     Usage:
       type: object
       required: [plan, limits, usage, at_limit]
       properties:
         plan: { type: string, examples: [trial] }
-        limits: { type: object, additionalProperties: { type: integer }, examples: [{ users: 25, students: 500, storage_gb: 2 }] }
+        limits: { $ref: "#/components/schemas/PlanLimits" }
         usage:
           type: object
           properties:
-            users: { type: integer }
-            students: { type: [integer, "null"] }
+            users: { type: integer, description: Active staff accounts (learners are not counted). }
+            students: { type: [integer, "null"], description: "Null until a module counts learners." }
             storage_gb: { type: [number, "null"] }
         at_limit: { type: array, items: { type: string }, description: Limits whose usage has reached them. }
     Plan:
@@ -89,7 +104,7 @@ components:
         modules: { type: array, items: { type: string } }
         specialized_suites: { oneOf: [{ type: integer }, { type: string, enum: [all] }] }
         integrations: { type: array, items: { type: string } }
-        limits: { type: object, properties: { users: { type: integer }, students: { type: integer }, storage_gb: { type: integer } } }
+        limits: { $ref: "#/components/schemas/PlanLimits" }
         published: { type: boolean }
     Subscription:
       type: object
