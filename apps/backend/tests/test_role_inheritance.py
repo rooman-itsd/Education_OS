@@ -158,13 +158,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "research-scholar selection-process.my-applications",
         ],
     ),
-    # workflow: empty catalogue (workflow module, batch #317)
-    "workflow": (
-        EMPTY,
-        [
-            "department-admin workflow.approvals-pending",
-        ],
-    ),
 }
 KNOWN_UNBACKED_WIDGETS: dict[tuple[str, str], str] = {
     tuple(pair.split(" ")): f"{module}: {reason}"

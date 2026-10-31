@@ -24,7 +24,7 @@ export function ApprovalsPending(_props: WidgetProps) {
               key={r.id}
               index={i}
               icon={r.is_overdue ? Icons.AlertTriangle : Icons.Clock}
-              tone={r.is_overdue ? "alert" : "accent"}
+              tone={r.is_overdue ? "danger" : "accent"}
               title={r.title}
               meta={[
                 humanise(r.entity_type),
