@@ -4,13 +4,14 @@ name: hr-payroll
 kind: feature              # feature | platform | integration
 domain: finance-operations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+version: 0.2.0
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Employee master, leave, payroll, appraisals, service records."
 owners: [gokulalakshmirooman-source]                # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
-# documents: payslip PDFs and service orders. notification: leave and payslip notices. scheduler: exits on the last working day.
+# documents: payslip PDFs and service orders (document ids stay null until the SDK exists). notification: leave and
+# payslip notices, through events. scheduler: the platform job hr-payroll.publish-due-exits (exits on the last working day).
 depends_on:
   platform: [identity, audit, documents, notification, scheduler]
   integrations: []
@@ -22,7 +23,8 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - scheduler.job.due      # its own job hr-payroll.publish-due-exits (exits on the last working day)
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
