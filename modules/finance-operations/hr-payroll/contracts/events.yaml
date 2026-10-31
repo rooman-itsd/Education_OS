@@ -1,7 +1,7 @@
 # Domain events published by hr-payroll.
 # Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
-# Salary amounts are never put in events.
+# An individual's salary, bank account or PAN is never put in events; payroll-run events carry only the run's net total.
 module: hr-payroll
 version: 1
 events:
@@ -12,10 +12,13 @@ events:
     description: Name, designation, department or reporting manager changed. Consumers refresh cached copies.
     payload: { organisation_id: uuid, employee_id: uuid, name: string, designation: string, department_id: uuid, reports_to: uuid }
   - name: hr-payroll.employee.exited
-    description: Published on the last working day. identity disables the user; modules release the employee's assignments.
+    description: >-
+      Published on the last working day: by the scheduler job hr-payroll.publish-due-exits (19:00 IST that day), or at
+      once when the exit is recorded on or after that day. identity disables the user; modules release the employee's
+      assignments.
     payload: { organisation_id: uuid, employee_id: uuid, user_id: uuid, kind: string, last_working_day: date }
   - name: hr-payroll.leave-request.submitted
-    description: notification tells the approver.
+    description: notification tells the approver (the reporting manager's user; null when unknown).
     payload: { organisation_id: uuid, leave_request_id: uuid, employee_id: uuid, approver_id: uuid, from: date, to: date, days: number }
   - name: hr-payroll.leave-request.approved
     description: >-
@@ -40,3 +43,8 @@ events:
   - name: hr-payroll.appraisal.completed
     description: An appraisal cycle was completed for an employee and the result recorded.
     payload: { organisation_id: uuid, appraisal_id: uuid, employee_id: uuid, cycle: string }
+  - name: hr-payroll.job.finished
+    description: >-
+      The outcome of a run of hr-payroll's scheduler job hr-payroll.publish-due-exits, reported to platform/scheduler,
+      which closes the run. A platform job covers every organisation, so this event has none (its organisation is null).
+    payload: { run_id: uuid, outcome: string, detail: string }
