@@ -38,3 +38,18 @@ roles:
     description: Athletes and staff checking which facilities exist and are open
     grants:
       - sports-facilities:facility:read
+  # Profile roles of the sports-college profile (platform/identity/config/profiles/sports-college.yaml). Tokens carry
+  # these, not the sports-facilities-* roles, so each gets the grants of the module role the PRD names for its users
+  # (part of #331); the backend's tests keep each list equal to its module role.
+  - name: facility-staff
+    description: The Facility / Inventory Staff profile role. Same grants as sports-facilities-admin (the PRD has facility staff register facilities and keep details, hours, availability and usage current).
+    grants: [sports-facilities:facility:read, sports-facilities:facility:write, sports-facilities:facility:status, sports-facilities:usage:read, sports-facilities:usage:record]
+  - name: coach
+    description: "Profile role: check facilities and record their squads' use. Same grants as sports-facilities-coach."
+    grants: [sports-facilities:facility:read, sports-facilities:usage:read, sports-facilities:usage:record]
+  - name: athlete
+    description: "Profile role: see which facilities exist and are open. Same grants as sports-facilities-viewer."
+    grants: [sports-facilities:facility:read]
+  - name: org-admin
+    description: The Organisation Admin profile role (the PRD's institution administrator). Same grants as sports-facilities-admin.
+    grants: [sports-facilities:facility:read, sports-facilities:facility:write, sports-facilities:facility:status, sports-facilities:usage:read, sports-facilities:usage:record]
