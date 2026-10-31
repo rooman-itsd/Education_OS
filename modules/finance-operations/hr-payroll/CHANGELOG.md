@@ -8,18 +8,19 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   monthly payroll runs with separate preparer and approver, payslips, appraisals, self-service and the
   joinings-and-exits report behind the HR Staff widgets; events; permissions and roles.
 - PRD (`docs/prd.md`).
-- Decided by the owner; see #336:
-  - bank account numbers and PANs are not stored in full: the last four digits of the account with its IFSC, and the
-    last four characters of the PAN; full values are validated and dropped, never logged, audited, published or
-    returned, and a 422 never repeats them. The PRD no longer says "stored encrypted";
-  - business dates are Indian (Asia/Kolkata, fixed UTC+05:30); timestamps are UTC;
-  - money is exact `Decimal`, `Numeric(14, 2)`;
-  - preparer ≠ approver for payroll; nobody decides their own leave request;
-  - salary data never appears in events and is visible only to the employee and holders of `hr-payroll:payroll:read`;
+- Decided by the owner; see #336: bank account numbers and PANs are not stored in full: the last four digits of the
+  account with its IFSC, and the last four characters of the PAN; full values are validated and dropped, never logged,
+  audited, published or returned, and a 422 never repeats them. The PRD no longer says "stored encrypted".
+- Rules the backend keeps:
+  - from the PRD: money is exact `Decimal`, `Numeric(14, 2)`; preparer ≠ approver for payroll; nobody decides their
+    own leave request; salary data never appears in events and is visible only to the employee and holders of
+    `hr-payroll:payroll:read`;
+  - business dates are Indian (Asia/Kolkata, fixed UTC+05:30) and timestamps UTC, as procurement (#335);
   - `audit_entry` rows in the same transaction until the audit SDK exists; document ids null until the documents SDK
     exists; the exit is published by the platform scheduler job `hr-payroll.publish-due-exits` on the last working day,
     or at once when recorded on or after it;
-  - the PRD's open questions take the conservative option, listed in the README under "Assumptions to revisit".
+  - the PRD's open questions take the conservative option, to be confirmed by the owner, listed in the README under
+    "Assumptions to revisit".
 - Contract 0.2.0 (additive, plus documented errors):
   - every returned row carries `organisation_id`, as the shared cross-tenant leak test needs;
   - employees: `user_id` (HR links the identity user) and `department_name` on input; `pan` and `bank_account` semantics
