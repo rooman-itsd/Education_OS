@@ -172,10 +172,18 @@ class SelectionProcessService:
     # Processes
     # ------------------------------------------------------------------
 
-    def _serialize_process(self, p: ProcessModel) -> dict:
+    def _serialize_process(self, p: ProcessModel, actor: Actor | None = None) -> dict:
         stages = repo.list_stages_for_process(self.db, p.organisation_id, p.id)
-        panels = repo.list_panels_for_process(self.db, p.organisation_id, p.id)
         candidate_count = repo.count_candidates_for_process(self.db, p.organisation_id, p.id)
+
+        can_see_panels = (
+            actor is None
+            or actor.can(PROCESS_MANAGE)
+            or actor.can(PANEL_MANAGE)
+            or self._is_panelist_on_process(actor, p.id)
+        )
+
+        panels = repo.list_panels_for_process(self.db, p.organisation_id, p.id) if can_see_panels else []
 
         return {
             "id": p.id,
@@ -220,6 +228,17 @@ class SelectionProcessService:
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
+        is_manager = actor.can(PROCESS_MANAGE) or actor.can(PANEL_MANAGE)
+        panelist_process_ids = self._get_panelist_process_ids(actor) if not is_manager else set()
+
+        if not is_manager and not panelist_process_ids:
+            if statuses:
+                statuses = [s for s in statuses if s in (ProcessStatus.OPEN.value, ProcessStatus.CLOSED.value)]
+                if not statuses:
+                    return {"items": [], "total": 0, "page": page, "page_size": page_size}
+            else:
+                statuses = [ProcessStatus.OPEN.value, ProcessStatus.CLOSED.value]
+
         limit = max(1, min(page_size, 200))
         offset = (max(1, page) - 1) * limit
         items, total = repo.list_processes(
@@ -231,8 +250,15 @@ class SelectionProcessService:
             limit=limit,
             offset=offset,
         )
+
+        if not is_manager and panelist_process_ids:
+            filtered = [p for p in items if p.status != ProcessStatus.DRAFT.value or p.id in panelist_process_ids]
+            diff = len(items) - len(filtered)
+            total = max(0, total - diff)
+            items = filtered
+
         return {
-            "items": [self._serialize_process(p) for p in items],
+            "items": [self._serialize_process(p, actor=actor) for p in items],
             "total": total,
             "page": page,
             "page_size": limit,
@@ -277,7 +303,14 @@ class SelectionProcessService:
         p = repo.get_process(self.db, actor.organisation_id, process_id)
         if not p:
             raise NotFoundError("Process not found")
-        return self._serialize_process(p)
+
+        can_see_draft = (
+            actor.can(PROCESS_MANAGE) or actor.can(PANEL_MANAGE) or self._is_panelist_on_process(actor, p.id)
+        )
+        if p.status == ProcessStatus.DRAFT.value and not can_see_draft:
+            raise NotFoundError("Process not found")
+
+        return self._serialize_process(p, actor=actor)
 
     def update_process(self, actor: Actor, process_id: str, data: dict) -> dict:
         p = repo.get_process(self.db, actor.organisation_id, process_id)
@@ -393,6 +426,14 @@ class SelectionProcessService:
         p = repo.get_process(self.db, actor.organisation_id, process_id)
         if not p:
             raise NotFoundError("Process not found")
+
+        can_see = (
+            actor.can(PROCESS_MANAGE) or actor.can(PANEL_MANAGE) or self._is_panelist_on_process(actor, process_id)
+        )
+        if not can_see:
+            if p.status == ProcessStatus.DRAFT.value:
+                raise NotFoundError("Process not found")
+            return []
 
         panels = repo.list_panels_for_process(self.db, actor.organisation_id, process_id)
         return [
