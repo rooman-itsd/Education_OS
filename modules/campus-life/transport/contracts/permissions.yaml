@@ -42,14 +42,7 @@ roles:
       - transport:route:read
       - transport:tracking:record
   - name: transport-rider
-    description: Riders who do not hold the student role, for example staff. Students get the same grants through the student role below.
-    grants:
-      - transport:self:read
-      - transport:self:request
-  # Profile role (platform/identity/config/profiles). Granted directly, as hostel and fees-accounts do, so a student
-  # needs no transport-specific role. Self-service only: every endpoint behind these keys is limited to the caller.
-  - name: student
-    description: Every student. Own passes and notices, routes and stops, live position on routes with an issued pass; request and cancel own pass.
+    description: Students and staff who use transport. Default for the student role.
     grants:
       - transport:self:read
       - transport:self:request
