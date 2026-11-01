@@ -2,27 +2,38 @@
 # Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
 # Note text is never put in events; confidential files publish no subject.
+# Dates are Indian business dates (Asia/Kolkata), ISO yyyy-mm-dd.
 module: e-office
 version: 1
 events:
   - name: e-office.file.created
-    description: A new file was opened, with its first holder being the creator.
+    description: A new file was opened, with its first holder being the creator. department_id may be null.
     payload: { organisation_id: uuid, file_id: uuid, number: string, category_id: uuid, department_id: uuid, created_by: uuid, confidential: boolean }
   - name: e-office.file.forwarded
-    description: notification tells the new holder. subject is empty for confidential files.
+    description: >-
+      notification tells the new holder. subject is empty for confidential files; action_required is empty when none
+      was given; due_on is null when none was set (the default days for the priority apply).
     payload: { organisation_id: uuid, file_id: uuid, number: string, subject: string, from_user_id: uuid, to_user_id: uuid, action_required: string, priority: string, due_on: date }
   - name: e-office.file.decided
-    description: A competent authority approved, rejected or returned the proposal in a file.
+    description: A competent authority approved, rejected or returned the proposal in a file. The remark is not included.
     payload: { organisation_id: uuid, file_id: uuid, number: string, decision: string, decided_by: uuid }
   - name: e-office.file.overdue
-    description: Sent once when a file passes its due date with the same holder. notification reminds the holder.
+    description: >-
+      Sent once per holding when a file passes its due date with the same holder: the due date set when it was sent,
+      or the date received plus the default days for its priority (that computed date is due_on). notification
+      reminds the holder. Raised by the e-office.flag-overdue scheduler job.
     payload: { organisation_id: uuid, file_id: uuid, number: string, holder_id: uuid, due_on: date }
   - name: e-office.file.closed
-    description: A file was closed after its decision was carried out; no further movement is possible.
+    description: A file was closed after its decision was carried out; no further movement is possible until it is reopened.
     payload: { organisation_id: uuid, file_id: uuid, number: string, closed_by: uuid }
   - name: e-office.receipt.registered
     description: notification tells the person it was sent to.
     payload: { organisation_id: uuid, receipt_id: uuid, number: string, send_to_user_id: uuid, received_on: date }
   - name: e-office.dispatch.sent
-    description: An outgoing letter was dispatched by the given mode; the file, if any, records the dispatch number.
+    description: An outgoing letter was dispatched by the given mode; the file's note sheet records the dispatch number.
     payload: { organisation_id: uuid, dispatch_id: uuid, number: string, file_id: uuid, mode: string, sent_on: date }
+  - name: e-office.job.finished
+    description: >-
+      The outcome of a scheduler run of e-office.flag-overdue, consumed by platform/scheduler to close the run
+      (scheduler's `<module>.job.finished`). No organisation_id: the job is a platform job over every organisation.
+    payload: { run_id: uuid, outcome: string, detail: string }
