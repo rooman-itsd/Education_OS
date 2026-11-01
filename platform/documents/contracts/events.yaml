@@ -1,9 +1,10 @@
 # Domain events published by documents.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
+# Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
 module: documents
 version: 1
-events: []
-#  - name: documents.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: documents.document.uploaded
+    description: A document was successfully uploaded and verified in storage.
+  - name: documents.document.deleted
+    description: A document was deleted from storage and metadata catalog.

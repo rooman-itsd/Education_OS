@@ -994,6 +994,73 @@ paths:
                       $ref: '#/components/schemas/SquadSummaryRow'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /reports/clearances:
+    get:
+      summary: Fitness clearances of active athletes
+      description: 'Every active athlete with their clearance, most urgent first: not cleared (none recorded, or lapsed),
+        restricted, cleared but lapsing within `lapsing_within_days`, then cleared. `counts` covers every row, not only
+        the page. Athletes see only their own row. Permission: `athlete-performance:clearance:read`.'
+      operationId: getClearanceReport
+      x-permission: athlete-performance:clearance:read
+      parameters:
+      - name: lapsing_within_days
+        in: query
+        description: A cleared or restricted athlete whose valid_until falls within this many days counts as lapsing soon.
+        schema:
+          type: integer
+          default: 14
+          minimum: 0
+          maximum: 90
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+      responses:
+        '200':
+          description: Clearance rows and counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - total
+                - counts
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClearanceReportRow'
+                  total:
+                    type: integer
+                  counts:
+                    type: object
+                    required:
+                    - cleared
+                    - restricted
+                    - not_cleared
+                    - lapsing_soon
+                    properties:
+                      cleared:
+                        type: integer
+                      restricted:
+                        type: integer
+                      not_cleared:
+                        type: integer
+                      lapsing_soon:
+                        type: integer
+                        description: Cleared or restricted athletes lapsing within the window; also counted in their status.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
@@ -1665,6 +1732,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+    ClearanceReportRow:
+      allOf:
+      - $ref: '#/components/schemas/FitnessClearance'
+      - type: object
+        required:
+        - full_name
+        - lapsing_soon
+        properties:
+          full_name:
+            type: string
+          lapsing_soon:
+            type: boolean
     SetClearanceRequest:
       type: object
       required:
