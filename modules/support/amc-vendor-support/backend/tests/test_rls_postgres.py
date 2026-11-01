@@ -154,6 +154,33 @@ def test_each_organisation_sees_only_its_own_rows(pg, table):
         assert c.execute(text(f"SELECT count(*) FROM {table}")).scalar() == 0, table
 
 
+def test_two_first_numbers_at_the_same_time_do_not_collide(pg):
+    """The first number of an organisation, taken by two transactions at once: the second waits on the first's insert
+    of the sequence row and then takes the next number, instead of failing on the primary key."""
+    import threading
+
+    from eos_amc_vendor_support.infrastructure.repository import next_number
+    from sqlalchemy.orm import Session
+
+    engine, _ = pg
+    org = str(uuid.uuid4())
+    first, second = Session(engine), Session(engine)
+    numbers: dict[str, int] = {}
+    try:
+        numbers["first"] = next_number(first, org, "engagement")  # row inserted, not yet committed
+        waiting = threading.Thread(target=lambda: numbers.update(second=next_number(second, org, "engagement")))
+        waiting.start()
+        waiting.join(timeout=1)
+        assert waiting.is_alive(), "the second transaction should wait for the first"
+        first.commit()
+        waiting.join(timeout=10)
+        second.commit()
+    finally:
+        first.close()
+        second.close()
+    assert numbers == {"first": 1, "second": 2}
+
+
 @pytest.mark.parametrize("table", sorted(INSERTS))
 def test_writing_another_organisations_row_is_refused(pg, table):
     from sqlalchemy import text

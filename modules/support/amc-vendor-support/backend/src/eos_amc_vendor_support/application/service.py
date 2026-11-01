@@ -422,7 +422,8 @@ def renew_contract(db: Session, actor: Actor, contract_id: str, body: dict) -> d
     require(actor, CONTRACT_MANAGE)
     original = _contract(db, contract_id)
     _domain(rules.check_renewable, original.status, original.renewed_to_id)
-    start = body.get("start_date") or original.end_date + timedelta(days=1)
+    # A contract ending on date.max has no next day; check_period then refuses the renewal (422) instead of overflowing.
+    start = body.get("start_date") or min(original.end_date, date.max - timedelta(days=1)) + timedelta(days=1)
     _domain(rules.check_period, start, body["end_date"])
     successor = Contract(
         organisation_id=actor.organisation_id,

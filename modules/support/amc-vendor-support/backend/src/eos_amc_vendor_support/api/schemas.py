@@ -14,6 +14,10 @@ CoverageType = Literal["comprehensive", "non_comprehensive"]
 EngagementKind = Literal["breakdown_call", "preventive_visit"]
 # A plain shape check for VendorContact.email (format: email), without an extra dependency.
 Email = Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+# Upper bounds the contract leaves open, set to what the columns hold, so a value too big is a 422, never a database
+# error or an overflow when the response and resolution due times are worked out.
+MAX_HOURS = 8760  # a year
+MAX_VISITS_PER_YEAR = 366
 
 
 class Strict(BaseModel):
@@ -35,16 +39,16 @@ def as_dict(body: BaseModel, *, partial: bool) -> dict:
 
 
 class Money(Strict):
-    amount: str = Field(pattern=r"^[0-9]+(\.[0-9]{1,2})?$")
+    amount: str = Field(pattern=r"^[0-9]{1,12}(\.[0-9]{1,2})?$")  # Numeric(14, 2)
     # The contract lists currency as required and also says it defaults to AMC_VENDOR_SUPPORT_DEFAULT_CURRENCY; a
     # missing currency gets that default.
     currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
 
 
 class Reference(Strict):
-    module: str = Field(min_length=1)
-    entity: str = Field(min_length=1)
-    id: str = Field(min_length=1)
+    module: str = Field(min_length=1, max_length=60)
+    entity: str = Field(min_length=1, max_length=60)
+    id: str = Field(min_length=1, max_length=100)
 
 
 class VendorContact(Strict):
@@ -62,9 +66,9 @@ class ContractInput(Strict):
     end_date: date
     value: Money | None = None
     purchase_order_reference: Reference | None = None
-    response_hours: int | None = Field(default=None, ge=1)
-    resolution_hours: int | None = Field(default=None, ge=1)
-    preventive_visits_per_year: int | None = Field(default=None, ge=0)
+    response_hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
+    resolution_hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
+    preventive_visits_per_year: int | None = Field(default=None, ge=0, le=MAX_VISITS_PER_YEAR)
     vendor_contacts: list[VendorContact] | None = None
     owner_id: Uuid | None = None
     renewal_notice_days: int = Field(default=60, ge=0, le=366)
@@ -79,9 +83,9 @@ class ContractUpdateInput(Strict):
     end_date: date | None = None
     value: Money | None = None
     purchase_order_reference: Reference | None = None
-    response_hours: int | None = Field(default=None, ge=1)
-    resolution_hours: int | None = Field(default=None, ge=1)
-    preventive_visits_per_year: int | None = Field(default=None, ge=0)
+    response_hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
+    resolution_hours: int | None = Field(default=None, ge=1, le=MAX_HOURS)
+    preventive_visits_per_year: int | None = Field(default=None, ge=0, le=MAX_VISITS_PER_YEAR)
     vendor_contacts: list[VendorContact] | None = None
     owner_id: Uuid | None = None
     renewal_notice_days: int | None = Field(default=None, ge=0, le=366)
@@ -110,7 +114,7 @@ class EngagementInput(Strict):
     description: str = Field(min_length=3)
     covered_item_id: Uuid | None = None
     references: list[Reference] | None = None
-    vendor_call_reference: str | None = None
+    vendor_call_reference: str | None = Field(default=None, max_length=100)
     reported_at: datetime | None = None
 
 
@@ -118,7 +122,7 @@ class EngagementUpdateInput(Strict):
     description: str | None = Field(default=None, min_length=3)
     covered_item_id: Uuid | None = None
     references: list[Reference] | None = None
-    vendor_call_reference: str | None = None
+    vendor_call_reference: str | None = Field(default=None, max_length=100)
     reported_at: datetime | None = None
 
 

@@ -131,3 +131,18 @@ def test_list_filters_newest_first(desk):
     assert newest == [visit["id"]]
     assert desk.get("/engagements?status=lost", desk.viewer).status_code == 422
     assert desk.get("/engagements?kind=repair", desk.viewer).status_code == 422
+    # kind is one EngagementKind in the contract, not a list: two kinds are refused, never a partial result.
+    both = desk.get("/engagements?kind=breakdown_call,preventive_visit", desk.viewer)
+    assert (both.status_code, both.json()["detail"]["code"]) == (422, "invalid_kind")
+
+
+def test_vendor_call_reference_longer_than_its_column_is_a_422(desk):
+    contract = desk.active()
+    body = {"contract_id": contract["id"], "kind": "breakdown_call", "description": "Lift stuck"}
+    too_long = desk.post("/engagements", {**body, "vendor_call_reference": "V" * 101}, desk.coordinator)
+    assert too_long.status_code == 422
+    eng = desk.engagement(contract["id"], vendor_call_reference="V" * 100)
+    assert (
+        desk.patch(f"/engagements/{eng['id']}", {"vendor_call_reference": "V" * 101}, desk.coordinator).status_code
+        == 422
+    )

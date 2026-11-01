@@ -7,6 +7,8 @@ import base64
 
 from eos_core.db import scoped
 from sqlalchemy import Select, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from .models import Contract, CoveredItem, Engagement, NumberSequence
@@ -49,16 +51,20 @@ def page_of(rows: list, cursor: str | None, limit: int) -> tuple[list, str | Non
 def next_number(db: Session, organisation_id: str, kind: str) -> int:
     """The next number of the organisation's sequence for `kind`. The row is locked (FOR UPDATE on Postgres) so two
     contracts or engagements created at the same time never get the same number; the unique (organisation_id, number)
-    indexes back this."""
+    indexes back this. FOR UPDATE locks nothing while the row does not exist, so it is first created with ON CONFLICT
+    DO NOTHING: of two first numbers at the same time, the second insert waits for the first and then does nothing."""
+    insert = postgresql_insert if db.get_bind().dialect.name == "postgresql" else sqlite_insert
+    db.execute(
+        insert(NumberSequence)
+        .values(organisation_id=organisation_id, kind=kind, last_number=0)
+        .on_conflict_do_nothing(index_elements=["organisation_id", "kind"])
+    )
     q = (
         select(NumberSequence)
         .where(NumberSequence.organisation_id == organisation_id, NumberSequence.kind == kind)
         .with_for_update()
     )
-    row = db.scalars(q).first()
-    if row is None:
-        row = NumberSequence(organisation_id=organisation_id, kind=kind, last_number=0)
-        db.add(row)
+    row = db.scalars(q).one()
     row.last_number += 1
     db.flush()
     return row.last_number

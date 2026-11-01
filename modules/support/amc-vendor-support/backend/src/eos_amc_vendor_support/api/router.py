@@ -47,6 +47,15 @@ def _listed(value: str | None, allowed: tuple[str, ...], field: str) -> list[str
     return values
 
 
+def _single(value: str | None, allowed: tuple[str, ...], field: str) -> str | None:
+    """`kind` is one value, not a list: kind=breakdown_call,preventive_visit is a 422, never a partial result."""
+    if not value:
+        return None
+    if value not in allowed:
+        raise HTTPException(422, {"code": f"invalid_{field}", "message": f"unknown {field} {value}", "field": field})
+    return value
+
+
 # ---------------------------------------------------------------- contracts
 
 
@@ -139,14 +148,13 @@ def list_engagements(
     a: Actor = Depends(READ),
     db: Session = Depends(get_db),
 ):
-    kinds = _listed(kind, ENGAGEMENT_KINDS, "kind")
     return _run(
         svc.list_engagements,
         db,
         a,
         contract_id=contract_id,
         statuses=_listed(status, ENGAGEMENT_STATUSES, "status"),
-        kind=kinds[0] if kinds else None,
+        kind=_single(kind, ENGAGEMENT_KINDS, "kind"),
         within_terms=within_terms,
         cursor=cursor,
         limit=limit,

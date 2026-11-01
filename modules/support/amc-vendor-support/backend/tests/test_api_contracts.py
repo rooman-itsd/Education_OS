@@ -25,6 +25,49 @@ def test_number_prefix_comes_from_settings(desk, monkeypatch):
     assert desk.draft()["number"].startswith("AMCX-")
 
 
+def test_numbering_continues_a_sequence_row_that_already_exists(desk):
+    """The ON CONFLICT path of next_number: the row was created first, as by a concurrent first contract."""
+    from eos_amc_vendor_support.infrastructure.models import NumberSequence
+    from eos_core.db import SessionLocal
+
+    with SessionLocal() as db:
+        db.add(NumberSequence(organisation_id=desk.org.id, kind="contract", last_number=5))
+        db.commit()
+    assert desk.draft()["number"] == "AMC-000006"
+
+
+TOO_BIG = {
+    "response_hours": 8761,
+    "resolution_hours": 10**11,
+    "preventive_visits_per_year": 367,
+    "value": {"amount": "1" * 13, "currency": "INR"},
+    "purchase_order_reference": {"module": "procurement", "entity": "purchase-order", "id": "p" * 101},
+}
+
+
+def test_values_too_big_for_their_columns_are_a_422_not_a_500(desk):
+    """Bounds the contract leaves open are those of the columns: Integer, Numeric(14, 2), String(60/60/100)."""
+    draft = desk.draft()
+    for field, value in TOO_BIG.items():
+        assert desk.post("/contracts", contract_body(**{field: value})).status_code == 422, field
+        assert desk.patch(f"/contracts/{draft['id']}", {field: value}).status_code == 422, field
+    for field in ("module", "entity"):
+        too_long = {**ASSET, field: "m" * 61}
+        assert (
+            desk.post(
+                f"/contracts/{draft['id']}/covered-items", {"description": "Lift", "reference": too_long}
+            ).status_code
+            == 422
+        )
+    largest = desk.draft(
+        response_hours=8760,
+        resolution_hours=8760,
+        preventive_visits_per_year=366,
+        value={"amount": "999999999999.99", "currency": "INR"},
+    )
+    assert (largest["response_hours"], largest["value"]["amount"]) == (8760, "999999999999.99")
+
+
 def test_record_refuses_bad_values(desk):
     bad = desk.post("/contracts", contract_body(end_date="2026-04-01"))
     assert (bad.status_code, bad.json()["detail"]["code"]) == (422, "end_before_start")
@@ -136,6 +179,13 @@ def test_a_renewal_cannot_be_activated_once_the_original_is_terminated(desk):
     desk.ok(desk.post(f"/contracts/{original['id']}/terminate", {"reason": "Ended early", "effective_date": days(1)}))
     refused = desk.post(f"/contracts/{successor['id']}/activate", {})
     assert (refused.status_code, refused.json()["detail"]["code"]) == (409, "predecessor_not_active")
+
+
+def test_a_contract_ending_on_the_last_possible_day_cannot_be_renewed(desk):
+    """The default start (end_date + 1 day) does not exist, so the renewal is a 422, not an overflow."""
+    original = desk.active(start_date="9999-01-01", end_date="9999-12-31")
+    refused = desk.post(f"/contracts/{original['id']}/renew", {"end_date": "9999-12-31"})
+    assert (refused.status_code, refused.json()["detail"]["code"]) == (422, "end_before_start")
 
 
 def test_renew_with_a_new_value_and_start(desk):
