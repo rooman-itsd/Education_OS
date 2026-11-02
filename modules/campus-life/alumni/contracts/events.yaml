@@ -1,9 +1,29 @@
 # Domain events published by alumni.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
+# Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Payloads carry ids only, no names or contact details (an alumnus has no login and gave the institution, not other
+# modules, their details). No module consumes these in v1.0.
 module: alumni
 version: 1
-events: []
-#  - name: alumni.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: alumni.alumnus.added
+    description: Staff added an alumnus to the directory; the record is verified by its creator.
+    payload: { organisation_id: uuid, alumnus_id: uuid, graduation_year: integer, is_mentor: boolean, verified_by: uuid }
+  - name: alumni.alumnus.archived
+    description: An alumnus was archived and is no longer listed or assignable.
+    payload: { organisation_id: uuid, alumnus_id: uuid }
+  - name: alumni.mentoring-assignment.started
+    description: Staff assigned a mentor to a student. notification may tell the student.
+    payload: { organisation_id: uuid, assignment_id: uuid, mentor_id: uuid, student_id: uuid, started_on: date }
+  - name: alumni.mentoring-assignment.ended
+    description: An assignment ended; its scheduled sessions were cancelled.
+    payload: { organisation_id: uuid, assignment_id: uuid, mentor_id: uuid, student_id: uuid, ended_on: date }
+  - name: alumni.mentoring-session.scheduled
+    description: A mentoring session was scheduled. notification may remind the student.
+    payload: { organisation_id: uuid, session_id: uuid, assignment_id: uuid, student_id: uuid, scheduled_at: datetime, mode: string }
+  - name: alumni.mentoring-session.completed
+    description: A scheduled session took place.
+    payload: { organisation_id: uuid, session_id: uuid, assignment_id: uuid, student_id: uuid }
+  - name: alumni.mentoring-session.cancelled
+    description: A scheduled session was cancelled, directly or because its assignment ended.
+    payload: { organisation_id: uuid, session_id: uuid, assignment_id: uuid, student_id: uuid }

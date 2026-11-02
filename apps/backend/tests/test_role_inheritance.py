@@ -71,9 +71,7 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
     # alumni: empty catalogue (alumni module, batch #337)
     "alumni": (
         EMPTY,
-        [
-            "management-student alumni.mentoring",
-        ],
+        [],
     ),
     # placement-career: empty catalogue (placement-career module, batch #337)
     "placement-career": (
