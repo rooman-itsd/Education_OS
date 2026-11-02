@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from eos_core import notify
-
 
 def register_and_login(
     client,
@@ -14,7 +12,11 @@ def register_and_login(
     password: str = "Passw0rd!x",
     super_admin: tuple[str, str] | None = None,
 ) -> dict:
-    """Register an organisation, verify it with the dev-mode token, log the admin in. Returns {org, token}."""
+    """Register an organisation, verify it with the dev-mode token, log the admin in. Returns {org, token}.
+
+    The verification token comes from the register response, which carries it only with EOS_DEV_MODE=true. Since
+    #361 the verification mail goes through platform/notification, which this package may not import (packages
+    never depend on platform services), so there is no other place to read it from."""
     email = email or f"admin@{slug}.example.com"
     r = client.post(
         "/api/v1/tenancy/register",
@@ -28,7 +30,12 @@ def register_and_login(
     )
     assert r.status_code == 201, r.text
     org = r.json()
-    token = org.get("verification_token") or next(m["token"] for m in reversed(notify.sent) if m.get("to") == email)
+    token = org.get("verification_token")
+    if not token:
+        raise AssertionError(
+            "register_and_login needs EOS_DEV_MODE=true: the register response returns the verification token only "
+            "in dev mode, and since #361 the mail goes through platform/notification, which eos_testing cannot read"
+        )
     v = client.post("/api/v1/tenancy/register/verify", json={"token": token})
     assert v.status_code == 200, v.text
     if v.json()["status"] == "pending_approval":
