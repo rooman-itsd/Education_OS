@@ -14,7 +14,7 @@ accepts, admissions' job is done — `student-information` (via an authorised st
 
 | Actor | Relationship |
 |---|---|
-| Applicant (public, no account) | Submits an application and tracks it by reference number and email. Never has an organisation login — see §6. |
+| Applicant (public or signed-in) | Submits an application and tracks it by reference number and email. May optionally link to an identity account to see status on the Applicant dashboard. |
 | Admissions staff | Reviews documents, decides eligibility, generates and publishes merit lists, extends offers. Holds `admissions:*` permissions. |
 | Department admin | Approves/reviews decisions for their department's programmes where the organisation's role grants require it. |
 | Management (VC, Registrar) | Sees the admissions funnel (counts only) on the Management dashboard. No access to individual applications. |
@@ -25,6 +25,7 @@ accepts, admissions' job is done — `student-information` (via an authorised st
 
 **In scope**
 - Public, anonymous application submission and status tracking (reference number + email).
+- Optional linking of an application to a signed-in applicant's identity account (`/me/applications`).
 - Document checklist and upload references (via `platform/documents`) per application.
 - Staff review: document verification, eligibility decision.
 - Merit list generation and publishing for a programme and academic cycle.
@@ -64,6 +65,8 @@ accepts, admissions' job is done — `student-information` (via an authorised st
 10. Staff: see the queue of documents awaiting verification across the organisation.
 11. Management: see funnel counts (applied, eligible, offered, accepted) per programme and
     academic year.
+12. Applicant: link an application to an identity account (by reference number + email) and
+    view own application and documents under `/me/applications`.
 
 ## 5. Important workflows
 
@@ -120,11 +123,12 @@ by an authorised higher-level role.
 
 ## 6. Business rules
 
-- **No applicant account is created, ever, by this module, before or after a decision.**
-  Submission, tracking, document upload and offer decisions are all anonymous and verified by
-  `reference_number` + `email`. This was an open question resolved for Issue #62: the
-  alternative (an authenticated "applicant" identity session) was considered and explicitly
-  declined in favour of this simpler, dependency-free model.
+- **No applicant account is created by this module; applicants may optionally link to an identity account.**
+  Submission, tracking, document upload and offer decisions may all be performed anonymously and verified by
+  `reference_number` + `email`. A signed-in user with the `applicant` role may also link an application to
+  their account via `POST /me/applications` using that same proof, after which they can track it on their
+  Applicant dashboard. Linking attaches `applicant_user_id` so `admissions.application.accepted` carries
+  `user_id` for `fees-accounts`.
 - **Organisation onboarding never touches this module.** An applicant and an Organisation Admin
   are different people solving different problems; nothing here assumes or reads
   `platform/tenancy`'s registration state.
@@ -176,8 +180,9 @@ by an authorised higher-level role.
 
 See `contracts/permissions.yaml`. Summary: `admissions:application:read`,
 `admissions:application:manage`, `admissions:document:verify`, `admissions:merit-list:manage`,
-`admissions:offer:manage`, `admissions:report:read`. The `management` role holds only
+`admissions:offer:manage`, `admissions:report:read`, `admissions:self:read`. The `management` role holds only
 `admissions:report:read`, so the VC and Registrar see counts, never applicant personal data.
+The `applicant` role holds `admissions:self:read` to view and link own applications under `/me/applications`.
 Public endpoints (submit, track, document upload, offer decision) require no permission key —
 they are unauthenticated by design (see §6).
 

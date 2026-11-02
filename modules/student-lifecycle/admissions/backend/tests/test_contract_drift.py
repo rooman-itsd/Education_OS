@@ -40,7 +40,7 @@ def contract_permission(op: dict) -> str | None:
 
 def test_router_and_contract_have_the_same_routes():
     assert set(ROUTES) == set(CONTRACT_OPS)
-    assert len(ROUTES) == 16
+    assert len(ROUTES) == 18
 
 
 def test_public_routes_are_exactly_the_contracts_anonymous_ones():
