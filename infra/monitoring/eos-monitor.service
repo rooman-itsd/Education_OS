@@ -7,4 +7,5 @@ After=docker.service network-online.target
 Type=oneshot
 ExecStart=/usr/local/bin/eos-monitor
 SyslogIdentifier=eos-monitor
-TimeoutStartSec=50s
+# Worst case: two health tries (5 s each, 10 s apart), two docker calls (20 s each) and webhook posts (10 s each).
+TimeoutStartSec=90s

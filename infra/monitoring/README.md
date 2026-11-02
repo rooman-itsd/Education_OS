@@ -39,6 +39,9 @@ on the public URL).
   **Put it in double quotes**, `EOS_MONITOR_WEBHOOK_URL="https://...?key=K&token=T"`: the file is read as
   shell, and without quotes the `&` cuts the line (the `config` check then fails).
 - Alerts carry counts, service names and paths only, never log lines, so nothing personal leaves the host.
+- Every alert is one line of plain text: a tool's error output (Docker's, curl's) has its newlines, tabs and other
+  control characters removed, so the journal keeps it whole and the webhook's JSON stays valid. A numeric setting
+  that is not a whole number falls back to its default, with a line in the journal saying so.
 
 ## Install (once per API host, as root)
 

@@ -42,12 +42,30 @@ log() {
   # Under systemd the line above already reaches the journal; send it once more only for a manual run.
   if [ -z "${INVOCATION_ID:-}" ] && command -v logger >/dev/null; then logger -t eos-monitor "$*"; fi
 }
+# Settings used in arithmetic must be whole numbers: a typo falls back to the default, with a line in the journal,
+# instead of a shell error that would stop every check after it.
+for setting in REMIND_MIN:60 HEALTH_RETRY_S:10 BACKUP_MAX_AGE_H:26 MAX_5XX:5 SLOW_MS:2000 MAX_SLOW:10 \
+  DISK_MAX_PCT:85 DOCKER_TIMEOUT_S:20; do
+  name="${setting%%:*}"
+  case "${!name}" in
+    '' | *[!0-9]*)
+      log "EOS_MONITOR_$name=${!name} is not a whole number; using ${setting#*:}"
+      printf -v "$name" '%s' "${setting#*:}"
+      ;;
+  esac
+done
+
+# One line of plain text: a tool's error output can carry newlines, tabs and other control characters, which the
+# journal splits and which make the webhook's JSON invalid (the endpoint refuses it, and the alert never arrives).
+oneline() { printf '%s' "$*" | tr '\n\t\r' '   ' | tr -d '\000-\037\177'; }
+
 # Bounded, so a hung Docker daemon fails the check instead of the whole run being killed by systemd.
 compose() { timeout "$DOCKER_TIMEOUT_S" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
 
 # Returns non-zero when the webhook did not take the alert, so the caller keeps its state and retries next run.
 alert() {
-  local text="[$LABEL] $*"
+  local text
+  text="[$LABEL] $(oneline "$*")"
   log "ALERT: $text"
   [ -n "$WEBHOOK" ] || return 0
   local escaped
@@ -99,7 +117,7 @@ report config "$problem"
 # The API answers. Asked twice before failing: an auto-deploy restarts it for a few seconds.
 health() {
   local body
-  body="$(curl -fsS -m 5 "$HEALTH_URL" 2>&1)" || { echo "$HEALTH_URL does not answer: ${body:0:120}"; return; }
+  body="$(curl -fsS -m 5 "$HEALTH_URL" 2>&1)" || { echo "$HEALTH_URL does not answer: $(oneline "${body:0:120}")"; return; }
   printf '%s' "$body" | grep -q '"status": *"ok"' || echo "$HEALTH_URL does not say ok"
 }
 problem="$(health)"
@@ -117,7 +135,7 @@ if [ "$rc" = 0 ]; then
 elif [ "$rc" = 124 ]; then
   problem="docker did not answer within ${DOCKER_TIMEOUT_S}s"
 else
-  problem="docker compose ps failed: ${running:0:120}"
+  problem="docker compose ps failed: $(oneline "${running:0:120}")"
 fi
 report containers "$problem"
 

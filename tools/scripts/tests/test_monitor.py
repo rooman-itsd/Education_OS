@@ -25,6 +25,7 @@ pytestmark = pytest.mark.skipif(
 # The fakes read what to answer from files in $FAKE_DIR, so a test can change the host between runs.
 FAKE_DOCKER = """#!/bin/sh
 [ -f "$FAKE_DIR/docker-hangs" ] && exec sleep 30
+[ -f "$FAKE_DIR/docker-error" ] && { printf 'error during connect:\\n\\tCannot connect to the Docker daemon\\r\\n\\033[31mis it running?\\033[0m\\n' >&2; exit 1; }
 case "$*" in
   *"ps --status running --services"*) cat "$FAKE_DIR/running" ;;
   *"logs --no-log-prefix --since"*) cat "$FAKE_DIR/logs" 2>/dev/null || true ;;
@@ -35,7 +36,9 @@ FAKE_CURL = """#!/bin/sh
 case "$*" in
   *"-K -"*)  # the webhook: record the URL (from stdin) and the body; refuse while webhook-down exists
     [ -f "$FAKE_DIR/webhook-down" ] && { cat >/dev/null; echo "curl: (22) 503" >&2; exit 22; }
-    { cat; for a in "$@"; do printf 'ARG %s\\n' "$a"; done; } >>"$FAKE_DIR/posted" ;;
+    { cat; for a in "$@"; do printf 'ARG %s\\n' "$a"; done; } >>"$FAKE_DIR/posted"
+    n=$(ls "$FAKE_DIR" | grep -c '^body-'); prev=""
+    for a in "$@"; do [ "$prev" = "-d" ] && printf '%s' "$a" >"$FAKE_DIR/body-$n"; prev="$a"; done ;;
   *)
     [ -f "$FAKE_DIR/api-down" ] && { echo "curl: (7) Failed to connect" >&2; exit 7; }
     [ -f "$FAKE_DIR/api-blip" ] && { rm "$FAKE_DIR/api-blip"; echo "curl: (7) Failed to connect" >&2; exit 7; }
@@ -242,3 +245,30 @@ def test_a_hung_docker_fails_the_check_instead_of_the_run(box):
     alerts = _alerts(r)
     assert "ALERT: [staging] FAILING containers: docker did not answer within 1s" in alerts
     assert any("FAILING errors: the api logs could not be read" in a for a in alerts)
+
+
+def test_a_multi_line_docker_error_still_reaches_the_webhook_as_valid_json(box):
+    """Docker's error output carries newlines, a tab, a carriage return and a colour code. Raw, they made the JSON
+    body invalid, so the endpoint refused it and the alert was retried every minute without ever arriving."""
+    url = "https://hooks.example.invalid/services/SECRET"
+    (box["fake"] / "docker-error").write_text("")
+    r = _run(box, EOS_MONITOR_WEBHOOK_URL=url)
+    alerts = _alerts(r)
+    containers = [a for a in alerts if "FAILING containers:" in a]
+    assert containers and "error during connect: Cannot connect to the Docker daemon" in containers[0]
+    assert all("\t" not in a and "\x1b" not in a for a in alerts)
+    bodies = [p.read_text() for p in sorted(box["fake"].glob("body-*"))]
+    assert len(bodies) == len(alerts)  # every alert was posted
+    for raw in bodies:
+        assert not any(ord(c) < 32 for c in raw), repr(raw)  # one line, no control characters
+        assert json.loads(raw)["text"].startswith("[staging] ")
+    assert any("FAILING containers:" in json.loads(raw)["text"] for raw in bodies)
+    assert "retrying next run" not in r.stdout
+
+
+def test_a_setting_that_is_not_a_number_falls_back_to_its_default(box):
+    r = _run(box, EOS_MONITOR_MAX_5XX="5x", EOS_MONITOR_REMIND_MIN="1h")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "EOS_MONITOR_MAX_5XX=5x is not a whole number; using 5" in r.stdout
+    assert "EOS_MONITOR_REMIND_MIN=1h is not a whole number; using 60" in r.stdout
+    assert "integer expression expected" not in r.stderr and "syntax error" not in r.stderr
