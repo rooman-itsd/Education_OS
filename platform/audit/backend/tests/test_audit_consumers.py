@@ -4,6 +4,7 @@ scheduler's audit.prune job runs retention."""
 
 from __future__ import annotations
 
+import re
 import tomllib
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -124,8 +125,148 @@ def test_secret_looking_keys_are_dropped_and_named_not_refused():
         )
     )
     (rec,) = records(org)
-    assert rec.after == {"user_id": "u-7", "email": "a@b.example", "nested": {"ok": 1}}
-    assert rec.context["dropped_keys"] == ["password", "reset_token"]
+    assert rec.after == {
+        "user_id": "u-7",
+        "nested": {"ok": 1},
+    }  # the email is dropped too: see the contact-detail tests
+    assert rec.context["dropped_keys"] == ["email", "password", "reset_token"]
+
+
+EMAIL = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
+
+
+def stored_text(e) -> str:
+    """Everything audit stored for one event, in the organisation and at platform level, as one string."""
+    found = [
+        r for r in records(e.organisation_id) + records(platform=True) if (r.context or {}).get("event_id") == e.id
+    ]
+    assert found, "the event recorded nothing"
+    return repr([(r.before, r.after, r.context, r.entity_id, r.actor) for r in found])
+
+
+def test_the_registration_email_never_reaches_an_immutable_record():
+    """Review of #434: tenancy.organisation.registered carries admin_email, and a record cannot be edited, so the
+    address could never be removed when its owner asks for erasure. It is dropped; the record says it was there."""
+    org = str(uuid.uuid4())
+    e = event(
+        "tenancy.organisation.registered",
+        org,
+        {
+            "organisation_id": org,
+            "slug": "harmony",
+            "academy_type": "music-academy",
+            "admin_email": "owner@harmony.example",
+        },
+    )
+    deliver(e)
+    (rec,) = records(org)
+    assert rec.after == {"organisation_id": org, "slug": "harmony", "academy_type": "music-academy"}
+    assert rec.context["dropped_keys"] == ["admin_email"]
+    assert not EMAIL.search(stored_text(e)) and "owner@harmony" not in stored_text(e)
+
+
+def test_the_platform_copy_of_a_super_admin_action_carries_no_email_either():
+    """A super admin action is recorded twice (in the organisation and at platform level); the one cleaned payload
+    feeds both, so neither can keep an address. registered is a self-registration, not a super admin action, so
+    the check uses suspended, whose operator-typed reason may well contain one."""
+    org = str(uuid.uuid4())
+    e = event(
+        "tenancy.organisation.suspended",
+        org,
+        {"organisation_id": org, "admin_email": "a@b.example", "reason": "mail bounced from c@d.example"},
+        actor="sa-1",
+    )
+    deliver(e)
+    (in_org,) = records(org)
+    (platform_rec,) = [r for r in records(platform=True) if (r.context or {}).get("event_id") == e.id]
+    for rec in (in_org, platform_rec):
+        assert rec.after == {"organisation_id": org}
+        assert rec.context["dropped_keys"] == ["admin_email", "reason"]
+    assert not EMAIL.search(stored_text(e))
+
+
+def test_an_email_address_is_dropped_whatever_its_key_is_called():
+    """The key rule catches admin_email; the value rule catches the next event that puts an address under a
+    harmless-looking name, or inside a sentence."""
+    org = str(uuid.uuid4())
+    e = event(
+        "tenancy.organisation.suspended",
+        org,
+        {
+            "organisation_id": org,
+            "reason": "bounced mail to bob@example.com",
+            "note": "ok",
+            "contact": "bob@example.com",
+        },
+    )
+    deliver(e)
+    (rec,) = records(org)
+    assert rec.after == {"organisation_id": org, "note": "ok"}
+    assert rec.context["dropped_keys"] == ["contact", "reason"]
+    assert not EMAIL.search(stored_text(e))
+
+
+def test_an_email_nested_deep_or_inside_a_list_is_dropped_and_the_rest_kept():
+    org = str(uuid.uuid4())
+    e = event(
+        "billing.invoice.issued",
+        org,
+        {
+            "organisation_id": org,
+            "invoice_id": "inv-1",
+            "recipients": ["finance@school.example", "ledger-team"],
+            "billing": {"contact": {"primary": "x@y.example", "phone": "+91 99999 00000"}, "currency": "INR"},
+        },
+    )
+    deliver(e)
+    (rec,) = records(org)
+    assert rec.after == {
+        "organisation_id": org,
+        "invoice_id": "inv-1",
+        "recipients": ["ledger-team"],
+        "billing": {"contact": {}, "currency": "INR"},
+    }
+    assert not EMAIL.search(stored_text(e)) and "99999" not in stored_text(e)
+
+
+def test_ordinary_fields_are_not_over_stripped():
+    """The filter must not eat what an audit trail is for: ids, names of things, statuses, amounts, dates."""
+    org = str(uuid.uuid4())
+    payload = {
+        "organisation_id": org,
+        "request_id": "r-9",
+        "status": "approved",
+        "mode": "cash",
+        "amount": "1500.00",
+        "decided_at": "2026-11-02T09:30:00+00:00",
+        "slug": "harmony",
+    }
+    deliver(event("workflow.request.approved", org, dict(payload)))
+    (rec,) = records(org)
+    assert rec.after == payload
+    assert "dropped_keys" not in rec.context
+
+
+@pytest.mark.parametrize("name", consumers.AUDITED)
+def test_no_audited_event_can_put_an_email_address_into_a_record(name):
+    """Every event audit subscribes to, with an address under a contact key, under an innocent key and in free text:
+    none of the three reaches the stored record. Keeps the next event added to AUDITED honest as well."""
+    org = str(uuid.uuid4())
+    e = event(
+        name,
+        org,
+        {
+            "organisation_id": org,
+            "admin_email": "one@example.com",
+            "label": "two@example.com",
+            "reason": "please write to three@example.com about it",
+            "kept": "visible",
+        },
+    )
+    deliver(e)
+    text = stored_text(e)
+    assert not EMAIL.search(text), name
+    assert "visible" in text, name
 
 
 def test_a_record_audit_cannot_store_raises_so_the_relay_retries(monkeypatch):

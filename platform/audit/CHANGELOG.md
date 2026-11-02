@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contact details never reach an immutable record (review of #434). `tenancy.organisation.registered` carries
+  `admin_email` and the consumer stored the payload verbatim in `after`; a record cannot be edited or deleted, so the
+  address could never be removed on a DPDP erasure request. The consumer now drops a key that names a contact detail
+  (`email`, `phone`, `mobile`, in any spelling) and any string value that contains an email address, under any key
+  and at any depth, including items of a list. The record keeps the key's name in `context.dropped_keys`, never the
+  address. Tested for every one of the audited events, in the organisation's record and in the platform copy.
 - Audit is fed by the outbox (#317 follow-up). Nothing called `record()` outside this module and audit consumed no
   events, so the store and both widgets stayed empty. `application/consumers.py` (entry point
   `eos.event_consumers`) records 32 state-change events from tenancy, identity, billing, workflow, documents and
