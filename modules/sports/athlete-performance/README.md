@@ -54,7 +54,10 @@ skinfolds, waist). The coach's `session-plan` and the athlete's `training-schedu
 
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its
-tests, `packages/testing`. The backend is `eos_athlete_performance.api.router:router`; its Alembic chain is `db/`. This module must not import code from any other module under `modules/`.
+tests, `packages/testing`. The backend is `eos_athlete_performance.api.router:router`; its Alembic chain is `db/`.
+`sports/athlete-performance` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts the router under
+`/api/v1/athlete-performance` behind the entitlement gate, and in `apps/frontend/config/modules.enabled.yaml`, which
+registers its widgets. This module must not import code from any other module under `modules/`.
 
 ## Layout
 | Path | Purpose |
