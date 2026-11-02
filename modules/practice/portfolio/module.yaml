@@ -5,7 +5,7 @@ kind: feature              # feature | platform | integration
 domain: practice
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Learner portfolios: artworks, repertoire, showreels, designs, teaching and research portfolios."
 owners: [praveen-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
