@@ -151,7 +151,9 @@ def test_level_by_key_or_label_and_score_consistency():
 def test_dates_and_people():
     rules.not_in_future(T0, T0, "assessed_at")
     assert _code(rules.not_in_future, T0 + timedelta(seconds=1), T0, "assessed_at") == "in_future"
-    assert _code(rules.not_self_assessment, "u1", "u1") == "self_assessment"
+    assert _code(rules.not_self_assessment, "u1", "u1", "u2") == "self_assessment"
+    assert _code(rules.not_self_assessment, "u1", "u2", "u1") == "self_assessment"  # recording their own
+    assert rules.not_self_assessment("u1", "u2", "u3") is None
 
 
 # ---------------------------------------------------------------- progression

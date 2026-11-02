@@ -258,6 +258,10 @@ def test_record_assessment_refusals(client, org):
     assert _err(post(skill_id=new_id())) == "unknown_skill"
     assert _err(post(rubric_id=new_id())) == "unknown_rubric"
     assert _err(post(evaluator_id=learner)) == "self_assessment"
+    # a learner who also holds an evaluator role cannot record their own assessment under another evaluator's name
+    _, dual = org.user(LEARNER, EVALUATOR, user_id=learner)
+    r = client.post(f"{BASE}/assessments", json=org.body(learner, s, rubric), headers=dual)
+    assert _err(r) == "self_assessment"
     assert _err(post(assessed_at="2026-10-30T09:00:01+00:00")) == "in_future"
     assert post(assessed_at="2026-10-30T09:00:00").status_code == 422  # a time without a timezone is refused
     assert _err(post(level="Master")) == "unknown_level"
@@ -312,6 +316,9 @@ def test_verify_and_void(client, org):
     assert client.post(f"{BASE}/assessments/{a['id']}/verify", headers=org.evaluator).status_code == 403
     _, self_admin = org.user("skill-progress-admin", user_id=org.evaluator_id)
     r = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=self_admin)
+    assert r.status_code == 400 and _err(r) == "own_assessment"
+    _, learner_admin = org.user("skill-progress-admin", user_id=learner)  # nor may the learner verify it
+    r = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=learner_admin)
     assert r.status_code == 400 and _err(r) == "own_assessment"
 
     r = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=org.admin)

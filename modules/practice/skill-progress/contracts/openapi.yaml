@@ -437,7 +437,7 @@ paths:
   /assessments/{assessment_id}/verify:
     post:
       summary: Verify an assessment
-      description: A reviewer confirms a submitted assessment (submitted -> verified). The evaluator who recorded it cannot verify it.
+      description: A reviewer confirms a submitted assessment (submitted -> verified). Its learner, its evaluator and whoever recorded it cannot verify it.
       operationId: verifyAssessment
       x-permission: skill-progress:assessment:approve
       parameters:

@@ -462,7 +462,7 @@ def record_assessment(db: Session, actor: Actor, data: dict) -> dict:
         raise _invalid("rubric_not_for_skill", "the rubric is not for this skill or its framework")
     assessed_at = as_utc(data.get("assessed_at")) or now
     with _rules():
-        rules.not_self_assessment(data["learner_id"], data["evaluator_id"])
+        rules.not_self_assessment(data["learner_id"], data["evaluator_id"], actor.user_id)
         rules.not_in_future(assessed_at, now, "assessed_at")
         rules.check_criterion_scores(rubric.criteria or [], data["criterion_scores"])
         level = rules.resolve_level(skill.level_scale, data["overall_score"], data["level_achieved"])
@@ -550,10 +550,10 @@ def _transition(db: Session, actor: Actor, assessment_id: str, status: str) -> A
 
 
 def verify_assessment(db: Session, actor: Actor, assessment_id: str) -> dict:
-    """A second person confirms the assessment: whoever evaluated or recorded it cannot verify it."""
+    """A second person confirms the assessment: its learner, evaluator and recorder cannot verify it."""
     a = _transition(db, actor, assessment_id, "verified")
-    if actor.user_id in (a.evaluator_id, a.recorded_by):
-        raise _invalid("own_assessment", "an assessment is verified by someone other than its evaluator")
+    if actor.user_id in (a.learner_id, a.evaluator_id, a.recorded_by):
+        raise _invalid("own_assessment", "an assessment is verified by someone other than its learner or evaluator")
     now = clock()
     before = {"status": a.status}
     a.status, a.verified_by, a.verified_at = "verified", actor.user_id, now

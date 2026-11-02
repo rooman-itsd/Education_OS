@@ -24,7 +24,7 @@ organisation's learners (`application/service.py`, `api/deps.py`).
 How it behaves (the contract's open questions in [docs/prd.md](docs/prd.md) section 9, decided here):
 - **Permissions (Q1).** Every operation names its key in `x-permission`. `progress:export` has no operation yet (Q3).
 - **Verifying and voiding (Q2).** `POST /assessments/{id}/verify` (`assessment:approve`) moves a submitted
-  assessment to verified; whoever evaluated or recorded it cannot verify it. `POST /assessments/{id}/void`
+  assessment to verified; its learner, its evaluator and whoever recorded it cannot verify it. `POST /assessments/{id}/void`
   (`assessment:delete`) voids a submitted or verified one. Voided is final; a voided assessment stays on record but
   no longer counts towards progress or the timeline.
 - **Frameworks.** Created active or draft. draft → active or archived; active → archived; archived → active. An
@@ -36,8 +36,8 @@ How it behaves (the contract's open questions in [docs/prd.md](docs/prd.md) sect
 - **Scores (Q8).** Every criterion of the rubric is scored once, with points from 0 to its max_points and a
   `level_key` among the criterion's levels. `overall_score` and `level_achieved` are the evaluator's: the score must
   lie within the skill's scale and reach the level's `min_score`; the level is named by key or label and returned as
-  its label. The evaluator cannot be the learner; `assessed_at` defaults to now, must carry a timezone, is stored in
-  UTC and cannot be in the future.
+  its label. Neither the evaluator nor whoever records it can be the learner; `assessed_at` defaults to now, must
+  carry a timezone, is stored in UTC and cannot be in the future.
 - **Milestones (Q5).** Per skill, the first counted assessment is the baseline; a later one whose level ranks above
   every earlier one is `level_advanced`; the first one at the scale's highest level is `milestone_achieved`. Each
   publishes `skill-progress.milestone.achieved` (`milestone_name` `level_advanced` or `highest_level_reached`). An

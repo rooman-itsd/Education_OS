@@ -195,9 +195,11 @@ def not_in_future(value: datetime, now: datetime, what: str) -> None:
         raise RuleViolationError("in_future", f"{what} cannot be in the future")
 
 
-def not_self_assessment(learner_id: str, evaluator_id: str) -> None:
-    if learner_id == evaluator_id:
-        raise RuleViolationError("self_assessment", "a learner cannot be their own evaluator")
+def not_self_assessment(learner_id: str, evaluator_id: str, recorded_by: str) -> None:
+    """Neither the named evaluator nor whoever records it may be the learner: a learner who also holds an evaluator
+    role could otherwise name someone else as evaluator and put their own assessment on record."""
+    if learner_id in (evaluator_id, recorded_by):
+        raise RuleViolationError("self_assessment", "a learner cannot assess themselves")
 
 
 # ---------------------------------------------------------------- progression
