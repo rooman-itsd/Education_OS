@@ -41,6 +41,16 @@ def test_no_cross_tenant_leak(client, org, other_org):
     timeline = client.get(f"{BASE}/learners/{learner}/timeline", headers=as_b).json()
     assert [e["id"] for e in timeline["items"]] == [b["assessment"]["id"]]
 
+    # my own progress in B is B's only, for the same person id
+    _, me_in_b = other_org.user("teacher-trainee", user_id=learner)
+    mine = client.get(f"{BASE}/me/progress", headers=me_in_b).json()
+    assert mine["organisation_id"] == other_org.id
+    assert [s["skill_id"] for s in mine["current_skills"]] == [b["skill"]["id"]]
+    _, me_in_a = org.user("teacher-trainee", user_id=learner)
+    assert [s["skill_id"] for s in client.get(f"{BASE}/me/progress", headers=me_in_a).json()["current_skills"]] == [
+        a["skill"]["id"]
+    ]
+
     # another organisation's ids are unknown here, so they cannot be referenced
     steal = other_org.body(new_id(), a["skill"], b["rubric"])
     r = client.post(f"{BASE}/assessments", json=steal, headers=other_org.evaluator)

@@ -465,6 +465,9 @@ def test_my_progress_is_the_callers_own(client, org):
     _, nobody = org.user("teacher-trainee")
     assert client.get(f"{BASE}/me/progress", headers=nobody).json()["skills_evaluated"] == 0
     assert client.get(f"{BASE}/me/progress?framework_id=x", headers=mine).status_code == 422
+    assert (
+        client.get(f"{BASE}/me/progress?framework_id={new_id()}", headers=mine).status_code == 404
+    )  # unknown framework
 
 
 def test_progress_and_timeline_queries_do_not_grow_with_the_data(client, org):

@@ -70,6 +70,20 @@ describe("skill-progress.my-progress widget", () => {
     expect(await screen.findByText("2 more skills")).toBeTruthy();
   });
 
+  it("says '1 more skill' when exactly one is hidden", async () => {
+    const seven = Array.from({ length: 7 }, (_, i) => skill({ skill_id: `s-${i}`, skill_title: `Skill ${i}` }));
+    vi.stubGlobal("fetch", api(summary(seven)));
+    render(<MyProgressWidget role="dancer" />);
+    expect(await screen.findByText("1 more skill")).toBeTruthy();
+  });
+
+  it("asks to sign in again, without a retry, when the session has expired", async () => {
+    vi.stubGlobal("fetch", api({}, 401));
+    render(<MyProgressWidget role="dancer" />);
+    expect(await screen.findByText("Sign in again to see this.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("says there are no assessments yet", async () => {
     vi.stubGlobal("fetch", api(summary([])));
     render(<MyProgressWidget role="dancer" />);

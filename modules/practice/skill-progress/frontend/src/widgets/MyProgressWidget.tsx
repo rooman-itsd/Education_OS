@@ -72,7 +72,11 @@ export function MyProgressWidget(_props: WidgetProps) {
           />
         ))}
         {skills.length > shown.length && (
-          <ListRow title={`${skills.length - shown.length} more skills`} tone="neutral" icon={Icons.Layers} />
+          <ListRow
+            title={`${skills.length - shown.length} more ${skills.length - shown.length === 1 ? "skill" : "skills"}`}
+            tone="neutral"
+            icon={Icons.Layers}
+          />
         )}
       </List>
     </>

@@ -521,7 +521,7 @@ paths:
   /me/progress:
     get:
       summary: Get my own skill progress summary
-      description: The caller's own progress, as GET /learners/{learner_id}/progress for their own id. A widget does not know the viewer's id, so the dashboard's my-progress widget calls this.
+      description: The caller's own progress, as GET /learners/{learner_id}/progress for their own id. A widget does not know the viewer's id, so the dashboard's my-progress widget calls this. A caller with no assessments gets an empty summary (200); 404 means only an unknown framework_id.
       operationId: getMyProgress
       x-permission: skill-progress:progress:read
       parameters:
