@@ -1,14 +1,17 @@
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import { listPendingDocuments } from "../api/client";
-import { documentTypeLabel, waitingFor } from "../components/labels";
+import { listMyApplications, type ApplicationDocument } from "../api/client";
+import { documentTypeLabel, formatDate, verificationLabel, verificationTone, waitingFor } from "../components/labels";
 import { useLoad } from "../components/useLoad";
 
-const SHOWN = 6;
-const load = (signal?: AbortSignal) => listPendingDocuments(SHOWN, signal);
+const load = (signal?: AbortSignal) => listMyApplications(signal);
+
+interface ApplicantDocumentItem extends ApplicationDocument {
+  reference_number: string;
+}
 
 /**
- * admissions.pending-documents for staff who verify documents: what applicants uploaded that nobody has verified,
- * longest waiting first (GET /documents?verification_status=pending).
+ * admissions.pending-documents on the Applicant dashboard: lists the applicant's own documents that
+ * are pending verification or rejected, with any rejection note.
  */
 export function PendingDocumentsWidget(_props: WidgetProps) {
   const [state, reload] = useLoad(load, "documents waiting for verification");
@@ -22,18 +25,25 @@ export function PendingDocumentsWidget(_props: WidgetProps) {
       </ErrorState>
     );
   }
-  const { items, total } = state.data;
-  if (total === 0) {
+
+  const items: ApplicantDocumentItem[] = (state.data.items || []).flatMap((app) =>
+    (app.documents || [])
+      .filter((d) => d.verification_status === "pending" || d.verification_status === "rejected")
+      .map((d) => ({ ...d, reference_number: app.reference_number })),
+  );
+
+  if (items.length === 0) {
     return (
       <EmptyState icon={<Icons.FileCheck2 />} title="Nothing waiting for verification">
         Documents applicants upload appear here until someone verifies them.
       </EmptyState>
     );
   }
+
   return (
     <>
       <p className="eos-row__meta" aria-label="Documents waiting">
-        {total} {total === 1 ? "document" : "documents"} waiting for verification
+        {items.length} {items.length === 1 ? "document" : "documents"} waiting for verification
       </p>
       <List divided label="Documents waiting for verification">
         {items.map((d, i) => (
@@ -41,15 +51,24 @@ export function PendingDocumentsWidget(_props: WidgetProps) {
             key={d.id}
             index={i}
             icon={Icons.FileText}
-            tone="warning"
-            title={`${d.reference_number} · ${d.applicant_name}`}
-            meta={d.label ? `${documentTypeLabel(d.type)} · ${d.label}` : documentTypeLabel(d.type)}
-            trailing={<Badge tone="warning">Waiting {waitingFor(d.uploaded_at)}</Badge>}
+            tone={d.verification_status === "rejected" ? "danger" : "warning"}
+            title={d.label ? `${documentTypeLabel(d.type)} · ${d.label}` : documentTypeLabel(d.type)}
+            meta={
+              d.verification_status === "rejected" && d.verification_note
+                ? `Rejected: ${d.verification_note} · ${d.reference_number}`
+                : `${d.reference_number} · Uploaded ${formatDate(d.uploaded_at)}`
+            }
+            trailing={
+              d.verification_status === "rejected" ? (
+                <Badge tone={verificationTone(d.verification_status)}>
+                  {verificationLabel(d.verification_status)}
+                </Badge>
+              ) : (
+                <Badge tone="warning">Waiting {waitingFor(d.uploaded_at)}</Badge>
+              )
+            }
           />
         ))}
-        {total > items.length && (
-          <ListRow title={`${total - items.length} more waiting`} tone="neutral" icon={Icons.ClipboardList} />
-        )}
       </List>
     </>
   );

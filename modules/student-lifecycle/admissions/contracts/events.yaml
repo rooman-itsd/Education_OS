@@ -4,9 +4,10 @@
 #
 # admissions.application.accepted is named to match the existing example in
 # docs/architecture/ARCHITECTURE.md ("fees-accounts... subscribes to admissions.application.accepted
-# and creates a fee invoice"). No event here assumes an applicant has an identity account; actor
-# for applicant-initiated events (submitted, accepted, declined) is the application itself, not a
-# user id, since submission and offer decisions are anonymous by design (see docs/prd.md).
+# and creates a fee invoice"). Actor for applicant-initiated events (submitted, accepted, declined)
+# is the application itself, not a user id, since submission and offer decisions are anonymous by
+# design (see docs/prd.md). An applicant may later link the application to an identity account
+# (POST /me/applications); admissions.application.accepted then carries that user_id.
 module: admissions
 version: 1
 events:
@@ -30,7 +31,9 @@ events:
       confirmation fee invoice (docs/architecture/ARCHITECTURE.md). A staff member later creates
       the Person record in student-information as a separate, manual action referencing this
       application; there is no automatic subscription from student-information to this event.
-    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, programme_id: uuid, academic_year: string, applicant_first_name: string, applicant_last_name: string, applicant_email: string }
+      user_id is the identity user who linked the application (POST /me/applications), or null when
+      it was never linked; fees-accounts invoices that user and skips the event when it is null.
+    payload: { organisation_id: uuid, application_id: uuid, reference_number: string, programme_id: uuid, academic_year: string, applicant_first_name: string, applicant_last_name: string, applicant_email: string, user_id: "uuid?" }
   - name: admissions.application.declined
     description: The applicant declined their offer.
     payload: { organisation_id: uuid, application_id: uuid, reference_number: string, reason: string }
