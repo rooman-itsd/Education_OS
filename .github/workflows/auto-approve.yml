@@ -1,0 +1,68 @@
+# Posts the automated review's verdict as Faizan's review (docs/team/automated-review.md).
+#
+# Runs on workflow_run, after auto-review.yml finishes: this job uses main's copy of this file, checks out
+# nothing from the pull request and executes none of its code; it only downloads the verdict artifact and
+# talks to GitHub. That is why the approving token lives here and not in auto-review.yml. Before posting it
+# re-checks that the PR head is still the reviewed commit, the author is a team member, the PR is not a draft,
+# and the PR does not touch a deployment-critical path (those get the bot's review but a human approval).
+#
+# Secret: FAIZAN_REVIEW_TOKEN, a fine-grained personal access token of @faizanrooman with "Pull requests:
+# write" on this repository. Decision recorded by the lead on 2026-10-31: the residual risk (a verdict is
+# derived from pull request content) is accepted for module code; see the docs.
+name: auto-approve
+
+on:
+  workflow_run:
+    workflows: [auto-review]
+    types: [completed]
+
+jobs:
+  post:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout: docs/team/members.yaml
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: verdict-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/verdict
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Approve or request changes on Faizan's behalf
+        env:
+          GH_TOKEN: ${{ secrets.FAIZAN_REVIEW_TOKEN }}
+          DIR: ${{ runner.temp }}/verdict
+          # Changes here can alter what runs in CI, on the servers or in the host: a person approves these.
+          PROTECTED: '^(\.github/|tools/|infra/|apps/|packages/|platform/)'
+        run: |
+          set -euo pipefail
+          [ -n "$GH_TOKEN" ] || { echo "FAIZAN_REVIEW_TOKEN is not set"; exit 0; }
+          [ -f "$DIR/meta.json" ] || { echo "no verdict artifact"; exit 0; }
+          pr=$(jq -r .pr "$DIR/meta.json"); head=$(jq -r .head "$DIR/meta.json"); model=$(jq -r .model "$DIR/meta.json")
+          verdict=$(jq -r '.verdict // empty' "$DIR/verdict.json")
+          [ -n "$verdict" ] || { echo "no verdict for #$pr"; exit 0; }
+          info=$(gh pr view "$pr" -R "$GITHUB_REPOSITORY" --json headRefOid,isDraft,state,author,files)
+          [ "$(echo "$info" | jq -r .state)" = OPEN ] || { echo "#$pr is not open"; exit 0; }
+          [ "$(echo "$info" | jq -r .headRefOid)" = "$head" ] || { echo "#$pr moved past $head; the new run will post"; exit 0; }
+          [ "$(echo "$info" | jq -r .isDraft)" = false ] || { echo "#$pr is a draft"; exit 0; }
+          author=$(echo "$info" | jq -r .author.login)
+          grep -q "handle: \"$author\"" docs/team/members.yaml || { echo "@$author is not in docs/team/members.yaml; nothing posted"; exit 0; }
+          [ "$author" != faizanrooman ] || { echo "own PR"; exit 0; }
+          if echo "$info" | jq -r '.files[].path' | grep -Eq "$PROTECTED"; then
+            gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "Automated verdict on ${head:0:7}: **$verdict**. This PR changes a deployment-critical path (workflows, tools, infra, the host, packages or platform), so a person approves it; the bot's findings are in the review above."
+            exit 0
+          fi
+          body=$(jq -r --arg m "$model" --arg h "${head:0:7}" '"Automated review on Faizan'"'"'s behalf (" + $m + ", head " + $h + "). " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nEvery new commit is reviewed again; approved PRs are merged by the watcher."' "$DIR/verdict.json")
+          if [ "$verdict" = approve ]; then
+            gh pr review "$pr" -R "$GITHUB_REPOSITORY" --approve --body "$body"
+          else
+            gh pr review "$pr" -R "$GITHUB_REPOSITORY" --request-changes --body "$body"
+          fi
