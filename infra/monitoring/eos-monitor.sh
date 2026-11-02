@@ -55,9 +55,12 @@ for setting in REMIND_MIN:60 HEALTH_RETRY_S:10 BACKUP_MAX_AGE_H:26 MAX_5XX:5 SLO
   esac
 done
 
-# One line of plain text: a tool's error output can carry newlines, tabs and other control characters, which the
-# journal splits and which make the webhook's JSON invalid (the endpoint refuses it, and the alert never arrives).
-oneline() { printf '%s' "$*" | tr '\n\t\r' '   ' | tr -d '\000-\037\177'; }
+# One line of plain text: a tool's error output can carry newlines, tabs, colour codes and other control characters,
+# which the journal splits and which make the webhook's JSON invalid (the endpoint refuses it, and the alert never
+# arrives). Colour codes go first, whole (not just their ESC byte); then whitespace becomes single spaces.
+oneline() {
+  printf '%s' "$*" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | tr '\n\t\r' '   ' | tr -d '\000-\037\177' | tr -s ' '
+}
 
 # Bounded, so a hung Docker daemon fails the check instead of the whole run being killed by systemd.
 compose() { timeout "$DOCKER_TIMEOUT_S" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }

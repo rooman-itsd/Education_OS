@@ -255,7 +255,8 @@ def test_a_multi_line_docker_error_still_reaches_the_webhook_as_valid_json(box):
     r = _run(box, EOS_MONITOR_WEBHOOK_URL=url)
     alerts = _alerts(r)
     containers = [a for a in alerts if "FAILING containers:" in a]
-    assert containers and "error during connect: Cannot connect to the Docker daemon" in containers[0]
+    assert containers and "error during connect: Cannot connect to the Docker daemon is it running?" in containers[0]
+    assert "[31m" not in containers[0] and "  " not in containers[0]  # colour codes gone whole; spaces squeezed
     assert all("\t" not in a and "\x1b" not in a for a in alerts)
     bodies = [p.read_text() for p in sorted(box["fake"].glob("body-*"))]
     assert len(bodies) == len(alerts)  # every alert was posted
