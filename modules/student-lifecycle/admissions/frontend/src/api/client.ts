@@ -89,6 +89,11 @@ export interface DocumentQueuePage {
   page_size: number;
 }
 
+/** contract MyApplications */
+export interface MyApplications {
+  items: Application[];
+}
+
 /** contract FunnelReport */
 export interface FunnelReport {
   total: number;
@@ -123,6 +128,51 @@ async function get<T>(path: string, { signal, auth = true }: { signal?: AbortSig
   const res = await fetch(`${API_BASE}/admissions${path}`, { headers, signal });
   if (!res.ok) throw new AdmissionsApiError(res.status, res.statusText || `HTTP ${res.status}`);
   return (await res.json()) as T;
+}
+
+async function post<T>(
+  path: string,
+  body: unknown,
+  { signal, auth = true }: { signal?: AbortSignal; auth?: boolean } = {},
+): Promise<T> {
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  };
+  const t = auth ? token() : null;
+  if (t) headers.Authorization = `Bearer ${t}`;
+  const res = await fetch(`${API_BASE}/admissions${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    let msg = res.statusText || `HTTP ${res.status}`;
+    try {
+      const err = await res.json();
+      if (err?.message) msg = err.message;
+      else if (err?.detail?.message) msg = err.detail.message;
+    } catch {
+      // ignore JSON parse error
+    }
+    throw new AdmissionsApiError(res.status, msg);
+  }
+  return (await res.json()) as T;
+}
+
+/** GET /me/applications: caller's own applications. Permission admissions:self:read. */
+export function listMyApplications(signal?: AbortSignal): Promise<MyApplications> {
+  return get<MyApplications>("/me/applications", { signal });
+}
+
+/** POST /me/applications: link application to caller's account. Permission admissions:self:read. */
+export function linkApplication(
+  referenceNumber: string,
+  email: string,
+  signal?: AbortSignal,
+): Promise<Application> {
+  return post<Application>("/me/applications", { reference_number: referenceNumber.trim(), email: email.trim() }, { signal });
 }
 
 /** GET /applications: newest first. Permission admissions:application:read. */

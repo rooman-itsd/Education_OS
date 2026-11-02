@@ -60,14 +60,6 @@ LEARNER_GAP = (
     "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # admissions: no role fits (admissions module, batch #321)
-    "admissions": (
-        NAMED,
-        [
-            "applicant admissions.application-status",
-            "applicant admissions.pending-documents",
-        ],
-    ),
     # alumni: empty catalogue (alumni module, batch #337)
     "alumni": (
         EMPTY,
@@ -126,14 +118,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "stage-manager productions.calendar",
             "stage-manager productions.upcoming",
             "studio-instructor productions.in-preparation",
-        ],
-    ),
-    # reporting: empty catalogue (reporting module, batch #317)
-    "reporting": (
-        EMPTY,
-        [
-            "department-admin reporting.department-reports",
-            "management reporting.attendance-and-results-by-department",
         ],
     ),
     # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
