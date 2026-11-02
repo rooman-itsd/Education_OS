@@ -194,4 +194,19 @@ def on_job_due(db: Session, event) -> None:
     )
 
 
-CONSUMERS = {**dict.fromkeys(AUDITED, on_event), "scheduler.job.due": on_job_due}
+def on_purged(db: Session, event) -> None:
+    """tenancy.organisation.purged: record it like any audited event (a platform-level record, which keeps no
+    organisation_id and so is not redacted), then tombstone the purged organisation's trail. Redelivery is safe:
+    the record is idempotent on the event id, and a tombstone is not redacted twice."""
+    on_event(db, event)
+    organisation_id = (event.payload or {}).get("organisation_id")
+    if organisation_id:
+        count = service.redact_organisation(db, str(organisation_id))
+        log.info("redacted %s audit record(s) of purged organisation %s", count, organisation_id)
+
+
+CONSUMERS = {
+    **dict.fromkeys(AUDITED, on_event),
+    "tenancy.organisation.purged": on_purged,
+    "scheduler.job.due": on_job_due,
+}

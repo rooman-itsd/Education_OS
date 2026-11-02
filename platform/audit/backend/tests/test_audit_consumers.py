@@ -336,3 +336,32 @@ def test_the_prune_job_ignores_other_jobs_and_reports_its_own_failure(monkeypatc
     deliver(e)  # reported, not raised
     (report,) = finished(e.payload["run_id"])
     assert report == {"run_id": e.payload["run_id"], "outcome": "failed", "detail": "RuntimeError"}
+
+
+# --- a purged organisation's trail is kept, its payloads redacted (decision on #317) ------------------------------
+
+
+def test_purging_an_organisation_redacts_its_trail_but_keeps_the_facts():
+    org, other = str(uuid.uuid4()), str(uuid.uuid4())
+    deliver(event("workflow.request.approved", org, {"request_id": "r1", "comments": "medical leave"}, actor="u1"))
+    deliver(event("tenancy.impersonation.started", org, {"user_id": "u9", "reason": "ticket 7"}, actor="sa-1"))
+    deliver(event("workflow.request.approved", other, {"request_id": "r2", "comments": "keep me"}, actor="u2"))
+    purged = event("tenancy.organisation.purged", None, {"organisation_id": org, "slug": "gone"}, actor="sa-1")
+    deliver(purged)
+    deliver(purged)  # redelivered: nothing changes twice
+
+    mine = records(org)
+    assert [r.action for r in mine] == ["request.approved", "impersonation.started"]
+    assert all(r.redacted and r.after is None and r.before is None for r in mine)
+    assert all(r.actor and r.entity_id for r in mine)  # who did what, and to which entity, survives
+    platform = records(platform=True)
+    copy = next(r for r in platform if r.action == "impersonation.started")
+    assert copy.redacted and copy.after is None
+    purge_record = next(r for r in platform if r.action == "organisation.purged")
+    assert not purge_record.redacted and purge_record.after["slug"] == "gone"  # the purge itself is the record
+    (theirs,) = records(other)
+    assert not theirs.redacted and theirs.after["comments"] == "keep me"
+
+
+def test_the_purge_event_is_handled_by_the_purge_handler():
+    assert consumers.CONSUMERS["tenancy.organisation.purged"] is consumers.on_purged

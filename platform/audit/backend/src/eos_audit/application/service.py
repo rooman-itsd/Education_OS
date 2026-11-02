@@ -288,9 +288,31 @@ def prune(db: Session, *, now: datetime | None = None) -> int:
     cutoff = (now or utcnow()) - timedelta(days=config.retention_days())
     with platform_scope():
         if db.get_bind().dialect.name == "postgresql":
-            # The immutability trigger allows a DELETE only inside a transaction that declares itself a prune.
-            db.execute(text("SELECT set_config('audit.pruning', 'on', true)"))
-        removed = db.execute(delete(AuditRecord).where(AuditRecord.occurred_at < cutoff)).rowcount or 0
+            # The application role holds no DELETE on audit_record (migration audit_0002): retention runs through
+            # audit_prune(), SECURITY DEFINER, which also refuses a cutoff younger than the retention floor.
+            removed = db.execute(text("SELECT audit_prune(:cutoff)"), {"cutoff": cutoff}).scalar() or 0
+        else:
+            removed = db.execute(delete(AuditRecord).where(AuditRecord.occurred_at < cutoff)).rowcount or 0
         events.publish(db, "audit.retention.pruned", None, {"removed_count": removed, "older_than": cutoff.isoformat()})
         db.commit()
     return removed
+
+
+def redact_organisation(db: Session, organisation_id: str) -> int:
+    """After an organisation is purged (tenancy.organisation.purged): keep its trail, drop the payloads. Its records,
+    and the platform-level copies about it, become tombstones (before/after removed, redacted true): who did what and
+    when survives, the personal data in the payloads does not. On PostgreSQL through audit_redact_organisation()
+    (SECURITY DEFINER; refuses while the organisation still exists), since the API's role cannot UPDATE a record."""
+    with platform_scope():
+        if db.get_bind().dialect.name == "postgresql":
+            return db.execute(text("SELECT audit_redact_organisation(:o)"), {"o": organisation_id}).scalar() or 0
+        n = 0
+        for rec in db.scalars(select(AuditRecord).where(AuditRecord.redacted.is_(False))):
+            about = rec.organisation_id == organisation_id or (
+                rec.organisation_id is None and (rec.context or {}).get("organisation_id") == organisation_id
+            )
+            if about:
+                rec.before, rec.after, rec.redacted = None, None, True
+                n += 1
+        db.flush()
+        return n
