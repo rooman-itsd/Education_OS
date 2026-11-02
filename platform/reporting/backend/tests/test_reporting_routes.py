@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from eos_core.db import SessionLocal
+from eos_core.tenant import organisation_scope
 from eos_reporting.application import service
+from eos_reporting.application.service import documents_service
 
 
 def test_routes_require_authentication(client):
@@ -78,14 +81,24 @@ def test_export_and_widgets_via_api(client, org, memory_storage):
     assert r_exp.status_code == 200
     assert r_exp.json()["format"] == "csv"
     download_url = r_exp.json()["download_url"]
-    assert "download_url" in r_exp.json()
 
-    # Verify that the download URL returns valid file content
-    r_dl = client.get(download_url, headers=org.admin_headers)
-    assert r_dl.status_code == 200
-    assert "text/csv" in r_dl.headers.get("content-type", "")
-    assert "attachment" in r_dl.headers.get("content-disposition", "")
-    assert len(r_dl.content) > 0
+    if service.documents_service is not None:
+        # Stored through platform/documents: the URL is a presigned storage URL and the object holds the CSV
+        from eos_documents.infrastructure.storage import get_storage
+
+        execution = client.get(f"/api/v1/reporting/executions/{exec_id}", headers=org.admin_headers).json()
+        with organisation_scope(org.id), SessionLocal() as s:
+            doc = documents_service.get_document(s, org.id, execution["export_file_id"])
+        assert doc is not None and doc.mime_type == "text/csv"
+        assert doc.storage_path in download_url
+        assert len(get_storage().get_object(doc.bucket, doc.storage_path)) > 0
+    else:
+        # Fallback: the URL is this module's own download route and it serves the file
+        r_dl = client.get(download_url, headers=org.admin_headers)
+        assert r_dl.status_code == 200
+        assert "text/csv" in r_dl.headers.get("content-type", "")
+        assert "attachment" in r_dl.headers.get("content-disposition", "")
+        assert len(r_dl.content) > 0
 
     # Department widget route
     r_dept = client.get("/api/v1/reporting/widgets/department-reports", headers=org.dept_admin_headers)

@@ -414,6 +414,7 @@ def export_report(
             tags=["reporting", "export", fmt],
             storage=storage,
         )
+        db.flush()  # direct_upload only adds the row; get_download_url selects it
         doc_id = doc.id
         _, download_url, exp = documents_service.get_download_url(
             db, organisation_id, actor_id, doc_id, storage=storage
