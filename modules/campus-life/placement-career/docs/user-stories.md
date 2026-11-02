@@ -14,13 +14,13 @@ Roles come from `contracts/permissions.yaml`. Each story names the contract oper
 | O6 | As the officer I see the applications to an opening or drive with each student's declaration, and which students are already placed. | `GET /applications`, `GET /applications/{id}` |
 | O7 | As the officer I shortlist, move to in process, record an offer and the student's answer, or reject with a reason, one step at a time. | `POST /applications/{id}/status` |
 | O8 | As the officer I see the upcoming drives with their application counts on my dashboard. | `GET /reports/drives-upcoming` (widget `drives`) |
-| O9 | As the officer or a coordinator I see openings and applications by status, students placed, and the openings closing soonest. | `GET /reports/openings-summary` (widget `openings`) |
+| O9 | As the officer or a coordinator I see openings and applications by status, students placed, and the openings closing soonest. | `GET /reports/openings-summary` (widget `openings-summary`) |
 
 ## Viewer (`placement-career-viewer`)
 
 | # | Story | Contract |
 |---|---|---|
-| V1 | As an industry liaison I see the companies, drives and openings, and the summary, without individual applications. | `GET /companies`, `GET /drives`, `GET /openings`, `GET /reports/openings-summary` (widget `openings`) |
+| V1 | As an industry liaison I see the companies, drives and openings, and the summary, without individual applications. | `GET /companies`, `GET /drives`, `GET /openings`, `GET /reports/openings-summary` (widget `openings-summary`) |
 
 ## Student (`student`)
 

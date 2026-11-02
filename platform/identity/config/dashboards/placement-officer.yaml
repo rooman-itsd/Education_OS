@@ -7,6 +7,6 @@ module_roles:
   - placement-career-officer
 widgets:
   - field-training.placements-open
-  - placement-career.openings
+  - placement-career.openings-summary
   - placement-career.drives
   - productions.calendar

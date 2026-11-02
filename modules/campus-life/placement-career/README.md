@@ -9,7 +9,8 @@ Campus placement for jobs: company records, drives, job openings, applications a
 ## Scope
 **Is:** company records, placement drives (dated campus events of one company), job openings in a drive or on their
 own, student applications along a fixed status sequence, offers, and the reports behind the dashboard widgets
-`placement-career.drives` (placement-officer) and `placement-career.openings` (student layouts and placement staff).
+`placement-career.drives` (placement-officer), `placement-career.openings` (learner layouts, `GET /me/openings`) and
+`placement-career.openings-summary` (placement staff and industry-liaison, `GET /reports/openings-summary`).
 
 **Is not:** internships (field-training), recruiter logins (companies are records), automatic eligibility checks
 (students self-declare; the officer shortlists), a one-offer policy. See [docs/prd.md](docs/prd.md) for the owner
@@ -31,7 +32,7 @@ See `module.yaml`. This module must not import code from any other module under 
 ## Layout
 | Path | Purpose |
 |---|---|
-| `docs/` | PRD, user stories, data model, screen list |
+| `docs/` | PRD and user stories now; `data-model.md`, `screens.md` and `integration-points.md` come with the backend PR |
 | `contracts/` | OpenAPI, event schemas, permission catalogue |
 | `backend/` | Domain, application, infrastructure, API layers + unit tests |
 | `frontend/` | Pages, components, API client + tests |

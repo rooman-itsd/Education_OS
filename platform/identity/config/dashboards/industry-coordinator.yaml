@@ -8,5 +8,5 @@ module_roles:
 widgets:
   - field-training.placements-open
   - field-training.active-placements
-  - placement-career.openings
+  - placement-career.openings-summary
   - productions.calendar
