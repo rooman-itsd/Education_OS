@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `tenancy.package.changed` is consumed (#316 follow-up): the organisation's admins get the new template
+  `tenancy.package.changed` ("Academic package approved", with the new package) when a super admin approves a
+  requested package change. tenancy still logs a copy through the `eos_core.notify` stub, which sends nothing;
+  removing that call is tenancy's own change, once this is merged.
 - Notification now reacts to other modules' events (#316). It declared nine consumed events in its contract but
   registered no consumer, so the relay delivered them to nobody, marked them published and sent nothing.
   `application/consumers.py` is published on the `eos.event_consumers` entry point and mails the organisation's
