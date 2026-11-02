@@ -9,7 +9,7 @@ expiry job has not turned read-only yet (negative days_left), so none is invisib
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from eos_core.db import utcnow
@@ -37,6 +37,11 @@ def _naive(value: datetime) -> datetime:
     return value.replace(tzinfo=None)
 
 
+def _utc(value: datetime) -> datetime:
+    """The UTC moment, whatever zone the database connection returned it in (SQLite: naive, already UTC)."""
+    return value if value.tzinfo is None else value.astimezone(UTC)
+
+
 def _comped(sub: Subscription, now: datetime) -> bool:
     return sub.comped_until is not None and _naive(sub.comped_until) > _naive(now)
 
@@ -50,38 +55,31 @@ def subscription_report(db: Session) -> dict:
         # Filtered in the database: only the window's paid invoices are loaded, never every invoice ever written.
         paid = list(db.scalars(select(Invoice).where(Invoice.status == "paid", Invoice.issued_at >= since)))
 
-        rows: dict[str, dict] = {}
-        for p in plans:
-            rows[p.id] = {
-                "plan": p.id,
-                "title": p.title,
-                "currency": p.currency,
-                "price_per_month": Decimal(str(p.price_per_month or 0)),
+        def new_row(plan_id: str, title: str, currency: str, price: Decimal) -> dict:
+            return {
+                "plan": plan_id,
+                "title": title,
+                "currency": currency,
+                "price_per_month": price,
                 "subscriptions": dict.fromkeys((*STATUSES, OTHER), 0),
                 "comped": 0,
                 "paid": Decimal("0"),
             }
+
+        rows: dict[str, dict] = {
+            p.id: new_row(p.id, p.title, p.currency, Decimal(str(p.price_per_month or 0))) for p in plans
+        }
+        # A subscription or a paid invoice on a plan that was since deleted still counts, under its plan id: money
+        # that came in is never dropped from the report.
         for s in subs:
-            # A subscription on a plan that was since deleted still counts, under its plan id.
-            row = rows.setdefault(
-                s.plan_id,
-                {
-                    "plan": s.plan_id,
-                    "title": s.plan_id,
-                    "currency": "INR",
-                    "price_per_month": Decimal("0"),
-                    "subscriptions": dict.fromkeys((*STATUSES, OTHER), 0),
-                    "comped": 0,
-                    "paid": Decimal("0"),
-                },
-            )
+            row = rows.setdefault(s.plan_id, new_row(s.plan_id, s.plan_id, "INR", Decimal("0")))
             status = s.status if s.status in STATUSES else OTHER
             row["subscriptions"][status] += 1
             if status == "active" and _comped(s, now):
                 row["comped"] += 1
         for i in paid:
-            if i.plan_id in rows:
-                rows[i.plan_id]["paid"] += Decimal(str(i.amount or 0))
+            row = rows.setdefault(i.plan_id, new_row(i.plan_id, i.plan_id, i.currency or "INR", Decimal("0")))
+            row["paid"] += Decimal(str(i.amount or 0))
 
         report_plans = []
         for row in rows.values():
@@ -105,7 +103,7 @@ def subscription_report(db: Session) -> dict:
         for s in subs:
             if s.status != "trialing" or not s.trial_ends_at:
                 continue
-            days_left = (s.trial_ends_at.date() - today).days
+            days_left = (_utc(s.trial_ends_at).date() - today).days
             if days_left <= TRIAL_WINDOW_DAYS:  # negative: ended, waiting for the daily expiry job
                 expiring.append(
                     {

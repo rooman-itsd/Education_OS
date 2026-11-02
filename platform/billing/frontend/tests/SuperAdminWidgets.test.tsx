@@ -142,3 +142,24 @@ describe("error states, as the other widgets", () => {
     }
   });
 });
+
+describe("one report request for the dashboard", () => {
+  it("the three widgets opened together share a single GET, and a later load asks again", async () => {
+    const fetchMock = answer(200, REPORT);
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <>
+        <TrialsExpiring role="super-admin" />
+        <RevenueByPlan role="super-admin" />
+        <SubscriptionsByPlan role="super-admin" />
+      </>,
+    );
+    expect(await screen.findByText("Morning Music")).toBeTruthy();
+    expect(await screen.findAllByText("Premium")).toHaveLength(2); // in revenue and in subscriptions
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<SubscriptionsByPlan role="super-admin" />);
+    expect(await screen.findByText("Premium")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2); // settled, so not cached: fresh numbers next time
+  });
+});

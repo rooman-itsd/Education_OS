@@ -220,3 +220,11 @@ def test_an_unknown_status_is_counted_as_other_not_cancelled(client):
     _sub(paid, "paused")
     row = _row(client.get(URL, headers=_user(super_admin=True)).json(), paid)
     assert row["subscriptions"]["other"] == 1 and row["subscriptions"]["cancelled"] == 0 and row["total"] == 1
+
+
+def test_a_paid_invoice_on_a_deleted_plan_still_counts(client):
+    """Money that came in is never dropped: an invoice whose plan row is gone gets its own row, as subscriptions do."""
+    org = _sub(_paid_plan(), "active")
+    _invoice(org, "retired-plan", "999.50")
+    row = _row(client.get(URL, headers=_user(super_admin=True)).json(), "retired-plan")
+    assert row["paid_last_30_days"] == "999.50" and row["total"] == 0

@@ -9,7 +9,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   the `eos.organisation_directory` entry point). Three Super Admin widgets read it: `billing.trials-expiring`,
   `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes. Comped
   subscriptions count as `comped`, not as recurring revenue; an unknown status counts as `other`; trials past their
-  end but not yet expired by the daily job are listed (negative `days_left`).
+  end but not yet expired by the daily job are listed (negative `days_left`). A paid invoice on a deleted plan still counts
+  (its own row); trial dates are read in UTC whatever the connection's zone; the three widgets share one request.
 - Scheduled jobs for platform/scheduler (#316): `billing.expire-trials` (daily 00:15 UTC) and
   `billing.trial-reminders` (daily 06:00 UTC), declared on the `eos.scheduler_jobs` entry point and run from
   `scheduler.job.due` (consumer on `eos.event_consumers`); each reports `billing.job.finished`.

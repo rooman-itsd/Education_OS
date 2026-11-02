@@ -179,8 +179,26 @@ export interface SubscriptionReport {
   paid_window_days: number;
 }
 
-/** GET /admin/reports/subscriptions. Permission platform:revenue:read (super admin only). */
-export const getSubscriptionReport = (signal?: AbortSignal) => request<SubscriptionReport>("/billing/admin/reports/subscriptions", {}, signal);
+/** The report request in flight, shared: the three Super Admin widgets read the same report when the dashboard opens. */
+let reportInFlight: Promise<SubscriptionReport> | null = null;
+
+/**
+ * GET /admin/reports/subscriptions. Permission platform:revenue:read (super admin only). Callers at the same moment
+ * share one request (it is not cancelled when one of them goes away); once it settles the next call asks again, so a
+ * retry or a later visit gets fresh numbers. A caller's signal still ends its own wait.
+ */
+export function getSubscriptionReport(signal?: AbortSignal): Promise<SubscriptionReport> {
+  reportInFlight ??= request<SubscriptionReport>("/billing/admin/reports/subscriptions").finally(() => {
+    reportInFlight = null;
+  });
+  if (!signal) return reportInFlight;
+  return new Promise<SubscriptionReport>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Aborted", "AbortError"));
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    reportInFlight!.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
 
 /** "12500.00" -> 1250000 (paise/cents), so sums are exact; anything unparsable counts as 0. */
 export function cents(amount: string): number {
