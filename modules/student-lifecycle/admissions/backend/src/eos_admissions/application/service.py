@@ -40,6 +40,7 @@ CODE_STATUS = {
     "reason_required": 422,
     "score_for_ineligible_application": 422,
     "duplicate_score": 422,
+    "already_linked": 409,
 }
 
 
@@ -661,6 +662,9 @@ def accept_offer(db: Session, organisation_id: str, reference_number: str, *, em
             "applicant_first_name": app.applicant_first_name,
             "applicant_last_name": app.applicant_last_name,
             "applicant_email": app.applicant_email,
+            # The applicant's identity user once they linked the application (POST /me/applications), else None.
+            # fees-accounts invoices that user; without it there is nobody to invoice yet.
+            "user_id": app.applicant_user_id,
         },
     )
     db.flush()
@@ -687,5 +691,40 @@ def decline_offer(
         "application.declined",
         {"application_id": app.id, "reference_number": app.reference_number, "reason": reason},
     )
+    db.flush()
+    return _view(db, app)
+
+
+# ---------------------------------------------------------------- signed-in applicant (own applications)
+# An applicant account is an identity user with the applicant role. Applications are still submitted anonymously;
+# the applicant links one to their account with the same proof the public track page asks for (reference number
+# and email). After that, the Applicant dashboard reads it with their token and fees-accounts can invoice them.
+
+
+def list_my_applications(db: Session, actor: Actor) -> dict:
+    """The caller's linked applications, newest first, with documents and offer."""
+    apps = (
+        db.query(Application)
+        .filter(Application.organisation_id == actor.organisation_id, Application.applicant_user_id == actor.user_id)
+        .order_by(Application.submitted_at.desc(), Application.id.desc())
+        .all()
+    )
+    return {"items": _views(db, apps)}
+
+
+def link_application(db: Session, actor: Actor, reference_number: str, email: str) -> dict:
+    """Link an application to the caller's account. A wrong reference or email is a 404, as on the track page, so
+    a guess reveals nothing. Linking again to the same account changes nothing; one linked to another account is
+    a 409."""
+    try:
+        app = _verified(db, actor.organisation_id, reference_number, email)
+    except AdmissionsError as exc:
+        raise _not_found("application") from exc
+    if app.applicant_user_id == actor.user_id:
+        return _view(db, app)
+    if app.applicant_user_id is not None:
+        raise AdmissionsError(409, "already_linked", "This application is linked to another account")
+    app.applicant_user_id = actor.user_id
+    _audit(db, actor.organisation_id, actor.user_id, "application_linked", "application", app.id)
     db.flush()
     return _view(db, app)
