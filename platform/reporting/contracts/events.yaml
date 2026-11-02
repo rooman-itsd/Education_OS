@@ -1,9 +1,28 @@
 # Domain events published by reporting.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
+# Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
 module: reporting
 version: 1
-events: []
-#  - name: reporting.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: reporting.report.executed
+    description: "Published when a report execution completes successfully."
+    payload_schema:
+      type: object
+      properties:
+        execution_id: { type: string }
+        report_code: { type: string }
+        requested_by: { type: string }
+        executed_at: { type: string, format: date-time }
+      required: [execution_id, report_code, requested_by, executed_at]
+
+  - name: reporting.report.exported
+    description: "Published when a report is exported as CSV or JSON and stored in Documents."
+    payload_schema:
+      type: object
+      properties:
+        execution_id: { type: string }
+        report_code: { type: string }
+        document_id: { type: string }
+        format: { type: string, enum: [csv, json] }
+        exported_by: { type: string }
+      required: [execution_id, report_code, document_id, format, exported_by]

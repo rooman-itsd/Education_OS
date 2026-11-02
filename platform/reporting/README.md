@@ -2,12 +2,13 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** planned
+**Status:** in-progress
 
-Dashboards, MIS reports, analytics and warehouse ETL.
+Dashboards, MIS reports, analytics, metric snapshots, and warehouse export integration.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+- **Responsible for:** Report definitions (`ReportDefinition`) supporting standard pre-seeded institutional reports and custom admin-defined reports; on-demand report execution (`ReportExecution`) with idempotency via `client_token`; metric snapshots (`MetricSnapshot`) for analytical caching; report export generator producing CSV and JSON exports stored in `platform/documents` via `direct_upload`; outbox event publishing (`reporting.report.executed`, `reporting.report.exported`); tenant isolation enforced by PostgreSQL RLS on all reporting tables (`reporting_definition`, `reporting_execution`, `reporting_metric_snapshot`); dashboard widgets `reporting.department-reports` for Department Admin and `reporting.attendance-and-results-by-department` for Management; frontend client and widgets package (`@eos/reporting`).
+- **Explicitly NOT:** Live operational transaction mutations (modifications occur in respective feature modules); binary file storage management (delegated to `platform/documents`); immutable audit record logging (`platform/audit`); arbitrary user script execution.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
