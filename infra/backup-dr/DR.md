@@ -69,7 +69,7 @@ people (trial reminders, verification mails) from the drill. The generated `.env
 **3. Copy the newest backup to the new host.** The dump holds personal data: it goes from server to server,
 never through a laptop disk.
 
-From the second location (a real incident). The destination trusts the old host's key, so first let the new host
+*a) From the second location* (a real incident). The destination trusts the old host's key, so first let the new host
 in: on the new host, make a key and print its public half,
 
 ```
@@ -84,11 +84,11 @@ its nightly backups continue there, and copy (on the new host):
 mkdir -p /var/backups/eos/restore && rsync -a <offsite>/daily/<newest>.dump <offsite>/daily/<newest>.dump.sha256 /var/backups/eos/restore/
 ```
 
-If the second location cannot be reached: restore the lost container's last Proxmox backup instead (vzdump; the
+*b) If the second location cannot be reached:* restore the lost container's last Proxmox backup instead (vzdump; the
 node's web UI, the container's Backup tab, Restore, as a new id), which brings back the whole machine as of that
 backup, then continue at step 5. Data written since that backup is lost.
 
-or, in a drill where the old host is still there, on the Proxmox host (`F` is the newest name from
+*c) In a drill, where the old host is still there:* on the Proxmox host (`F` is the newest name from
 `pct exec <old-ctid> -- ls /var/backups/eos/daily`):
 
 ```
@@ -110,7 +110,10 @@ eos-db-restore --check /var/backups/eos/restore/<file>.dump | tee /root/dr-check
 eos-db-restore /var/backups/eos/restore/<file>.dump | tee /root/dr-restore.txt; echo "exit: ${PIPESTATUS[0]}"
 ```
 
-Both must end `exit: 0` (`tee` would hide the script's own status). A restore whose migrate step fails still starts
+Both must end `exit: 0` (`tee` would hide the script's own status). If `pg_restore` itself fails half-way (`exit: 1`
+without "Restored."), the services are started again anyway, on a half-restored database: stop them at once
+(`docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api stop api relay scheduler`) and
+run the restore again before anything else. A restore whose migrate step fails still starts
 the services but ends `exit: 1` with an error: fix the migration before going on.
 
 With Keycloak on (`COMPOSE_PROFILES=oidc`), restore its dump too (README, "Nightly database backup").
@@ -134,7 +137,7 @@ command without `WIRE_PROXY=0`. That is not only the proxy step: on the existing
 `main`, keeps `.env.api`, rebuilds the image and restarts every service (a minute of downtime on the new host),
 reinstalls the auto-deploy and backup timers (the backup install takes a backup at once, of the restored data),
 and only then points `/api/` at it. Then `curl -s https://educationos.futureacad.ae/api/v1/health`.
-Install the monitor (once #381 is merged; `infra/monitoring` does not exist before):
+Install the monitor (its `install.sh` arrives with #381; until that is merged the folder holds only a README):
 `bash /opt/education-os/infra/monitoring/install.sh`.
 
 **7. After a drill:** delete the drill container and the clone on the Proxmox host
