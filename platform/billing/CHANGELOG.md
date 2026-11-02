@@ -3,6 +3,11 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Super admin report (contract 0.2.0, #346): `GET /admin/reports/subscriptions` on `platform:revenue:read`, the
+  catalogue key no route used yet: subscriptions per plan and status, monthly recurring revenue, paid invoices of
+  the last 30 days (both as decimal strings) and trials ending within 14 days with the organisation's name (from
+  the `eos.organisation_directory` entry point). Three Super Admin widgets read it: `billing.trials-expiring`,
+  `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes.
 - Scheduled jobs for platform/scheduler (#316): `billing.expire-trials` (daily 00:15 UTC) and
   `billing.trial-reminders` (daily 06:00 UTC), declared on the `eos.scheduler_jobs` entry point and run from
   `scheduler.job.due` (consumer on `eos.event_consumers`); each reports `billing.job.finished`.

@@ -58,12 +58,14 @@ afterEach(() => {
 
 describe("registration", () => {
   it("exports the three Organisation Admin widgets with the keys the catalogue grants org-admin", () => {
-    const ids = widgets.map((w) => w.id);
-    expect(ids).toEqual(["billing.plan-and-trial", "billing.usage-vs-limits", "billing.invoices"]);
-    for (const w of widgets) {
+    const orgAdmin = ["billing.plan-and-trial", "billing.usage-vs-limits", "billing.invoices"];
+    expect(widgets.map((w) => w.id).filter((id) => orgAdmin.includes(id))).toEqual(orgAdmin);
+    for (const w of widgets.filter((x) => orgAdmin.includes(x.id))) {
       expect(w.permission).toBe("billing:subscription:read");
       expect(w.kind).toBeTruthy();
     }
+    // Everything else is the super admin's (SuperAdminWidgets.test.tsx), never on an organisation key.
+    for (const w of widgets.filter((x) => !orgAdmin.includes(x.id))) expect(w.permission).toBe("platform:revenue:read");
   });
 });
 
