@@ -122,21 +122,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "studio-instructor productions.in-preparation",
         ],
     ),
-    # reporting: empty catalogue (reporting module, batch #317)
-    "reporting": (
-        EMPTY,
-        [
-            "department-admin reporting.department-reports",
-            "management reporting.attendance-and-results-by-department",
-        ],
-    ),
-    # workflow: empty catalogue (workflow module, batch #317)
-    "workflow": (
-        EMPTY,
-        [
-            "department-admin workflow.approvals-pending",
-        ],
-    ),
 }
 KNOWN_UNBACKED_WIDGETS: dict[tuple[str, str], str] = {
     tuple(pair.split(" ")): f"{module}: {reason}"
