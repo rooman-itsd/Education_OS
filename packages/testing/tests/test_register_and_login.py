@@ -61,8 +61,10 @@ def test_without_the_token_it_says_dev_mode_is_needed():
     assert [path for path, _ in client.calls] == ["/api/v1/tenancy/register"]  # never verifies with a guessed token
 
 
-def test_the_legacy_stub_is_never_read_for_the_token():
-    """A mail in eos_core.notify.sent (where verification mails used to go) is not used as the token."""
+def test_the_legacy_stub_is_never_read_for_the_token(monkeypatch):
+    """A mail in eos_core.notify.sent (where verification mails used to go) is not used as the token. The stub's list
+    is process-wide, so the test gets its own and leaves the shared one as it was."""
+    monkeypatch.setattr(notify, "sent", [])
     notify.send_email("admin@gamma.example.com", "Verify your email", "body", token="stale-stub-token")
     client = _Client(token=None)
     with pytest.raises(AssertionError, match="EOS_DEV_MODE=true"):
