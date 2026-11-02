@@ -312,3 +312,47 @@ def test_two_approvers_on_one_step_cannot_both_apply(app_engine):
     status, step, actions, topics = _state(app_engine, org, rid)
     assert (status, step, actions) == ("pending", 2, ["approved"])
     assert topics.count("workflow.step.advanced") == 1
+
+
+def test_two_sla_checks_at_once_escalate_a_step_once(app_engine):
+    """The escalation row's unique key settles concurrent workflow.sla-check runs (PostgreSQL, eos_app, RLS)."""
+    import threading
+    from datetime import UTC, datetime, timedelta
+
+    from eos_core.tenant import platform_scope
+    from eos_workflow.application import service
+    from sqlalchemy.orm import Session
+
+    _service_ready(app_engine)
+    with _admin(DATABASE).begin() as conn:
+        conn.execute(text(f"GRANT ALL ON workflow_escalation TO {APP_ROLE}"))
+    org = str(uuid.uuid4())
+    rid = _seed(
+        app_engine, org, [{"step_order": 1, "name": "HoD", "approver_role": "department-admin", "is_final": True}]
+    )
+    later = datetime.now(UTC) + timedelta(days=30)
+    start = threading.Barrier(2)
+    counts: list[int] = []
+
+    def check():
+        with platform_scope(), Session(app_engine) as s:
+            start.wait()
+            counts.append(service.escalate_overdue(s, now=later))
+
+    threads = [threading.Thread(target=check) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(15)
+    with app_engine.begin() as conn:
+        _as(conn, org)
+        rows = conn.execute(text("SELECT count(*) FROM workflow_escalation WHERE request_id = :r"), {"r": rid}).scalar()
+        events = conn.execute(
+            text(
+                "SELECT count(*) FROM outbox_event WHERE name = 'workflow.step.overdue' AND payload ->> 'request_id' = :r"
+            ),
+            {"r": rid},
+        ).scalar()
+    # The shared database also holds other tests' overdue requests, which either check may escalate; this request's
+    # step must be escalated exactly once between the two.
+    assert len(counts) == 2 and rows == 1 and events == 1

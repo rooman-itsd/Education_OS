@@ -17,6 +17,9 @@ Configurable workflow and approval engine (state machines, SLAs, delegation).
 - **Act:** the current step's `approver_role`, the delegate, or an admin; never the requester. Approve, reject and
   delegate lock the request row, and an optional `step_order` makes a late decision on a finished step a 409.
 - **Idempotency:** `client_token` is unique per requester (`organisation_id, requester_id, client_token`).
+- **SLA:** each step's deadline is its `sla_hours`, else `WORKFLOW_DEFAULT_SLA_HOURS`. The scheduled job
+  `workflow.sla-check` escalates a pending step past its deadline once: a `workflow_escalation` row and a
+  `workflow.step.overdue` event (retried by the relay until delivered).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
