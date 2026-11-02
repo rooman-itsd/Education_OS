@@ -266,7 +266,11 @@ def test_no_audited_event_can_put_an_email_address_into_a_record(name):
     deliver(e)
     text = stored_text(e)
     assert not EMAIL.search(text), name
-    assert "visible" in text, name
+    if name != "tenancy.organisation.purged":
+        # The over-stripping guard: harmless fields survive. Not for a purge: this branch tombstones the purged
+        # organisation's trail by design (DPDP erasure keeps who did what, not the payloads), so by the time the
+        # record is read there is nothing left to be visible.
+        assert "visible" in text, name
 
 
 def test_a_record_audit_cannot_store_raises_so_the_relay_retries(monkeypatch):
