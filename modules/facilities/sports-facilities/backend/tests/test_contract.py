@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 from conftest import BASE, outbox
+from eos_sports_facilities.api import schemas
 from eos_sports_facilities.application import service as svc
 from eos_sports_facilities.domain import rules
 from fastapi.routing import APIRoute
@@ -104,3 +105,18 @@ def test_responses_have_the_contract_shapes_and_events_match_events_yaml(client,
     declared = {e["name"]: set(e["payload"]) for e in EVENTS["events"]}
     published = {e.name: set(e.payload) for e in outbox(org.id)}
     assert published == declared
+
+
+@pytest.mark.parametrize(
+    "schema",
+    ["Facility", "CreateFacilityRequest", "UpdateFacilityRequest", "Space", "CreateSpaceRequest", "UpdateSpaceRequest"],
+)
+def test_the_contract_states_the_input_caps_the_code_applies(schema):
+    sports = SCHEMAS[schema]["properties"]["sports"]
+    assert sports["maxItems"] == schemas.MAX_SPORTS and sports["items"]["maxLength"] == 80
+    if "description" in SCHEMAS[schema]["properties"]:
+        assert SCHEMAS[schema]["properties"]["description"]["maxLength"] == schemas.MAX_DESCRIPTION
+
+
+def test_the_contract_states_the_slot_cap():
+    assert SCHEMAS["OperatingHours"]["properties"]["slots"]["maxItems"] == schemas.MAX_SLOTS

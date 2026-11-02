@@ -70,6 +70,11 @@ class OperatingHoursSlot(Base, TenantMixin):
     """One opening slot of the weekly hours, in the institution's local time. No rows means always open."""
 
     __tablename__ = f"{PREFIX}operating_hours"
+    __table_args__ = (
+        UniqueConstraint(
+            "organisation_id", "facility_id", "day_of_week", "opens_at", name="uq_sports_facilities_hours_slot"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     facility_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}facility.id"), index=True)

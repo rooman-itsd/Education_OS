@@ -1,9 +1,15 @@
 """Request bodies, mirroring contracts/openapi.yaml components. Shape errors (a wrong type, a missing field, an
 unknown field, an id that is not a UUID, a time without its offset) are 422; the contract's written rules (usage
-window, space of the facility, slot order, period length, at least one field) are checked by the service (400)."""
+window, space of the facility, slot order, period length, at least one field) are checked by the service (400).
+
+Limits (also in contracts/openapi.yaml): at most MAX_SPORTS sports of up to 80 characters each, MAX_SLOTS weekly
+slots, a description of up to MAX_DESCRIPTION characters, and every date or date-time between FIRST_DAY and LAST_DAY
+(years 2000 to 2100), so no input can push a date past what Python can represent while it is shifted to the local
+time zone. A status `until` is also at most rules.MAX_PERIOD_DAYS ahead (checked by the service, 400)."""
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time
 from typing import Annotated, ClassVar, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -18,6 +24,18 @@ Uuid = Annotated[
 HHMM = r"^([01][0-9]|2[0-3]):[0-5][0-9]$"
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Sport = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+MAX_SPORTS = 50
+MAX_SLOTS = 50
+MAX_DESCRIPTION = 5000
+FIRST_DAY = date(2000, 1, 1)
+LAST_DAY = date(2100, 12, 31)
+Sports = Annotated[list[Sport], Field(max_length=MAX_SPORTS)]
+Description = Annotated[str, Field(max_length=MAX_DESCRIPTION)]
+Day = Annotated[date, Field(ge=FIRST_DAY, le=LAST_DAY)]
+Instant = Annotated[
+    AwareDatetime,
+    Field(ge=datetime.combine(FIRST_DAY, time.min, tzinfo=UTC), le=datetime.combine(LAST_DAY, time.max, tzinfo=UTC)),
+]
 
 
 class Strict(BaseModel):
@@ -41,30 +59,30 @@ class Patch(Strict):
 class FacilityIn(Strict):
     name: Annotated[Name, Field(max_length=200)]
     facility_type: FacilityType
-    sports: list[Sport]
+    sports: Sports
     surface: str | None = Field(default=None, max_length=120)
     indoor: bool
     capacity: int | None = Field(default=None, ge=1)
     location: str | None = Field(default=None, max_length=300)
-    description: str | None = None
+    description: Description | None = None
 
 
 class FacilityPatch(Patch):
     NULLABLE = frozenset({"surface", "capacity", "location", "description"})
     name: Annotated[Name, Field(max_length=200)] | None = None
     facility_type: FacilityType | None = None
-    sports: list[Sport] | None = None
+    sports: Sports | None = None
     surface: str | None = Field(default=None, max_length=120)
     indoor: bool | None = None
     capacity: int | None = Field(default=None, ge=1)
     location: str | None = Field(default=None, max_length=300)
-    description: str | None = None
+    description: Description | None = None
 
 
 class SpaceIn(Strict):
     name: Annotated[Name, Field(max_length=120)]
     capacity: int | None = Field(default=None, ge=1)
-    sports: list[Sport] = Field(default_factory=list)
+    sports: Sports = Field(default_factory=list)
     active: bool = True
 
 
@@ -72,15 +90,15 @@ class SpacePatch(Patch):
     NULLABLE = frozenset({"capacity"})
     name: Annotated[Name, Field(max_length=120)] | None = None
     capacity: int | None = Field(default=None, ge=1)
-    sports: list[Sport] | None = None
+    sports: Sports | None = None
     active: bool | None = None
 
 
 class UsageIn(Strict):
     facility_id: Uuid
     space_id: Uuid | None = None
-    used_from: AwareDatetime
-    used_to: AwareDatetime
+    used_from: Instant
+    used_to: Instant
     purpose: Purpose
     group_name: str | None = Field(default=None, max_length=200)
     headcount: int | None = Field(default=None, ge=1)
@@ -94,13 +112,13 @@ class SlotIn(Strict):
 
 
 class OperatingHoursIn(Strict):
-    slots: list[SlotIn]
+    slots: list[SlotIn] = Field(max_length=MAX_SLOTS)
 
 
 class StatusIn(Strict):
     status: Status
     reason: str | None = Field(default=None, max_length=500)
-    until: AwareDatetime | None = None
+    until: Instant | None = None
 
 
 def dump(body: BaseModel, *, partial: bool = False) -> dict:

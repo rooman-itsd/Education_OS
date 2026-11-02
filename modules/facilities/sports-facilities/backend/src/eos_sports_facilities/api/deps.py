@@ -19,10 +19,8 @@ def current_actor(authorization: str | None = Header(default=None), db: Session 
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"code": "unauthorised", "message": "missing bearer token"})
     try:
         claims = decode_token(authorization.split(" ", 1)[1])
-    except jwt.PyJWTError as e:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, {"code": "unauthorised", "message": f"invalid token: {e}"}
-        ) from e
+    except jwt.PyJWTError as e:  # the library's reason stays out of the response
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, {"code": "unauthorised", "message": "invalid token"}) from e
     organisation_id = claims.get("org")
     if not organisation_id:
         raise HTTPException(

@@ -49,8 +49,17 @@ Python package `eos_sports_facilities` in `backend/src/`, in four layers:
 Rules the contract leaves to the module, as built:
 - Dates are local dates in `SPORTS_FACILITIES_TIMEZONE` (default `Asia/Kolkata`); instants are stored in UTC.
 - Facility names are unique in an organisation, space names in their facility (`400 duplicate_name`).
-- Slots of one day may not overlap (`400 overlapping_slots`); a status `until` must be in the future (`400 until_in_past`).
-- `GET /usage?from&to` returns the records that touch those local dates.
+- Slots of one day may not overlap (`400 overlapping_slots`); a status `until` must be in the future (`400 until_in_past`)
+  and at most 366 days ahead (`400 until_too_far`).
+- `PUT .../hours` locks the facility row (`SELECT ... FOR UPDATE`); slots are unique on (organisation, facility, day,
+  opening time), and a concurrent update that still clashes is `409 hours_conflict`.
+- `GET /usage?from&to` returns the records that touch those local dates; with both, the period follows the
+  utilisation rule (`400 invalid_period`, `400 period_too_long`).
+- Input limits (422 past them, also in `contracts/openapi.yaml`): every date and date-time between 2000-01-01 and
+  2100-12-31; at most 50 sports of up to 80 characters; at most 50 weekly slots; a description of up to 5000
+  characters.
+- `GET /facilities` pages in Python after loading the organisation's facilities, so the sport filter matches the
+  JSON list the same way on SQLite and Postgres. Fine for tens of facilities; move the match into SQL if that grows.
 - Utilisation: `hours_used` is the time the facility was in use inside the period, so two groups at once count
   once; each `by_purpose` entry is counted the same way within its purpose, and only purposes with use are listed.
   Use outside the operating hours still counts, so `utilisation_pct` can pass 100.

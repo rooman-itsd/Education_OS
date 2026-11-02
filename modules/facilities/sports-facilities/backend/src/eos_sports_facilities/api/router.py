@@ -20,6 +20,11 @@ LIMIT = Query(50, ge=1, le=200)
 OFFSET = Query(0, ge=0)
 
 
+def _day(default=..., alias: str | None = None):
+    """A date query parameter within the years the schemas accept (schemas.FIRST_DAY..LAST_DAY), else 422."""
+    return Query(default, alias=alias, ge=s.FIRST_DAY, le=s.LAST_DAY)
+
+
 def _run(fn, *args):
     try:
         return fn(*args)
@@ -130,8 +135,8 @@ def set_facility_status(
 @router.get("/facilities/{facility_id}/utilisation")
 def get_utilisation(
     facility_id: str,
-    from_: date = Query(alias="from"),
-    to: date = Query(),
+    from_: date = _day(alias="from"),
+    to: date = _day(),
     _: Actor = Depends(require(svc.USAGE_READ)),
     db: Session = Depends(get_db),
 ):
@@ -145,15 +150,15 @@ def get_utilisation(
 def list_usages(
     facility_id: str | None = None,
     purpose: s.Purpose | None = None,
-    from_: date | None = Query(None, alias="from"),
-    to: date | None = None,
+    from_: date | None = _day(None, alias="from"),
+    to: date | None = _day(None),
     limit: int = LIMIT,
     offset: int = OFFSET,
     _: Actor = Depends(require(svc.USAGE_READ)),
     db: Session = Depends(get_db),
 ):
     filters = {"facility_id": facility_id, "purpose": purpose, "from": from_, "to": to}
-    return svc.list_usages(db, filters, limit, offset)
+    return _run(svc.list_usages, db, filters, limit, offset)
 
 
 @router.post("/usage", status_code=201)

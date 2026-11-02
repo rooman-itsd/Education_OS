@@ -252,7 +252,8 @@ paths:
     get:
       summary: List usage records
       description: 'Newest first. from and to are inclusive local dates in the institution''s time zone
-        (SPORTS_FACILITIES_TIMEZONE). Permission: `sports-facilities:usage:read`.'
+        (SPORTS_FACILITIES_TIMEZONE), between 2000-01-01 and 2100-12-31 (422 otherwise). With both, the period is at
+        most 366 days and to before from is 400. Permission: `sports-facilities:usage:read`.'
       operationId: listUsages
       parameters:
       - name: facility_id
@@ -402,6 +403,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /facilities/{facility_id}/status:
     parameters:
     - name: facility_id
@@ -443,8 +446,8 @@ paths:
         format: uuid
     get:
       summary: Utilisation between two dates
-      description: 'Hours used against hours open, by purpose, from and to inclusive local dates (at most 366 days;
-        to before from is 400). Hours open come from the weekly operating hours; a facility with none is open all day.
+      description: 'Hours used against hours open, by purpose, from and to inclusive local dates between 2000-01-01
+        and 2100-12-31 (at most 366 days; to before from is 400). Hours open come from the weekly operating hours; a facility with none is open all day.
         utilisation_pct is omitted when hours_open is 0. Permission: `sports-facilities:usage:read`.'
       operationId: getUtilisation
       parameters:
@@ -492,6 +495,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
       description: Resource not found in the caller's organisation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Another request changed the same resource at the same time; reload and retry
       content:
         application/json:
           schema:
@@ -572,8 +581,10 @@ components:
           - other
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
             example: Athletics
         surface:
           type: string
@@ -589,6 +600,7 @@ components:
           example: North campus
         description:
           type: string
+          maxLength: 5000
     CreateFacilityRequest:
       type: object
       required:
@@ -613,8 +625,10 @@ components:
           - other
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
             example: Athletics
         surface:
           type: string
@@ -630,6 +644,7 @@ components:
           example: North campus
         description:
           type: string
+          maxLength: 5000
     Space:
       type: object
       description: A part of a facility used on its own, e.g. Court 2 or Lanes 1–4.
@@ -668,8 +683,10 @@ components:
           minimum: 1
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
         active:
           type: boolean
           default: true
@@ -686,8 +703,10 @@ components:
           minimum: 1
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
         active:
           type: boolean
           default: true
@@ -703,8 +722,10 @@ components:
           minimum: 1
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
         active:
           type: boolean
           default: true
@@ -748,9 +769,11 @@ components:
         used_from:
           type: string
           format: date-time
+          description: Between 2000-01-01 and 2100-12-31 (422 otherwise).
         used_to:
           type: string
           format: date-time
+          description: Between 2000-01-01 and 2100-12-31 (422 otherwise).
         purpose:
           type: string
           enum:
@@ -786,9 +809,11 @@ components:
         used_from:
           type: string
           format: date-time
+          description: Between 2000-01-01 and 2100-12-31 (422 otherwise).
         used_to:
           type: string
           format: date-time
+          description: Between 2000-01-01 and 2100-12-31 (422 otherwise).
         purpose:
           type: string
           enum:
@@ -816,6 +841,7 @@ components:
       properties:
         slots:
           type: array
+          maxItems: 50
           items:
             type: object
             required:
@@ -853,6 +879,7 @@ components:
         until:
           type: string
           format: date-time
+          description: Expected end of this status. In the future and at most 366 days ahead (400 otherwise).
     Utilisation:
       type: object
       required:
@@ -906,8 +933,10 @@ components:
           - other
         sports:
           type: array
+          maxItems: 50
           items:
             type: string
+            maxLength: 80
             example: Athletics
         surface:
           type: string
@@ -923,3 +952,4 @@ components:
           example: North campus
         description:
           type: string
+          maxLength: 5000
