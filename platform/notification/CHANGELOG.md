@@ -3,6 +3,11 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- A refused registration is emailed (#316 follow-up). tenancy refuses a registration by archiving (or suspending)
+  an organisation that is still pending, and only logged the email through the `eos_core.notify` stub. New
+  template `tenancy.organisation.rejected` (with the reason) and one handler for `tenancy.organisation.archived` and
+  `.suspended` (`on_status_changed`) that chooses the template from the payload's `previous_status` (tenancy
+  contract 0.3.0, #432): `pending_*` is a rejection; anything else, or no `previous_status`, sends nothing here.
 - Notification now reacts to other modules' events (#316). It declared nine consumed events in its contract but
   registered no consumer, so the relay delivered them to nobody, marked them published and sent nothing.
   `application/consumers.py` is published on the `eos.event_consumers` entry point and mails the organisation's

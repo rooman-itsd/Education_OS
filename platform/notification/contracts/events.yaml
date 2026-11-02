@@ -66,6 +66,8 @@ consumes:
   - tenancy.organisation.registered     # verification mail; replaces the live eos_core.notify stub
   - tenancy.organisation.verified       # awaiting operator approval
   - tenancy.organisation.approved       # academy is live, how to sign in
+  - tenancy.organisation.archived       # previous_status pending_*: registration refused (tenancy.organisation.rejected)
+  - tenancy.organisation.suspended      # previous_status pending_*: registration refused (tenancy.organisation.rejected)
   - tenancy.package.requested           # package change requested
   - tenancy.package.changed             # package change applied
   - identity.user.created               # welcome, set your password

@@ -131,6 +131,19 @@ DEFAULTS: dict[str, DefaultTemplate] = {
             in_app_allowed=True,
         ),
         _t(
+            "tenancy.organisation.rejected",
+            "operational",
+            ["email"],
+            ["organisation_name", "reason"],
+            {
+                ("email", "en"): (
+                    "Your Education OS registration for ${organisation_name} was not approved",
+                    "The registration of ${organisation_name} was not approved by the platform operator.\n\n"
+                    "Reason: ${reason}\n\nIf you think this is a mistake, reply to this email." + _FOOTER,
+                )
+            },
+        ),
+        _t(
             "billing.trial.reminder",
             "reminder",
             ["email", "in_app"],

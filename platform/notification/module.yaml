@@ -26,6 +26,8 @@ consumes_events:
   - tenancy.organisation.registered
   - tenancy.organisation.verified
   - tenancy.organisation.approved
+  - tenancy.organisation.archived       # a refused registration (previous_status pending_*)
+  - tenancy.organisation.suspended      # a refused registration (previous_status pending_*)
   - tenancy.package.requested
   - tenancy.package.changed
   - identity.user.created

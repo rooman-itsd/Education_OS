@@ -170,3 +170,56 @@ def test_the_lookup_is_found_on_the_entry_point_group(monkeypatch):
         assert calls == ["org-1"]
     finally:
         organisations.reset_cache()
+
+
+# --- a refused registration (tenancy archives or suspends an organisation still pending) -------------------------
+
+
+def test_a_refused_registration_mails_the_reason_once():
+    """Replaces tenancy's eos_core.notify stub, which only logged this email (#316 follow-up)."""
+    o = Org.create(SessionLocal())
+    e = event(
+        "tenancy.organisation.archived",
+        o.id,
+        {"organisation_id": o.id, "reason": "Incomplete documentation", "previous_status": "pending_approval"},
+    )
+    deliver_status(e)
+    deliver_status(e)  # redelivered: nobody is mailed twice
+    (message,) = messages_of(o.id)
+    assert message.template_key == "tenancy.organisation.rejected" and message.status == "sent"
+    (mail,) = [m for m in transport_module.sent if m.get("to") == o.admin.email]
+    assert "was not approved" in mail["subject"] and NAME in mail["subject"]
+    assert "Incomplete documentation" in mail["body"]
+
+
+def test_suspending_a_pending_registration_is_also_a_rejection():
+    o = Org.create(SessionLocal())
+    deliver_status(
+        event("tenancy.organisation.suspended", o.id, {"reason": "spam", "previous_status": "pending_verification"})
+    )
+    assert [m.template_key for m in messages_of(o.id)] == ["tenancy.organisation.rejected"]
+
+
+def test_closing_an_active_organisation_is_not_a_rejection():
+    o = Org.create(SessionLocal())
+    deliver_status(event("tenancy.organisation.archived", o.id, {"reason": "closed", "previous_status": "active"}))
+    assert messages_of(o.id) == []
+
+
+def test_without_previous_status_nothing_is_guessed():
+    """An event from before tenancy contract 0.3.0 cannot say whether it was a rejection: no email rather than the
+    wrong one."""
+    o = Org.create(SessionLocal())
+    deliver_status(event("tenancy.organisation.archived", o.id, {"reason": "registration rejected"}))
+    assert messages_of(o.id) == []
+
+
+def test_status_events_are_handled_by_the_status_dispatcher():
+    for name in consumers.STATUS_EVENTS:
+        assert consumers.CONSUMERS[name] is consumers.on_status_changed
+
+
+def deliver_status(e) -> None:
+    with organisation_scope(e.organisation_id), SessionLocal() as session:
+        consumers.CONSUMERS[e.name](session, e)
+        session.commit()
