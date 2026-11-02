@@ -13,6 +13,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Status-change events (`tenancy.organisation.activated|suspended|archived` from `PUT /status` and reject)
   carry `previous_status`, so notification can tell a refused registration from a suspension or closure.
   Contract 0.3.0 (additive).
+- Super Admin dashboard widgets (#346): `tenancy.approval-queue` (registrations awaiting approval and package
+  changes, oldest first), `tenancy.organisations-by-status` (a count per status) and `tenancy.recent-registrations`
+  (the five newest), all on `platform:organisations:read` from `GET /admin/organisations`. Frontend only; no
+  contract change.
 - The registration verification mail goes through `platform/notification` (template
   `tenancy.organisation.verify`) instead of the `eos_core.notify` stub (#316). It is recorded in the
   registration's transaction and sent only after that commits, so a failed registration sends nothing. If
