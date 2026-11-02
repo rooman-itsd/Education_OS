@@ -48,6 +48,6 @@ def test_fresh_upgrade_matches_the_models_and_downgrades_cleanly():
             compare_metadata(MigrationContext.configure(conn, opts={"include_object": _include}), Base.metadata) == []
         )
         head = RuntimeContext.configure(conn, opts={"version_table": "workflow_alembic_version"}).get_current_revision()
-    assert head == "workflow_0001"
+    assert head == "workflow_0002"
     command.downgrade(cfg, "base")
     assert not TABLES & set(inspect(create_engine(url)).get_table_names())

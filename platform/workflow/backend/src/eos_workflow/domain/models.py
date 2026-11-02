@@ -89,7 +89,9 @@ class WorkflowRequest(Base, TenantMixin):
     __table_args__ = (
         Index("ix_workflow_request_org_status", "organisation_id", "status"),
         Index("ix_workflow_request_org_entity", "organisation_id", "entity_type", "entity_id"),
-        Index("uq_workflow_request_org_token", "organisation_id", "client_token", unique=True),
+        Index(
+            "uq_workflow_request_org_requester_token", "organisation_id", "requester_id", "client_token", unique=True
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

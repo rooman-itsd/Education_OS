@@ -3,6 +3,22 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+Contract 0.2.0: request reads and delegation targets are narrower (security fixes below); `step_order` on
+actions is new and optional.
+
+### Fixed
+- `client_token` idempotency is per requester (migration `workflow_0002`): replaying another user's token created
+  nothing new and returned their request, context included. It now creates the caller's own request.
+- Request reads follow who is involved: department admins and other approvers see requests that reached a step
+  their role approves, are delegated to them, or that they acted on; org and super admins see all. Before, any
+  holder of `workflow:approval:action` read every request in the organisation.
+- Approve, reject and delegate lock the request row (`SELECT ... FOR UPDATE`), so two concurrent decisions can no
+  longer both apply (an approve and a reject both recorded, or one step approved twice). Actions accept an optional
+  `step_order` and answer 409 if the request has already moved past it.
+- Delegation requires a target holding `workflow:approval:action` who is not the requester, so a delegated item
+  can no longer sit in a queue whose owner is refused every action.
+- Creating a chain whose code differs only by surrounding spaces, or racing a second create, answers 409, not 500.
+
 ### Added
 - Implemented core domain models: `ApprovalChain`, `ApprovalStep`, `WorkflowRequest`, `WorkflowAction`.
 - Added database migration `workflow_0001` with PostgreSQL Row Level Security (`rls.POLICY`) and `ix_<table>_organisation_id` indexes on all 4 workflow tables.
