@@ -43,15 +43,23 @@ def test_package_needs_super_admin_approval(client, manual_approval):
         headers=sa,
     )
     assert a.status_code == 200 and a.json()["status"] == "active"
+    # The approval email is notification's: tenancy publishes tenancy.organisation.approved and notification's
+    # consumer mails the admins (end to end in test_notification_consumers.py). The legacy eos_core.notify stub,
+    # which only logged a second copy, is no longer called.
     from eos_core import notify
+    from eos_core.db import SessionLocal
+    from eos_core.events import OutboxEvent
+    from eos_core.tenant import platform_scope
+    from sqlalchemy import select
 
-    approval_emails = [
-        m for m in notify.sent if m["to"] == "admin@pending.example.com" and "approved" in m["subject"].lower()
-    ]
-    assert len(approval_emails) == 1
-    assert approval_emails[0]["organisation_id"] == v.json()["id"]
-    assert "Pending College" in approval_emails[0]["subject"]
-    assert "law-college" in approval_emails[0]["body"]
+    with platform_scope(), SessionLocal() as db:
+        approved = db.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.name == "tenancy.organisation.approved", OutboxEvent.organisation_id == v.json()["id"]
+            )
+        ).all()
+    assert len(approved) == 1 and approved[0].payload["academy_type"] == "law-college"
+    assert not [m for m in notify.sent if m["to"] == "admin@pending.example.com"]
 
     assert (
         client.post(
@@ -91,6 +99,20 @@ def test_package_rejection_sends_email(client, manual_approval):
         headers=sa,
     )
     assert rej.status_code == 200 and rej.json()["status"] == "archived"
+    # The event says it was a refused registration, not a closed organisation (what notification needs to choose)
+    from eos_core.db import SessionLocal
+    from eos_core.events import OutboxEvent
+    from eos_core.tenant import platform_scope
+    from sqlalchemy import select
+
+    with platform_scope(), SessionLocal() as db:
+        (archived,) = db.scalars(
+            select(OutboxEvent).where(
+                OutboxEvent.name == "tenancy.organisation.archived", OutboxEvent.organisation_id == v.json()["id"]
+            )
+        ).all()
+    assert archived.payload["previous_status"] == "pending_approval"
+    assert archived.payload["reason"] == "Incomplete documentation"
 
     # cannot sign in
     r = client.post(

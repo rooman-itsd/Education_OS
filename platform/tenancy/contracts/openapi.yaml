@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: tenancy API
-  version: 0.2.0
+  version: 0.3.0
   description: "Organisations (tenants), self-service registration, academy type, entitlements. See ADR-0005."
 servers:
   - url: /api/v1/tenancy
@@ -24,6 +24,18 @@ paths:
       security: []
       requestBody: { content: { application/json: { schema: { type: object, required: [token], properties: { token: { type: string } } } } } }
       responses: { "200": { description: Organisation with its status, content: { application/json: { schema: { $ref: "#/components/schemas/Organisation" } } } } }
+  /register/resend:
+    post:
+      summary: >-
+        Mail a new verification token to the address that registered the organisation, if it is still pending
+        verification. Earlier unused tokens stop working. Always 202, whether or not a mail was sent, so it reveals
+        nothing about which registrations exist. At most one mail a minute and five a day per organisation; requests
+        beyond that are dropped silently.
+      security: []
+      requestBody: { content: { application/json: { schema: { type: object, required: [slug, email], properties: { slug: { type: string, maxLength: 40 }, email: { type: string, maxLength: 254 } } } } } }
+      responses:
+        "202": { description: Accepted, content: { application/json: { schema: { type: object, properties: { status: { type: string, enum: [accepted] } } } } } }
+        "503": { description: No mail transport is configured; the earlier token stays valid }
   /organisation/academy-package:
     put:
       summary: Ask to change academic package (academy type). Takes effect only when a super admin approves. Permission tenancy:organisation:manage.

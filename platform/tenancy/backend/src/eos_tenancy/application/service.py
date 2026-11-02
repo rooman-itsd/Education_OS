@@ -32,6 +32,9 @@ EXPORT_SCHEMA_VERSION = 1
 DEFAULT_RETENTION_DAYS = 30
 SLUG_RE = re.compile(r"^[a-z0-9-]{3,40}$")
 RESERVED = {"admin", "api", "www", "app", "platform"}
+TOKEN_TTL = timedelta(hours=48)  # a verification token's life; also how its issue time is derived (expires - TTL)
+RESEND_COOLDOWN = timedelta(seconds=60)  # between two verification emails for one organisation
+RESEND_MAX_PER_DAY = 5  # verification emails per organisation in any 24 hours, the registration's included
 
 
 class TenancyError(Exception):
@@ -90,7 +93,7 @@ def register(
             organisation_id=org.id,
             token=token,
             email=admin["email"].lower(),
-            expires_at=utcnow() + timedelta(hours=48),
+            expires_at=utcnow() + TOKEN_TTL,
         )
         db.add(issued)
         db.flush()
@@ -119,6 +122,60 @@ def register(
     db.commit()
     _deliver_verification(accepted)
     return org, token
+
+
+def resend_verification(db: Session, *, slug: str, email: str) -> None:
+    """Issue a new verification token for an organisation still awaiting verification and mail it to the address
+    that registered it. The verification email carries a secret that is never stored, so a mail lost to a
+    provider failure (or a closed tab) cannot be re-sent as is: this is the only way to recover.
+
+    Answers the same way whether or not anything was sent, so it cannot be used to learn which slugs and
+    addresses are registered, and it cannot be used to mail anyone but the registering address. Limited per
+    organisation: one mail per RESEND_COOLDOWN and RESEND_MAX_PER_DAY in 24 hours; anything beyond is dropped.
+    Earlier unused tokens stop working, so only the newest mail's token verifies."""
+    with platform_scope():
+        org = db.scalar(select(Organisation).where(Organisation.slug == slug))
+        if org is None or org.status != "pending_verification":
+            return
+        issued = list(
+            db.scalars(
+                select(RegistrationToken)
+                .where(RegistrationToken.organisation_id == org.id)
+                .order_by(RegistrationToken.expires_at.desc())
+            )
+        )
+    if not issued or issued[0].email != email.strip().lower():
+        return
+    now = utcnow()
+    issued_at = [_aware(t.expires_at) - TOKEN_TTL for t in issued]
+    if issued_at[0] > now - RESEND_COOLDOWN:
+        log.info("verification resend for %s dropped: cooldown", org.id)
+        return
+    if sum(1 for at in issued_at if at > now - timedelta(days=1)) >= RESEND_MAX_PER_DAY:
+        log.info("verification resend for %s dropped: daily limit", org.id)
+        return
+    with organisation_scope(org.id):
+        for old in issued:
+            old.used = True  # only the newest token verifies
+        token = secrets.token_urlsafe(32)
+        fresh = RegistrationToken(
+            organisation_id=org.id, token=token, email=issued[0].email, expires_at=now + TOKEN_TTL
+        )
+        db.add(fresh)
+        db.flush()
+        try:
+            accepted = messages.accept_in_transaction(
+                db,
+                template="tenancy.organisation.verify",
+                recipient={"address": fresh.email},
+                variables={"organisation_name": org.name, "token": token, "token_id": fresh.id},
+                client_token=f"tenancy:verify:{fresh.id}",
+            )
+        except NotificationError as e:
+            db.rollback()  # no transport: keep the earlier token valid rather than issue one nobody receives
+            raise TenancyError(f"verification email cannot be sent: {e.detail}", e.status) from e
+    db.commit()
+    _deliver_verification(accepted)
 
 
 def _deliver_verification(accepted: messages.Accepted) -> None:
@@ -180,16 +237,7 @@ def _activate(db: Session, org: Organisation, *, approved_by: str | None, reason
         actor=approved_by,
     )
     events.publish(db, "tenancy.organisation.activated", org.id, {"organisation_id": org.id})
-    email = _admin_email(db, org.id)
-    if email:
-        notify.send_email(
-            email,
-            f"Your Education OS organisation {org.name} has been approved",
-            f"Congratulations! Your organisation {org.name} has been approved on the {org.academy_type} package. You can now sign in to your administrator dashboard.",
-            organisation_id=org.id,
-            academy_type=org.academy_type,
-            status="active",
-        )
+    # The approval email is notification's, on tenancy.organisation.approved (its consumer mails the admins).
 
 
 def approve(db: Session, organisation_id: str, *, approved_by: str, reason: str = "") -> Organisation:
@@ -354,7 +402,14 @@ def set_status(db: Session, organisation_id: str, status: str, reason: str) -> O
         prev_status = org.status
         org.status, org.status_reason = status, reason
         name = {"active": "activated", "suspended": "suspended", "archived": "archived"}.get(status, "status_changed")
-        events.publish(db, f"tenancy.organisation.{name}", org.id, {"organisation_id": org.id, "reason": reason})
+        events.publish(
+            db,
+            f"tenancy.organisation.{name}",
+            org.id,
+            # previous_status lets a consumer tell a refused registration (pending_* -> archived/suspended) from
+            # an active organisation being suspended or closed, and a reactivation from a first activation.
+            {"organisation_id": org.id, "reason": reason, "previous_status": prev_status},
+        )
         email = _admin_email(db, org.id)
         rejected = prev_status in ("pending_verification", "pending_approval") and status in ("archived", "suspended")
         if email and rejected:
