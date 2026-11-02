@@ -2,7 +2,8 @@
 
 **Domain:** finance-operations
 **Kind:** feature
-**Status:** in-progress (backend built; not yet enabled in `apps/backend`; widget and pages to follow)
+**Status:** in-progress (backend built; enabled in `apps/backend` and `apps/frontend`; the files-pending widget is
+on the HR Staff dashboard, pages to follow)
 
 Paperless office files: a file with its note sheet and attachments moves from person to person until the competent
 authority decides and the file is closed. Inward letters are registered and routed; approved letters are dispatched.
@@ -101,9 +102,11 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting, install and CI:** a `finance-operations/e-office` entry in `apps/backend/config/modules.enabled.yaml`
-  mounts the router at `/api/v1/e-office` (package `eos_e_office`) and lets the install, CI and deploy scripts pick it
-  up. That is a separate PR; until then the API is not served.
+- **Mounting, install and CI:** the `finance-operations/e-office` entry in `apps/backend/config/modules.enabled.yaml`
+  mounts the router at `/api/v1/e-office` (package `eos_e_office`) behind the entitlement gate; `py-setup.sh`, the API
+  image, CI and the auto-deploy install it, run its tests and upgrade its chain from that entry.
+- **Dashboard:** the entry in `apps/frontend/config/modules.enabled.yaml` registers `frontend/src/widgets/index.ts`.
+  It exports `e-office.files-pending` (#411), which the HR Staff layout places.
 - **Scheduler:** installing the package declares `e-office.flag-overdue` on `eos.scheduler_jobs`, a platform job with a
   default schedule of 18:45 UTC (00:15 IST) daily, and its handler on `eos.event_consumers`. It runs once the scheduler
   loop and the event-bus relay run in the deployment; the run is closed by `e-office.job.finished`.
