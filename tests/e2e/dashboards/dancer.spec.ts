@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Dancer dashboard (layout platform/identity/config/dashboards/dancer.yaml, which extends the Student layout; the role
@@ -14,9 +14,10 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   permissions through `extends`);
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
  *   builds it: skill-progress (#329), productions (#318), selection-process (#322, PR #414), facility-booking.my-bookings
- *   (#331, PR #395) and timetable-attendance (#325);
- * - no data journey yet: inventory-equipment.my-loans needs a loan handed out to the dancer, and the other widgets
- *   wait for their modules.
+ *   (#331, PR #395), timetable-attendance and examinations (#325), lms (#326), transport and library (#338);
+ * - data journey: an item the dancer asks to borrow shows in inventory-equipment.my-loans. Facility staff set up
+ *   the item and receive stock; the dancer (loan:request) requests the loan. The other widgets' journeys wait for
+ *   their modules.
  *
  * facilities, finance-operations and campus-life are not in the Trial plan (platform/billing/config/plans.yaml), so the
  * super admin moves the organisation to Standard first. The empty-state tests run before any data is created (serial
@@ -87,15 +88,23 @@ const WIDGETS: LayoutWidget[] = [
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
+
+let admin: DashboardUser;
 let user: DashboardUser;
+/** Facility staff: they run the catalogue and stores, so they set up the item the dancer borrows. */
+let facilityStaff: DashboardUser;
 /** Per shipped widget id: what its GET answered the dancer. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "dance-academy", role: "dancer" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "dance-academy" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "dancer");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -129,4 +138,39 @@ test.describe("dancer widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with facilities data", () => {
+  test("inventory-equipment.my-loans lists an item the dancer asks to borrow", async ({ page, request }) => {
+    const w = byId("inventory-equipment.my-loans");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the inventory-equipment API answered ${status[w.id]} to the dancer role`);
+    // Facility staff (item:manage, stock:manage) set up the catalogue and receive stock, as in production-manager.spec.ts.
+    // The item is loanable by default and not consumable (consumables are refused with consumable_not_loanable); the
+    // category sets no borrower_role_ids, so any role holding loan:request may borrow (check_loan_line in
+    // inventory-equipment's domain/rules.py), and no rule requires approval, so the loan is approved at once.
+    const category = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/categories", { name: "Accessories" });
+    const location = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/locations", { name: "Wardrobe" });
+    const item = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/items", {
+      name: "Ghungroo set",
+      category_id: category.id,
+      tracking: "quantity",
+    });
+    await created(request, facilityStaff, "/inventory-equipment/movements", {
+      kind: "receipt",
+      item_id: item.id,
+      quantity: 2,
+      to_location_id: location.id,
+    });
+    // A week ahead: within the default max_loan_days of 14.
+    const due = new Date(Date.now() + 7 * 86_400_000);
+    await created(request, user, "/inventory-equipment/loans", { lines: [{ item_id: item.id, quantity: 1 }], due_at: due.toISOString() });
+    await signIn(page, user);
+    const panel = widget(page, "My loans");
+    await expect(panel.getByText("Nothing on loan")).toHaveCount(0);
+    await expect(panel.getByText("Ghungroo set", { exact: true })).toBeVisible();
+    // MyLoansWidget's shortDate: "9 Nov" in the browser's (here the host's) time zone.
+    await expect(panel.getByText(`Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)).toBeVisible();
+    await expect(panel.getByText("Ready to collect")).toBeVisible();
+  });
 });
