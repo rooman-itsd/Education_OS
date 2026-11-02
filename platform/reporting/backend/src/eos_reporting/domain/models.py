@@ -63,8 +63,9 @@ class ReportExecution(TenantMixin, Base):
 
     __table_args__ = (
         Index(
-            "uq_reporting_execution_org_client_token",
+            "uq_reporting_execution_org_requester_token",
             "organisation_id",
+            "requested_by",
             "client_token",
             unique=True,
             postgresql_where=text("client_token IS NOT NULL"),

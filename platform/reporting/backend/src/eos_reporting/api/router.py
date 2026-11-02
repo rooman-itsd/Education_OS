@@ -167,7 +167,7 @@ def run_report(
         raise _err(e) from e
     except IntegrityError:
         db.rollback()
-        existing = service.find_execution_by_token(db, p.organisation_id, client_token)
+        existing = service.find_execution_by_token(db, p.organisation_id, p.user_id, client_token)
         if existing:
             return JSONResponse(service.view_execution(existing), status_code=200)
         raise
@@ -182,7 +182,11 @@ def get_execution(
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     execution = service.get_execution(db, p.organisation_id, id)
-    if not execution:
+    if not execution or (
+        not p.can(REPORT_EXECUTE)
+        and service.summary_needs_execute(service.get_definition(db, p.organisation_id, execution.report_definition_id))
+    ):
+        # A financial summary needs reporting:report:execute; without it the run does not exist for the caller.
         raise HTTPException(404, detail={"code": "not_found", "message": f"Execution '{id}' not found"})
     return service.view_execution(execution)
 
@@ -246,7 +250,9 @@ def get_department_reports_widget(
 ):
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
-    return service.get_department_reports_widget_data(db, p.organisation_id, department_id=department_id)
+    return service.get_department_reports_widget_data(
+        db, p.organisation_id, department_id=department_id, include_financial=p.can(REPORT_EXECUTE)
+    )
 
 
 @router.get("/widgets/attendance-and-results")

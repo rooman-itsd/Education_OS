@@ -187,3 +187,78 @@ def test_system_definition_rejects_blank_field_changes(client, org):
     assert client.put(url, json={"parameters_schema": {}}, headers=org.admin_headers).status_code == 403
     # Toggling active state stays allowed
     assert client.put(url, json={"is_active": False}, headers=org.admin_headers).status_code == 200
+
+
+# --- Financial summaries need reporting:report:execute; client_token is per requester (#317 follow-up) ---------
+
+
+def _run(client, headers, code_or_id, **body):
+    r = client.post(f"/api/v1/reporting/definitions/{code_or_id}/run", json=body or None, headers=headers)
+    assert r.status_code in (200, 201), r.text
+    return r.json()
+
+
+def test_financial_summaries_need_execute_academic_ones_only_read(client, org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    attendance = _run(client, org.admin_headers, "department-attendance")
+
+    # Faculty hold reporting:report:read only
+    assert (
+        client.get(f"/api/v1/reporting/executions/{attendance['id']}", headers=org.faculty_headers).status_code == 200
+    )
+    r = client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=org.faculty_headers)
+    assert r.status_code == 404 and "result_summary" not in r.text
+    # ... and neither export nor download the financial run
+    assert (
+        client.get(f"/api/v1/reporting/executions/{fee['id']}/export", headers=org.faculty_headers).status_code == 403
+    )
+    assert (
+        client.get(f"/api/v1/reporting/executions/{fee['id']}/download", headers=org.faculty_headers).status_code == 403
+    )
+
+    # Department admins and management hold reporting:report:execute
+    for headers in (org.dept_admin_headers, org.management_headers, org.admin_headers):
+        r = client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=headers)
+        assert r.status_code == 200 and "result_summary" in r.json()
+
+    # Students hold no reporting permission at all
+    assert (
+        client.get(f"/api/v1/reporting/executions/{attendance['id']}", headers=org.student_headers).status_code == 403
+    )
+
+
+def test_the_recent_reports_widget_lists_financial_runs_only_to_executors(client, org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    attendance = _run(client, org.admin_headers, "department-attendance")
+
+    faculty_view = client.get("/api/v1/reporting/widgets/department-reports", headers=org.faculty_headers).json()
+    assert [r["id"] for r in faculty_view["recent_reports"]] == [attendance["id"]]
+
+    dept_view = client.get("/api/v1/reporting/widgets/department-reports", headers=org.dept_admin_headers).json()
+    listed = {r["id"]: r for r in dept_view["recent_reports"]}
+    assert set(listed) == {fee["id"], attendance["id"]}
+    # The widget names the report, not the definition's internal id
+    assert listed[fee["id"]]["code"] == "fee-collection-summary"
+    assert listed[fee["id"]]["title"] == "Fee Collection and Dues Summary"
+
+
+def test_a_financial_run_of_another_organisation_stays_invisible(client, org, other_org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    assert client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=other_org.admin_headers).status_code == 404
+    other_widget = client.get("/api/v1/reporting/widgets/department-reports", headers=other_org.dept_admin_headers)
+    assert fee["id"] not in {r["id"] for r in other_widget.json()["recent_reports"]}
+
+
+def test_client_token_replay_by_another_user_never_returns_their_run(client, org):
+    mine = _run(client, org.admin_headers, "fee-collection-summary", client_token="shared-token")
+    theirs = _run(client, org.dept_admin_headers, "department-attendance", client_token="shared-token")
+    assert theirs["id"] != mine["id"] and theirs["requested_by"] == org.dept_admin_id
+    assert theirs["report_definition_id"] != mine["report_definition_id"]
+
+    # Each requester's own replay is still idempotent
+    replay = client.post(
+        "/api/v1/reporting/definitions/fee-collection-summary/run",
+        json={"client_token": "shared-token"},
+        headers=org.admin_headers,
+    )
+    assert replay.status_code == 200 and replay.json()["id"] == mine["id"]

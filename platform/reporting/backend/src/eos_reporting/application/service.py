@@ -34,6 +34,15 @@ from ..domain.models import (
 logger = logging.getLogger(__name__)
 
 
+FINANCIAL = "financial"
+
+
+def summary_needs_execute(definition: ReportDefinition | None) -> bool:
+    """Financial report data (fee collection, dues) is for roles that may run and export reports
+    (reporting:report:execute). reporting:report:read covers academic and administrative summaries only."""
+    return definition is not None and definition.category == FINANCIAL
+
+
 class ReportingError(Exception):
     def __init__(self, message: str, status: int = 400) -> None:
         super().__init__(message)
@@ -229,12 +238,16 @@ def update_definition(
     return definition
 
 
-def find_execution_by_token(db: Session, organisation_id: str, client_token: str | None) -> ReportExecution | None:
-    """Find previous execution by client_token for idempotency."""
+def find_execution_by_token(
+    db: Session, organisation_id: str, requested_by: str, client_token: str | None
+) -> ReportExecution | None:
+    """The caller's own earlier run with this client_token. Tokens are per requester: another user's run with the
+    same token is never returned (it would hand them that run's data)."""
     if not client_token:
         return None
     stmt = select(ReportExecution).where(
         ReportExecution.organisation_id == organisation_id,
+        ReportExecution.requested_by == requested_by,
         ReportExecution.client_token == client_token,
     )
     return db.execute(stmt).scalar_one_or_none()
@@ -251,7 +264,7 @@ def run_report(
     """Execute a report definition. Returns (execution, is_new)."""
     # 1. Idempotency check
     if client_token:
-        existing = find_execution_by_token(db, organisation_id, client_token)
+        existing = find_execution_by_token(db, organisation_id, requested_by, client_token)
         if existing:
             return existing, False
 
@@ -492,30 +505,29 @@ def get_execution_export_content(execution: ReportExecution, export_format: str)
 
 
 def get_department_reports_widget_data(
-    db: Session, organisation_id: str, department_id: str | None = None
+    db: Session, organisation_id: str, department_id: str | None = None, include_financial: bool = False
 ) -> dict[str, Any]:
-    """Retrieve operational metrics for department-admin widget from real MetricSnapshot data (read-only)."""
+    """Retrieve operational metrics for department-admin widget from real MetricSnapshot data (read-only).
+    Financial runs are listed only when include_financial (the caller holds reporting:report:execute)."""
     dept_id = department_id or ""
 
-    # Real recent executions
-    recent_runs = list(
-        db.execute(
-            select(ReportExecution)
-            .where(ReportExecution.organisation_id == organisation_id)
-            .order_by(ReportExecution.executed_at.desc())
-            .limit(5)
-        )
-        .scalars()
-        .all()
+    # Real recent executions, with their definition's code and name
+    stmt = (
+        select(ReportExecution, ReportDefinition)
+        .join(ReportDefinition, ReportDefinition.id == ReportExecution.report_definition_id)
+        .where(ReportExecution.organisation_id == organisation_id, ReportDefinition.organisation_id == organisation_id)
     )
+    if not include_financial:
+        stmt = stmt.where(ReportDefinition.category != FINANCIAL)
+    recent_runs = db.execute(stmt.order_by(ReportExecution.executed_at.desc()).limit(5)).all()
     recent_reports = [
         {
             "id": run.id,
-            "code": run.report_definition_id,
-            "title": f"Report Execution ({run.id[:8]})",
+            "code": definition.code,
+            "title": definition.name,
             "generated_at": run.executed_at.isoformat(),
         }
-        for run in recent_runs
+        for run, definition in recent_runs
     ]
 
     # Query real metrics from MetricSnapshot

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: reporting API
-  version: 0.1.0
+  version: 0.2.0
   description: "Dashboards, MIS reports, analytics and warehouse ETL."
 servers:
   - url: /api/v1/reporting
@@ -103,6 +103,9 @@ paths:
   /executions/{id}:
     get:
       summary: Get report execution output
+      description: >-
+        reporting:report:read covers academic and administrative runs. A run of a financial report (category
+        financial, e.g. fee-collection-summary) needs reporting:report:execute; without it the run answers 404.
       operationId: getExecution
       parameters:
         - name: id
@@ -235,7 +238,7 @@ components:
       type: object
       properties:
         parameters: { type: object }
-        client_token: { type: string }
+        client_token: { type: string, description: "Idempotency key, unique per requester: a replay returns the caller's own run." }
 
     ReportExecution:
       type: object

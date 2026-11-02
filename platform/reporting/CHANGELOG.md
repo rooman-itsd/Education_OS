@@ -3,6 +3,18 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+Contract 0.2.0: financial run summaries need `reporting:report:execute`; `client_token` is per requester.
+
+### Fixed
+- Financial report data is restricted to roles that may run and export reports. A run of a `financial`
+  definition (e.g. `fee-collection-summary`) answers 404 on `GET /executions/{id}` without
+  `reporting:report:execute`, and the department-reports widget lists financial runs only to those roles. Faculty
+  (`reporting:report:read` only) keep academic and administrative summaries; export and download already needed
+  execute.
+- `client_token` idempotency is per requester (migration `reporting_0002`): replaying another user's token
+  returned their run, result_summary included.
+- The department-reports widget's recent runs carry the report's code and name, not the definition id.
+
 ### Added
 - Implemented core domain models: `ReportDefinition`, `ReportExecution`, `MetricSnapshot`.
 - Added database migration `reporting_0001` with PostgreSQL Row Level Security (`rls.POLICY`) and `ix_<table>_organisation_id` indexes on all 3 reporting tables.

@@ -98,27 +98,27 @@ def test_unique_constraint_on_definition_org_code(db):
 
 
 def test_unique_constraint_on_execution_client_token(db):
-    e1 = ReportExecution(
-        id=new_id(),
-        organisation_id="org-unique",
-        report_definition_id="def-1",
-        requested_by="user-1",
-        client_token="tok-123",
-    )
-    db.add(e1)
-    db.commit()
-
-    e2 = ReportExecution(
-        id=new_id(),
-        organisation_id="org-unique",
-        report_definition_id="def-1",
-        requested_by="user-2",
-        client_token="tok-123",
-    )
-    db.add(e2)
+    """client_token is unique per requester: the same user's duplicate is refused, another user's is not (it must
+    never resolve to someone else's run)."""
     import pytest
     from sqlalchemy.exc import IntegrityError
 
+    def run(user: str) -> ReportExecution:
+        return ReportExecution(
+            id=new_id(),
+            organisation_id="org-unique",
+            report_definition_id="def-1",
+            requested_by=user,
+            client_token="tok-123",
+        )
+
+    db.add(run("user-1"))
+    db.commit()
+
+    db.add(run("user-2"))
+    db.commit()  # another requester may use the same token
+
+    db.add(run("user-1"))
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
