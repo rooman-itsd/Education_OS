@@ -13,6 +13,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
     (unique, so redelivery adds nothing), then the month's snapshot cell is recalculated; `recalculate()` and
     `POST /metrics/recalculate` (manage) rebuild a range. A malformed payload raises (retried, then dead-lettered).
     No person id, name or email reaches a fact.
+  - A void or an ended assignment is a *reversal*: it finds the fact it takes back (`source_ref`) and books the
+    negative of it with that fact's own dimensions, in the month the reversal happens. So a voided cash payment
+    lowers the cash figure, never lands in a cell without a mode, and one whose original predates ingestion is
+    ignored rather than booked as a negative. A reversal records what it reversed, so a second end or void of the
+    same thing under a new event id is counted once. (Found by the automated review of this PR.)
   - Migration `reporting_0003` replaces `reporting_metric_snapshot` (never written anywhere) with the agreed fields
     (tenant, source_module, metric_key, period_start, period_end, dimensions JSONB, value, unit, calculated_at,
     schema_version) and adds `reporting_metric_fact`; both with RLS.

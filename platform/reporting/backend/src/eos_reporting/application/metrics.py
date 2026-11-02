@@ -115,8 +115,16 @@ METRICS: tuple[Metric, ...] = (
            {"fees-accounts.invoice.issued": lambda p: Contribution(_amount(p, "total"), {})}),
     Metric("finance.fees_collected", 1, "fees-accounts", "amount", FINANCIAL,
            "Payments received, net of voided payments",
-           {"fees-accounts.payment.received": lambda p: Contribution(_amount(p, "amount"), {"mode": p.get("mode")}),
-            "fees-accounts.payment.voided": lambda p: Contribution(-_amount(p, "amount"), {})}),
+           {"fees-accounts.payment.received": lambda p: Contribution(
+               _amount(p, "amount"), {"mode": p.get("mode")}, source_ref=_id(p, "payment_id"),
+           ),
+            # A void takes back the payment it names, in that payment's own mode: the reversal copies the original
+            # fact's dimensions, so the per-mode figure goes down and no cell without a mode is ever created. The
+            # amount is still validated, so a malformed event is dead-lettered like any other; the value booked is
+            # the original's (ingest.py), not the payload's.
+            "fees-accounts.payment.voided": lambda p: Contribution(
+               -_amount(p, "amount"), {}, reverses=_id(p, "payment_id"),
+           )}),
     Metric("finance.refunds_issued", 1, "fees-accounts", "amount", FINANCIAL, "Refunds issued",
            {"fees-accounts.refund.issued": lambda p: Contribution(_amount(p, "amount"), {})}),
     Metric("finance.concessions_approved", 1, "fees-accounts", "amount", FINANCIAL, "Concessions approved, by kind",

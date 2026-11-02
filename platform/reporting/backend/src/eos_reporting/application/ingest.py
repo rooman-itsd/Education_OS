@@ -95,7 +95,18 @@ def ingest(db: Session, event) -> int:
             )
             if original is None:
                 continue  # its creation predates ingestion: nothing to release
-            value, dims = -original.value, dict(original.dimensions)
+            reversed_already = db.scalar(
+                select(MetricFact.id).where(
+                    MetricFact.organisation_id == organisation_id,
+                    MetricFact.metric_key == metric.key,
+                    MetricFact.source_ref == contribution.reverses,
+                    MetricFact.value < 0,
+                )
+            )
+            if reversed_already is not None:
+                continue  # a second end or void of the same thing, under a new event id: it was taken back once
+            # The reversal records what it reversed, so the lookup above finds it the next time.
+            value, dims, source_ref = -original.value, dict(original.dimensions), contribution.reverses
         if "course_offering_id" in dims:
             dims = {
                 "department_id": _department_of_offering(db, organisation_id, dims.pop("course_offering_id")),

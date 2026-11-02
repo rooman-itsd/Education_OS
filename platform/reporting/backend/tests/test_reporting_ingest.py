@@ -138,6 +138,90 @@ def test_finance_events_net_out_voids_and_keep_amounts_exact():
     assert total == Decimal("1500.50")
 
 
+def received(org, payment_id, amount, mode="cash", at=OCT, event_id=None):
+    return ev("fees-accounts.payment.received", org, {
+        "organisation_id": org, "payment_id": payment_id, "invoice_id": "i", "person_id": "x",
+        "amount": amount, "mode": mode, "receipt_id": "r"}, at, event_id)  # fmt: skip
+
+
+def voided(org, payment_id, amount, at=OCT, event_id=None):
+    return ev("fees-accounts.payment.voided", org, {
+        "organisation_id": org, "payment_id": payment_id, "invoice_id": "i", "person_id": "x",
+        "amount": amount, "reason": "bounced"}, at, event_id)  # fmt: skip
+
+
+def collected(org) -> dict:
+    """Every fees_collected cell, as {(month, mode or None): value}. A test that only sums the cells cannot tell a
+    void that nets out from one that lands in the wrong cell (-100 here and +100 there also sum to zero)."""
+    return {(r.period_start, r.dimensions.get("mode")): r.value for r in cells(org, "finance.fees_collected")}
+
+
+def test_a_void_nets_out_the_per_mode_figure_not_only_the_total():
+    """The bug the review of #452 reproduced: received cash 100.00 then voided 100.00 left {cash} = +100 and an
+    empty-dimension cell of -100, so the per-mode collection never went down."""
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00", "cash"))
+    deliver(received(org, "p2", "40.00", "upi"))
+    deliver(voided(org, "p1", "100.00"))
+    assert collected(org) == {(date(2026, 10, 1), "cash"): Decimal(0), (date(2026, 10, 1), "upi"): Decimal(40)}
+
+
+def test_a_void_never_creates_a_cell_without_a_mode():
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00", "cheque"))
+    deliver(voided(org, "p1", "100.00"))
+    assert {mode for _, mode in collected(org)} == {"cheque"}
+
+
+def test_a_void_in_a_later_month_reduces_that_months_figure_for_the_same_mode():
+    """Reversed in the period it happens, as the faculty release is: October stays as it was reported and
+    November carries the -100, both under the payment's own mode."""
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00", "cheque", at=OCT))
+    deliver(voided(org, "p1", "100.00", at=NOV))
+    assert collected(org) == {(date(2026, 10, 1), "cheque"): Decimal(100), (date(2026, 11, 1), "cheque"): Decimal(-100)}
+
+
+def test_the_same_payment_voided_twice_is_counted_once():
+    """Two void events with different event ids (a redelivery under a new id, a second void of the same payment)
+    must not subtract the payment twice."""
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00", "cash"))
+    deliver(voided(org, "p1", "100.00", event_id=str(uuid.uuid4())))
+    deliver(voided(org, "p1", "100.00", event_id=str(uuid.uuid4())))
+    assert collected(org) == {(date(2026, 10, 1), "cash"): Decimal(0)}
+
+
+def test_a_void_of_a_payment_that_predates_ingestion_is_ignored_not_booked_as_a_negative():
+    """Nothing was ever counted for it, so there is nothing to take back; booking -100 would understate collections."""
+    org = str(uuid.uuid4())
+    deliver(received(org, "p-new", "50.00", "upi"))
+    deliver(voided(org, "p-before-ingestion", "100.00"))
+    assert collected(org) == {(date(2026, 10, 1), "upi"): Decimal(50)}
+
+
+def test_a_void_with_a_malformed_amount_still_raises_so_the_relay_dead_letters_it():
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00"))
+    with pytest.raises(InvalidPayloadError):
+        deliver(voided(org, "p1", "not-a-number"))
+
+
+def test_a_faculty_assignment_ended_twice_releases_its_hours_once():
+    """The second finding of the review of #452: a repeated `ended` under a new event id released the hours twice."""
+    org = str(uuid.uuid4())
+    deliver(ev("academic-management.offering.created", org, {
+        "course_offering_id": "off-1", "course_id": "c", "academic_period_id": "t1", "department_id": "dept-cs"}))  # fmt: skip
+    deliver(ev("academic-management.faculty-assignment.created", org, {
+        "instructor_assignment_id": "ia-1", "course_offering_id": "off-1", "faculty_id": "f1", "role": "primary",
+        "contact_hours": 4}))  # fmt: skip
+    for _ in range(2):
+        deliver(ev("academic-management.faculty-assignment.ended", org, {
+            "instructor_assignment_id": "ia-1", "course_offering_id": "off-1", "faculty_id": "f1",
+            "ended_at": NOV.isoformat()}, at=NOV, event_id=str(uuid.uuid4())))  # fmt: skip
+    assert sum(r.value for r in cells(org, "academics.faculty_contact_hours")) == Decimal(0)
+
+
 def test_faculty_contact_hours_follow_the_offerings_department_and_are_released_when_an_assignment_ends():
     org = str(uuid.uuid4())
     deliver(
@@ -205,6 +289,28 @@ def test_historical_recalculation_rebuilds_a_range_from_the_facts():
         db.commit()
     assert written == 2
     assert [r.value for r in cells(org, "admissions.applications_submitted")] == [2, 1]
+
+
+def test_recalculating_after_a_void_gives_the_same_per_mode_figures_as_ingesting_it():
+    """Snapshots are a cache of the facts. If a void only looked right until somebody recalculated, the fix would
+    be a coincidence of the order things arrived in."""
+    org = str(uuid.uuid4())
+    deliver(received(org, "p1", "100.00", "cash"))
+    deliver(received(org, "p2", "70.00", "upi", at=NOV))
+    deliver(voided(org, "p1", "100.00", at=NOV))
+    before = collected(org)
+    with organisation_scope(org), SessionLocal() as db:
+        ingest.recalculate(db, org, date(2026, 10, 1), date(2026, 11, 30))
+        db.commit()
+    assert (
+        collected(org)
+        == before
+        == {
+            (date(2026, 10, 1), "cash"): Decimal(100),
+            (date(2026, 11, 1), "upi"): Decimal(70),
+            (date(2026, 11, 1), "cash"): Decimal(-100),
+        }
+    )
 
 
 def test_the_definitions_are_versioned_and_wired_to_the_event_bus():
