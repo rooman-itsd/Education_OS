@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Music Teacher dashboard (layout platform/identity/config/dashboards/music-teacher.yaml, which extends the Faculty
@@ -13,8 +13,10 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   state, or says its data is not available while the backend is missing (the music teacher holds the faculty
  *   role's permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it:
- *   skill-progress (#329), selection-process and portfolio (#322, PRs #414 and #413);
- * - the data journey is fixme (see the end of this file).
+ *   skill-progress (#329) and selection-process (#322, PR #414);
+ * - data journey: a booking later today on a practice room the music teacher approves shows in
+ *   facility-booking.bookings-today. Facility staff set up the room and make the booking (the music teacher holds
+ *   facility-booking-approver's grants, which do not include managing resources).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the
  * organisation to Standard first. The empty-state tests run before any data is created (serial mode). Loading states
@@ -56,7 +58,7 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Judging tasks are not available yet.",
   },
   {
-    // Texts of ReviewsPendingWidget.tsx in PR #413 (feat/portfolio/module-build).
+    // Texts of ReviewsPendingWidget.tsx (practice/portfolio, merged in #413).
     id: "portfolio.reviews-pending",
     module: "practice/portfolio",
     batch: "#322",
@@ -78,15 +80,23 @@ const WIDGETS: LayoutWidget[] = [
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
+
+let admin: DashboardUser;
 let user: DashboardUser;
+/** Facility staff: they run the resource register, so they set up the practice room the music teacher approves. */
+let facilityStaff: DashboardUser;
 /** Per shipped widget id: what its GET answered the music teacher. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "music-academy", role: "music-teacher" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "music-academy" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "music-teacher");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -122,16 +132,38 @@ test.describe("music teacher widgets", () => {
   }
 });
 
-// Backend-dependent: these need their module's API to create the data through, so nothing here is faked.
-test.describe("with facilities data", () => {
-  test.fixme("facility-booking.bookings-today lists a booking of a practice room the music teacher approves", async () => {
-    // facilities/facility-booking is enabled and exports the widget. The music teacher (facility-booking-approver
-    // grants) sees today's bookings only on the resources they approve, so set up with organisationAdmin + addUser:
-    // a facility-staff user adds a resource type and a resource with approver_user_ids: [<music teacher id>]
-    // (POST /facility-booking/resource-types, /resources), then a booking later today as in facility-staff.spec.ts
-    // (the next free half hour in FACILITY_BOOKING_TIMEZONE, skipped near midnight). Confirm which role may create a
-    // resource with approvers before writing this.
-    // Expect: "No bookings today" is gone; the row shows the time window and "<resource> · <title>", and the
-    // "Booking counts" line says "1 today".
+test.describe("with facility-booking data", () => {
+  test("facility-booking.bookings-today lists a booking later today on a practice room the music teacher approves", async ({ page, request }) => {
+    const w = byId("facility-booking.bookings-today");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the facility-booking API answered ${status[w.id]} to the music-teacher role`);
+    // As in facility-staff.spec.ts: the default slot grid is 30 minutes and "today" is the organisation's date in
+    // FACILITY_BOOKING_TIMEZONE (UTC by default; the API inherits this process's environment), so book the next free
+    // half hour, unless that runs past midnight in that zone. The music teacher sees bookings on the resources whose
+    // approvers list them (scope=managed without booking:read-all).
+    const zone = process.env.FACILITY_BOOKING_TIMEZONE || "UTC";
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone }); // YYYY-MM-DD
+    const slot = 30 * 60_000;
+    const start = new Date(Math.ceil((Date.now() + 5 * 60_000) / slot) * slot);
+    const end = new Date(start.getTime() + slot);
+    test.skip(day(end) !== day(new Date()), `too close to midnight in ${zone}`);
+    const type = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resource-types", { name: "Practice room" });
+    const resource = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resources", {
+      name: "Practice Room 1",
+      type_id: type.id,
+      capacity: 4,
+      approver_user_ids: [user.id],
+    });
+    await created(request, facilityStaff, "/facility-booking/bookings", {
+      resource_id: resource.id,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+      title: "Piano lesson",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "Bookings today");
+    await expect(panel.getByText("No bookings today")).toHaveCount(0);
+    await expect(panel.getByText("Practice Room 1 · Piano lesson")).toBeVisible();
+    await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Musician dashboard (layout platform/identity/config/dashboards/musician.yaml, which extends the Student layout; the
@@ -13,9 +13,11 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   state, or says its data is not available while the backend is missing (the musician holds the student role's
  *   permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it:
- *   portfolio and selection-process (#322, PRs #413 and #414), productions (#318) and skill-progress (#329);
+ *   selection-process (#322, PR #414), productions (#318) and skill-progress (#329);
  *   facility-booking is enabled but exports facility-booking.my-bookings only once PR #395 (sprint batch #331) merges;
- * - the data journeys are fixme (see the end of this file).
+ * - data journey: an instrument the musician asks to borrow shows in inventory-equipment.my-loans. Facility staff
+ *   set up the item and receive stock; the musician (loan:request) requests the loan. The my-bookings journey is
+ *   fixme until facility-booking exports that widget.
  *
  * facilities, finance-operations and campus-life are not in the Trial plan (platform/billing/config/plans.yaml), so
  * the super admin moves the organisation to Standard first. The empty-state tests run before any data is created
@@ -53,7 +55,7 @@ const WIDGETS: LayoutWidget[] = [
   { id: "library.loans", module: "campus-life/library", batch: "#338" },
   // The musician's own widgets.
   {
-    // Texts of MyPortfolioWidget.tsx in PR #413 (feat/portfolio/module-build).
+    // Texts of MyPortfolioWidget.tsx (practice/portfolio, merged in #413).
     id: "portfolio.my-portfolio",
     module: "practice/portfolio",
     batch: "#322",
@@ -96,15 +98,23 @@ const WIDGETS: LayoutWidget[] = [
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
+
+let admin: DashboardUser;
 let user: DashboardUser;
+/** Facility staff: they run the catalogue and stores, so they set up the instrument the musician borrows. */
+let facilityStaff: DashboardUser;
 /** Per shipped widget id: what its GET answered the musician. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "music-academy", role: "musician" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "music-academy" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "musician");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -140,20 +150,41 @@ test.describe("musician widgets", () => {
   }
 });
 
-// Backend-dependent: these need their module's API to create the data through, so nothing here is faked. Write them
-// as the facility-staff and finance-staff data journeys are written once each part below is settled.
 test.describe("with facilities data", () => {
-  test.fixme("inventory-equipment.my-loans lists an instrument the musician asks to borrow", async () => {
-    // facilities/inventory-equipment is enabled. Set up with organisationAdmin + addUser so a facility-staff user
-    // (item:manage, stock:manage) exists beside the musician: POST /inventory-equipment/categories, /locations, /items
-    // ("Violin", tracking quantity) and a receipt movement. Then as the musician (loan:request) POST
-    // /inventory-equipment/loans { lines: [{ item_id, quantity: 1 }], due_at: <a week ahead> }. The contract answers
-    // 403 when "the caller's role may not borrow this item": confirm which category settings let the musician borrow
-    // before writing this.
-    // Expect: "Nothing on loan" is gone; the row names the violin, "Due <date>" and "Awaiting approval" (or
-    // "Ready to collect" when no approval is needed).
+  test("inventory-equipment.my-loans lists an instrument the musician asks to borrow", async ({ page, request }) => {
+    const w = byId("inventory-equipment.my-loans");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the inventory-equipment API answered ${status[w.id]} to the musician role`);
+    // Facility staff (item:manage, stock:manage) set up the catalogue and receive stock, as in production-manager.spec.ts.
+    // The item is loanable by default and not consumable (consumables are refused with consumable_not_loanable); the
+    // category sets no borrower_role_ids, so any role holding loan:request may borrow (check_loan_line in
+    // inventory-equipment's domain/rules.py), and no rule requires approval, so the loan is approved at once.
+    const category = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/categories", { name: "Instruments" });
+    const location = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/locations", { name: "Instrument room" });
+    const item = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/items", {
+      name: "Violin",
+      category_id: category.id,
+      tracking: "quantity",
+    });
+    await created(request, facilityStaff, "/inventory-equipment/movements", {
+      kind: "receipt",
+      item_id: item.id,
+      quantity: 2,
+      to_location_id: location.id,
+    });
+    // A week ahead: within the default max_loan_days of 14.
+    const due = new Date(Date.now() + 7 * 86_400_000);
+    await created(request, user, "/inventory-equipment/loans", { lines: [{ item_id: item.id, quantity: 1 }], due_at: due.toISOString() });
+    await signIn(page, user);
+    const panel = widget(page, "My loans");
+    await expect(panel.getByText("Nothing on loan")).toHaveCount(0);
+    await expect(panel.getByText("Violin", { exact: true })).toBeVisible();
+    // MyLoansWidget's shortDate: "9 Nov" in the browser's (here the host's) time zone.
+    await expect(panel.getByText(`Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)).toBeVisible();
+    await expect(panel.getByText("Ready to collect")).toBeVisible();
   });
 
+  // Backend-dependent: needs facility-booking.my-bookings exported, so nothing here is faked.
   test.fixme("facility-booking.my-bookings lists a practice room the musician books", async () => {
     // facilities/facility-booking exports facility-booking.my-bookings once PR #395 (sprint batch #331) merges. Then:
     // a facility-staff user adds a resource type and a resource (POST /facility-booking/resource-types, /resources),
