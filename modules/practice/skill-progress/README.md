@@ -25,7 +25,7 @@ How it behaves (the contract's open questions in [docs/prd.md](docs/prd.md) sect
 - **Permissions (Q1).** Every operation names its key in `x-permission`. `progress:export` has no operation yet (Q3).
 - **Verifying and voiding (Q2).** `POST /assessments/{id}/verify` (`assessment:approve`) moves a submitted
   assessment to verified; its learner, its evaluator and whoever recorded it cannot verify it. `POST /assessments/{id}/void`
-  (`assessment:delete`) voids a submitted or verified one. Voided is final; a voided assessment stays on record but
+  (`assessment:delete`) voids a submitted or verified one, but not one where the caller is the learner (`own_assessment`). Voided is final; a voided assessment stays on record but
   no longer counts towards progress or the timeline.
 - **Frameworks.** Created active or draft. draft → active or archived; active → archived; archived → active. An
   archived framework takes no new skills or rubrics, and only an active framework's skills can be assessed.

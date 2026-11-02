@@ -464,7 +464,7 @@ paths:
   /assessments/{assessment_id}/void:
     post:
       summary: Void an assessment
-      description: Withdraw a submitted or verified assessment (-> voided). A voided assessment stays on record but no longer counts towards progress or the timeline.
+      description: Withdraw a submitted or verified assessment (-> voided). A voided assessment stays on record but no longer counts towards progress or the timeline. The learner cannot void their own assessment.
       operationId: voidAssessment
       x-permission: skill-progress:assessment:delete
       parameters:

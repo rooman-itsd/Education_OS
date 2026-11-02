@@ -321,6 +321,9 @@ def test_verify_and_void(client, org):
     r = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=learner_admin)
     assert r.status_code == 400 and _err(r) == "own_assessment"
 
+    r = client.post(f"{BASE}/assessments/{a['id']}/void", headers=learner_admin)  # nor void it
+    assert r.status_code == 400 and _err(r) == "own_assessment"
+
     r = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=org.admin)
     assert r.status_code == 200 and r.json()["status"] == "verified"
     again = client.post(f"{BASE}/assessments/{a['id']}/verify", headers=org.admin)

@@ -565,6 +565,8 @@ def verify_assessment(db: Session, actor: Actor, assessment_id: str) -> dict:
 def void_assessment(db: Session, actor: Actor, assessment_id: str) -> dict:
     """The assessment stays on record but stops counting, so the learner's progress is recomputed."""
     a = _transition(db, actor, assessment_id, "voided")
+    if actor.user_id == a.learner_id:
+        raise _invalid("own_assessment", "an assessment is voided by someone other than its learner")
     now = clock()
     before = {"status": a.status}
     a.status, a.voided_by, a.voided_at = "voided", actor.user_id, now
