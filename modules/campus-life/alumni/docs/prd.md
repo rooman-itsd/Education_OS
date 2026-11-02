@@ -10,7 +10,7 @@ student, and the student sees their mentor and upcoming sessions on the dashboar
 "alumni mentoring" as part of corporate relations (`docs/architecture/institution-types.md`, lines 36 and 76).
 Contract: `contracts/openapi.yaml`, `events.yaml`, `permissions.yaml`. Stories: [user-stories.md](user-stories.md).
 
-No PRD existed for this module before; every rule below is an owner decision recorded on #337.
+No PRD existed for this module before; the decisions A1 to A8 below are the owner's, recorded on #337.
 
 ## Decisions
 
@@ -24,6 +24,8 @@ Decided by the owner; see [#337](https://github.com/rooman-itsd/Education_OS/iss
 | A4 | The placement officer runs the module through the module role `alumni-coordinator`, listed in the `placement-officer` layout's `module_roles`. |
 | A5 | A mentor's contact details (email, phone, LinkedIn) are visible only to the student assigned to them and to staff. |
 | A6 | v1.0 covers the directory and mentoring only. Alumni events, donations and engagement campaigns (named in the original module description) are v1.1. |
+| A7 | No future dates (decided by the owner on #337, 2 Nov). On `POST /mentoring/assignments`, `started_on` is today or earlier (Asia/Kolkata date). On `POST /mentoring/assignments/{id}/end`, `ended_on` is on or after `started_on` and not after today. Otherwise 422 `invalid_date`. |
+| A8 | `PUT /directory/{id}` is a full replace (decided by the owner on #337, 2 Nov): it replaces the whole record and every field must be sent. Its body is `AlumnusUpdate`, the same fields as `AlumnusInput` with `is_mentor` required, so an edit never clears the mentor flag by leaving it out. |
 
 ## Users
 
@@ -39,15 +41,18 @@ only management institutes use it.
 
 1. **Directory.** The coordinator adds an alumnus: name and graduation year (required), programme, current company,
    designation, industry, city, and contact details (email, phone, LinkedIn). The record is verified on creation (A2).
-   Records are edited, archived with an optional reason, and restored. Nothing is deleted.
+   Records are edited (a full replace, A8), archived with an optional reason, and restored. Nothing is deleted.
 2. **Mentor flag.** The coordinator marks an alumnus `is_mentor`. Only an active alumnus with the flag is assigned.
 3. **Assignment.** The coordinator assigns a mentor to a student (the student's identity user id), with a start date
-   (default today) and an optional focus. The assignment is active until the coordinator ends it.
+   (default today, never in the future, A7) and an optional focus. The assignment is active until the coordinator
+   ends it, on an end date (default today) between the start date and today (A7).
 4. **Sessions (optional).** On an active assignment the coordinator schedules sessions (date and time, duration,
    mode: in person, online or phone, location or link, topic), edits or cancels them, and marks them completed with
    staff-only notes.
 5. **Student view.** The student's `alumni.mentoring` widget shows their active mentor (name, company, designation,
-   contact details) and up to five upcoming sessions. With no active mentor it shows an empty state.
+   contact details) and up to five upcoming sessions. Upcoming means status `scheduled` and `scheduled_at` at or
+   after now, so a past session nobody marked completed drops off. With no active mentor (`assignment` is null) it
+   shows an empty state.
 
 ## Rules
 
@@ -60,6 +65,14 @@ only management institutes use it.
 - A mentor with an active assignment is not archived, and their mentor flag is not cleared, until the assignment ends
   (409 `mentor_has_active_assignments`).
 - Ending an assignment cancels its scheduled sessions.
+- `started_on` is today or earlier; `ended_on` is on or after `started_on` and not after today. Dates are judged on the
+  Asia/Kolkata date (A7). Otherwise 422 `invalid_date`.
+- `PUT /directory/{id}` replaces the whole record; every field must be sent and `is_mentor` is required (A8).
+- Moving a session publishes `alumni.mentoring-session.rescheduled` with the new `scheduled_at`; restoring an
+  alumnus publishes `alumni.alumnus.restored`.
+- Free text has a length limit in the contract: 200 characters for names and short fields, 500 for a session
+  location, 2000 for notes and reasons. `student_name` is a copy taken when the assignment is made and is not kept in
+  step with identity.
 - Event payloads carry ids only, no names or contact details.
 - Every table carries `organisation_id` with row-level security; every event carries `organisation_id`.
 - Every state change writes an audit record through `packages/sdk`.
@@ -75,11 +88,18 @@ Schema `alumni`, one Alembic chain, every table with `organisation_id` and an RL
 | `alumni_mentoring_assignment` | `mentor_id` (alumnus), `student_id` (identity user id, no foreign key), `student_name`, `started_on`, `ended_on`, `status`, `focus`, `assigned_by`, `end_reason`. A partial unique index keeps one active assignment per student and organisation |
 | `alumni_mentoring_session` | `assignment_id`, `scheduled_at`, `duration_minutes`, `mode`, `location`, `topic`, `status`, `notes`, `cancel_reason`, `created_by` |
 
+Tenancy rules for `student_id`, which is not checked against identity in v1.0 (open question 1):
+
+- Every lookup of an assignment by student is by `(organisation_id, student_id)`, never by `student_id` alone; the
+  partial unique index and `GET /me/mentoring` use the same pair.
+- The cross-tenant leak test covers `GET /me/mentoring` for a student id that exists in two organisations: each
+  organisation's caller sees only their own organisation's assignment and sessions.
+
 ## Integration points
 
 | Direction | With | How |
 |---|---|---|
-| Publishes | none in v1.0 | `alumnus.added`, `alumnus.archived`, `mentoring-assignment.started`/`ended`, `mentoring-session.scheduled`/`completed`/`cancelled`. No module consumes them yet; notification may later. |
+| Publishes | none in v1.0 | `alumnus.added`, `alumnus.archived`, `alumnus.restored`, `mentoring-assignment.started`/`ended`, `mentoring-session.scheduled`/`rescheduled`/`completed`/`cancelled`. No module consumes them yet; notification may later. |
 | Consumes | none | |
 | Platform | identity, audit | through `packages/sdk` |
 
