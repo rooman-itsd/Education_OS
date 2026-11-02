@@ -39,6 +39,7 @@ class Application(Base, TenantMixin):
         Index(f"uq_{PREFIX}application_reference", "organisation_id", "reference_number", unique=True),
         Index(f"ix_{PREFIX}application_status", "organisation_id", "status"),
         Index(f"ix_{PREFIX}application_programme", "organisation_id", "programme_id", "academic_year"),
+        Index(f"ix_{PREFIX}application_applicant_user", "organisation_id", "applicant_user_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -49,6 +50,8 @@ class Application(Base, TenantMixin):
     applicant_email: Mapped[str] = mapped_column(String(320), nullable=False)
     applicant_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
     applicant_date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The identity user who linked this application to their account (POST /me/applications); None until then.
+    applicant_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     programme_id: Mapped[str] = mapped_column(String(36), nullable=False)
     academic_year: Mapped[str] = mapped_column(String(20), nullable=False)
     selection_process_round_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
