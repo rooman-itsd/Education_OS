@@ -185,6 +185,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/DepartmentReportsWidgetData"
 
+  /metrics/definitions:
+    get:
+      summary: The versioned metric definitions ingested from the event bus, and what has no source yet
+      description: Financial metrics are listed only to holders of reporting:report:execute.
+      operationId: listMetricDefinitions
+      responses:
+        "200": { description: Definitions, content: { application/json: { schema: { type: object } } } }
+  /metrics:
+    get:
+      summary: A metric's monthly snapshots for this organisation
+      description: >-
+        Rows carry tenant_id, source_module, metric_key, period_start, period_end, dimensions, value, unit,
+        calculated_at and schema_version. A financial metric needs reporting:report:execute (404 otherwise).
+      operationId: readMetric
+      parameters:
+        - { name: metric_key, in: query, required: true, schema: { type: string } }
+        - { name: from, in: query, required: true, schema: { type: string, pattern: "^\\d{4}-\\d{2}$" } }
+        - { name: to, in: query, required: true, schema: { type: string, pattern: "^\\d{4}-\\d{2}$" } }
+        - { name: department_id, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: Snapshots, content: { application/json: { schema: { type: object } } } }
+        "404": { description: Unknown metric, or a financial metric without reporting:report:execute }
+  /metrics/recalculate:
+    post:
+      summary: Rebuild this organisation's snapshots for a month range from the ingested facts (reporting:report:manage)
+      operationId: recalculateMetrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, pattern: "^\\d{4}-\\d{2}$" }
+                to: { type: string, pattern: "^\\d{4}-\\d{2}$" }
+                metric_key: { type: string, nullable: true }
+      responses:
+        "200": { description: Cells written, content: { application/json: { schema: { type: object, properties: { cells_written: { type: integer } } } } } }
   /widgets/attendance-and-results:
     get:
       summary: Cross-department comparison for Management widget
