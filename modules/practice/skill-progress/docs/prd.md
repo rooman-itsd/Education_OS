@@ -105,18 +105,19 @@ Any institution type can describe the skills it trains in its own frameworks and
 
 ## 9. Not yet defined in the contracts
 
-These are open questions. They are listed here so they are decided in a contract change, not assumed.
+These were open questions, listed so they are decided in a contract change, not assumed. Q1, Q2 and Q5 to Q8 are
+answered by the backend (PR #384); the module [README](../README.md) says how. Q3, Q4 and Q9 to Q11 are still open.
 
-| # | Question |
-|---|---|
-| Q1 | **Permission per operation.** No operation in `openapi.yaml` names the permission key it requires. |
-| Q2 | **Verifying and voiding assessments.** `assessment:approve` and `assessment:delete` exist, and an assessment's status can be `verified` or `voided`, but there is no operation to verify or void one. |
-| Q3 | **Exporting progress.** `progress:export` exists, but there is no export operation. |
-| Q4 | **Archiving.** A framework can be set to `archived` through its update. There is no archive or delete operation for skills or rubrics, and no rubric update. |
-| Q5 | **Milestones.** `milestone.achieved` and the timeline's `milestone_achieved` and `level_advanced` entries exist, but the contracts do not say how a milestone is defined or when a learner reaches one or advances a level. |
-| Q6 | **When progress is recomputed.** `progress.updated` says a learner's progress profile was recomputed, but not what triggers it. |
-| Q7 | **Learners seeing only their own records.** The viewer role (learners and observers) holds `assessment:read` and `progress:read` with no own-records key or rule. |
-| Q8 | **Scoring.** The contracts do not say how criterion points and weights produce `overall_score`, or how the overall score maps to `level_achieved`; both are supplied when an assessment is recorded. |
-| Q9 | **Widget data.** The role layouts name `skill-progress.assessments-due`, `skill-progress.my-progress` and `skill-progress.cohort-overview`. `my-progress` can use the learner progress summary. The contracts define no due dates or assignment of assessments for `assessments-due`, and no cohort or group report for `cohort-overview`. |
-| Q10 | **Role mapping.** The roles are named `skill-progress-admin`, `-evaluator` and `-viewer`. How they map to profile roles (for example music teacher or medical student) is not defined. |
-| Q11 | **Update events.** Framework and skill updates publish no event; only creation does. |
+| # | Question | Status |
+|---|---|---|
+| Q1 | **Permission per operation.** No operation in `openapi.yaml` names the permission key it requires. | Answered: every operation names its key in `x-permission` and documents a 403. |
+| Q2 | **Verifying and voiding assessments.** `assessment:approve` and `assessment:delete` exist, and an assessment's status can be `verified` or `voided`, but there is no operation to verify or void one. | Answered: `POST /assessments/{id}/verify` and `/void`; the learner, evaluator and recorder cannot verify. |
+| Q3 | **Exporting progress.** `progress:export` exists, but there is no export operation. | Open |
+| Q4 | **Archiving.** A framework can be set to `archived` through its update. There is no archive or delete operation for skills or rubrics, and no rubric update. | Open |
+| Q5 | **Milestones.** `milestone.achieved` and the timeline's `milestone_achieved` and `level_advanced` entries exist, but the contracts do not say how a milestone is defined or when a learner reaches one or advances a level. | Answered: per skill, a level above every earlier one is `level_advanced`; the first at the highest level is `milestone_achieved`. |
+| Q6 | **When progress is recomputed.** `progress.updated` says a learner's progress profile was recomputed, but not what triggers it. | Answered: recomputed when an assessment is recorded or voided. |
+| Q7 | **Learners seeing only their own records.** The viewer role (learners and observers) holds `assessment:read` and `progress:read` with no own-records key or rule. | Answered: a learner role sees only records whose `learner_id` is their own user id. |
+| Q8 | **Scoring.** The contracts do not say how criterion points and weights produce `overall_score`, or how the overall score maps to `level_achieved`; both are supplied when an assessment is recorded. | Answered: points are checked per criterion; the evaluator supplies the overall score and level, which must agree with the skill's scale. |
+| Q9 | **Widget data.** The role layouts name `skill-progress.assessments-due`, `skill-progress.my-progress` and `skill-progress.cohort-overview`. `my-progress` can use the learner progress summary. The contracts define no due dates or assignment of assessments for `assessments-due`, and no cohort or group report for `cohort-overview`. | Open |
+| Q10 | **Role mapping.** The roles are named `skill-progress-admin`, `-evaluator` and `-viewer`. How they map to profile roles (for example music teacher or medical student) is not defined. | Open |
+| Q11 | **Update events.** Framework and skill updates publish no event; only creation does. | Open |
