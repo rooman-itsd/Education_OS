@@ -15,8 +15,9 @@ Immutable, append-only audit log for every state-changing action.
   records every event in its `AUDITED` list (tenancy lifecycle and super admin operations, identity users,
   billing subscription and invoice state, workflow decisions, documents, report runs and exports) as one record
   in the event's organisation: `module` and `action` from the event name, the event's actor and time, the
-  payload as `after`. Idempotent on the event id. Keys that look like secrets are dropped and named in
-  `context.dropped_keys`. Anything else that fails raises, so the relay retries and finally dead-letters.
+  payload as `after`. Idempotent on the event id. Keys that look like secrets, keys that name a contact detail
+  (`email`, `phone`, `mobile`) and any string that contains an email address are dropped and named in
+  `context.dropped_keys` (a record cannot be edited, so an address stored in one could never be erased). Anything else that fails raises, so the relay retries and finally dead-letters.
 - **Super admin operations** (`SUPER_ADMIN_ACTIONS`: approve, package change, suspend, archive, export, deletion
   request, restore, purge, impersonation) also get a platform-level record (`organisation_id` null,
   `context.organisation_id` set), which `audit.super-admin-actions` reads.

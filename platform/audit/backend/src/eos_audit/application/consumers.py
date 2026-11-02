@@ -12,12 +12,19 @@ kept in the record's context, so a record still says that it changed. Any other 
 retries the event and finally dead-letters it, where an operator sees it: a lost audit record must never pass
 silently.
 
+Contact details are dropped the same way, and for a stronger reason: a record cannot be edited or deleted, so an
+email address stored here could never be removed when its owner asks for erasure (DPDP). A key that names one
+(`admin_email`, `email`, `phone`, `mobile`) is dropped, and so is any string value that contains an email address
+under whatever key, which covers the next event that carries one. The record keeps the key's name in its context
+("admin_email was present"), never the address. Found in review of #434.
+
 The list is explicit (ADR-0003: a consumer declares what it subscribes to). A module that adds a state-changing
 event adds it here and to contracts/events.yaml `consumes`."""
 
 from __future__ import annotations
 
 import logging
+import re
 
 from eos_core import events
 from eos_core.db import SessionLocal
@@ -86,21 +93,34 @@ SUPER_ADMIN_ACTIONS = frozenset(
 )
 
 
+# Contact details never reach an immutable record. By key name (admin_email, applicant_email, e_mail, phone, mobile) ...
+PERSONAL_KEY_RE = re.compile(r"e[-_]?mail|phone|mobile", re.I)
+# ... and by value, under any key: a string that contains an email address. Deliberately loose (anything shaped like
+# local@host.tld): a false positive loses a free-text field from the record, a false negative keeps an address for good.
+EMAIL_RE = re.compile(r"[^\s@<>\"',;()]+@[^\s@<>\"',;()]+\.[^\s@<>\"',;()]+")
+
+
+def _has_email(value) -> bool:
+    return isinstance(value, str) and EMAIL_RE.search(value) is not None
+
+
 def _without_secrets(payload: dict) -> tuple[dict, list[str]]:
-    """The payload minus any key the audit contract refuses to store (at any depth), and the names dropped."""
+    """The payload minus anything the audit contract refuses to store or that must not outlive its owner's consent
+    (at any depth), and the key names dropped. Dropped: a key that looks like a secret; a key that names a contact
+    detail; any string that contains an email address, whatever its key, and such an item of a list."""
     dropped: list[str] = []
 
     def clean(value):
         if isinstance(value, dict):
             out = {}
             for key, inner in value.items():
-                if service.SECRET_KEY_RE.search(str(key)):
+                if service.SECRET_KEY_RE.search(str(key)) or PERSONAL_KEY_RE.search(str(key)) or _has_email(inner):
                     dropped.append(str(key))
                     continue
                 out[key] = clean(inner)
             return out
         if isinstance(value, list):
-            return [clean(v) for v in value]
+            return [clean(v) for v in value if not _has_email(v)]
         return value
 
     return clean(payload), dropped
