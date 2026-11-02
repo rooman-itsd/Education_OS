@@ -11,3 +11,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   and apply. The placement-officer, industry-coordinator and practicum-coordinator layouts list
   `placement-career-officer`; industry-liaison lists `placement-career-viewer`.
 - `docs/prd.md` with the owner decisions P1 to P7 (#337) and `docs/user-stories.md`.
+- Review of #424: two widget ids (P8): `placement-career.openings` for learners (`GET /me/openings`, `self:read`)
+  and `placement-career.openings-summary` for staff (`GET /reports/openings-summary`, `report:read`); the four staff
+  layouts use the new id. Event rule (P9): ids, dates and the cancel reason only. New event
+  `placement-career.drive.rescheduled`. `PUT /drives/{id}` and `PUT /openings/{id}` check dates against today only
+  when they change. `GET /me/openings` and `GET /me/applications` are cursor pages. events.yaml has an `envelope`,
+  `consumers` per event and `"date?"`/`"uuid?"` for nullable fields. PRD open questions 7 to 9.

@@ -19,12 +19,17 @@ Role ids are those of the dashboard layouts (`platform/identity/config/dashboard
 
 | Actor | Roles | Holds | Needs | Dashboard widget |
 |---|---|---|---|---|
-| Placement officer | placement-officer; industry-coordinator (hospitality), practicum-coordinator (teacher education) | `placement-career-officer` through the layout's `module_roles` | Keep company records, announce drives, post openings, shortlist, record offers, see placed students | `placement-career.drives` (`GET /reports/drives-upcoming`, placement-officer), `placement-career.openings` (`GET /reports/openings-summary`) |
-| Viewer | industry-liaison (design and fashion) | `placement-career-viewer` | See companies, drives, openings and the summary; no individual applications | `placement-career.openings` (`GET /reports/openings-summary`) |
-| Student | `student` and every layout that extends it (management-student, engineering-student, hospitality-trainee, law-student, ...) | the `student` grants | See open openings with criteria and CTC, apply with a self-declaration, follow their applications and offers, withdraw | `placement-career.openings` (`GET /me/openings`) |
+| Placement officer | placement-officer; industry-coordinator (hospitality), practicum-coordinator (teacher education) | `placement-career-officer` through the layout's `module_roles` | Keep company records, announce drives, post openings, shortlist, record offers, see placed students | `placement-career.drives` (placement-officer only; declares `placement-career:report:read`, calls `GET /reports/drives-upcoming`), `placement-career.openings-summary` (declares `placement-career:report:read`, calls `GET /reports/openings-summary`) |
+| Viewer | industry-liaison (design and fashion) | `placement-career-viewer` | See companies, drives, openings and the summary; no individual applications | `placement-career.openings-summary` (declares `placement-career:report:read`, calls `GET /reports/openings-summary`) |
+| Student | `student` and every layout that extends it (management-student, engineering-student, hospitality-trainee, law-student, ...) | the `student` grants | See open openings with criteria and CTC, apply with a self-declaration, follow their applications and offers, withdraw | `placement-career.openings` (declares `placement-career:self:read`, calls `GET /me/openings`) |
 
-Companies are records, not users: nobody from a company signs in. org-admin and management hold no placement-career
-role in v1.0.
+Each widget declares one key and calls one endpoint: learners get `placement-career.openings`, staff get
+`placement-career.openings-summary` (P8). Companies are records, not users: nobody from a company signs in.
+org-admin and management hold no placement-career role in v1.0.
+
+The viewer sees application counts only in the reports (per opening in `closing_soon` of the openings summary, per
+drive in the upcoming drives report). On `GET /openings`, `applications_count` stays null without
+`application:read`; this difference is kept as is in v1.0.
 
 ## Main flows
 
@@ -32,7 +37,9 @@ role in v1.0.
    An inactive company gets no new drives or openings.
 2. **Drive.** A dated campus event of one company: date (and an end date for a drive over several days), venue,
    registration closing date, selection rounds (shown, not tracked) and eligibility criteria. Draft → scheduled
-   (students see it) → completed, or cancelled while no opening of it has applications.
+   (students see it) → completed, or cancelled while no opening of it has applications. Moving the dates of a
+   scheduled drive publishes `placement-career.drive.rescheduled`, so students who were told the old date can be told
+   the new one.
 3. **Opening.** A job with title, description, location, CTC per annum, positions, eligibility criteria and the last
    day to apply. It belongs to a drive of the same company, or stands alone (off-campus or referral). Draft → open →
    closed, or cancelled while it has no applications. An opening in a drive opens once the drive is scheduled and stops
@@ -60,7 +67,10 @@ role in v1.0.
 - Nothing is deleted: drives and openings are cancelled or closed, applications rejected or withdrawn.
 - Business dates are Indian (Asia/Kolkata); timestamps are UTC. Money is exact decimal rupees.
 - Every table carries `organisation_id` with row-level security; every event carries `organisation_id`.
-- Event payloads carry ids and dates only: no names, declarations, offered CTC or company contacts.
+- Event payloads carry ids, dates and the cancel reason only: no names, declarations, offered CTC or company
+  contacts (P9).
+- A withdrawn application still counts as an application: it blocks a cancel (`has_applications`) and a second
+  application to the same opening (`already_applied`), because applications are never deleted.
 
 ## Integration points
 
@@ -93,6 +103,8 @@ Decided by the owner; see #337.
 | P5 | Applications follow a fixed status sequence. There is no one-offer rule in v1.0, but students already placed are flagged to the officer. |
 | P6 | Students can see the CTC. |
 | P7 | Read access to openings is granted to the common `student` role, the way fees-accounts does it. |
+| P8 | Two widget ids (2 Nov). `placement-career.openings` is the learner widget: it declares `placement-career:self:read` and calls `GET /me/openings`. `placement-career.openings-summary` is the staff widget on placement-officer, industry-coordinator, practicum-coordinator and industry-liaison: it declares `placement-career:report:read` and calls `GET /reports/openings-summary`. |
+| P9 | Events keep `reason` on the cancel events (2 Nov). Event payloads carry ids, dates and the cancel reason only: no names, declarations, offered CTC or company contacts. |
 
 ## Open questions (for review)
 
@@ -107,3 +119,9 @@ otherwise.
 4. A drive or opening with applications cannot be cancelled, only closed; nothing changes applications automatically.
 5. industry-liaison (viewer) sees summary counts but not individual applications, which are students' personal data.
 6. org-admin and management hold no placement-career role.
+7. Event payloads carry ids and dates only, and no module consumes them in v1.0. Answered by the owner on 2 Nov
+   (P9): ids, dates and the cancel reason only.
+8. A withdrawn application cannot be resubmitted (`already_applied`), and an opening in a drive stops taking
+   applications on or before the drive date (`close_date_after_drive`).
+9. An `offer` sent with a status other than `offered` on `POST /applications/{id}/status`: ignored, or refused
+   with a 422. The contract does not say yet.

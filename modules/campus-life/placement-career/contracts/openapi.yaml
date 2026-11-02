@@ -28,7 +28,8 @@ info:
     - 409 (the state does not allow it): `company_exists` (same name in the organisation), `company_inactive`,
       `not_editable`, `not_draft` (only a draft is scheduled or published), `not_scheduled` (only a scheduled drive
       is completed), `not_open` (only an open opening is closed), `not_cancellable`, `has_applications` (a drive or
-      opening with applications is closed, not cancelled), `drive_not_open_for_openings` (a completed or cancelled
+      opening with applications is closed, not cancelled; a withdrawn application counts, since applications are
+      never deleted), `drive_not_open_for_openings` (a completed or cancelled
       drive takes no openings), `drive_not_scheduled` (an opening in a drive is published once the drive is
       scheduled), `opening_not_open`, `applications_closed` (after applications_close_on, IST), `already_applied`
       (one application per student per opening, a withdrawn one included), `invalid_transition` (a step out of the
@@ -107,14 +108,16 @@ paths:
     put:
       summary: >-
         Edit a draft or scheduled drive (a scheduled drive can be rescheduled). The company does not change once
-        the drive has openings. Permission placement-career:drive:manage.
+        the drive has openings. Dates are checked against today only when they change, so a scheduled drive whose
+        date has passed can still be corrected. When a scheduled drive's scheduled_on or ends_on changes, publishes
+        placement-career.drive.rescheduled. Permission placement-career:drive:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/DriveInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Drive" } } } }
         "409": { description: "The drive is completed or cancelled (not_editable); the company is inactive (company_inactive)" }
         "404": { description: "company_id is not a company of the organisation (not_found)" }
-        "422": { description: "Empty title (invalid_title); scheduled_on before today, ends_on before scheduled_on, or registration_closes_on after scheduled_on (invalid_date); bad criteria (invalid_eligibility); a different company while the drive has openings (company_mismatch); moving scheduled_on before the applications_close_on of one of its openings (close_date_after_drive)" }
+        "422": { description: "Empty title (invalid_title); scheduled_on changed to a date before today, ends_on before scheduled_on, or registration_closes_on after scheduled_on (invalid_date); bad criteria (invalid_eligibility); a different company while the drive has openings (company_mismatch); moving scheduled_on before the applications_close_on of one of its openings (close_date_after_drive)" }
   /drives/{id}/schedule:
     post:
       summary: >-
@@ -146,7 +149,7 @@ paths:
       requestBody: { $ref: "#/components/requestBodies/Reason" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Drive" } } } }
-        "409": { description: "The drive is completed or cancelled (not_cancellable); an opening of the drive has applications (has_applications)" }
+        "409": { description: "The drive is completed or cancelled (not_cancellable); an opening of the drive has applications, a withdrawn one included (has_applications)" }
         "422": { description: "An empty reason (reason_required)" }
   /openings:
     get:
@@ -181,14 +184,16 @@ paths:
     put:
       summary: >-
         Edit a draft or open opening. The company and drive do not change once it has applications. Existing
-        applications are not changed by an edit. Permission placement-career:opening:manage.
+        applications are not changed by an edit. applications_close_on is checked against today only when it
+        changes, so an open opening past its last day can still be corrected. Permission
+        placement-career:opening:manage.
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/OpeningInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }
         "404": { description: "company_id or drive_id is not in the organisation (not_found)" }
         "409": { description: "The opening is closed or cancelled (not_editable); the company or drive changes while it has applications (has_applications); the company is inactive (company_inactive); the drive is completed or cancelled (drive_not_open_for_openings)" }
-        "422": { description: "Empty title (invalid_title); bad ctc_per_annum (invalid_amount); positions below 1 (invalid_positions); applications_close_on before today (invalid_date); bad criteria (invalid_eligibility); a company other than the drive's (company_mismatch); applications_close_on after the drive date (close_date_after_drive)" }
+        "422": { description: "Empty title (invalid_title); bad ctc_per_annum (invalid_amount); positions below 1 (invalid_positions); applications_close_on changed to a date before today (invalid_date); bad criteria (invalid_eligibility); a company other than the drive's (company_mismatch); applications_close_on after the drive date (close_date_after_drive)" }
   /openings/{id}/publish:
     post:
       summary: >-
@@ -217,7 +222,7 @@ paths:
       requestBody: { $ref: "#/components/requestBodies/Reason" }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Opening" } } } }
-        "409": { description: "The opening is closed or cancelled (not_cancellable); it has applications (has_applications)" }
+        "409": { description: "The opening is closed or cancelled (not_cancellable); it has applications, a withdrawn one included (has_applications)" }
         "422": { description: "An empty reason (reason_required)" }
   /applications:
     get:
@@ -258,14 +263,24 @@ paths:
     get:
       summary: >-
         Open openings that still take applications (applications_close_on today or later, IST), soonest closing
-        first, each with the caller's own application status if they applied. Backs the student layouts' widget
-        placement-career.openings. Permission placement-career:self:read.
-      parameters: [{ $ref: "#/components/parameters/Limit" }]
-      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MyOpening" } } } } } }
+        first, each with the caller's own application status if they applied. Permission placement-career:self:read.
+        Backs the learner widget placement-career.openings (the layouts that extend `student`), which declares
+        placement-career:self:read and calls this endpoint only (decided by the owner on #337).
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyOpeningPage" } } } }
+        "400": { description: "A cursor this API did not return (invalid_cursor)" }
   /me/applications:
     get:
       summary: The caller's own applications with their status and any offer, newest first. Permission placement-career:self:read.
-      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/MyApplication" } } } } } }
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyApplicationPage" } } } }
+        "400": { description: "A cursor this API did not return (invalid_cursor)" }
     post:
       summary: >-
         Apply to an open opening, declaring that the caller meets its eligibility criteria. The declaration is not
@@ -290,16 +305,19 @@ paths:
     get:
       summary: >-
         Scheduled drives from today (IST), soonest first, with each drive's openings and application counts by status,
-        and the number of drives in the next 30 days. Backs the Placement Officer widget placement-career.drives.
-        Permission placement-career:report:read.
+        and the number of drives in the next 30 days. Permission placement-career:report:read. Backs the
+        placement-officer widget placement-career.drives, which declares placement-career:report:read and calls this
+        endpoint only.
       parameters: [{ name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }]
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DrivesUpcomingReport" } } } } }
   /reports/openings-summary:
     get:
       summary: >-
         Openings by status, applications by status, students placed (with an accepted offer), and the openings
-        closing soonest. Backs placement-career.openings on staff layouts (placement-officer and the coordinator and
-        liaison layouts). Permission placement-career:report:read.
+        closing soonest. Permission placement-career:report:read. Backs the staff widget
+        placement-career.openings-summary (placement-officer, industry-coordinator, practicum-coordinator and
+        industry-liaison), which declares placement-career:report:read and calls this endpoint only (decided by the
+        owner on #337).
       parameters: [{ name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 5 } }]
       responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OpeningsSummaryReport" } } } } }
 components:
@@ -416,7 +434,7 @@ components:
             status: { $ref: "#/components/schemas/OpeningStatus" }
             company: { $ref: "#/components/schemas/CompanySummary" }
             drive: { type: object, nullable: true, properties: { id: { type: string, format: uuid }, title: { type: string }, scheduled_on: { type: string, format: date }, venue: { type: string, nullable: true }, eligibility: { $ref: "#/components/schemas/Eligibility" } }, description: "With the drive's own criteria, shown next to the opening's" }
-            applications_count: { type: integer, nullable: true, description: "Only for callers with placement-career:application:read; null otherwise" }
+            applications_count: { type: integer, nullable: true, description: "Only for callers with placement-career:application:read; null otherwise. The viewer (report:read without application:read) gets counts only in the reports (per opening in OpeningsSummaryReport.closing_soon, per drive in DrivesUpcomingReport), not here" }
             cancel_reason: { type: string, nullable: true }
             published_at: { type: string, format: date-time, nullable: true }
             created_by: { type: string, format: uuid }
@@ -462,7 +480,7 @@ components:
       properties:
         status: { type: string, enum: [shortlisted, in_process, offered, accepted, declined, rejected] }
         reason: { type: string, description: "Required for rejected; shown to the student" }
-        offer: { $ref: "#/components/schemas/Offer" }
+        offer: { allOf: [{ $ref: "#/components/schemas/Offer" }], description: "Recorded when status is offered. Whether an offer sent with another status is ignored or refused is open question 9 in docs/prd.md" }
     HistoryEntry:
       type: object
       properties:
@@ -510,6 +528,16 @@ components:
         reason: { type: string, nullable: true }
         applied_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    MyApplicationPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MyApplication" } }
+        next_cursor: { type: string, nullable: true }
+    MyOpeningPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MyOpening" } }
+        next_cursor: { type: string, nullable: true }
     MyOpening:
       type: object
       properties:
