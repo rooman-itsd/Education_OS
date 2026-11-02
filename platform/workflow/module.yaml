@@ -5,9 +5,9 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "Configurable workflow and approval engine (state machines, SLAs, delegation)."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
