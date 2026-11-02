@@ -5,33 +5,16 @@ import {
   getSummary,
   listBookingsToday,
   type Booking,
-  type BookingStatus,
   type Failure,
   type Summary,
   timeWindow,
 } from "../api/client";
+import { LABEL, TONE } from "./status";
 
 type State =
   | { kind: "loading" }
   | { kind: "error"; failure: Failure }
   | { kind: "ready"; bookings: Booking[]; total: number; summary: Summary };
-type Tone = "danger" | "warning" | "info" | "success" | "neutral";
-
-/** Statuses in words, and the tone of each; status always comes with a word, never colour alone. */
-const LABEL: Partial<Record<BookingStatus, string>> = {
-  pending: "Awaiting approval",
-  confirmed: "Confirmed",
-  checked_in: "Checked in",
-  completed: "Completed",
-  no_show: "No-show",
-};
-const TONE: Partial<Record<BookingStatus, Tone>> = {
-  pending: "warning",
-  confirmed: "info",
-  checked_in: "success",
-  completed: "neutral",
-  no_show: "danger",
-};
 
 const SHOWN = 6;
 
