@@ -122,6 +122,7 @@ def record(
     after: dict | None = None,
     context: dict | None = None,
     client_token: str | None = None,
+    occurred_at: datetime | None = None,
 ) -> tuple[AuditRecord, bool]:
     """Append one record in the caller's transaction. Returns (record, created). A replayed client_token
     returns the original and appends nothing, so a retried request cannot record twice."""
@@ -153,6 +154,8 @@ def record(
         context=context or {},
         client_token=client_token or None,
     )
+    if occurred_at is not None:
+        rec.occurred_at = _utc(occurred_at)  # when it happened (the event's time), not when it reached audit
     with _scope(organisation_id):
         db.add(rec)
         db.flush()

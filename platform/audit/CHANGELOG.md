@@ -3,6 +3,14 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Audit is fed by the outbox (#317 follow-up). Nothing called `record()` outside this module and audit consumed no
+  events, so the store and both widgets stayed empty. `application/consumers.py` (entry point
+  `eos.event_consumers`) records 32 state-change events from tenancy, identity, billing, workflow, documents and
+  reporting, idempotent on the event id, with the event's actor and time (`record()` takes `occurred_at`). Super
+  admin operations also get a platform-level record for `audit.super-admin-actions`. Secret-looking payload keys
+  are dropped and named in `context.dropped_keys` rather than refusing the record.
+- Retention runs: the platform job `audit.prune` (`30 2 * * *`, entry point `eos.scheduler_jobs`) consumes
+  `scheduler.job.due`, runs `prune()` and reports `audit.job.finished`. `prune()` existed but nothing ran it.
 - `contracts/openapi.yaml`: append a record, search, read one, full history of an entity,
   and a per-organisation compliance export. No PUT, PATCH or DELETE on a record: immutability
   is enforced by the absence of the endpoints, not by convention.
