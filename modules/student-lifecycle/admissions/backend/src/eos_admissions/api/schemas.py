@@ -83,3 +83,11 @@ class OfferAcceptInput(BaseModel):
 class OfferDeclineInput(BaseModel):
     email: EmailStr
     reason: str | None = Field(default=None, max_length=2000)
+
+
+# ---------------------------------------------------------------- signed-in applicant
+
+
+class LinkApplicationInput(BaseModel):
+    reference_number: str = Field(min_length=1, max_length=32)
+    email: EmailStr
