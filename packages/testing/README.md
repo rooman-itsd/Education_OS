@@ -11,6 +11,10 @@ b = register_and_login(client, slug="beta", academy_type="music-academy")
 assert_no_cross_tenant_leak(client, "/api/v1/identity/users", a["token"], b["token"])
 ```
 
+`register_and_login` needs `EOS_DEV_MODE=true`: the register response then returns the verification token. Since
+#361 the verification mail goes through `platform/notification`, which this package may not import, so without dev
+mode the helper stops with a message saying so.
+
 ## Platform stubs
 
 In-memory fakes so a module's tests pass with only `packages/` available (module standard rule 6).
