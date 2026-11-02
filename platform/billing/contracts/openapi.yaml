@@ -86,8 +86,10 @@ components:
                   past_due: { type: integer }
                   read_only: { type: integer }
                   cancelled: { type: integer }
+                  other: { type: integer, description: "A status outside the five above, counted rather than relabelled" }
               total: { type: integer }
-              monthly_recurring: { type: string, description: "Decimal, two places: active subscriptions x price_per_month", example: "12500.00" }
+              comped: { type: integer, description: "Active subscriptions comped by the super admin (comped_until in the future): counted in active, not in monthly_recurring" }
+              monthly_recurring: { type: string, description: "Decimal, two places: active subscriptions that are not comped x price_per_month", example: "12500.00" }
               paid_last_30_days: { type: string, description: "Decimal, two places: paid invoices issued in the window", example: "25000.00" }
         trials_expiring:
           type: array
@@ -98,7 +100,7 @@ components:
               organisation_name: { type: string, nullable: true }
               plan: { type: string }
               trial_ends_at: { type: string, format: date-time }
-              days_left: { type: integer, minimum: 0 }
+              days_left: { type: integer, description: "Negative when the trial has ended but the daily expiry job has not made it read-only yet" }
     Plan:
       type: object
       properties:

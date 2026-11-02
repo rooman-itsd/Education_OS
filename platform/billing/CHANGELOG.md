@@ -7,7 +7,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   catalogue key no route used yet: subscriptions per plan and status, monthly recurring revenue, paid invoices of
   the last 30 days (both as decimal strings) and trials ending within 14 days with the organisation's name (from
   the `eos.organisation_directory` entry point). Three Super Admin widgets read it: `billing.trials-expiring`,
-  `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes.
+  `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes. Comped
+  subscriptions count as `comped`, not as recurring revenue; an unknown status counts as `other`; trials past their
+  end but not yet expired by the daily job are listed (negative `days_left`).
 - Scheduled jobs for platform/scheduler (#316): `billing.expire-trials` (daily 00:15 UTC) and
   `billing.trial-reminders` (daily 06:00 UTC), declared on the `eos.scheduler_jobs` entry point and run from
   `scheduler.job.due` (consumer on `eos.event_consumers`); each reports `billing.job.finished`.

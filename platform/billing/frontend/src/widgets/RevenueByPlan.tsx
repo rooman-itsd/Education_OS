@@ -29,7 +29,13 @@ export function RevenueByPlan(_props: WidgetProps) {
                 icon={Icons.IndianRupee}
                 tone="success"
                 title={p.title}
-                meta={`${p.subscriptions.active} active · ${money(cents(p.paid_last_30_days) / 100, p.currency)} paid in ${data.paid_window_days} days`}
+                meta={[
+                  `${p.subscriptions.active - p.comped} paying`,
+                  p.comped > 0 ? `${p.comped} comped` : null,
+                  `${money(cents(p.paid_last_30_days) / 100, p.currency)} paid in ${data.paid_window_days} days`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 trailing={<Badge tone="success">{`${money(cents(p.monthly_recurring) / 100, p.currency)}/mo`}</Badge>}
               />
             ))}

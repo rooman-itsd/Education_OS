@@ -6,19 +6,20 @@ import { RevenueByPlan } from "../src/widgets/RevenueByPlan";
 import { SubscriptionsByPlan } from "../src/widgets/SubscriptionsByPlan";
 import { TrialsExpiring } from "../src/widgets/TrialsExpiring";
 
-const counts = (c: Partial<PlanReport["subscriptions"]>): PlanReport["subscriptions"] => ({ trialing: 0, active: 0, past_due: 0, read_only: 0, cancelled: 0, ...c });
+const counts = (c: Partial<PlanReport["subscriptions"]>): PlanReport["subscriptions"] => ({ trialing: 0, active: 0, past_due: 0, read_only: 0, cancelled: 0, other: 0, ...c });
 
 const REPORT: SubscriptionReport = {
   generated_at: "2026-10-31T10:00:00+00:00",
   trial_window_days: 14,
   paid_window_days: 30,
   plans: [
-    { plan: "trial", title: "Trial", currency: "INR", subscriptions: counts({ trialing: 4, read_only: 1 }), total: 5, monthly_recurring: "0.00", paid_last_30_days: "0.00" },
-    { plan: "standard", title: "Standard", currency: "INR", subscriptions: counts({ active: 2, past_due: 1 }), total: 3, monthly_recurring: "49998.00", paid_last_30_days: "24999.00" },
-    { plan: "premium", title: "Premium", currency: "INR", subscriptions: counts({ cancelled: 1 }), total: 1, monthly_recurring: "0.00", paid_last_30_days: "49999.00" },
-    { plan: "enterprise", title: "Enterprise", currency: "INR", subscriptions: counts({}), total: 0, monthly_recurring: "0.00", paid_last_30_days: "0.00" },
+    { plan: "trial", title: "Trial", currency: "INR", subscriptions: counts({ trialing: 4, read_only: 1 }), total: 5, comped: 0, monthly_recurring: "0.00", paid_last_30_days: "0.00" },
+    { plan: "standard", title: "Standard", currency: "INR", subscriptions: counts({ active: 3, past_due: 1 }), total: 4, comped: 1, monthly_recurring: "49998.00", paid_last_30_days: "24999.00" },
+    { plan: "premium", title: "Premium", currency: "INR", subscriptions: counts({ cancelled: 1 }), total: 1, comped: 0, monthly_recurring: "0.00", paid_last_30_days: "49999.00" },
+    { plan: "enterprise", title: "Enterprise", currency: "INR", subscriptions: counts({}), total: 0, comped: 0, monthly_recurring: "0.00", paid_last_30_days: "0.00" },
   ],
   trials_expiring: [
+    { organisation_id: "o0", organisation_name: "Late Theatre", plan: "trial", trial_ends_at: "2026-10-30T12:00:00+00:00", days_left: -1 },
     { organisation_id: "o1", organisation_name: "Morning Music", plan: "trial", trial_ends_at: "2026-10-31T12:00:00+00:00", days_left: 0 },
     { organisation_id: "o2", organisation_name: null, plan: "trial", trial_ends_at: "2026-11-03T12:00:00+00:00", days_left: 3 },
     { organisation_id: "o3", organisation_name: "Slow Dance", plan: "trial", trial_ends_at: "2026-11-10T12:00:00+00:00", days_left: 10 },
@@ -62,7 +63,7 @@ describe("helpers", () => {
   it("describes statuses and days left", () => {
     expect(statusBreakdown(counts({ trialing: 4, active: 2, read_only: 1 }))).toBe("4 trialing · 2 active · 1 read-only");
     expect(statusBreakdown(counts({}))).toBe("");
-    expect([endsIn(0), endsIn(1), endsIn(5)]).toEqual(["ends today", "ends tomorrow", "ends in 5 days"]);
+    expect([endsIn(-1), endsIn(0), endsIn(1), endsIn(5)]).toEqual(["trial ended", "ends today", "ends tomorrow", "ends in 5 days"]);
   });
 });
 
@@ -73,11 +74,13 @@ describe("billing.trials-expiring", () => {
     render(<TrialsExpiring role="super-admin" />);
     expect(await screen.findByText("Morning Music")).toBeTruthy();
     const r = rows();
-    expect(r[0]).toContain("ends today");
-    expect(r[0]).toContain("Trial ·");
-    expect(r[1]).toContain("Unnamed organisation");
-    expect(r[1]).toContain("ends in 3 days");
-    expect(r[2]).toContain("Slow Dance");
+    expect(r[0]).toContain("Late Theatre"); // ended yesterday, not yet read-only: still listed, first
+    expect(r[0]).toContain("trial ended");
+    expect(r[1]).toContain("ends today");
+    expect(r[1]).toContain("Trial ·");
+    expect(r[2]).toContain("Unnamed organisation");
+    expect(r[2]).toContain("ends in 3 days");
+    expect(r[3]).toContain("Slow Dance");
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/v1/billing/admin/reports/subscriptions");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
@@ -98,7 +101,7 @@ describe("billing.revenue-by-plan", () => {
     const r = rows();
     expect(r).toHaveLength(2); // Standard (active) and Premium (paid in the window); not Trial or Enterprise
     expect(r[0]).toContain("Standard");
-    expect(r[0]).toContain(`2 active · ${money(24999, "INR")} paid in 30 days`);
+    expect(r[0]).toContain(`2 paying · 1 comped · ${money(24999, "INR")} paid in 30 days`); // 3 active, 1 of them comped
     expect(r[0]).toContain(`${money(49998, "INR")}/mo`);
     expect(r[1]).toContain("Premium");
   });
@@ -115,7 +118,7 @@ describe("billing.subscriptions-by-plan", () => {
     vi.stubGlobal("fetch", answer(200, REPORT));
     render(<SubscriptionsByPlan role="super-admin" />);
     expect(await screen.findByText("Trial")).toBeTruthy();
-    expect(rows()).toEqual(["Trial4 trialing · 1 read-only5", "Standard2 active · 1 past due3", "Premium1 cancelled1"]);
+    expect(rows()).toEqual(["Trial4 trialing · 1 read-only5", "Standard3 active · 1 past due (1 comped)4", "Premium1 cancelled1"]);
   });
 
   it("says when nobody is subscribed", async () => {
@@ -127,6 +130,7 @@ describe("billing.subscriptions-by-plan", () => {
 
 describe("error states, as the other widgets", () => {
   it.each([
+    [401, "Sign in again to see this."],
     [403, "You do not have access to this."],
     [503, "Billing data is not available yet."],
   ])("answers %i with %s in every super admin widget", async (status, text) => {

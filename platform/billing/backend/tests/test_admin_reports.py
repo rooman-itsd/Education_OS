@@ -82,7 +82,7 @@ def _noon(days: int) -> timedelta:
     return now.replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=days) - now
 
 
-def _sub(plan: str, status: str, trial_ends_in: timedelta | None = None) -> str:
+def _sub(plan: str, status: str, trial_ends_in: timedelta | None = None, *, comped_for: timedelta | None = None) -> str:
     org = str(uuid.uuid4())
     with organisation_scope(org), SessionLocal() as db:
         db.add(
@@ -91,6 +91,7 @@ def _sub(plan: str, status: str, trial_ends_in: timedelta | None = None) -> str:
                 plan_id=plan,
                 status=status,
                 trial_ends_at=utcnow() + trial_ends_in if trial_ends_in is not None else None,
+                comped_until=utcnow() + comped_for if comped_for is not None else None,
             )
         )
         db.commit()
@@ -129,7 +130,15 @@ def test_counts_per_plan_and_status_and_recurring_revenue_from_active_only(clien
 
     assert r.status_code == 200, r.text
     row = _row(r.json(), paid)
-    assert row["subscriptions"] == {"trialing": 0, "active": 2, "past_due": 1, "read_only": 1, "cancelled": 1}
+    assert row["subscriptions"] == {
+        "trialing": 0,
+        "active": 2,
+        "past_due": 1,
+        "read_only": 1,
+        "cancelled": 1,
+        "other": 0,
+    }
+    assert row["comped"] == 0
     assert row["total"] == 5
     assert row["monthly_recurring"] == str((_plan_price(paid) * 2).quantize(Decimal("0.01")))
     trial = _row(r.json(), "trial")
@@ -155,17 +164,17 @@ def test_trials_ending_within_14_days_soonest_first_with_names(client, _db):
     today = _sub("trial", "trialing", _noon(0))
     edge = _sub("trial", "trialing", _noon(14))
     _sub("trial", "trialing", _noon(15))  # outside the window
-    _sub("trial", "trialing", _noon(-1))  # already ended
+    ended = _sub("trial", "trialing", _noon(-1))  # ended yesterday; the daily expiry job has not run yet
     _sub(_paid_plan(), "active", _noon(2))  # not trialing any more
     _db[today] = "Morning Music Academy"
 
     expiring = client.get(URL, headers=_user(super_admin=True)).json()["trials_expiring"]
 
-    assert [t["organisation_id"] for t in expiring] == [today, later, edge]
-    assert [t["days_left"] for t in expiring] == [0, 10, 14]
-    assert expiring[0]["organisation_name"] == "Morning Music Academy"
-    assert expiring[1]["organisation_name"] is None  # not in the directory: shown without a name
-    assert expiring[0]["plan"] == "trial"
+    assert [t["organisation_id"] for t in expiring] == [ended, today, later, edge]
+    assert [t["days_left"] for t in expiring] == [-1, 0, 10, 14]
+    assert expiring[1]["organisation_name"] == "Morning Music Academy"
+    assert expiring[2]["organisation_name"] is None  # not in the directory: shown without a name
+    assert expiring[1]["plan"] == "trial"
 
 
 def test_an_empty_platform_reports_every_plan_with_zeros(client):
@@ -190,3 +199,24 @@ def test_the_directory_lookup_is_found_on_the_entry_point(monkeypatch):
         assert organisations.name(db, str(uuid.uuid4())) is None
     organisations.reset_cache()
     assert reports.TRIAL_WINDOW_DAYS == 14
+
+
+def test_a_comped_subscription_is_active_but_not_recurring_revenue(client):
+    """admin_set can comp an organisation (comped_until in the future): active, paying nothing. A comp that has run
+    out pays again."""
+    paid = _paid_plan()
+    _sub(paid, "active")
+    _sub(paid, "active", comped_for=timedelta(days=30))
+    _sub(paid, "active", comped_for=timedelta(days=-1))  # the comp ended yesterday: paying again
+
+    row = _row(client.get(URL, headers=_user(super_admin=True)).json(), paid)
+
+    assert row["subscriptions"]["active"] == 3 and row["comped"] == 1
+    assert row["monthly_recurring"] == str((_plan_price(paid) * 2).quantize(Decimal("0.01")))
+
+
+def test_an_unknown_status_is_counted_as_other_not_cancelled(client):
+    paid = _paid_plan()
+    _sub(paid, "paused")
+    row = _row(client.get(URL, headers=_user(super_admin=True)).json(), paid)
+    assert row["subscriptions"]["other"] == 1 and row["subscriptions"]["cancelled"] == 0 and row["total"] == 1

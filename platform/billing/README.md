@@ -24,9 +24,12 @@ Not in scope: deciding what an organisation may use (`platform/tenancy` computes
 
 ## Super admin report and dashboard widgets
 `GET /admin/reports/subscriptions` (`platform:revenue:read`, super admin only; `application/reports.py`) reads every
-organisation in platform scope and answers, per plan, the subscriptions in each status, the **monthly recurring
-revenue** (active subscriptions × the plan's monthly price) and what was **paid in the last 30 days** (paid
-invoices issued in that window), plus the **trials ending in the next 14 days**, soonest first. Money is computed
+organisation in platform scope and answers, per plan, the subscriptions in each status (a status outside the five
+counts as `other`), the **monthly recurring revenue** (active subscriptions that pay × the plan's monthly price; one
+comped through `admin_set`, `comped_until` in the future, counts in `active` and in `comped`, not in the revenue) and
+what was **paid in the last 30 days** (paid invoices issued in that window, filtered in the database), plus the
+**trials ending within 14 days**, soonest first, including any already past their end that the daily expiry job has
+not made read-only yet (negative `days_left`, shown as "trial ended"). Money is computed
 with `Decimal` and returned as two-decimal strings. Organisation names come from the `eos.organisation_directory`
 entry point that tenancy publishes (`application/organisations.py`), so billing never imports tenancy; without it
 a trial is listed without a name.

@@ -153,9 +153,12 @@ export interface PlanReport {
   plan: string;
   title: string;
   currency: string;
-  subscriptions: Record<SubscriptionStatus, number>;
+  /** Counts per status; `other` is a status outside the contract's five. */
+  subscriptions: Record<SubscriptionStatus | "other", number>;
   total: number;
-  /** Active subscriptions x the plan's monthly price, e.g. "12500.00". */
+  /** Active subscriptions comped by the super admin: in `active`, not in `monthly_recurring`. */
+  comped: number;
+  /** Active subscriptions that are not comped x the plan's monthly price, e.g. "12500.00". */
   monthly_recurring: string;
   /** Paid invoices issued in the last paid_window_days. */
   paid_last_30_days: string;
@@ -165,6 +168,7 @@ export interface ExpiringTrial {
   organisation_name: string | null;
   plan: string;
   trial_ends_at: string;
+  /** Negative: ended, not yet made read-only by the daily expiry job. */
   days_left: number;
 }
 export interface SubscriptionReport {
@@ -192,24 +196,26 @@ export function recurringByCurrency(plans: PlanReport[]): Array<{ currency: stri
 }
 
 /** Subscription statuses in the order the widgets list them, with their words. */
-export const SUBSCRIPTION_STATUSES: Array<{ status: SubscriptionStatus; label: string }> = [
+export const SUBSCRIPTION_STATUSES: Array<{ status: SubscriptionStatus | "other"; label: string }> = [
   { status: "trialing", label: "trialing" },
   { status: "active", label: "active" },
   { status: "past_due", label: "past due" },
   { status: "read_only", label: "read-only" },
   { status: "cancelled", label: "cancelled" },
+  { status: "other", label: "other" },
 ];
 
 /** "4 trialing · 2 active · 1 read-only": only the statuses that have subscriptions. */
-export function statusBreakdown(counts: Partial<Record<SubscriptionStatus, number>>): string {
+export function statusBreakdown(counts: Partial<Record<SubscriptionStatus | "other", number>>): string {
   return SUBSCRIPTION_STATUSES.filter(({ status }) => (counts[status] ?? 0) > 0)
     .map(({ status, label }) => `${counts[status]} ${label}`)
     .join(" · ");
 }
 
-/** "ends today", "ends tomorrow", "ends in 5 days". */
+/** "trial ended", "ends today", "ends tomorrow", "ends in 5 days". */
 export function endsIn(daysLeft: number): string {
-  if (daysLeft <= 0) return "ends today";
+  if (daysLeft < 0) return "trial ended";
+  if (daysLeft === 0) return "ends today";
   if (daysLeft === 1) return "ends tomorrow";
   return `ends in ${daysLeft} days`;
 }

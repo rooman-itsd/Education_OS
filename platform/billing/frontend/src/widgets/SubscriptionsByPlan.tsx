@@ -21,7 +21,7 @@ export function SubscriptionsByPlan(_props: WidgetProps) {
               index={i}
               icon={Icons.Layers}
               title={p.title}
-              meta={statusBreakdown(p.subscriptions)}
+              meta={statusBreakdown(p.subscriptions) + (p.comped > 0 ? ` (${p.comped} comped)` : "")}
               trailing={<Badge tone="info">{String(p.total)}</Badge>}
             />
           ))}

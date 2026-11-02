@@ -47,7 +47,7 @@ export const widgets: DashboardWidget[] = [
     permission: "platform:revenue:read",
     size: "1x1",
     kind: "list",
-    subtitle: "Next 14 days, soonest first",
+    subtitle: "Ended or ending within 14 days, soonest first",
     component: TrialsExpiring,
   },
   {
