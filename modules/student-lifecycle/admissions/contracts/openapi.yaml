@@ -1,14 +1,17 @@
 openapi: 3.1.0
 info:
   title: admissions API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Online application, document verification, merit lists, counselling and offers. Submission,
     status tracking, document upload and offer decisions are public/anonymous, verified by
     reference_number + email — no applicant account is created by this module. Public paths live
     under /public/{org_slug}/ so every anonymous request names its organisation; the host gateway
     resolves the slug, checks the organisation is active and entitled to admissions, and answers
-    404 otherwise. Staff paths take the organisation from the caller's session. See docs/prd.md.
+    404 otherwise. Staff paths take the organisation from the caller's session. A signed-in
+    applicant (identity user with the applicant role) may link an application to their account
+    under /me/ with the same reference_number + email proof, and then reads it there; this backs
+    the Applicant dashboard. See docs/prd.md.
 servers:
   - url: /api/v1/admissions
 paths:
@@ -17,7 +20,7 @@ paths:
     get:
       summary: >
         Find applications in the caller's organisation, newest first. Staff only. Permission
-        admissions:application:read. Backs the widget admissions.application-status.
+        admissions:application:read.
       parameters:
         - { name: programme_id, in: query, schema: { type: string, format: uuid } }
         - { name: academic_year, in: query, schema: { type: string } }
@@ -68,8 +71,8 @@ paths:
       summary: >
         Documents across the organisation's applications, oldest upload first, filtered by
         verification status (default pending). The pending queue leaves out applications that are
-        already closed (ineligible, rejected, withdrawn, accepted, declined). Backs the widget
-        admissions.pending-documents. Permission admissions:document:verify.
+        already closed (ineligible, rejected, withdrawn, accepted, declined). The staff
+        verification queue. Permission admissions:document:verify.
       parameters:
         - { name: verification_status, in: query, schema: { type: string, enum: [pending, verified, rejected], default: pending } }
         - { $ref: "#/components/parameters/Page" }
@@ -136,6 +139,27 @@ paths:
         - { name: academic_year, in: query, schema: { type: string } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/FunnelReport" } } } }
+
+  # ---------------------------------------------------------------- signed-in applicant (own applications)
+  /me/applications:
+    get:
+      summary: >
+        The caller's own applications (those linked to their account), newest first, with
+        documents and offer. Backs the Applicant widgets admissions.application-status and
+        admissions.pending-documents. Permission admissions:self:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyApplications" } } } }
+    post:
+      summary: >
+        Link an application in the caller's organisation to the caller's account, proved by
+        reference_number and email as on the public track page. A wrong reference or email is a
+        404, so a guess reveals nothing. Linking again to the same account returns the application
+        unchanged. Permission admissions:self:read.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LinkApplicationInput" } } } }
+      responses:
+        "200": { description: Linked, content: { application/json: { schema: { $ref: "#/components/schemas/Application" } } } }
+        "404": { description: No application matches that reference number and email }
+        "409": { description: The application is linked to another account, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
 
   # ---------------------------------------------------------------- public (anonymous, per organisation)
   /public/{org_slug}/applications:
@@ -285,6 +309,17 @@ components:
         total: { type: integer }
         page: { type: integer }
         page_size: { type: integer }
+
+    MyApplications:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Application" } }
+    LinkApplicationInput:
+      type: object
+      required: [reference_number, email]
+      properties:
+        reference_number: { type: string, maxLength: 32 }
+        email: { type: string, format: email, description: "Must match the application's applicant email" }
 
     StatusChangeInput:
       type: object

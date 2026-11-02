@@ -41,6 +41,28 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
+## Dashboard widgets
+`frontend/src/widgets/index.ts` exports the widgets the role layouts in `platform/identity/config/dashboards/` name:
+
+| Widget | Layout | Permission | Endpoints |
+|---|---|---|---|
+| `sports-nutrition-health.nutrition-plan` | athlete | `plan:read` | `GET /nutrition-plans?status=active` (the athlete's own plans) |
+| `sports-nutrition-health.injured-athletes` | medical-staff | `injury:read` | `GET /injuries?status=active`, `GET /injuries?status=recovering` |
+| `sports-nutrition-health.appointments-today` | medical-staff | `appointment:read` | `GET /appointments?on=<UTC day>`, once or twice |
+| `sports-nutrition-health.athletes-on-plans` | nutritionist | `plan:read` | `GET /nutrition-plans?status=active` |
+| `sports-nutrition-health.plan-reviews-due` | nutritionist | `plan:read` | `GET /nutrition-plans?status=active&review_due_before=<today + 7 days>` |
+
+Athletes are referenced by id only and this module has no endpoint that names them, so rows show a short id
+("Athlete 3f2a9c7e"); a widget does not call athlete-performance for names. No widget shows an injury's clinical
+notes or an appointment's notes: the client drops them before a widget sees the row.
+
+`?on=` is a UTC calendar day, while "today" is the viewer's local day. A local day overlaps two UTC days unless the
+viewer is on UTC (in India, 00:00 to 05:30 local is the previous UTC day), so appointments-today asks for each UTC
+day the local day overlaps and keeps the appointments between local midnight and midnight. It lists the whole
+organisation's appointments, not only the viewer's own (the widget does not know the viewer's user id).
+List widgets load one page of 200 per request (the contract maximum); athletes-on-plans says so when more active
+plans exist than it loaded.
+
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens), for its tests
 `packages/testing`, and `platform/event-bus` to deliver the consumed event. The backend is
