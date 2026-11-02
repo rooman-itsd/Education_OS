@@ -21,7 +21,19 @@ Immutable, append-only audit log for every state-changing action.
   request, restore, purge, impersonation) also get a platform-level record (`organisation_id` null,
   `context.organisation_id` set), which `audit.super-admin-actions` reads.
 - **Directly**, in the caller's transaction, through `service.record()` or `POST /records` (role `service`).
-- **Retention:** the scheduled platform job `audit.prune` (daily, 02:30 UTC) runs `service.prune()`.
+- **Retention:** the scheduled platform job `audit.prune` (daily, 02:30 UTC) runs `service.prune()`, which on
+  PostgreSQL calls `audit_prune()`.
+
+## Immutability, at the database
+- The API's role (`eos_app`) may only INSERT and SELECT on `audit_record` (migration `audit_0002`, re-applied by
+  `infra/docker/db-roles.py` on every deploy). The immutability trigger also refuses UPDATE, DELETE and TRUNCATE to
+  anyone but the table owner, a superuser included.
+- `audit_prune(cutoff)`: retention, SECURITY DEFINER, executable by `eos_app`, never younger than 2555 days.
+- `audit_redact(record_id)`: a single legal erasure, SECURITY DEFINER, owner only (database maintenance).
+- `audit_redact_organisation(org)`: after a purge, tombstones that organisation's records (executable by
+  `eos_app`, refused while the organisation exists); run on `tenancy.organisation.purged`.
+- Deployment requirements: migrations run as the owner (`infra/docker/migrate.sh` does), and `db-roles.py`'s
+  `APPEND_ONLY` must keep listing `audit_record`.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)

@@ -3,6 +3,18 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Tamper protection at the database (#317 follow-up, audit finding A3). Migration `audit_0002`:
+  - the API's role `eos_app` loses UPDATE, DELETE and TRUNCATE on `audit_record` (INSERT and SELECT only);
+    `infra/docker/db-roles.py` re-applies this after its grants on every deploy (`APPEND_ONLY`);
+  - retention runs through `audit_prune(cutoff)` (SECURITY DEFINER, granted to eos_app), which refuses a cutoff
+    younger than the 2555-day floor; `prune()` calls it on PostgreSQL;
+  - `audit_redact(record_id)` (SECURITY DEFINER, owner only) writes a tombstone and nothing else;
+  - the trigger allows a delete or a tombstone only as the table owner: setting `audit.pruning` no longer lets
+    any session delete a chosen record, and a "redaction" can no longer write arbitrary before/after values.
+- A purged organisation's trail is kept with its payloads redacted (decision on #317): on
+  `tenancy.organisation.purged`, `redact_organisation()` tombstones its records and the platform-level copies about
+  it, through `audit_redact_organisation(org)` (SECURITY DEFINER, granted to eos_app, refuses while the
+  organisation still exists). tenancy's purge leaves `audit_record` alone (#450).
 - Audit is fed by the outbox (#317 follow-up). Nothing called `record()` outside this module and audit consumed no
   events, so the store and both widgets stayed empty. `application/consumers.py` (entry point
   `eos.event_consumers`) records 32 state-change events from tenancy, identity, billing, workflow, documents and
