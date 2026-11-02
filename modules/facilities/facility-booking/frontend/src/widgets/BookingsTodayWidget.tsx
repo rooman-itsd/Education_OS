@@ -1,20 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import {
-  describeFailure,
-  getSummary,
-  listBookingsToday,
-  type Booking,
-  type Failure,
-  type Summary,
-  timeWindow,
-} from "../api/client";
+import { getSummary, listBookingsToday, timeWindow } from "../api/client";
 import { LABEL, TONE } from "./status";
-
-type State =
-  | { kind: "loading" }
-  | { kind: "error"; failure: Failure }
-  | { kind: "ready"; bookings: Booking[]; total: number; summary: Summary };
+import { useWidgetData } from "./useWidgetData";
 
 const SHOWN = 6;
 
@@ -24,37 +11,22 @@ const SHOWN = 6;
  * GET /summary). The shell renders the panel and its title (the academy's vocabulary term); this is the body.
  */
 export function BookingsTodayWidget(_props: WidgetProps) {
-  const [state, setState] = useState<State>({ kind: "loading" });
+  const { load, reload } = useWidgetData(async (signal) => {
+    const [page, summary] = await Promise.all([listBookingsToday(SHOWN, signal), getSummary(signal)]);
+    const bookings = [...(page.items ?? [])].sort((a, b) => (a.start_at ?? "").localeCompare(b.start_at ?? ""));
+    return { bookings, total: page.total ?? bookings.length, summary };
+  }, "today's bookings");
 
-  const load = useCallback((signal?: AbortSignal) => {
-    setState({ kind: "loading" });
-    Promise.all([listBookingsToday(SHOWN, signal), getSummary(signal)])
-      .then(([page, summary]) => {
-        const bookings = [...(page.items ?? [])].sort((a, b) => (a.start_at ?? "").localeCompare(b.start_at ?? ""));
-        setState({ kind: "ready", bookings, total: page.total ?? bookings.length, summary });
-      })
-      .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") {
-          setState({ kind: "error", failure: describeFailure(e, "today's bookings") });
-        }
-      });
-  }, []);
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    load(ctrl.signal);
-    return () => ctrl.abort();
-  }, [load]);
-
-  if (state.kind === "loading") return <SkeletonLines lines={4} />;
-  if (state.kind === "error") {
-    const { title, detail, retry } = state.failure;
+  if (load.kind === "loading") return <SkeletonLines lines={4} />;
+  if (load.kind === "error") {
+    const { title, detail, retry } = load.failure;
     return (
-      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+      <ErrorState title={title} onRetry={retry ? reload : undefined}>
         {detail}
       </ErrorState>
     );
   }
+  const state = load.data;
   const { summary } = state;
   const counts = [
     `${summary.bookings_today} today`,

@@ -83,9 +83,19 @@ place them by id, and the shell titles them with the academy's vocabulary.
   `bookings` covers the resources the viewer approves; `my-bookings` the viewer's own, booked by or for them.
 - **States:** loading, empty, and error with a retry when trying again can help; until the backend answers, the error
   reads "Booking data is not available yet." 401 and 403 offer no retry.
-- **Read-only for now:** the cancel and check-in actions the PRD lists for these rows (driven by `Booking.can`), and
-  whether `bookings` also shows the viewer's own bookings, come in #421.
+- **Row actions (#421):** a row of **bookings** or **my-bookings** shows "Check in" when the booking's `can` lists
+  `check_in` and "Cancel" when it lists `cancel`; the widgets never infer an action from status or role. They call
+  `POST /bookings/{id}/check-in` and `POST /bookings/{id}/cancel`. On `bookings` a cancel asks for a reason (the
+  contract requires one of `facility-booking:booking:manage`); on `my-bookings` it asks to confirm and sends no reason.
+  While a request runs the row's buttons are disabled; on success the list loads again. A failure is said on the row
+  in the widget's own words, from the status code (409: "This booking can no longer be cancelled." or "This booking
+  cannot be checked in now."), never the server's text. Every button's accessible name names the booking.
+- **Still open (#421):** whether `bookings` should also list the viewer's own bookings ("made or approves" in the PRD).
+  That needs a contract scope covering both, so its consumers must be told; otherwise the PRD wording becomes
+  "approves". Until then `bookings` stays on `scope=managed`.
 - **Data:** `src/api/client.ts`, a hand-written typed client that the generated client will replace.
+  `src/widgets/useWidgetData.ts` runs each widget's fetch: retry and the refresh after an action bump an attempt
+  counter, and the effect owns the request's AbortController (as in the procurement and budget-grants widgets).
 - **Tests:** `cd modules/facilities/facility-booking/frontend && pnpm test` (vitest and Testing Library).
 
 ## Porting this module to another repo

@@ -2,6 +2,7 @@ import type { DashboardWidget } from "@eos/ui-kit";
 import { BookingsTodayWidget } from "./BookingsTodayWidget";
 import { BookingsWidget } from "./BookingsWidget";
 import { MyBookingsWidget } from "./MyBookingsWidget";
+import "./widgets.css";
 
 /**
  * Dashboard widgets exported by facility-booking.
