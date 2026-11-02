@@ -10,6 +10,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ModuleSettings:
     trend_steady_percent: float
+    timezone: str
 
 
 def _env(key: str, default: str) -> str:
@@ -17,4 +18,7 @@ def _env(key: str, default: str) -> str:
 
 
 def load_settings() -> ModuleSettings:
-    return ModuleSettings(trend_steady_percent=float(_env("TREND_STEADY_PERCENT", "1")))
+    return ModuleSettings(
+        trend_steady_percent=float(_env("TREND_STEADY_PERCENT", "1")),
+        timezone=_env("TIMEZONE", "Asia/Kolkata"),
+    )

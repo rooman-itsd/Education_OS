@@ -66,4 +66,7 @@ if ! $COMPOSE run --rm -T migrate; then
 fi
 $COMPOSE up -d --quiet-pull
 docker image prune -f >/dev/null
+# And the build cache: every merge rebuilds the install layer (about 200 MB), so old cache is never reused and
+# filled CT 122's disk (3.6 GB on 7.8 GB in three weeks). The base image is an image, not cache, and is kept.
+docker builder prune -af >/dev/null || true
 logger -t eos-api-autodeploy "deployed $label $want (was $have)"

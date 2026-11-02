@@ -15,6 +15,7 @@ paths:
       summary: List tournaments
       description: 'Permission: `tournament-events:tournament:read`.'
       operationId: listTournaments
+      x-permission: tournament-events:tournament:read
       parameters:
       - name: status
         in: query
@@ -80,6 +81,7 @@ paths:
       summary: Create tournament
       description: 'Permission: `tournament-events:tournament:write`.'
       operationId: createTournament
+      x-permission: tournament-events:tournament:write
       requestBody:
         required: true
         content:
@@ -109,6 +111,7 @@ paths:
       summary: Get tournament
       description: 'Permission: `tournament-events:tournament:read`.'
       operationId: getTournament
+      x-permission: tournament-events:tournament:read
       responses:
         '200':
           description: Tournament
@@ -124,6 +127,7 @@ paths:
       summary: Update tournament
       description: 'Permission: `tournament-events:tournament:write`.'
       operationId: updateTournament
+      x-permission: tournament-events:tournament:write
       requestBody:
         required: true
         content:
@@ -155,6 +159,7 @@ paths:
       summary: List entries
       description: 'Permission: `tournament-events:entry:read`.'
       operationId: listEntrys
+      x-permission: tournament-events:entry:read
       parameters:
       - name: status
         in: query
@@ -198,6 +203,7 @@ paths:
       summary: Create entry
       description: 'Permission: `tournament-events:entry:write`.'
       operationId: createEntry
+      x-permission: tournament-events:entry:write
       requestBody:
         required: true
         content:
@@ -233,6 +239,7 @@ paths:
       summary: Confirm or withdraw an entry
       description: 'Permission: `tournament-events:entry:write`.'
       operationId: updateEntry
+      x-permission: tournament-events:entry:write
       requestBody:
         required: true
         content:
@@ -264,6 +271,7 @@ paths:
       summary: List fixtures
       description: 'Permission: `tournament-events:fixture:read`.'
       operationId: listFixtures
+      x-permission: tournament-events:fixture:read
       parameters:
       - name: status
         in: query
@@ -319,6 +327,7 @@ paths:
       summary: Schedule a fixture
       description: 'Permission: `tournament-events:fixture:write`.'
       operationId: scheduleFixture
+      x-permission: tournament-events:fixture:write
       requestBody:
         required: true
         content:
@@ -354,6 +363,7 @@ paths:
       summary: Get fixture
       description: 'Permission: `tournament-events:fixture:read`.'
       operationId: getFixture
+      x-permission: tournament-events:fixture:read
       responses:
         '200':
           description: Fixture
@@ -369,6 +379,7 @@ paths:
       summary: Update fixture
       description: 'Permission: `tournament-events:fixture:write`.'
       operationId: updateFixture
+      x-permission: tournament-events:fixture:write
       requestBody:
         required: true
         content:
@@ -400,6 +411,7 @@ paths:
       summary: List officials
       description: 'Permission: `tournament-events:official:read`.'
       operationId: listOfficials
+      x-permission: tournament-events:official:read
       parameters:
       - name: limit
         in: query
@@ -435,6 +447,7 @@ paths:
       summary: Assign an official
       description: 'Permission: `tournament-events:official:write`.'
       operationId: assignOfficial
+      x-permission: tournament-events:official:write
       requestBody:
         required: true
         content:
@@ -470,6 +483,7 @@ paths:
       summary: Remove official
       description: 'Permission: `tournament-events:official:write`.'
       operationId: deleteOfficial
+      x-permission: tournament-events:official:write
       responses:
         '204':
           description: Official removed
@@ -489,6 +503,7 @@ paths:
       summary: Publish a tournament
       description: 'Makes a draft visible to athletes and opens entries. Permission: `tournament-events:tournament:publish`.'
       operationId: publishTournament
+      x-permission: tournament-events:tournament:publish
       responses:
         '200':
           description: Published
@@ -512,6 +527,7 @@ paths:
       summary: Cancel a tournament
       description: 'Permission: `tournament-events:tournament:publish`.'
       operationId: cancelTournament
+      x-permission: tournament-events:tournament:publish
       requestBody:
         required: true
         content:
@@ -552,6 +568,7 @@ paths:
       summary: Get a fixture's result
       description: 'Permission: `tournament-events:result:read`.'
       operationId: getResult
+      x-permission: tournament-events:result:read
       responses:
         '200':
           description: Result
@@ -567,6 +584,7 @@ paths:
       summary: Record a fixture's result
       description: 'Recording a result completes the fixture. Permission: `tournament-events:result:record`.'
       operationId: recordResult
+      x-permission: tournament-events:result:record
       requestBody:
         required: true
         content:
@@ -598,6 +616,7 @@ paths:
       summary: Get travel and event logistics
       description: 'Permission: `tournament-events:logistics:read`.'
       operationId: getLogistics
+      x-permission: tournament-events:logistics:read
       responses:
         '200':
           description: Logistics
@@ -613,6 +632,7 @@ paths:
       summary: Set travel and event logistics
       description: 'Permission: `tournament-events:logistics:write`.'
       operationId: setLogistics
+      x-permission: tournament-events:logistics:write
       requestBody:
         required: true
         content:
@@ -637,6 +657,7 @@ paths:
       summary: Tournament and fixture calendar
       description: 'Published tournaments and their fixtures between two dates. Permission: `tournament-events:tournament:read`.'
       operationId: getCalendar
+      x-permission: tournament-events:tournament:read
       parameters:
       - name: from
         in: query

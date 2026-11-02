@@ -66,3 +66,47 @@ roles:
       - sports-nutrition-health:plan:read
       - sports-nutrition-health:injury:read
       - sports-nutrition-health:appointment:read
+  # The sports-college profile's own roles (platform/identity/config/profiles/sports-college.yaml), so the people an
+  # institution creates there can use this module without also holding a sports-nutrition-health-* role. Health
+  # records stay with medical roles: org-admin administers plans, injuries and appointments but not health records.
+  - name: medical-staff
+    description: Medical Staff (profile role); same access as sports-nutrition-health-medical
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:health-record:read
+      - sports-nutrition-health:health-record:write
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:injury:write
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write
+  - name: nutritionist
+    description: Nutritionist (profile role); same access as sports-nutrition-health-nutritionist
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:plan:write
+      - sports-nutrition-health:plan:review
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write
+  - name: coach
+    description: Coach (profile role); same access as sports-nutrition-health-coach
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read
+  - name: athlete
+    description: Athlete (profile role); their own data only, same as sports-nutrition-health-athlete
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:appointment:read
+  - name: org-admin
+    description: Organisation Admin (profile role); plans, injuries and appointments, without health records
+    grants:
+      - sports-nutrition-health:plan:read
+      - sports-nutrition-health:plan:write
+      - sports-nutrition-health:plan:review
+      - sports-nutrition-health:injury:read
+      - sports-nutrition-health:injury:write
+      - sports-nutrition-health:appointment:read
+      - sports-nutrition-health:appointment:write

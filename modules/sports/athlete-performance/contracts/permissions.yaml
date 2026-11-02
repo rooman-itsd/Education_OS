@@ -121,6 +121,12 @@ roles:
       - athlete-performance:assessment:read
       - athlete-performance:benchmark:read
       - athlete-performance:clearance:read
+  - name: nutritionist
+    description: Nutritionist (profile role); reads athletes and performance summaries, same as athlete-performance-viewer
+    grants:
+      - athlete-performance:catalogue:read
+      - athlete-performance:athlete:read
+      - athlete-performance:report:read
   - name: management
     description: Management (profile role); reads performance summaries, same as athlete-performance-viewer
     grants:

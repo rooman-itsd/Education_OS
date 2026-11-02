@@ -323,6 +323,17 @@ def set_clearance(
 # ---------------------------------------------------------------- reports
 
 
+@router.get("/reports/clearances")
+def get_clearance_report(
+    lapsing_within_days: int = Query(14, ge=0, le=90),
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    a: Actor = Depends(require(svc.CLEARANCE_READ)),
+    db: Session = Depends(get_db),
+):
+    return svc.clearance_report(db, a, lapsing_within_days, limit, offset)
+
+
 @router.get("/reports/squad-summary")
 def get_squad_summary(
     discipline_id: str | None = None,
