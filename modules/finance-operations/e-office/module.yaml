@@ -4,13 +4,14 @@ name: e-office
 kind: feature              # feature | platform | integration
 domain: finance-operations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
+version: 0.2.0
+status: in-progress       # planned | in-progress | stable | deprecated
 description: "File movement, notings, approvals, digital correspondence."
 owners: [gokulalakshmirooman-source]                # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
-# documents: attachments and scanned correspondence. notification: file movement. scheduler: overdue files.
+# documents: attachments and scanned correspondence (ids only until the documents SDK exists). notification: file
+# movement, overdue reminders, receipts. scheduler: the e-office.flag-overdue job (entry point eos.scheduler_jobs).
 depends_on:
   platform: [identity, audit, documents, notification, scheduler]
   integrations: []
@@ -22,7 +23,8 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - scheduler.job.due      # its own e-office.flag-overdue job only
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
