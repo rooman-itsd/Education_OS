@@ -17,6 +17,7 @@ modules:
   - finance-operations/budget-grants
   - finance-operations/fees-accounts
   - finance-operations/procurement
+  - sports/athlete-performance
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
