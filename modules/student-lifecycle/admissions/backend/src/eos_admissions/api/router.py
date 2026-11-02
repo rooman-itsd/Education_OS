@@ -22,6 +22,7 @@ from .deps import (
     PERM_MERIT_LIST_MANAGE,
     PERM_OFFER_MANAGE,
     PERM_REPORT_READ,
+    PERM_SELF_READ,
     public_organisation,
     require,
 )
@@ -194,6 +195,23 @@ def list_documents(
     db: Session = Depends(get_db),
 ):
     return _run(db, svc.list_documents, actor, verification_status=verification_status, page=page, page_size=page_size)
+
+
+# ---------------------------------------------------------------- signed-in applicant (own applications)
+
+
+@router.get("/me/applications")
+def my_applications(actor: Actor = Depends(require(PERM_SELF_READ)), db: Session = Depends(get_db)):
+    return _run(db, svc.list_my_applications, actor)
+
+
+@router.post("/me/applications")
+def link_application(
+    body: s.LinkApplicationInput,
+    actor: Actor = Depends(require(PERM_SELF_READ)),
+    db: Session = Depends(get_db),
+):
+    return _run(db, svc.link_application, actor, body.reference_number, body.email)
 
 
 # ---------------------------------------------------------------- public (anonymous, per organisation)

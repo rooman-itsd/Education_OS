@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { timeAgo, type AuditRecord } from "../src/api/client";
 import { widgets } from "../src/widgets";
 import { RecentActivity, SHOWN } from "../src/widgets/RecentActivity";
+import { SuperAdminActions } from "../src/widgets/SuperAdminActions";
 
 const rec = (over: Partial<AuditRecord> = {}): AuditRecord => ({
   id: "r1",
@@ -70,5 +71,37 @@ describe("audit.recent-activity", () => {
     expect(timeAgo("2026-10-21T12:00:00Z", now)).toBe("2 d ago");
     expect(timeAgo("2026-09-01T12:00:00Z", now)).toBe("1 Sept");
     expect(timeAgo("not-a-date", now)).toBe("");
+  });
+});
+
+describe("audit.super-admin-actions", () => {
+  it("is exported with the id and permission the Super Admin layout expects", () => {
+    const w = widgets.find((x) => x.id === "audit.super-admin-actions");
+    expect(w?.permission).toBe("platform:audit:read");
+    expect(w?.kind).toBe("list");
+    expect(w?.component).toBe(SuperAdminActions);
+  });
+
+  it("lists platform-level actions for the super admin", async () => {
+    const fetchMock = answer(200, {
+      items: [
+        rec({
+          id: "p1",
+          organisation_id: null,
+          module: "tenancy",
+          action: "organisation.approved",
+          summary: "Approved Delhi Academy",
+          actor: "root",
+          actor_name: "Super Admin",
+        }),
+      ],
+      total: 1,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<SuperAdminActions role="super-admin" />);
+    expect(await screen.findByText("Approved Delhi Academy")).toBeTruthy();
+    expect(screen.getByText("Tenancy · Super Admin · 5 min ago")).toBeTruthy();
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`/api/v1/audit/records?limit=${SHOWN}`);
   });
 });

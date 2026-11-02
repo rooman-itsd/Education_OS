@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: transport API
-  version: 0.1.0
+  version: 0.2.0
   description: "Routes, vehicles, passes, driver management, tracking. See docs/prd.md."
 servers:
   - url: /api/v1/transport
@@ -278,6 +278,7 @@ components:
           required: [person_id]
           properties:
             person_id: { type: string, format: uuid }
+            rider_type: { type: string, enum: [student, staff], default: student, description: "Carried on transport.pass.issued so fees-accounts can tell staff passes apart" }
             override_capacity: { type: boolean, default: false }
             reason: { type: string, description: "Required with override_capacity" }
     Pass:

@@ -42,16 +42,16 @@ const WIDGETS: LayoutWidget[] = [
   // The supervisor's own widgets.
   { id: "projects.to-review", module: "practice/projects", batch: "#339" },
   { id: "projects.active", module: "practice/projects", batch: "#339" },
+  { id: "selection-process.to-judge", module: "practice/selection-process", batch: "#322" },
   {
-    id: "selection-process.to-judge",
-    module: "practice/selection-process",
+    id: "portfolio.reviews-pending",
+    module: "practice/portfolio",
     batch: "#322",
-    title: "To Judge",
-    probe: "/selection-process/processes?status=open&page_size=5",
-    empty: "No candidates awaiting review",
-    unavailable: "Selection judging data is not available yet.",
+    title: "Reviews Pending",
+    probe: "/portfolio/items?scope=managed&status=submitted,under_review",
+    empty: "No reviews pending",
+    unavailable: "Portfolio review data is not available yet.",
   },
-  { id: "portfolio.reviews-pending", module: "practice/portfolio", batch: "#322" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
