@@ -13,4 +13,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract: `x-permission` and a 403 response on every operation; `POST /assessments/{id}/verify`
   (`assessment:approve`) and `POST /assessments/{id}/void` (`assessment:delete`), so the `verified` and `voided`
   statuses can be reached; a 400 response on the framework and skill updates (non-breaking).
+- Contract: `GET /me/progress` (`progress:read`), the caller's own progress, for the `skill-progress.my-progress`
+  widget (a widget does not know the viewer's id); additive.
+- Frontend: widget `skill-progress.my-progress`; the module is enabled in `apps/backend` and `apps/frontend`.
 - Tests: domain, API, learner self-scope, query counts, cross-tenant leak, migration and contract-drift tests.

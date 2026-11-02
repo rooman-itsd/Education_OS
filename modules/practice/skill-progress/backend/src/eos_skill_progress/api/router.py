@@ -193,6 +193,15 @@ def get_learner_progress(
     return _run(svc.learner_progress, db, a, learner_id, framework_id)
 
 
+@router.get("/me/progress")
+def get_my_progress(
+    framework_id: str | None = _id(),
+    a: Actor = Depends(require(svc.PROGRESS_READ)),
+    db: Session = Depends(get_db),
+):
+    return _run(svc.learner_progress, db, a, a.user_id, framework_id)
+
+
 @router.get("/learners/{learner_id}/timeline")
 def get_learner_timeline(
     learner_id: str = LEARNER,

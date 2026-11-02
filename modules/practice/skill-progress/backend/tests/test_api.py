@@ -450,6 +450,23 @@ def test_a_changed_scale_keeps_recorded_levels(client, org):
     ]
 
 
+def test_my_progress_is_the_callers_own(client, org):
+    f, s, rubric = org.setup()
+    learner = new_id()
+    org.assess(learner, s, rubric, 72, "Proficient")
+    org.assess(new_id(), s, rubric, 99, "Expert")  # someone else
+    _, mine = org.user("teacher-trainee", user_id=learner)
+    r = client.get(f"{BASE}/me/progress", headers=mine)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["learner_id"] == learner and body["skills_evaluated"] == 1
+    assert [c["latest_level"] for c in body["current_skills"]] == ["Proficient"]
+    # no assessments yet: an empty summary, not an error
+    _, nobody = org.user("teacher-trainee")
+    assert client.get(f"{BASE}/me/progress", headers=nobody).json()["skills_evaluated"] == 0
+    assert client.get(f"{BASE}/me/progress?framework_id=x", headers=mine).status_code == 422
+
+
 def test_progress_and_timeline_queries_do_not_grow_with_the_data(client, org):
     """No N+1: the summary and the timeline take the same number of queries for one skill or many."""
     f = org.framework()

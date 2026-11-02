@@ -518,6 +518,30 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /me/progress:
+    get:
+      summary: Get my own skill progress summary
+      description: The caller's own progress, as GET /learners/{learner_id}/progress for their own id. A widget does not know the viewer's id, so the dashboard's my-progress widget calls this.
+      operationId: getMyProgress
+      x-permission: skill-progress:progress:read
+      parameters:
+        - name: framework_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The caller's skill progress summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearnerProgressSummary"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /learners/{learner_id}/timeline:
     get:
       summary: Get learner skill progression timeline
