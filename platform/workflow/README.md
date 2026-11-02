@@ -2,12 +2,13 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** planned
+**Status:** in-progress
 
 Configurable workflow and approval engine (state machines, SLAs, delegation).
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+- **Responsible for:** Configurable multi-step approval chains (`ApprovalChain`, `ApprovalStep`); submission and tracking of workflow requests (`WorkflowRequest`); step transitions, SLAs, deadlines, and overdue detection; approvals, rejections, and user delegations (`WorkflowAction`); outbox event publishing (`workflow.request.submitted`, `workflow.step.advanced`, `workflow.request.approved`, `workflow.request.rejected`, `workflow.request.delegated`); tenant isolation enforced by PostgreSQL RLS on all workflow tables; pending approvals queue and dashboard widget (`workflow.approvals-pending`).
+- **Explicitly NOT:** Direct modification of business entity states (calling modules handle entity mutations upon receiving workflow events); generic task management or ticketing (`support/helpdesk`); document attachment storage (`platform/documents`); long-term event audit trail (`platform/audit`); arbitrary script execution or untyped user workflows.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
