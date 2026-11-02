@@ -101,20 +101,33 @@ jobs:
             a widget's permission key not granted to the dashboard's role. Reproduce any bug you claim with a
             throwaway test before reporting it; delete the throwaway afterwards.
 
-            Do not post anything on GitHub, do not push, do not commit. When finished, write exactly one file,
-            `${{ runner.temp }}/verdict.json`, of the form
+            Do not post anything on GitHub, do not push, do not commit. When finished, write the verdict to
+            `${{ runner.temp }}/verdict.json` AND repeat it as the last thing you say, in one fenced ```json block,
+            of the form
             {"verdict": "approve" | "changes", "summary": "<one paragraph for the author: what you verified and the verbatim test summary lines>", "findings": [{"severity": "high|medium|low", "where": "file:line", "what": "...", "fix": "..."}]}
             Use "changes" only for findings a reviewer would block on (a bug, a security or tenancy gap, a rule
             violation, red tests); everything else goes in the summary as follow-ups with "approve".
           claude_args: |
             --model ${{ needs.decide.outputs.model }}
             --max-turns 80
-            --allowedTools "Bash,Read,Grep,Glob,Write(${{ runner.temp }}/verdict.json)"
+            --add-dir ${{ runner.temp }}
+            --allowedTools "Bash,Read,Grep,Glob,Write"
       - name: Keep the verdict for auto-approve.yml
         if: always()
         run: |
           mkdir -p "${{ runner.temp }}/verdict"
-          cp "${{ runner.temp }}/verdict.json" "${{ runner.temp }}/verdict/verdict.json" 2>/dev/null || echo '{}' > "${{ runner.temp }}/verdict/verdict.json"
+          out="${{ runner.temp }}/verdict/verdict.json"
+          if jq -e '.verdict' "${{ runner.temp }}/verdict.json" >/dev/null 2>&1; then
+            cp "${{ runner.temp }}/verdict.json" "$out"
+          else
+            # the action saves the whole conversation; take the fenced json block from Claude's final text
+            log="${{ runner.temp }}/claude-execution-output.json"
+            text=$(jq -r '[.[] | select(.type=="result") | .result // empty] | last // empty' "$log" 2>/dev/null)
+            [ -n "$text" ] || text=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | last // empty' "$log" 2>/dev/null)
+            printf '%s\n' "$text" | awk '/^```json/{f=1;next}/^```/{if(f){exit}}f' > "$out" || true
+            jq -e '.verdict' "$out" >/dev/null 2>&1 || echo '{}' > "$out"
+          fi
+          echo "verdict: $(jq -r '.verdict // "none"' "$out")"
           printf '{"pr": %s, "head": "%s", "model": "%s"}\n' "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.sha }}" "${{ needs.decide.outputs.model }}" > "${{ runner.temp }}/verdict/meta.json"
       - uses: actions/upload-artifact@v4
         if: always()
@@ -129,10 +142,10 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           MODEL: ${{ needs.decide.outputs.model }}
-          VERDICT: ${{ runner.temp }}/verdict.json
+          VERDICT: ${{ runner.temp }}/verdict/verdict.json
         run: |
           if ! jq -e '.verdict' "$VERDICT" >/dev/null 2>&1; then
-            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review (advisory) could not complete on ${HEAD:0:7}; see the auto-review run. A human review follows."
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --body "Automated review could not complete on ${HEAD:0:7}; see the auto-review run. A human review follows."
             exit 0
           fi
           body=$(jq -r --arg m "$MODEL" --arg h "${HEAD:0:7}" '"**Automated review (advisory, " + $m + ", head " + $h + "). Verdict: " + .verdict + ".** " + .summary + (if (.findings|length) > 0 then "\n\n" + ([.findings[] | "- **" + .severity + "** `" + .where + "`: " + .what + " Fix: " + .fix] | join("\n")) else "" end) + "\n\nThe approval or change request follows from auto-approve.yml on Faizan'"'"'s behalf (deployment-critical paths keep a human approval). Every new commit is reviewed again."' "$VERDICT")
