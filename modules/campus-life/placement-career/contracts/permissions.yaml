@@ -1,11 +1,54 @@
 # Permission catalogue for placement-career. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Owner decisions on #337: the placement officer and the coordinator roles that do placements in other academies hold
+# placement-career-officer through their layouts' module_roles (placement-officer, industry-coordinator,
+# practicum-coordinator); industry-liaison holds placement-career-viewer (read only). Companies are records, not users.
+# Every learner reads openings and applies through the common `student` role, which the learner layouts extend
+# (the way fees-accounts grants `student`).
 module: placement-career
-permissions: []
-#  - key: placement-career:record:read
-#    description: ...
-#  - key: placement-career:record:write
-#    description: ...
-roles: []
-#  - name: placement-career-admin
-#    grants: [placement-career:record:read, placement-career:record:write]
+permissions:
+  - key: placement-career:company:read
+    description: View company records, including their recruiter contacts.
+  - key: placement-career:company:manage
+    description: Record and edit companies; deactivate or reactivate them.
+  - key: placement-career:drive:manage
+    description: Create, edit, schedule, complete and cancel drives; see draft and cancelled drives.
+  - key: placement-career:opening:read
+    description: >-
+      View scheduled and completed drives and open and closed job openings, with their companies (name, industry,
+      website), eligibility criteria and CTC.
+  - key: placement-career:opening:manage
+    description: Create, edit, publish, close and cancel job openings; see draft and cancelled openings.
+  - key: placement-career:application:read
+    description: View every application of the organisation, with the student's declaration and the placed flag.
+  - key: placement-career:application:manage
+    description: Move applications along the fixed sequence (shortlist, in process, offer, accepted, declined) or reject them.
+  - key: placement-career:report:read
+    description: View placement reports (upcoming drives, openings and applications summary).
+  - key: placement-career:self:read
+    description: View open openings with one's own application status, and one's own applications and offers.
+  - key: placement-career:self:apply
+    description: Apply to an open opening with a self-declaration of eligibility, and withdraw one's own application before an offer.
+roles:
+  - name: placement-career-officer
+    description: Runs placements for the organisation; held by the placement officer and the coordinator roles that do placements.
+    grants:
+      - placement-career:company:read
+      - placement-career:company:manage
+      - placement-career:drive:manage
+      - placement-career:opening:read
+      - placement-career:opening:manage
+      - placement-career:application:read
+      - placement-career:application:manage
+      - placement-career:report:read
+  - name: placement-career-viewer
+    description: Read only overview of companies, drives, openings and the summary reports; no individual applications.
+    grants:
+      - placement-career:company:read
+      - placement-career:opening:read
+      - placement-career:report:read
+  - name: student
+    grants:
+      - placement-career:opening:read
+      - placement-career:self:read
+      - placement-career:self:apply
