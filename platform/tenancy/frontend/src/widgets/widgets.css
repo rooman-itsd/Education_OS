@@ -1,0 +1,2 @@
+/* tenancy widgets. Colours, type and spacing come from the shell's tokens (--eos-*). */
+.eos-tenancy__muted { color: var(--eos-muted); font-size: var(--eos-text-xs); margin: 0 0 var(--eos-space-2); }
