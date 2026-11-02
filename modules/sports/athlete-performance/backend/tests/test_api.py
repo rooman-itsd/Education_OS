@@ -529,3 +529,57 @@ def test_a_date_one_day_ahead_of_utc_is_accepted(client, org):
     )
     late = client.post(f"{BASE}/assessments", json={**body, "assessed_on": "2026-10-31"}, headers=org.admin)
     assert late.status_code == 400 and late.json()["detail"]["code"] == "in_future"
+
+
+def test_clearance_report_lists_the_most_urgent_first(client, org, monkeypatch):
+    from datetime import UTC, datetime
+
+    monkeypatch.setattr(service, "clock", lambda: datetime(2026, 10, 30, 6, 0, tzinfo=UTC))
+    d = org.discipline()
+    _, medic = org.user(MEDICAL)
+    names = ("Asha", "Ben", "Chitra", "Dev", "Esha")
+    ids = {n: org.athlete(d["id"], full_name=n)["id"] for n in names}
+    for name, body in (
+        ("Asha", {"status": "cleared", "valid_until": "2027-03-01"}),
+        ("Ben", {"status": "cleared", "valid_until": "2026-11-05"}),  # lapses within 14 days
+        ("Chitra", {"status": "restricted", "valid_until": "2026-12-31", "restrictions": "No contact drills"}),
+        ("Dev", {"status": "cleared", "valid_until": "2026-10-31"}),
+    ):
+        r = client.put(f"{BASE}/athletes/{ids[name]}/clearance", json=body, headers=medic)
+        assert r.status_code == 200, r.text
+    # Dev's clearance lapses; Esha never had one
+    monkeypatch.setattr(service, "clock", lambda: datetime(2026, 11, 1, 6, 0, tzinfo=UTC))
+
+    r = client.get(f"{BASE}/reports/clearances", headers=medic)
+    assert r.status_code == 200
+    body = r.json()
+    assert [row["full_name"] for row in body["items"]] == ["Dev", "Esha", "Chitra", "Ben", "Asha"]
+    assert [row["status"] for row in body["items"]] == [
+        "not_cleared",
+        "not_cleared",
+        "restricted",
+        "cleared",
+        "cleared",
+    ]
+    assert body["items"][0]["valid_until"] == "2026-10-31" and body["items"][0]["lapsing_soon"] is False
+    assert [row["lapsing_soon"] for row in body["items"][2:]] == [False, True, False]
+    assert body["total"] == 5
+    assert body["counts"] == {"cleared": 2, "restricted": 1, "not_cleared": 2, "lapsing_soon": 1}
+
+    wider = client.get(f"{BASE}/reports/clearances?lapsing_within_days=90&limit=2&offset=2", headers=medic).json()
+    assert [row["full_name"] for row in wider["items"]] == ["Chitra", "Ben"]  # Chitra now lapsing too, but restricted
+    assert wider["counts"]["lapsing_soon"] == 2 and wider["total"] == 5
+    assert client.get(f"{BASE}/reports/clearances?lapsing_within_days=91", headers=medic).status_code == 422
+
+
+def test_clearance_report_scope(client, org):
+    d = org.discipline()
+    user_id, athlete = org.user(ATHLETE)
+    own = org.athlete(d["id"], user_id=user_id, full_name="Own")
+    org.athlete(d["id"], full_name="Someone else")
+    rows = client.get(f"{BASE}/reports/clearances", headers=athlete).json()["items"]
+    assert [r["athlete_id"] for r in rows] == [own["id"]]
+    # the sports-college nutritionist reads summaries but not clearances
+    _, nutritionist = org.user("nutritionist")
+    assert client.get(f"{BASE}/reports/squad-summary", headers=nutritionist).status_code == 200
+    assert client.get(f"{BASE}/reports/clearances", headers=nutritionist).status_code == 403

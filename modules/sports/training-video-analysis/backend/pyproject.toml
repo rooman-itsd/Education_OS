@@ -4,12 +4,27 @@ version = "0.1.0"
 description = "Education OS module: training-video-analysis (backend)"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi",
+  "fastapi>=0.115",
   "sqlalchemy>=2",
-  "alembic",
+  "alembic>=1.13",
+  "pydantic>=2",
+  "PyJWT>=2",
   "eos-core",
-  "eos-sdk",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "httpx>=0.27", "pyyaml>=6", "eos-testing"]
+
+# The event bus finds this module's handlers here (platform/event-bus README, "Consuming an event").
+[project.entry-points."eos.event_consumers"]
+training-video-analysis = "eos_training_video_analysis.application.consumers:CONSUMERS"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

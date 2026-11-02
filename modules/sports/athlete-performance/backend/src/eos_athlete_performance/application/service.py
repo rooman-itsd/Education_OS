@@ -853,6 +853,37 @@ def get_clearance(db: Session, actor: Actor, athlete_id: str) -> dict:
     return clearance_out(athlete.id, repo.first_by(db, Clearance, athlete_id=athlete.id), today)
 
 
+# Most urgent first: who may not train, who may train with limits, who is about to lapse, then everyone else.
+_URGENCY = {"not_cleared": 0, "restricted": 1, "lapsing": 2, "cleared": 3}
+
+
+def clearance_report(db: Session, actor: Actor, lapsing_within_days: int, limit: int, offset: int) -> dict:
+    """Every active athlete's clearance, most urgent first, with counts over all of them (a self-only caller: their
+    own row). Computed in Python: lapsing depends on today's local date, and a squad is hundreds of rows at most."""
+    q = repo.query(db, Athlete).where(Athlete.status == "active")
+    if actor.self_only:
+        q = q.where(Athlete.user_id == actor.user_id)
+    athletes = list(db.scalars(q))
+    clearances = repo.clearances_of(db, [a.id for a in athletes])
+    today = as_utc(clock()).astimezone(ZoneInfo(load_settings().timezone)).date()
+    horizon = today + timedelta(days=lapsing_within_days)
+    rows = []
+    for a in athletes:
+        row = clearance_out(a.id, clearances.get(a.id), today)
+        valid_until = clearances[a.id].valid_until if row["status"] != "not_cleared" else None
+        row.update(full_name=a.full_name, lapsing_soon=valid_until is not None and valid_until <= horizon)
+        rows.append(row)
+    counts = {k: sum(r["status"] == k for r in rows) for k in ("cleared", "restricted", "not_cleared")}
+    counts["lapsing_soon"] = sum(r["lapsing_soon"] for r in rows)
+
+    def urgency(r: dict) -> tuple:
+        kind = "lapsing" if r["status"] == "cleared" and r["lapsing_soon"] else r["status"]
+        return (_URGENCY[kind], r.get("valid_until") or "9999-12-31", r["full_name"], r["athlete_id"])
+
+    rows.sort(key=urgency)
+    return {"items": rows[offset : offset + limit], "total": len(rows), "counts": counts}
+
+
 def set_clearance(db: Session, actor: Actor, athlete_id: str, data: dict) -> dict:
     athlete = _get(db, Athlete, athlete_id, "athlete")
     now = clock()

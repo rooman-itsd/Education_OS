@@ -88,3 +88,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   could, once the vendor was approved again, be awarded for indents another order had taken (two orders for one
   indent). The award now locks and checks the tender's indents (409 `indent_in_use`); the contract's award response
   lists it.
+- Widget `purchase-orders-pending` (Finance Staff), with loading, empty and error-with-retry states; 18 tests. Frontend
+  test dependencies came in their own PR.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/procurement`) and
+  `apps/frontend/config/modules.enabled.yaml`; the README documents the widget, and its events note names what is
+  still missing now that the event-bus relay runs: budget-grants registering its consumers.

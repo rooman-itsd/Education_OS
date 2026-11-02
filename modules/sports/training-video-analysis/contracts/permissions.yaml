@@ -57,3 +57,25 @@ roles:
       - training-video-analysis:drill:read
       - training-video-analysis:video:read
 
+  # The sports-college profile's own roles (platform/identity/config/profiles/sports-college.yaml). The coach layout
+  # already holds training-video-analysis-coach through its module_roles; the athlete and org-admin layouts do not.
+  - name: athlete
+    description: Athlete (profile role); their own sessions, plans and videos only, same as training-video-analysis-athlete
+    grants:
+      - training-video-analysis:plan:read
+      - training-video-analysis:session:read
+      - training-video-analysis:drill:read
+      - training-video-analysis:video:read
+  - name: org-admin
+    description: Organisation Admin (profile role); full administration, same as training-video-analysis-admin
+    grants:
+      - training-video-analysis:plan:read
+      - training-video-analysis:plan:write
+      - training-video-analysis:session:read
+      - training-video-analysis:session:write
+      - training-video-analysis:drill:read
+      - training-video-analysis:drill:write
+      - training-video-analysis:video:read
+      - training-video-analysis:video:upload
+      - training-video-analysis:video:tag
+      - training-video-analysis:annotation:write

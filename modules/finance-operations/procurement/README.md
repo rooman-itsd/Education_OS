@@ -2,7 +2,7 @@
 
 **Domain:** finance-operations
 **Kind:** feature
-**Status:** in-progress (backend built; widget and registration in their own PRs)
+**Status:** in-progress (backend and widget built; enabled in `apps/backend` and `apps/frontend`)
 
 Buying goods and services from request to payment: vendors, indents (purchase requests), quotation requests and
 tenders, purchase orders, goods receipts and vendor invoices. Every purchase is charged to a budget or grant line in
@@ -117,9 +117,9 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting, install and CI:** an entry `finance-operations/procurement` in `apps/backend/config/modules.enabled.yaml`
-  (a separate PR) mounts the router at `/api/v1/procurement`; `py-setup.sh`, the API image, CI and the auto-deploy then
-  install it, run its tests and upgrade its chain.
+- **Mounting, install and CI:** the `finance-operations/procurement` entry in `apps/backend/config/modules.enabled.yaml`
+  mounts the router at `/api/v1/procurement`; `py-setup.sh`, the API image, CI and the auto-deploy install it, run its
+  tests and upgrade its chain from that entry.
 - **budget-grants:** set `PROCUREMENT_BUDGET_GRANTS_URL`. Management approves indents and orders, so management needs
   `budget-grants:availability:read` (granted in #292) and `budget-grants:budget:read` (it has it); department
   admins already have availability.
@@ -127,8 +127,11 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
   payroll recorded in budget-grants at the same moment are not covered by it; budget-grants records them as real spend
   and alerts at 80% and 100%.
 - **Events:** budget-grants applies `purchase-order.issued`, `purchase-order.cancelled` and `vendor-invoice.paid`
-  through its `consumers.handle`, but until the event bus exists nothing delivers them. A relay must read the outbox and
-  call it. Until then, commitments and spend do not reach budget-grants on a server. The same holds for notification.
+  through its `consumers.handle`. The event-bus relay (#356) runs as the `relay` service in the API deployment (#367)
+  and delivers outbox events to the handlers a module registers under the `eos.event_consumers` entry point, but
+  budget-grants does not register its handlers yet, and notification has none for procurement. Until budget-grants
+  registers them, commitments and spend do not reach budget-grants on a server, and no procurement event leads to a
+  notification.
 
 ### Assumptions to revisit
 - **Departments: not enforced.** The contract allows an indent approver to be limited to their department, but
@@ -139,6 +142,23 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 - **Documents:** an issued order has no PDF (`document_id` is null) until the documents SDK exists.
 - **Delivery date of an award:** the drafted order is due `delivery_days` after the award (the award day when the
   quote gives none); it is a draft, so it is corrected before submitting.
+
+## Frontend
+
+`frontend/src/widgets/index.ts` exports the dashboard widget. The Finance Staff layout in
+`platform/identity/config/dashboards/` places it, and `apps/frontend/config/modules.enabled.yaml` registers the module.
+
+| Widget | Dashboard | Endpoint | Permission |
+|---|---|---|---|
+| `procurement.purchase-orders-pending` | Finance Staff | `GET /reports/purchase-orders-pending` | `procurement:report:read` |
+
+- **Shows:** orders awaiting approval, issued orders awaiting delivery, overdue deliveries (highlighted when there are
+  any) and approved invoices awaiting payment, each with its value; and the ten oldest pending orders with their vendor,
+  status, total and the date they started waiting (submitted, or issued).
+- **Data:** the widget reads through `src/api/client.ts`, a hand-written typed client that the generated client will replace.
+- **States:** loading, empty, and error with a retry when trying again can help. Until the backend answers, the error
+  reads "Procurement data is not available yet".
+- **Tests:** `cd modules/finance-operations/procurement/frontend && pnpm test` (vitest and Testing Library).
 
 ## Layout
 | Path | Purpose |

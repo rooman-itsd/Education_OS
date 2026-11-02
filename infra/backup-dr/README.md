@@ -55,6 +55,29 @@ eos-db-restore --check /var/backups/eos/daily/<newest>.dump
 Restores into a throwaway database `eos_restore_check`, prints the rows in every table, then drops it.
 Live data is not touched. A backup is only proven by a restore.
 
+To prove the restored copy is the live data, compare its counts with the live database's (run right after a
+fresh `eos-db-backup`, so nothing has changed in between):
+
+```
+time eos-db-backup
+time eos-db-restore --check "$(ls -1 /var/backups/eos/daily/eos-*.dump | tail -1)" | tee /tmp/restore-check.txt
+docker compose -f /opt/education-os/infra/docker/docker-compose.api.yml --env-file /opt/education-os/infra/docker/.env.api exec -T db psql -U eos -d eos -At <<'SQL' | sort > /tmp/live-counts.txt
+SELECT format('SELECT %L || '' '' || count(*) FROM %I.%I', table_schema || '.' || table_name, table_schema, table_name)
+FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1
+\gexec
+SQL
+grep '^  ' /tmp/restore-check.txt | sed 's/^  //' | sort > /tmp/restored-counts.txt
+diff /tmp/live-counts.txt /tmp/restored-counts.txt && echo "IDENTICAL: every table, every row count"
+```
+
+#### Drill log
+
+Add a row after every drill. A restore that fails, or counts that differ, is an incident: open an issue.
+
+| Date (UTC) | Host | Dump | Backup | Restore check | Result | Notes |
+|---|---|---|---|---|---|---|
+| 2026-10-30 | education-os (staging, CT 122) | `eos-2026-10-30T093023Z.dump`, 456 KB | 2.3 s | 7.2 s, 131 tables | Row counts identical to live (`diff` empty) | Staging holds almost no data (1 user, no organisation), so the timings say little about a real institution: repeat monthly and once organisations exist. No second location was set (`EOS_BACKUP_OFFSITE` empty), so the backups shared the database's disk; a full restore onto a clean host is the DR drill (#151). |
+
 ### Restore the live database (an incident)
 
 1. Pick the backup: the newest one from before the problem (`ls /var/backups/eos/daily/ weekly/`).

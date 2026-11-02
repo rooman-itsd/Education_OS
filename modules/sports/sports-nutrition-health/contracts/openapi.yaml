@@ -15,6 +15,7 @@ paths:
       summary: List nutrition plans
       description: 'Athletes see only their own plans. Permission: `sports-nutrition-health:plan:read`.'
       operationId: listNutritionPlans
+      x-permission: sports-nutrition-health:plan:read
       parameters:
       - name: athlete_id
         in: query
@@ -69,6 +70,7 @@ paths:
       summary: Create nutrition plan
       description: 'Permission: `sports-nutrition-health:plan:write`.'
       operationId: createNutritionPlan
+      x-permission: sports-nutrition-health:plan:write
       requestBody:
         required: true
         content:
@@ -98,6 +100,7 @@ paths:
       summary: Get nutrition plan
       description: 'Permission: `sports-nutrition-health:plan:read`.'
       operationId: getNutritionPlan
+      x-permission: sports-nutrition-health:plan:read
       responses:
         '200':
           description: Nutrition plan
@@ -113,6 +116,7 @@ paths:
       summary: Update nutrition plan
       description: 'Permission: `sports-nutrition-health:plan:write`.'
       operationId: updateNutritionPlan
+      x-permission: sports-nutrition-health:plan:write
       requestBody:
         required: true
         content:
@@ -144,6 +148,7 @@ paths:
       summary: List plan reviews
       description: 'Permission: `sports-nutrition-health:plan:read`.'
       operationId: listPlanReviews
+      x-permission: sports-nutrition-health:plan:read
       parameters:
       - name: limit
         in: query
@@ -179,6 +184,7 @@ paths:
       summary: Record a plan review
       description: 'Permission: `sports-nutrition-health:plan:review`.'
       operationId: recordPlanReview
+      x-permission: sports-nutrition-health:plan:review
       requestBody:
         required: true
         content:
@@ -201,6 +207,7 @@ paths:
       summary: List health records
       description: 'Permission: `sports-nutrition-health:health-record:read`.'
       operationId: listHealthRecords
+      x-permission: sports-nutrition-health:health-record:read
       parameters:
       - name: athlete_id
         in: query
@@ -251,6 +258,7 @@ paths:
       summary: Create health record
       description: 'Permission: `sports-nutrition-health:health-record:write`.'
       operationId: createHealthRecord
+      x-permission: sports-nutrition-health:health-record:write
       requestBody:
         required: true
         content:
@@ -280,6 +288,7 @@ paths:
       summary: Get health record
       description: 'Permission: `sports-nutrition-health:health-record:read`.'
       operationId: getHealthRecord
+      x-permission: sports-nutrition-health:health-record:read
       responses:
         '200':
           description: Health record
@@ -295,6 +304,7 @@ paths:
       summary: Update health record
       description: 'Permission: `sports-nutrition-health:health-record:write`.'
       operationId: updateHealthRecord
+      x-permission: sports-nutrition-health:health-record:write
       requestBody:
         required: true
         content:
@@ -319,6 +329,7 @@ paths:
       summary: List injuries
       description: 'Permission: `sports-nutrition-health:injury:read`.'
       operationId: listInjurys
+      x-permission: sports-nutrition-health:injury:read
       parameters:
       - name: athlete_id
         in: query
@@ -375,6 +386,7 @@ paths:
       summary: Report an injury
       description: 'Permission: `sports-nutrition-health:injury:write`.'
       operationId: reportInjury
+      x-permission: sports-nutrition-health:injury:write
       requestBody:
         required: true
         content:
@@ -404,6 +416,7 @@ paths:
       summary: Get injury
       description: 'Permission: `sports-nutrition-health:injury:read`.'
       operationId: getInjury
+      x-permission: sports-nutrition-health:injury:read
       responses:
         '200':
           description: Injury
@@ -419,6 +432,7 @@ paths:
       summary: Update injury
       description: 'Permission: `sports-nutrition-health:injury:write`.'
       operationId: updateInjury
+      x-permission: sports-nutrition-health:injury:write
       requestBody:
         required: true
         content:
@@ -443,6 +457,7 @@ paths:
       summary: List appointments
       description: 'Permission: `sports-nutrition-health:appointment:read`.'
       operationId: listAppointments
+      x-permission: sports-nutrition-health:appointment:read
       parameters:
       - name: athlete_id
         in: query
@@ -503,6 +518,7 @@ paths:
       summary: Schedule an appointment
       description: 'Permission: `sports-nutrition-health:appointment:write`.'
       operationId: scheduleAppointment
+      x-permission: sports-nutrition-health:appointment:write
       requestBody:
         required: true
         content:
@@ -532,6 +548,7 @@ paths:
       summary: Get appointment
       description: 'Permission: `sports-nutrition-health:appointment:read`.'
       operationId: getAppointment
+      x-permission: sports-nutrition-health:appointment:read
       responses:
         '200':
           description: Appointment
@@ -547,6 +564,7 @@ paths:
       summary: Update appointment
       description: 'Permission: `sports-nutrition-health:appointment:write`.'
       operationId: updateAppointment
+      x-permission: sports-nutrition-health:appointment:write
       requestBody:
         required: true
         content:

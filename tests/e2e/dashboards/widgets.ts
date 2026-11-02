@@ -28,6 +28,13 @@ export interface LayoutWidget {
   unavailable?: string;
   /** The wording when the API refuses the role (the probe answers 403). */
   forbidden?: string;
+  /**
+   * The contract's error code with which the probe answers 404 when there is nothing to show yet, for an endpoint that
+   * returns one record rather than a list (hr-payroll's GET /payroll-runs/current answers `not_found` before the
+   * month's run). The widget shows its empty state then, so the probe counts it as 200. A 404 without the code (the
+   * module is not mounted) stays 404.
+   */
+  emptyCode?: string;
 }
 
 export const repo = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
@@ -112,6 +119,11 @@ export async function standardPlan(request: APIRequestContext, organisationId: s
  */
 export async function probe(request: APIRequestContext, user: DashboardUser, w: LayoutWidget): Promise<number> {
   const r = await request.get(`/api/v1${w.probe}`, { headers: { Authorization: `Bearer ${user.token}` } });
+  if (w.emptyCode && r.status() === 404) {
+    const body = (await r.json().catch(() => undefined)) as { detail?: unknown } | undefined;
+    const detail = body?.detail as { code?: string } | string | undefined;
+    if (typeof detail === "object" && detail?.code === w.emptyCode) return 200; // nothing yet: the empty state
+  }
   if (backendEnabled(w.module)) {
     expect(r.status(), `${w.id}: ${w.module} is enabled in apps/backend/config/modules.enabled.yaml, so ${w.probe} must answer 200 (got ${r.status()} ${await r.text()})`).toBe(200);
   }
