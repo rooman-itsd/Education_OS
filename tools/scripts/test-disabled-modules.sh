@@ -11,13 +11,17 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$ROOT"
 VENV="${DISABLED_VENV:-.venv/disabled-modules}"  # inside .venv/, which is git-ignored
 PY="$VENV/bin/python"
 
-suites="$(python3 tools/scripts/enabled-modules.py disabled-tests)"
+# The repo's venv first (as precheck.sh): enabled-modules.py needs PyYAML, which a bare runner's python3 may lack, and
+# this script's own venv lives inside .venv/, so creating it first would leave .venv without the main venv.
+[ -x .venv/bin/python ] || { echo "run tools/scripts/py-setup.sh first"; exit 1; }
+HOST_PY=".venv/bin/python"
+suites="$("$HOST_PY" tools/scripts/enabled-modules.py disabled-tests)"
 if [ -z "$suites" ]; then echo "no disabled module has a test suite"; exit 0; fi
 
-[ -x "$PY" ] || python3 -m venv "$VENV"
+[ -x "$PY" ] || "$HOST_PY" -m venv "$VENV"
 "$PY" -m pip install -q --upgrade pip
 # shellcheck disable=SC2046  # the -e arguments are meant to split
-"$PY" -m pip install -q -e packages/core -e packages/testing $(python3 tools/scripts/enabled-modules.py install --pip --extras test)
+"$PY" -m pip install -q -e packages/core -e packages/testing $("$HOST_PY" tools/scripts/enabled-modules.py install --pip --extras test)
 
 failed=()
 for tests in $suites; do
