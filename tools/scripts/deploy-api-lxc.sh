@@ -7,10 +7,15 @@
 #   EOS_SUPER_ADMIN_EMAIL=<email> EOS_SUPER_ADMIN_PASSWORD=<password> \
 #   tools/scripts/deploy-api-lxc.sh
 #
+# PVE_HOST=local runs it on the Proxmox host itself (its web console's Shell, from a clone of the repository
+# there) without SSH; SSH_PUBKEY then names the .pub file to put in the container.
+#
 # Optional: PROXY_CTID (nginx container, default 101), GATEWAY (default: the host's default gateway),
 # ROOTFS_STORAGE (default local-lvm), BRIDGE (default vmbr0), CORES/MEMORY_MB/DISK_GB,
 # PUBLIC_URL (default https://educationos.futureacad.ae), SSH_PUBKEY (default ~/.ssh/id_*.pub),
-# REPO_REF (branch deployed by this run, default main; the timer resets the container to main later).
+# REPO_REF (branch deployed by this run, default main; the timer resets the container to main later),
+# CT_HOSTNAME (default education-os), WIRE_PROXY (default 1; 0 leaves the public /api/ where it points, for a
+# second host such as a disaster-recovery drill: infra/backup-dr/DR.md).
 # The super admin email and password are only needed the first time (.env.api is created once and kept).
 set -euo pipefail
 
@@ -26,6 +31,8 @@ DISK_GB="${DISK_GB:-16}"
 PUBLIC_URL="${PUBLIC_URL:-https://educationos.futureacad.ae}"
 REPO_URL="${REPO_URL:-https://github.com/rooman-itsd/Education_OS.git}"
 REPO_REF="${REPO_REF:-main}"   # branch to deploy first; the auto-deploy timer follows main afterwards
+CT_HOSTNAME="${CT_HOSTNAME:-education-os}"
+WIRE_PROXY="${WIRE_PROXY:-1}"
 APP=/opt/education-os
 COMPOSE="docker compose -f $APP/infra/docker/docker-compose.api.yml --env-file $APP/infra/docker/.env.api"
 
@@ -33,7 +40,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-pve() { ssh -o BatchMode=yes "$PVE" "$@"; }
+# PVE_HOST=local: run on the Proxmox host itself (its web console), without SSH.
+if [ "$PVE" = local ]; then
+  pve() { bash -c "$*"; }
+  to_pve() { cp "$1" "$2"; }
+else
+  pve() { ssh -o BatchMode=yes "$PVE" "$@"; }
+  to_pve() { scp -q "$1" "$PVE:$2"; }
+fi
 in_ct() { pve "pct exec $CTID -- bash -c $(printf %q "$1")"; }
 
 echo "==> checking $PVE"
@@ -46,7 +60,7 @@ else
   echo "==> creating container $CTID (education-os) at $CT_IP"
   key="${SSH_PUBKEY:-$(ls "$HOME"/.ssh/id_ed25519.pub "$HOME"/.ssh/id_rsa.pub 2>/dev/null | head -1)}"
   [ -n "$key" ] || { echo "no SSH public key found; set SSH_PUBKEY" >&2; exit 1; }
-  scp -q "$key" "$PVE:/root/eos-deploy.pub"
+  to_pve "$key" /root/eos-deploy.pub
   gw="${GATEWAY:-$(pve "ip -4 route show default | awk '{print \$3; exit}'")}"
   tmpl="$(pve "pveam list local | awk '/debian-12-standard/{print \$1}' | sort | tail -1")"
   if [ -z "$tmpl" ]; then
@@ -55,7 +69,7 @@ else
     tmpl="$(pve "pveam list local | awk '/debian-12-standard/{print \$1}' | sort | tail -1")"
   fi
   pve "pct create $CTID $tmpl \
-    --hostname education-os --ostype debian --unprivileged 1 --features nesting=1,keyctl=1 \
+    --hostname $CT_HOSTNAME --ostype debian --unprivileged 1 --features nesting=1,keyctl=1 \
     --cores $CORES --memory $MEMORY_MB --swap 512 --rootfs $ROOTFS_STORAGE:$DISK_GB --onboot 1 \
     --net0 name=eth0,bridge=$BRIDGE,firewall=1,gw=$gw,ip=$CT_IP/24 \
     --ssh-public-keys /root/eos-deploy.pub"
@@ -93,7 +107,7 @@ EOS_CORS_ORIGINS=$PUBLIC_URL
 BILLING_PAYMENT_ADAPTER=none
 EOS_API_PORT=8000
 EOF
-  scp -q "$TMP/.env.api" "$PVE:/tmp/eos.env.api"
+  to_pve "$TMP/.env.api" /tmp/eos.env.api
   pve "pct push $CTID /tmp/eos.env.api $APP/infra/docker/.env.api --perms 600 && rm -f /tmp/eos.env.api"
 fi
 # An .env.api from before the eos_app role: give the API its own database password, generated in the container.
@@ -120,8 +134,12 @@ echo "==> installing the nightly database backup"
 in_ct "bash $APP/infra/backup-dr/install.sh"
 
 # ---------- 6. proxy ----------
+if [ "$WIRE_PROXY" = 0 ]; then
+  echo "done: the API runs in container $CTID ($CT_IP). WIRE_PROXY=0: the public /api/ was left as it was."
+  exit 0
+fi
 echo "==> pointing /api/ on the nginx container $PROXY_CTID at $CT_IP"
-scp -q "$ROOT/infra/docker/wire-api-proxy.sh" "$PVE:/tmp/wire-api-proxy.sh"
+to_pve "$ROOT/infra/docker/wire-api-proxy.sh" /tmp/wire-api-proxy.sh
 pve "pct push $PROXY_CTID /tmp/wire-api-proxy.sh /tmp/wire-api-proxy.sh && rm -f /tmp/wire-api-proxy.sh
   pct exec $PROXY_CTID -- bash /tmp/wire-api-proxy.sh $CT_IP $(printf %q "${PUBLIC_URL#https://}")
   pct exec $PROXY_CTID -- rm -f /tmp/wire-api-proxy.sh"
