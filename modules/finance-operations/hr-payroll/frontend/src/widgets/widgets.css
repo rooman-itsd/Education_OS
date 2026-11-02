@@ -1,0 +1,25 @@
+/* hr-payroll dashboard widgets. Colours and spacing come from the shell's tokens (--eos-*). */
+.eos-hr { display: flex; flex-direction: column; gap: 12px; font-size: 13px; min-width: 0; }
+.eos-hr__muted { color: var(--eos-muted); font-size: 12px; margin: 0; }
+.eos-hr__heading { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--eos-muted); }
+
+/* Key figures at the top of each widget. */
+.eos-hr__summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px 12px; margin: 0; }
+.eos-hr__summary div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eos-hr__summary dt { color: var(--eos-muted); font-size: 11px; }
+.eos-hr__summary dd { margin: 0; overflow-wrap: anywhere; }
+.eos-hr__count { font-size: 20px; font-weight: 600; }
+
+/* Payroll run: month with its status badges, then who acts next. */
+.eos-hr__title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.eos-hr__period { margin: 0; font-size: 15px; font-weight: 600; }
+.eos-hr__badges { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.eos-hr__next { margin: 0; font-weight: 600; }
+.eos-hr__note { margin: 0; overflow-wrap: anywhere; }
+.eos-hr__alert { margin: 0; }
+.eos-hr [data-warn] { color: var(--eos-danger); }
+
+/* Lists: details under the name, days or date on the right. */
+.eos-hr__meta { display: flex; flex-direction: column; gap: 2px; }
+.eos-hr__trailing { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.eos-hr__date { white-space: nowrap; color: var(--eos-muted); font-size: 12px; }
