@@ -23,5 +23,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Alembic chain `sf_0001`: five `sports_facilities_*` tables with `organisation_id`, RLS policy on Postgres, own
   version table `sports_facilities_alembic_version`.
 - Tests: domain, API, cross-tenant leak, migration, contract drift and profile-role tests.
+- Review fixes (#397): dates and date-times are bounded to 2000-01-01..2100-12-31 (422 instead of a 500 overflow);
+  `GET /usage` with both dates checks the period like utilisation (400 `invalid_period`, `period_too_long`); a
+  status `until` is at most 366 days ahead (400 `until_too_far`); `sports` capped at 50 items, `slots` at 50,
+  `description` at 5000 characters, stated in `openapi.yaml`; `PUT .../hours` locks the facility row and slots are
+  unique on (organisation, facility, day, opening time) in `sf_0001`, a clash is 409 `hours_conflict`; a 401 no
+  longer echoes the token library's message; `PyJWT` declared; stray `.gitkeep` files removed.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/sports-facilities`) and
   `apps/frontend/config/modules.enabled.yaml` (no widgets) (#331).

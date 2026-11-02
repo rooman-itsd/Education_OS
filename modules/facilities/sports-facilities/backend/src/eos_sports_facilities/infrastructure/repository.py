@@ -22,6 +22,13 @@ def get(db: Session, model, row_id: str | None):
     return db.scalars(query(db, model).where(model.id == row_id)).first()
 
 
+def get_for_update(db: Session, model, row_id: str | None):
+    """Like get, holding the row (SELECT ... FOR UPDATE) until the transaction ends; SQLite ignores the lock."""
+    if not row_id:
+        return None
+    return db.scalars(query(db, model).where(model.id == row_id).with_for_update()).first()
+
+
 def first_by(db: Session, model, **values):
     q = query(db, model)
     for field, value in values.items():

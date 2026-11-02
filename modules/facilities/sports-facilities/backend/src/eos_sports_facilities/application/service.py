@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from eos_core import events
 from eos_core.db import new_id, utcnow
@@ -232,6 +232,9 @@ def _hours_out(rows) -> dict:
 
 
 def list_facilities(db: Session, filters: dict, limit: int, offset: int) -> dict:
+    """Loads the organisation's facilities and pages in Python, because the sport filter matches inside a JSON list
+    the same way on SQLite and Postgres. An institution has tens of facilities, so this is cheap; move the sport
+    match into SQL (a JSONB containment query) if that ever stops being true."""
     rows = repo.facilities(db, filters.get("facility_type"), filters.get("status"), filters.get("indoor"))
     sport = (filters.get("sport") or "").strip().casefold()
     if sport:  # sports is a JSON list; matched here so SQLite and Postgres agree (case-insensitive, whole name)
@@ -288,6 +291,8 @@ def set_status(db: Session, actor: Actor, facility_id: str, data: dict) -> dict:
     until = as_utc(data.get("until"))  # stored as UTC
     if until is not None and until <= clock():
         raise _invalid("until_in_past", "until must be in the future")
+    if until is not None and until > clock() + timedelta(days=rules.MAX_PERIOD_DAYS):
+        raise _invalid("until_too_far", f"until is at most {rules.MAX_PERIOD_DAYS} days ahead")
     change = {"status": data["status"], "status_reason": data.get("reason"), "status_until": until}
     before, after = _apply(f, change)
     if after:
@@ -349,8 +354,34 @@ def get_hours(db: Session, facility_id: str) -> dict:
     return _hours_out(repo.slots(db, f.id))
 
 
+def _replace_slots(db: Session, actor: Actor, f: Facility, current, as_slots: list[Slot], wanted: list[Slot]) -> None:
+    for row in current:
+        db.delete(row)
+    db.flush()  # deletes first: a kept opening time would otherwise clash with its own replacement
+    for s in wanted:
+        db.add(
+            OperatingHoursSlot(
+                organisation_id=actor.organisation_id,
+                facility_id=f.id,
+                day_of_week=s.day_of_week,
+                opens_at=s.opens_at,
+                closes_at=s.closes_at,
+            )
+        )
+    before = {"slots": [s.__dict__ for s in as_slots]}
+    after = {"slots": [s.__dict__ for s in wanted]}
+    _audit(db, actor, "hours_set", "facility", f, before=before, after=after)
+    _facility_updated(db, actor, f, ["operating_hours"])
+    db.commit()
+
+
 def set_hours(db: Session, actor: Actor, facility_id: str, slots: list[dict]) -> dict:
-    f = _get(db, Facility, facility_id, "facility")
+    """Replaces the weekly slots. The facility row is locked (FOR UPDATE) so two PUTs for the same facility run one
+    after the other; the unique (organisation_id, facility_id, day_of_week, opens_at) constraint backs that up where
+    the database takes no row lock (SQLite), and a clash there is 409 hours_conflict."""
+    f = repo.get_for_update(db, Facility, facility_id)
+    if f is None:
+        raise _not_found("facility")
     try:
         wanted = rules.check_slots([Slot(**s) for s in slots])
     except RuleViolationError as v:
@@ -358,23 +389,13 @@ def set_hours(db: Session, actor: Actor, facility_id: str, slots: list[dict]) ->
     current = repo.slots(db, f.id)
     as_slots = [Slot(r.day_of_week, r.opens_at, r.closes_at) for r in current]
     if as_slots != wanted:
-        for row in current:
-            db.delete(row)
-        for s in wanted:
-            db.add(
-                OperatingHoursSlot(
-                    organisation_id=actor.organisation_id,
-                    facility_id=f.id,
-                    day_of_week=s.day_of_week,
-                    opens_at=s.opens_at,
-                    closes_at=s.closes_at,
-                )
-            )
-        before = {"slots": [s.__dict__ for s in as_slots]}
-        after = {"slots": [s.__dict__ for s in wanted]}
-        _audit(db, actor, "hours_set", "facility", f, before=before, after=after)
-        _facility_updated(db, actor, f, ["operating_hours"])
-        db.commit()
+        try:
+            _replace_slots(db, actor, f, current, as_slots, wanted)
+        except IntegrityError as e:
+            db.rollback()
+            raise ServiceError(
+                409, "hours_conflict", "the operating hours were changed at the same time; reload and try again"
+            ) from e
     return _hours_out(repo.slots(db, f.id))
 
 
@@ -382,7 +403,13 @@ def set_hours(db: Session, actor: Actor, facility_id: str, slots: list[dict]) ->
 
 
 def list_usages(db: Session, filters: dict, limit: int, offset: int) -> dict:
-    """Records that touch the inclusive local dates from..to, newest first."""
+    """Records that touch the inclusive local dates from..to, newest first. With both dates the period follows the
+    utilisation rule (to not before from, at most MAX_PERIOD_DAYS days)."""
+    if filters.get("from") and filters.get("to"):
+        try:
+            rules.check_period(filters["from"], filters["to"])
+        except RuleViolationError as v:
+            raise _rule(v) from v
     start, end = rules.local_bounds(filters.get("from"), filters.get("to"), load_settings().tz)
     q = repo.usage_query(db, filters.get("facility_id"), filters.get("purpose"), start, end)
     rows, total = repo.page(db, q, (UsageRecord.used_from.desc(), UsageRecord.id), limit, offset)

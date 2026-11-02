@@ -83,6 +83,9 @@ def upgrade() -> None:
         sa.Column("day_of_week", sa.Integer, nullable=False),
         sa.Column("opens_at", sa.String(5), nullable=False),
         sa.Column("closes_at", sa.String(5), nullable=False),
+        sa.UniqueConstraint(
+            "organisation_id", "facility_id", "day_of_week", "opens_at", name="uq_sports_facilities_hours_slot"
+        ),
     )
     op.create_table(
         f"{P}usage",

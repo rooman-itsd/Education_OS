@@ -334,7 +334,8 @@ def test_list_usage_by_local_dates_newest_first(client, org):
     assert ids("?from=2026-10-29") == [night["id"]]
     assert ids("?to=2026-10-27") == [late["id"]]
     assert ids(f"?facility_id={f['id']}&purpose=training") == [morning["id"]]
-    assert ids("?from=2026-10-29&to=2026-10-28") == []
+    backwards = client.get(f"{BASE}/usage?from=2026-10-29&to=2026-10-28", headers=org.admin)
+    assert backwards.status_code == 400 and backwards.json()["detail"]["code"] == "invalid_period"
     page = client.get(f"{BASE}/usage?limit=1&offset=2", headers=org.admin).json()
     assert page == {"items": [late], "total": 3}
 
