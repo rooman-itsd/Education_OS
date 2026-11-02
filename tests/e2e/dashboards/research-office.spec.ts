@@ -32,7 +32,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No grants to show",
     unavailable: "Budget data is not available yet.",
   },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
   { id: "regulatory-reports.due", module: "governance/regulatory-reports", batch: "#343" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
