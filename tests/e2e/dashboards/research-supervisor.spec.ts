@@ -35,7 +35,8 @@ const WIDGETS: LayoutWidget[] = [
     title: "Course roster",
     probe: "/academic-management/me/offerings",
     empty: "No courses this term",
-    // The widget's client treats 404 (no active term) as nothing this term, not as a failure.
+    // No active term: academic-management answers 404 active_term_not_found, which the widget shows as nothing this term.
+    emptyCode: "active_term_not_found",
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
   },
