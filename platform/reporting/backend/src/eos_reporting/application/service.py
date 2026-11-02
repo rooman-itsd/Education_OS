@@ -209,7 +209,7 @@ def update_definition(
     if not definition:
         raise ReportingError(f"Report definition '{definition_id}' not found", status=404)
 
-    if definition.is_system and (name or category or parameters_schema):
+    if definition.is_system and (name is not None or category is not None or parameters_schema is not None):
         raise ReportingError("System report definitions cannot be modified", status=403)
 
     if name is not None:

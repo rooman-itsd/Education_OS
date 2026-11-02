@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from eos_reporting.application import service
+
 
 def test_routes_require_authentication(client):
     assert client.get("/api/v1/reporting/definitions").status_code == 401
@@ -117,3 +119,58 @@ def test_cross_tenant_isolation_via_api(client, org, other_org):
     # Org 2 cannot read Org 1's execution
     r_exec_other = client.get(f"/api/v1/reporting/executions/{exec_id}", headers=other_org.admin_headers)
     assert r_exec_other.status_code == 404
+
+
+def test_download_requires_execute_permission(client, org):
+    defs = client.get("/api/v1/reporting/definitions", headers=org.admin_headers).json()
+    exec_id = client.post(f"/api/v1/reporting/definitions/{defs[0]['id']}/run", headers=org.admin_headers).json()["id"]
+    url = f"/api/v1/reporting/executions/{exec_id}/download?format=csv"
+
+    # Faculty holds reporting:report:read only: blocked from both export and direct download
+    assert client.get(f"/api/v1/reporting/executions/{exec_id}/export", headers=org.faculty_headers).status_code == 403
+    assert client.get(url, headers=org.faculty_headers).status_code == 403
+
+    # Department admin holds reporting:report:execute
+    r = client.get(url, headers=org.dept_admin_headers)
+    assert r.status_code == 200
+    assert "attachment" in r.headers.get("content-disposition", "")
+
+
+def test_new_organisation_lists_standard_definitions(client, unseeded_org):
+    r = client.get("/api/v1/reporting/definitions", headers=unseeded_org.faculty_headers)
+    assert r.status_code == 200
+    defs = r.json()
+    system_codes = sorted(d["code"] for d in defs if d["is_system"])
+    assert system_codes == sorted(d["code"] for d in service.STANDARD_DEFINITIONS)
+
+    # Listing again does not duplicate them
+    again = client.get("/api/v1/reporting/definitions", headers=unseeded_org.faculty_headers).json()
+    assert len(again) == len(defs)
+
+    # A standard report can be run by id (not only by code)
+    attendance = next(d for d in defs if d["code"] == "department-attendance")
+    r_run = client.post(
+        f"/api/v1/reporting/definitions/{attendance['id']}/run", headers=unseeded_org.dept_admin_headers
+    )
+    assert r_run.status_code == 201
+    assert r_run.json()["report_definition_id"] == attendance["id"]
+
+
+def test_concurrent_duplicate_create_returns_409(client, org, monkeypatch):
+    body = {"code": "race-report", "name": "Race", "category": "academic"}
+    assert client.post("/api/v1/reporting/definitions", json=body, headers=org.admin_headers).status_code == 201
+
+    # Simulate the second request passing the existence check before the first commits
+    monkeypatch.setattr(service, "get_definition", lambda *a, **k: None)
+    r = client.post("/api/v1/reporting/definitions", json=body, headers=org.admin_headers)
+    assert r.status_code == 409
+
+
+def test_system_definition_rejects_blank_field_changes(client, org):
+    defs = client.get("/api/v1/reporting/definitions", headers=org.admin_headers).json()
+    system_id = next(d["id"] for d in defs if d["is_system"])
+    url = f"/api/v1/reporting/definitions/{system_id}"
+    assert client.put(url, json={"name": ""}, headers=org.admin_headers).status_code == 403
+    assert client.put(url, json={"parameters_schema": {}}, headers=org.admin_headers).status_code == 403
+    # Toggling active state stays allowed
+    assert client.put(url, json={"is_active": False}, headers=org.admin_headers).status_code == 200

@@ -91,11 +91,12 @@ def _create_test_user(db: Session, org_id: str, roles: list[str], label: str):
 
 
 class OrgHelper:
-    def __init__(self, db: Session, org_id: str | None = None):
+    def __init__(self, db: Session, org_id: str | None = None, seed: bool = True):
         self.id = org_id or str(uuid.uuid4())
         with organisation_scope(self.id):
-            service.ensure_standard_definitions(db, self.id)
-            db.commit()
+            if seed:
+                service.ensure_standard_definitions(db, self.id)
+                db.commit()
             self.admin = _create_test_user(db, self.id, ["org-admin"], "admin")
             self.dept_admin = _create_test_user(db, self.id, ["department-admin"], "dept-admin")
             self.management = _create_test_user(db, self.id, ["management"], "management")
@@ -144,6 +145,12 @@ def org(db: Session) -> OrgHelper:
 @pytest.fixture
 def other_org(db: Session) -> OrgHelper:
     return OrgHelper(db)
+
+
+@pytest.fixture
+def unseeded_org(db: Session) -> OrgHelper:
+    """A fresh organisation with no report definitions, as after provisioning."""
+    return OrgHelper(db, seed=False)
 
 
 @pytest.fixture

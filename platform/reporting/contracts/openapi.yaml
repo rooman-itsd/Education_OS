@@ -9,6 +9,7 @@ paths:
   /definitions:
     get:
       summary: List available report definitions
+      description: Seeds the organisation's standard report definitions on first call, so a new organisation sees them.
       operationId: listDefinitions
       responses:
         "200":
@@ -35,6 +36,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReportDefinition"
+        "409":
+          description: A report definition with this code already exists in the organisation
 
   /definitions/{id}:
     get:
@@ -138,6 +141,7 @@ paths:
   /executions/{id}/download:
     get:
       summary: Download exported report data directly
+      description: Requires reporting:report:execute, the same as /executions/{id}/export.
       operationId: downloadExport
       parameters:
         - name: id
@@ -156,6 +160,8 @@ paths:
               schema: { type: string }
             application/json:
               schema: { type: string }
+        "403":
+          description: Caller lacks reporting:report:execute
         "404":
           description: Execution not found
 

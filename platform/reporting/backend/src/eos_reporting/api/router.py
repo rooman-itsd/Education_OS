@@ -57,8 +57,11 @@ def list_definitions(
 ):
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
-    defs = service.list_definitions(db, p.organisation_id, category=category, is_active=is_active)
+    # A new organisation has no rows yet: seed the standard definitions so they can be discovered
+    # and run by id. Idempotent (unique (organisation_id, code) + savepoints), so concurrent lists are safe.
+    service.ensure_standard_definitions(db, p.organisation_id)
     db.commit()
+    defs = service.list_definitions(db, p.organisation_id, category=category, is_active=is_active)
     return [service.view_definition(d) for d in defs]
 
 
@@ -85,6 +88,13 @@ def create_definition(
     except ReportingError as e:
         db.rollback()
         raise _err(e) from e
+    except IntegrityError as e:
+        # Two concurrent creates passed the existence check; the unique (organisation_id, code) index decides.
+        db.rollback()
+        raise HTTPException(
+            409,
+            detail={"code": "reporting_error", "message": f"Report definition with code '{body.code}' already exists"},
+        ) from e
 
 
 @router.get("/definitions/{id}")
@@ -205,9 +215,10 @@ def export_report(
 def download_execution_export(
     id: str,
     format: str = Query("csv", pattern="^(csv|json)$"),
-    p: Principal = Depends(require(REPORT_READ)),
+    p: Principal = Depends(require(REPORT_EXECUTE)),
     db: Session = Depends(get_db),
 ):
+    # Same permission as /export: downloading report data is an export, not a read.
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     execution = service.get_execution(db, p.organisation_id, id)
