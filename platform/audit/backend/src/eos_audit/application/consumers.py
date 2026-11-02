@@ -20,6 +20,8 @@ from __future__ import annotations
 import logging
 
 from eos_core import events
+from eos_core.db import SessionLocal
+from eos_core.tenant import platform_scope
 from sqlalchemy.orm import Session
 
 from . import service
@@ -122,14 +124,9 @@ def on_event(db: Session, event) -> None:
         context["dropped_keys"] = sorted(set(dropped))
     occurred_at = getattr(event, "occurred_at", None)
 
-    copies = []
-    if event.organisation_id:
-        copies.append((event.organisation_id, f"event:{event.id}"))
-    if event.name in SUPER_ADMIN_ACTIONS or not event.organisation_id:
-        copies.append((None, f"event:{event.id}:platform" if event.organisation_id else f"event:{event.id}"))
-    for organisation_id, token in copies:
+    def write(session: Session, organisation_id: str | None, token: str) -> None:
         service.record(
-            db,
+            session,
             organisation_id=organisation_id,
             actor=event.actor,
             module=module,
@@ -141,6 +138,19 @@ def on_event(db: Session, event) -> None:
             client_token=token,
             occurred_at=occurred_at,
         )
+
+    if not event.organisation_id:
+        write(db, None, f"event:{event.id}")  # a platform event: the relay's session is already in platform scope
+        return
+    if event.name in SUPER_ADMIN_ACTIONS:
+        # The platform copy needs a transaction that BEGINS in platform scope: on PostgreSQL row-level security is
+        # set when a transaction begins, so the relay's session (in the event's organisation) cannot write a row
+        # without one. Committed first and on its own; both records are idempotent on their client_token, so a
+        # retry after the organisation's record fails records nothing twice.
+        with platform_scope(), SessionLocal() as platform_db:
+            write(platform_db, None, f"event:{event.id}:platform")
+            platform_db.commit()
+    write(db, event.organisation_id, f"event:{event.id}")
 
 
 def on_job_due(db: Session, event) -> None:
