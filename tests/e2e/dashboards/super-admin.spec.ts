@@ -28,7 +28,7 @@ const WIDGETS: Array<LayoutWidget & { title: string }> = [
   { id: "billing.trials-expiring", module: "platform/billing", batch: "#346", title: "Trials ending soon" },
   { id: "billing.revenue-by-plan", module: "platform/billing", batch: "#346", title: "Revenue by plan" },
   { id: "billing.subscriptions-by-plan", module: "platform/billing", batch: "#346", title: "Subscriptions by plan" },
-  { id: "audit.super-admin-actions", module: "platform/audit", batch: "#317", title: "Super admin actions" },
+  { id: "audit.super-admin-actions", module: "platform/audit", batch: "#317", title: "Super Admin actions" },
 ];
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 const SHIPPED = WIDGETS.filter(shipped);
@@ -151,7 +151,7 @@ test("an approved organisation leaves the approval queue", async ({ page, reques
   await expect(panel.getByText(pending.name)).toHaveCount(0);
 });
 
-test("super admin actions waits for platform/audit", async ({ page }) => {
+test("super admin actions shows on the dashboard", async ({ page }) => {
   const w = needs("audit.super-admin-actions");
   await signInAsSuperAdmin(page);
   await expect(widget(page, w.title)).toBeVisible();
