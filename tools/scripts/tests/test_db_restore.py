@@ -87,8 +87,15 @@ def test_only_the_running_services_are_stopped_and_started(box):
     assert calls[_index(calls, " start ")].endswith("start api")
 
 
-def test_a_failed_migration_still_starts_the_services_and_says_so(box):
+def test_a_failed_migration_still_starts_the_services_and_fails_the_restore(box):
+    """The restored data is served again (the services start), but the restore itself fails: exit 1, not a warning."""
     (box["fake"] / "migrate-fails").write_text("")
     r, calls = _restore(box, "api\nrelay\nscheduler\n")
-    assert "the migrate step failed" in r.stderr
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "the migrate step failed" in r.stderr and "error:" in r.stderr
     assert calls[_index(calls, " start ")].endswith("start api relay scheduler")
+
+
+def test_a_successful_restore_exits_zero(box):
+    r, _ = _restore(box, "api\n")
+    assert r.returncode == 0, r.stdout + r.stderr

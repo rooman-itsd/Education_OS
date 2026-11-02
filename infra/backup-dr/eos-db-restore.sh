@@ -95,6 +95,14 @@ count_rows "$DB_NAME" | sed 's/^/  /'
 # A backup taken by older code (a rebuilt host runs the newest): bring it to this checkout's migrations and set
 # eos_app's password to this host's, as every deploy does (infra/docker/migrate.sh).
 echo "Migrating the restored database to this checkout:"
-compose run --rm -T migrate ||
-  echo "warning: the migrate step failed; fix it and run: docker compose ... run --rm -T migrate" >&2
+migrated=true
+compose run --rm -T migrate || migrated=false
+if ! $migrated; then
+  # The services still start (the EXIT trap above), so the restored data is served, but on a schema this code may
+  # not match: the restore has failed, and says so with its exit status, not a warning that is easy to miss.
+  logger -t eos-db-backup "restored $(basename "$file") into the live database; the migrate step FAILED" 2>/dev/null || true
+  echo "error: the restore is in, but the migrate step failed: the API, relay and scheduler start on an old schema." >&2
+  echo "       Fix the migration, then: docker compose -f $COMPOSE_FILE --env-file $ENV_FILE run --rm -T migrate" >&2
+  exit 1
+fi
 logger -t eos-db-backup "restored $(basename "$file") into the live database" 2>/dev/null || true

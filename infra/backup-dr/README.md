@@ -84,7 +84,8 @@ Add a row after every drill. A restore that fails, or counts that differ, is an 
 2. `eos-db-restore --check <file>` first, to see that it holds what you expect.
 3. `eos-db-restore <file>` and type `restore eos` when asked. It takes a safety backup of the current
    database, stops the API, the relay and the scheduler, replaces the database, prints the row counts, runs
-   the migrations (a backup from older code is brought up to this checkout) and starts them again.
+   the migrations (a backup from older code is brought up to this checkout) and starts them again. If the
+   migrations fail it still starts them, but ends with an error and exit status 1: fix the migration first.
 4. Open `/api/v1/health` and sign in to confirm. Everything written after that backup is gone; tell
    the affected organisations.
 
