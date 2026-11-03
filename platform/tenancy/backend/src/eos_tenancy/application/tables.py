@@ -98,6 +98,20 @@ def file_references(table_name: str, rows: list[dict]) -> list[dict]:
     return out
 
 
+def append_only(db: Session, tables: list[Table]) -> list[Table]:
+    """Tables the connected role may not DELETE from (PostgreSQL grants): append-only by design, such as
+    platform/audit's audit_record. Purge leaves them; their module handles erasure on tenancy.organisation.purged
+    (audit tombstones the organisation's payloads). Decided from the database's own grants, so tenancy needs to
+    know no other module's tables. SQLite has no grants: nothing is append-only there."""
+    if not tables or db.get_bind().dialect.name != "postgresql":
+        return []
+    return [
+        t
+        for t in tables
+        if not db.execute(text("SELECT has_table_privilege(current_user, :t, 'DELETE')"), {"t": t.name}).scalar()
+    ]
+
+
 def delete_rows(db: Session, tables: list[Table], organisation_id: str) -> dict[str, int]:
     """Delete the organisation's rows from every table, children first. A table a foreign key still blocks is
     retried on the next pass (each attempt is its own savepoint) until every table is empty; deferrable
