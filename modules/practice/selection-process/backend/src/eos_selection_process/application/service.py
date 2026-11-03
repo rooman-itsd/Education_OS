@@ -27,6 +27,7 @@ from ..domain.models import (
     ProcessNotOpenError,
     ProcessStatus,
     SlotStatus,
+    check_stage_sequences,
 )
 from ..infrastructure import repository as repo
 from ..infrastructure.models import (
@@ -41,6 +42,12 @@ from ..infrastructure.models import (
 )
 
 MODULE = "selection-process"
+
+
+def _stage_conflict() -> ConflictError:
+    """A stage write the sequence check did not catch (e.g. two concurrent requests) hit the unique constraint."""
+    return ConflictError("stage_sequence_conflict", "Stages changed at the same time; reload and try again")
+
 
 PROCESS_TYPE_READ = f"{MODULE}:process-type:read"
 PROCESS_TYPE_MANAGE = f"{MODULE}:process-type:manage"
@@ -269,6 +276,9 @@ class SelectionProcessService:
         if not ptype:
             raise NotFoundError("Process type not found")
 
+        stages_data = data.get("stages") or []
+        check_stage_sequences(stages_data)
+
         process = ProcessModel(
             organisation_id=actor.organisation_id,
             type_id=data["type_id"],
@@ -279,23 +289,26 @@ class SelectionProcessService:
             created_at=utcnow(),
             updated_at=utcnow(),
         )
-        self.db.add(process)
-        self.db.flush()
+        try:
+            self.db.add(process)
+            self.db.flush()
 
-        # Add initial stages if provided
-        stages_data = data.get("stages") or []
-        for s in stages_data:
-            stage = StageModel(
-                organisation_id=actor.organisation_id,
-                process_id=process.id,
-                name=s["name"],
-                sequence=s["sequence"],
-                description=s.get("description"),
-                created_at=utcnow(),
-            )
-            self.db.add(stage)
+            # Add initial stages if provided
+            for s in stages_data:
+                stage = StageModel(
+                    organisation_id=actor.organisation_id,
+                    process_id=process.id,
+                    name=s["name"],
+                    sequence=s["sequence"],
+                    description=s.get("description"),
+                    created_at=utcnow(),
+                )
+                self.db.add(stage)
 
-        self.db.commit()
+            self.db.commit()
+        except IntegrityError as err:
+            self.db.rollback()
+            raise _stage_conflict() from err
         self.db.refresh(process)
         return self._serialize_process(process)
 
@@ -350,28 +363,33 @@ class SelectionProcessService:
         if p.status != ProcessStatus.DRAFT.value:
             raise ProcessNotDraftError()
 
-        # Delete old stages
-        old_stages = repo.list_stages_for_process(self.db, actor.organisation_id, process_id)
-        for s in old_stages:
-            self.db.delete(s)
-        self.db.flush()
+        # Validate before the old stages are deleted or anything is flushed.
+        check_stage_sequences(stages_data)
 
-        # Add new stages
-        new_stages = []
-        for s in stages_data:
-            stage = StageModel(
-                organisation_id=actor.organisation_id,
-                process_id=process_id,
-                name=s["name"],
-                sequence=s["sequence"],
-                description=s.get("description"),
-                created_at=utcnow(),
-            )
-            self.db.add(stage)
-            new_stages.append(stage)
+        try:
+            # Delete old stages
+            old_stages = repo.list_stages_for_process(self.db, actor.organisation_id, process_id)
+            for s in old_stages:
+                self.db.delete(s)
+            self.db.flush()
 
-        p.updated_at = utcnow()
-        self.db.commit()
+            # Add new stages
+            for s in stages_data:
+                stage = StageModel(
+                    organisation_id=actor.organisation_id,
+                    process_id=process_id,
+                    name=s["name"],
+                    sequence=s["sequence"],
+                    description=s.get("description"),
+                    created_at=utcnow(),
+                )
+                self.db.add(stage)
+
+            p.updated_at = utcnow()
+            self.db.commit()
+        except IntegrityError as err:
+            self.db.rollback()
+            raise _stage_conflict() from err
 
         # Reload ordered
         stages = repo.list_stages_for_process(self.db, actor.organisation_id, process_id)

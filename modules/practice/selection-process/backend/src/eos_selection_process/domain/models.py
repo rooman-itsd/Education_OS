@@ -81,6 +81,26 @@ class CandidateFinalizedError(DomainError):
         super().__init__("candidate_finalized", message, status_code=409)
 
 
+class DuplicateStageSequenceError(DomainError):
+    """Two stages of one process share a sequence number (unique per process in the database)."""
+
+    def __init__(self, sequences: list[int]) -> None:
+        listed = ", ".join(str(n) for n in sequences)
+        noun = "sequence" if len(sequences) == 1 else "sequences"
+        super().__init__("duplicate_stage_sequence", f"Stage {noun} {listed} used more than once", status_code=422)
+        self.sequences = sequences
+
+
+def check_stage_sequences(stages: list[dict]) -> None:
+    """Refuse a stage list in which a sequence number repeats, before anything is written."""
+    seen: set[int] = set()
+    repeated: set[int] = set()
+    for s in stages:
+        (repeated if s["sequence"] in seen else seen).add(s["sequence"])
+    if repeated:
+        raise DuplicateStageSequenceError(sorted(repeated))
+
+
 class AlreadyDecidedError(DomainError):
     def __init__(self, message: str = "Decision already recorded by panelist for this stage") -> None:
         super().__init__("already_decided", message, status_code=409)

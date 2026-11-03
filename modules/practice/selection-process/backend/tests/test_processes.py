@@ -1,6 +1,6 @@
 """Processes and panels lifecycle test suite."""
 
-from conftest import BASE
+from conftest import BASE, new_id
 
 COORDINATOR = "selection-process-coordinator"
 PANELIST = "selection-process-panelist"
@@ -137,3 +137,98 @@ def test_applicant_process_and_panel_privacy(client, org):
     assert coord_get_res.status_code == 200
     assert len(coord_get_res.json()["panels"]) == 1
     assert coord_get_res.json()["panels"][0]["member_person_ids"] == [judge_id]
+
+
+# ------------------------------------------------------------------
+# Duplicate stage sequences (review of #414): a 4xx, never a 500
+# ------------------------------------------------------------------
+
+
+def _process_type(client, coord) -> str:
+    return client.post(f"{BASE}/process-types", json={"name": f"Jury {new_id()}"}, headers=coord).json()["id"]
+
+
+def _draft(client, coord, stages) -> dict:
+    res = client.post(
+        f"{BASE}/processes",
+        json={"type_id": _process_type(client, coord), "title": "Jury", "stages": stages},
+        headers=coord,
+    )
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def test_create_process_with_duplicate_stage_sequence_is_refused(client, org):
+    _, coord = org.user(COORDINATOR)
+    type_id = _process_type(client, coord)
+    res = client.post(
+        f"{BASE}/processes",
+        json={
+            "type_id": type_id,
+            "title": "Duplicate sequences",
+            "stages": [{"name": "A", "sequence": 1}, {"name": "B", "sequence": 2}, {"name": "C", "sequence": 2}],
+        },
+        headers=coord,
+    )
+    assert res.status_code == 422
+    detail = res.json()["detail"]
+    assert detail["code"] == "duplicate_stage_sequence"
+    assert "2" in detail["message"]
+
+    # Nothing was written: the process type still has no process.
+    listed = client.get(f"{BASE}/processes", params={"type_id": type_id}, headers=coord).json()
+    assert listed["total"] == 0
+
+
+def test_replace_stages_with_duplicate_sequence_keeps_existing_stages(client, org):
+    _, coord = org.user(COORDINATOR)
+    proc = _draft(client, coord, [{"name": "Screening", "sequence": 1}, {"name": "Final", "sequence": 2}])
+
+    res = client.put(
+        f"{BASE}/processes/{proc['id']}/stages",
+        json=[{"name": "Round 1", "sequence": 1}, {"name": "Round 2", "sequence": 1}],
+        headers=coord,
+    )
+    assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "duplicate_stage_sequence"
+
+    # Validation ran before the old stages were deleted.
+    stages = client.get(f"{BASE}/processes/{proc['id']}", headers=coord).json()["stages"]
+    assert [(s["name"], s["sequence"]) for s in stages] == [("Screening", 1), ("Final", 2)]
+
+
+def test_replace_stages_may_reuse_the_old_sequence_numbers(client, org):
+    _, coord = org.user(COORDINATOR)
+    proc = _draft(client, coord, [{"name": "Screening", "sequence": 1}, {"name": "Final", "sequence": 2}])
+
+    res = client.put(
+        f"{BASE}/processes/{proc['id']}/stages",
+        json=[{"name": "One", "sequence": 1}, {"name": "Two", "sequence": 2}, {"name": "Three", "sequence": 3}],
+        headers=coord,
+    )
+    assert res.status_code == 200
+    assert [s["sequence"] for s in res.json()] == [1, 2, 3]
+
+
+def test_integrity_error_on_stage_write_is_a_409_and_rolled_back(client, org, monkeypatch):
+    """If the check is bypassed (e.g. two concurrent writes), the unique constraint answers 409, not 500."""
+    from eos_selection_process.application import service
+
+    _, coord = org.user(COORDINATOR)
+    proc = _draft(client, coord, [{"name": "Screening", "sequence": 1}])
+    type_id = _process_type(client, coord)
+    monkeypatch.setattr(service, "check_stage_sequences", lambda stages: None)
+
+    dup = [{"name": "A", "sequence": 1}, {"name": "B", "sequence": 1}]
+    created = client.post(f"{BASE}/processes", json={"type_id": type_id, "title": "Race", "stages": dup}, headers=coord)
+    assert created.status_code == 409
+    assert created.json()["detail"]["code"] == "stage_sequence_conflict"
+    assert client.get(f"{BASE}/processes", params={"type_id": type_id}, headers=coord).json()["total"] == 0
+
+    replaced = client.put(f"{BASE}/processes/{proc['id']}/stages", json=dup, headers=coord)
+    assert replaced.status_code == 409
+    assert replaced.json()["detail"]["code"] == "stage_sequence_conflict"
+
+    # The rollback restored the old stages and left the session usable.
+    stages = client.get(f"{BASE}/processes/{proc['id']}", headers=coord).json()["stages"]
+    assert [(s["name"], s["sequence"]) for s in stages] == [("Screening", 1)]
