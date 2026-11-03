@@ -1,7 +1,8 @@
 # Permission catalogue for admissions. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 # Public endpoints (submit, track, document upload, offer accept/decline) need no permission key;
-# they are unauthenticated by design (docs/prd.md §6) and are not listed below.
+# they are unauthenticated by design (docs/prd.md §6) and are not listed below. A signed-in applicant
+# reads and links only their own applications under /me/ with admissions:self:read.
 module: admissions
 permissions:
   - key: admissions:application:read
@@ -16,7 +17,12 @@ permissions:
     description: Extend an offer on an eligible application.
   - key: admissions:report:read
     description: Read admissions funnel counts. Counts only, no applicant personal data.
+  - key: admissions:self:read
+    description: View one's own applications and link an application to one's account by reference number and email.
 roles:
+  - name: applicant
+    description: A signed-in applicant. Sees only the applications linked to their own account.
+    grants: [admissions:self:read]
   - name: admissions-reviewer
     description: Reviews documents and eligibility but does not decide offers or merit lists.
     grants: [admissions:application:read, admissions:document:verify]
