@@ -1,6 +1,6 @@
 # examinations: product requirements
 
-**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contracts in review (issue #63)
+**Owner:** Shivani (@shivanisinghrooman-09) · **Tier:** common · **Status:** contracts merged (PR #183), backend not implemented yet (issue #325). Confirmed, proposed and open decisions, with their evidence: [reviewer-decisions.md](reviewer-decisions.md)
 
 ## 1. Objective
 
@@ -120,7 +120,7 @@ Teacher-education roles inherit from these: `mentor-teacher` extends `faculty`, 
 - The issued file is stored in `platform/documents`; examinations keeps only its `document_id`.
 
 ### 5.8 Exam Duty
-- Has `staff_id` (an identity user id), `duty_type` (`invigilation`, `evaluation` or `moderation`), and the session (invigilation) or paper (evaluation, moderation) it covers.
+- Has `staff_id` (an identity user id; the platform-wide staff identifier is still to be confirmed by Faizan, see Q11), `duty_type` (`invigilation`, `evaluation` or `moderation`), and the session (invigilation) or paper (evaluation, moderation) it covers.
 - Status: `assigned`, `cancelled` or `completed`.
 
 ### 5.9 Mark Entry
@@ -162,11 +162,19 @@ This PR does not change those layouts.
 | `examinations.hall-tickets-issued` | Examination Staff (Akshata) | Per exam cycle: eligible, issued, withheld and revoked counts; withheld reasons | `GET /reports/hall-tickets?exam_cycle_id=` | `examinations:hall-ticket:read-all` |
 | `examinations.results-pending` | Examination Staff (Akshata) | Papers by pipeline stage (marks entry, moderation, lock, approval, publication), with counts and the oldest pending | `GET /reports/results-pending?exam_cycle_id=` | `examinations:report:read-all` |
 | `examinations.exam-duties` | Faculty (Shivani) | The caller's upcoming duties: type, session time or paper, venue, status | `GET /me/duties` | `examinations:duty:read-own` |
-| `examinations.upcoming-assessments` | Student (Tejaswini) | The caller's upcoming exam sessions: paper, date and time, venue, eligibility, hall-ticket status. Exams only, pending Q6 | `GET /me/exam-schedule` | `examinations:session:read-own` |
+| `examinations.upcoming-assessments` | Student (Tejaswini) | The caller's upcoming exam sessions: paper, date and time, venue, eligibility, hall-ticket status. Exam sessions only (Q6, decided) | `GET /me/exam-schedule` | `examinations:session:read-own` |
 | `examinations.results-summary` | Department Admin (Himanshu) | For a department and exam cycle: per course offering, the candidate count, pass rate and grade distribution, for published results | `GET /reports/results-summary?exam_cycle_id=&department_id=` | `examinations:report:read-department`; `examinations:report:read-all` widens it to the organisation |
 
 The Examination Staff dashboard's fourth widget, `enrolment-registration.registered-candidates`,
 belongs to enrolment-registration and is not served here.
+
+LMS quizzes and assignment due dates are not shown by `examinations.upcoming-assessments` (Q6). If
+students need them on the dashboard, that is a separate LMS widget with its own LMS endpoint; it is
+not part of this module.
+
+Implementation status: the three Examination Staff widgets are merged (PR #216) and call
+endpoints that this module does not serve yet. `exam-duties`, `upcoming-assessments` and
+`results-summary` are not built.
 
 ## 8. Functional requirements
 
@@ -205,8 +213,8 @@ belongs to enrolment-registration and is not served here.
 - **Inputs, in this order, each adding a reason when it fails:**
   1. Registration in the course offering (enrolment-registration, Q1)
   2. Student status (student-information, Q2)
-  3. Attendance at least `min_attendance_percent` up to `eligibility_cutoff_date`, from timetable-attendance's bulk attendance read (owner decision C7); excused classes are excluded from the denominator. Where the minimum lives is still Q5
-  4. Dues, when `check_dues` is set (fees-accounts, Q4)
+  3. Attendance at least `min_attendance_percent` up to `eligibility_cutoff_date`, from timetable-attendance's bulk attendance read, `POST /reports/attendance-eligibility` (owner decision C7). The contract is merged; its backend endpoint is not implemented yet. Excused classes are excluded from the denominator, and that API applies no threshold. Where the minimum lives is still open (Q5)
+  4. Dues, when `check_dues` is set: a synchronous read of fees-accounts `GET /dues` at the cut-off, filtered by `source_module=examinations` and `source_reference=<exam_cycle_id>`, with key `fees-accounts:dues:read` (Q4, confirmed in principle by both owners; contract merged in PR #243; response shape not confirmed by Examinations). fees-accounts only reports the balance; examinations decides whether it blocks eligibility. The call takes a `person_id`, so it depends on the unresolved `student_id` mapping (Q2)
   5. The cycle's own examination rules
 - **Missing inputs.** An input whose source is not available yet (the integration is unconfirmed) leaves the candidate `pending` with no reason recorded for that input. It never silently counts as eligible.
 - **Manual override.** The controller may override a candidate's status with a mandatory reason.
@@ -319,11 +327,11 @@ copies, not foreign keys. `student_id`, `staff_id`, `department_id` and `documen
 
 | Needs | From | How | Status |
 |---|---|---|---|
-| Academic period, course offering (course code, title, credits, department), instructor assignment (to suggest evaluators) | academic-management | Consumed events into `offering_ref` | PENDING CONFIRMATION FROM OWNER (Shivani; names become authoritative when PR #168 merges, owner decision C4) |
-| Who is registered for each course offering; supplementary and backlog registration | enrolment-registration | Consumed events into `registration_ref` | PENDING CONFIRMATION FROM OWNER (Praveen; Q1) |
+| Academic period, course offering (course code, title, credits, department), instructor assignment (to suggest evaluators) | academic-management | Consumed events into `offering_ref` (section 12) | Event contracts merged (PR #168) and authoritative (owner decision C4); this module does not consume them yet (`consumes_events: []`). `course.updated` and `offering.updated` carry no new values: see section 12 |
+| Who is registered for each course offering; supplementary and backlog registration | enrolment-registration | Consumed events into `registration_ref` (section 12) | `course-registration.confirmed` and `.withdrawn` exist and list examinations as a consumer. Supplementary and backlog registration is open (Q1); the `student_id` mapping is open (Q2) |
 | Student status (active, suspended, discontinued) | student-information | Event or API | PENDING CONFIRMATION FROM OWNER (Praveen; Q2) |
-| Attendance counts per student and course offering at the cut-off date | timetable-attendance | `POST /reports/attendance-eligibility` (timetable-attendance FR-18, PR #179), key `timetable-attendance:report:read-eligibility` | Decided by owner decision C7; proposed contract, not yet merged |
-| Dues status for examination fees | fees-accounts | Event or API | PENDING CONFIRMATION FROM OWNER (Gokula Lakshmi; Q4) |
+| Attendance counts per student and course offering at the cut-off date | timetable-attendance | `POST /reports/attendance-eligibility` (FR-18), key `timetable-attendance:report:read-eligibility` | Decided (owner decision C7). Contract merged; backend endpoint not implemented yet. The minimum is open (Q5) |
+| Dues status for examination fees | fees-accounts | `GET /dues?person_id=&source_module=examinations&source_reference=<exam_cycle_id>`, key `fees-accounts:dues:read` | Confirmed in principle by both owners (Q4); contract merged (PR #243) and served by fees-accounts; response shape not confirmed by Examinations. Not called from this module yet |
 | Permission checks, current user, caller's department | platform/identity | `packages/sdk` | Available; department scope pending Q13 |
 | Audit trail | platform/audit | `packages/sdk` | Available |
 | Publishing events | platform/event-bus | `packages/sdk` | Available |
@@ -349,27 +357,43 @@ the one stored by `packages/core` (`eos_core.events.OutboxEvent`): `id`, `name`,
 | `examinations.hall-ticket.issued` | notification |
 | `examinations.hall-ticket.withheld` | notification |
 | `examinations.hall-ticket.revoked` | notification |
-| `examinations.duty.assigned` | notification; possibly hr-payroll (Q11) |
-| `examinations.duty.cancelled` | notification; possibly hr-payroll |
+| `examinations.duty.assigned` | notification; hr-payroll does not consume it in v1, duty pay is a manual payslip line (Q11) |
+| `examinations.duty.cancelled` | notification; hr-payroll does not consume it in v1 (Q11) |
 | `examinations.result.published` | enrolment-registration, student-information, reporting, regulatory-reports, nad, digilocker, notification (Q7, Q12) |
 | `examinations.result.revised` | the same consumers as `result.published` |
 
 ## 12. Consumed events
 
-None are declared in `module.yaml` until the owners confirm the names in their own `events.yaml`.
-The names below describe what is needed. They are **not** event names.
+The academic-management and enrolment-registration contracts are merged. Per owner decision C4, each
+consumer declares the events it uses in its own `consumes_events` in a follow-up PR; this module's
+`module.yaml` still declares none, and no consumer is implemented. The events below are the ones
+whose published `consumers` list includes examinations (names and payload fields as in those
+modules' `contracts/events.yaml`, checked on 2026-11-03):
 
-| Needed fact | Publisher | Event name |
-|---|---|---|
-| Academic period created / became active | academic-management (Shivani) | PENDING CONFIRMATION FROM OWNER |
-| Course offering created / updated / status changed, with course code, title, credits, department | academic-management (Shivani) | PENDING CONFIRMATION FROM OWNER |
-| Instructor assignment created / ended | academic-management (Shivani) | PENDING CONFIRMATION FROM OWNER |
-| Student registered for / withdrawn from a course offering; supplementary or backlog registration | enrolment-registration (Praveen) | PENDING CONFIRMATION FROM OWNER |
-| Student status changed | student-information (Praveen) | PENDING CONFIRMATION FROM OWNER |
-| Examination-fee dues settled or outstanding (only if Q4 chooses events) | fees-accounts (Gokula Lakshmi) | PENDING CONFIRMATION FROM OWNER |
+| Needed fact | Publisher | Event | Payload fields |
+|---|---|---|---|
+| Academic period created / activated | academic-management | `academic-management.term.created`, `.term.activated` | `academic_period_id, code, name, starts_on, ends_on` / `academic_period_id, previous_academic_period_id?, activated_at` |
+| Course in the catalogue | academic-management | `.course.created`, `.course.updated`, `.course.archived` | `course_id, code, title, credits, course_type, department_id` / `course_id, changed_fields[]` / `course_id, archived_at` |
+| Course offering | academic-management | `.offering.created`, `.offering.updated`, `.offering.status-changed` | `course_offering_id, course_id, academic_period_id, programme_ids[], course_code, course_title, credits, course_type, department_id` / `course_offering_id, changed_fields[]` / `course_offering_id, from_status, to_status, changed_at` |
+| Instructor assignment created / ended | academic-management | `.faculty-assignment.created`, `.faculty-assignment.ended` | `instructor_assignment_id, course_offering_id, section_id?, faculty_id, role, contact_hours` / `instructor_assignment_id, course_offering_id, section_id?, faculty_id, ended_at` |
+| Curriculum published | academic-management | `.curriculum.published` | `curriculum_id, programme_id, curriculum_version, total_credits, published_at` |
+| Student registered for / withdrawn from a course offering | enrolment-registration | `enrolment-registration.course-registration.confirmed`, `.course-registration.withdrawn` | `registration_id, person_id, course_offering_id, section_id, academic_period_id, registration_type, student_name, roll_number, confirmed_at` / `registration_id, person_id, course_offering_id, section_id, reason, withdrawn_at` |
+| Student status changed | student-information | not defined | PENDING CONFIRMATION FROM OWNER (Praveen; Q2) |
 
-academic-management (PR #168), timetable-attendance (PR #179) and fees-accounts (PR #170) have
-draft contracts that propose event names. Those names become authoritative only when the PRs merge.
+Fees-accounts dues are not consumed as events: Q4 was confirmed in principle by both owners as a synchronous `GET /dues` read; the contract is merged; the response shape is not confirmed by Examinations (section 10).
+
+Limitations that need a decision before the read-model handlers are written:
+- **`course.updated` and `offering.updated` carry only `changed_fields`.** They do not contain the
+  updated values. A handler cannot refresh `offering_ref` from the payload alone. No decision on
+  whether consumers may read academic-management's API was found in the sources inspected; the
+  intended approach for this work is not to call the owner's API. How these events are applied is
+  an open architectural decision; see [reviewer-decisions.md](reviewer-decisions.md).
+- **The person on an assignment is `faculty_id`** in the merged events. Renaming it `instructor_id`
+  was proposed and is blocked on Faizan.
+- **`student_id` against `person_id`** (Q2): the registration events carry `person_id`. Whether
+  `student_id` equals it is a proposal, not a decision.
+- **`registration_type`** is a string in the contract; whether it covers supplementary and
+  backlog registration is open (Q1).
 
 ## 13. Permissions
 
@@ -415,16 +439,16 @@ confirmed (Q13); until then the department-scoped keys are defined but their sco
 | # | Question | Who decides |
 |---|---|---|
 | Q1 | Is candidacy derived entirely from course or semester registration in enrolment-registration? Who registers students for `supplementary` cycles and backlog papers, and what events carry it? | Praveen |
-| Q2 | Which identifier `student_id` is (student-information record id or identity user id); where student status and display name come from | Praveen, Faizan |
+| Q2 | Which identifier `student_id` is (student-information record id or identity user id); where student status and display name come from. **Proposed, not decided:** `student_id = person_id` from the enrolment-registration events (Praveen, PR #459); no record found in the sources inspected of Faizan's confirmation | Praveen, Faizan |
 | Q3 | Exam venues: keep a free-text `venue_label`, or reference facility-booking resources and book them (or create blackouts) when a session is scheduled | Ashritha |
-| Q4 | Whether examination-fee dues can withhold eligibility or hall tickets; which fees-accounts event or API reports dues; who raises the examination-fee invoice | Gokula Lakshmi |
-| Q5 | **API part decided (owner decision C7):** examinations reads attendance through timetable-attendance's bulk read (FR-18 in PR #179), not events; excused classes are excluded from the denominator. **Still open:** whether the minimum is set per exam cycle here (proposed) or comes from timetable-attendance's shortage threshold | Shivani (timetable-attendance), with Akshata for the Exam Staff view |
-| Q6 | Does `examinations.upcoming-assessments` include LMS quizzes and assignments, or exams only? Proposed: exams only | Tejaswini, Shivani (lms) |
+| Q4 | **Confirmed in principle by both owners; contract merged; response shape not confirmed by Examinations** (Gokula Lakshmi and Shivani, PR #183 comments of 2026-10-13; contract merged in PR #243): fees-accounts raises the examination-fee invoice, with source `{module: examinations, reference: <exam_cycle_id>}`; examinations reads the balance synchronously through `GET /dues` at the eligibility cut-off and decides, through `check_dues`, whether dues withhold eligibility or hall tickets. Dues are not consumed as events. Both owners recorded it as a "proposed decision"; Shivani's wording was "subject to agreement on the endpoint contract and ownership". **Still open:** the call takes a `person_id`, so it depends on Q2; no record found in the sources inspected of Shivani's confirmation, on PR #243, that the merged `GET /dues` fits | Gokula Lakshmi (confirmed in principle) |
+| Q5 | **API part decided (owner decision C7):** examinations reads attendance through `POST /reports/attendance-eligibility` of timetable-attendance (FR-18), not events; excused classes are excluded from the denominator. The contract is merged; the backend endpoint is not implemented yet. **Still open:** whether the minimum is set per exam cycle here (proposed) or comes from timetable-attendance's shortage threshold (owner decision C11 is unresolved) | Shivani (timetable-attendance), with Akshata for the Exam Staff view |
+| Q6 | **Decided** (Tejaswini, PR #175, 2026-10-13): `examinations.upcoming-assessments` shows exam sessions only, as `GET /me/exam-schedule` specifies. LMS quizzes and assignment due dates would need a separate LMS widget and endpoint. Tejaswini said this is not needed for Wave A and could be raised separately later; her comment does not address the scope of the first release beyond Wave A | Tejaswini, Shivani (lms) |
 | Q7 | Transcripts and certificates: examinations, student-information, or only the NAD and DigiLocker integrations from published results | Praveen, Himanshu, Faizan |
-| Q8 | **Decided (owner decision C5, [owner decision record](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6099000605)):** academic-management uses `academic_period_id`, `course_offering_id` and `instructor_assignment_id`, aligned in PR #168 | Shivani |
+| Q8 | **Decided (owner decision C5, [owner decision record](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6099000605)):** academic-management uses `academic_period_id`, `course_offering_id` and `instructor_assignment_id`, aligned in PR #168, and the merged event payloads use these names. **Not decided:** the person on an assignment is `faculty_id` in the merged events; renaming it `instructor_id` is proposed and blocked on Faizan | Shivani |
 | Q9 | **Decided for Week 1 (owner decision C9, [owner decision record](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6099000605)):** LMS coursework grades do not feed the `continuous` component; exam marks are entered here. Integration is revisited in a later phase | Shivani |
 | Q10 | Should result approval use `platform/workflow` (no module uses it yet) or stay as this module's state machine? | Himanshu, Faizan |
-| Q11 | Does duty remuneration involve hr-payroll, and does it consume `duty.*` events? | Gokula Lakshmi |
+| Q11 | **Decided for v1** (Gokula Lakshmi and Shivani, PR #183 comments of 2026-10-13): hr-payroll does not consume `examinations.duty.*`; duty pay is a manual payslip line added during payroll review. Automation later would need a rate per `duty_type` in hr-payroll and an agreed staff identifier. **Not decided:** that `staff_id` is the identity user id is stated here and in the contract but is pending Faizan's confirmation of the platform-wide staff identifier | Gokula Lakshmi (decided), Faizan (identifier) |
 | Q12 | Which result fields do `platform/reporting` (`reporting.attendance-and-results-by-department`), regulatory-reports, nad and digilocker need in `result.published`? | Himanshu, Madhumita |
 | Q13 | How the caller's department is known (identity SDK), and therefore how department-scoped keys are enforced (same as timetable-attendance Q9) | Faizan |
 
@@ -433,7 +457,7 @@ confirmed (Q13); until then the department-scoped keys are defined but their sco
 | # | Item | Raised with |
 |---|---|---|
 | CR-1 | **Answered.** Akshata's recorded comment on PR #168 agrees that Assessment Scheme is owned by examinations, not academic-management. Academic-management's PRD wording (sections 3 and 8.3) was updated in PR #168 to match. This PR does not touch academic-management | PR #168 (Shivani) |
-| R-1 | Event envelope. ARCHITECTURE.md requires only `organisation_id` in the envelope; the implemented outbox (`packages/core`, `eos_core.events.OutboxEvent`) stores `id`, `name`, `organisation_id`, `actor`, `occurred_at`, `payload`. The scaffold comment in every `contracts/events.yaml` ("id, occurred_at, actor, tenant, version, payload") also lists `version`, which neither the architecture docs nor the outbox define. This contract follows the outbox, and contract versioning stays with the file-level `version` and module semver (module-standard rule 7). The timetable-attendance draft (PR #179) still lists `version`. Should the scaffold comment be corrected, or should `version` be added to the outbox? | Faizan |
+| R-1 | Event envelope. ARCHITECTURE.md requires only `organisation_id` in the envelope; the implemented outbox (`packages/core`, `eos_core.events.OutboxEvent`) stores `id`, `name`, `organisation_id`, `actor`, `occurred_at`, `payload`. The scaffold comment in every `contracts/events.yaml` ("id, occurred_at, actor, tenant, version, payload") also lists `version`, which neither the architecture docs nor the outbox define. This contract follows the outbox, and contract versioning stays with the file-level `version` and module semver (module-standard rule 7). The timetable-attendance contract (PR #179, merged) still lists `version`. Should the scaffold comment be corrected, or should `version` be added to the outbox? **Observation, not a recorded decision:** the outbox in `packages/core` now has a `version` column (default 1) and `publish(..., version=1)`, so the premise above no longer holds; no record found in the sources inspected that R-1 is closed or how this contract should change | Faizan |
 
 ## 15. Acceptance criteria (week 1)
 
@@ -442,3 +466,6 @@ confirmed (Q13); until then the department-scoped keys are defined but their sco
 - Every operation in `contracts/openapi.yaml` names its `x-permission`, and every key named exists.
 - Every event carries `organisation_id`.
 - Q1 to Q13, CR-1 and R-1 are raised with their owners on the PR.
+
+These were the Week 1 criteria. Their outcome and the decisions made since, with evidence, are in
+[reviewer-decisions.md](reviewer-decisions.md).

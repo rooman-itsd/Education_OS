@@ -20,7 +20,9 @@ modules:
   - finance-operations/budget-grants
   - finance-operations/e-office
   - finance-operations/fees-accounts
+  - finance-operations/hr-payroll
   - finance-operations/procurement
+  - practice/selection-process
   - practice/portfolio
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions

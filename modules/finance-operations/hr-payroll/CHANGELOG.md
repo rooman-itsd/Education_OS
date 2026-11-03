@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled (#336) in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/hr-payroll`; installed, tested
+  and migrated in CI and the auto-deploy) and `apps/frontend/config/modules.enabled.yaml` (the dashboard registers the
+  module's widgets: `leave-requests`, `payroll-run-status` and `joinings-and-exits`, from #412). README: the documents
+  platform service in `module.yaml` is not enabled in the host; nothing calls it yet.
 - Widgets (#336): `leave-requests`, `payroll-run-status` and `joinings-and-exits` (HR Staff), with loading, empty and
   error-with-retry states; 36 tests. No payroll run yet (404 `not_found`) is the empty state, kept apart from an
   unmounted module. Frontend test dependencies added to the package. Enabling the module in `apps/frontend` is a

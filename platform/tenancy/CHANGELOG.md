@@ -3,6 +3,11 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Purge keeps append-only tables (#317 follow-up). It deleted the organisation's rows from every table with
+  `organisation_id`, audit_record included, which the audit trigger refuses once records exist (and the API's role
+  no longer holds DELETE on it). Tables the connected role may not DELETE from (PostgreSQL grants) are now left
+  alone and listed under `kept` in the response and in `tenancy.organisation.purged`; their module erases on that
+  event (audit tombstones the organisation's payloads). Nothing changes where every table is deletable.
 - Super Admin dashboard widgets (#346): `tenancy.approval-queue` (registrations awaiting approval and package
   changes, oldest first), `tenancy.organisations-by-status` (a count per status) and `tenancy.recent-registrations`
   (the five newest), all on `platform:organisations:read` from `GET /admin/organisations`. Frontend only; no

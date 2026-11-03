@@ -26,3 +26,20 @@ events:
         format: { type: string, enum: [csv, json] }
         exported_by: { type: string }
       required: [execution_id, report_code, document_id, format, exported_by]
+
+# Source events MetricSnapshot ingestion records (application/metrics.py, application/ingest.py). Only modules that
+# publish today: examinations and timetable-attendance have no code yet, so their metrics are reported unavailable.
+consumes:
+  - academic-management.faculty-assignment.created
+  - academic-management.faculty-assignment.ended
+  - academic-management.offering.created
+  - admissions.application.accepted
+  - admissions.application.declined
+  - admissions.application.submitted
+  - admissions.offer.made
+  - fees-accounts.concession.approved
+  - fees-accounts.invoice.cancelled
+  - fees-accounts.invoice.issued
+  - fees-accounts.payment.received
+  - fees-accounts.payment.voided
+  - fees-accounts.refund.issued

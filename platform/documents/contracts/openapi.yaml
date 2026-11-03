@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: documents API
-  version: 0.1.0
+  version: 0.2.0
   description: "Document and media management: storage abstraction, presigned URLs, and access control."
 servers:
   - url: /api/v1/documents
@@ -25,13 +25,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/UploadIntentResult"
         "200":
-          description: Idempotent replay of previously registered upload intent
+          description: >-
+            Idempotent replay of an upload intent still pending. The URL names an upload key of its own, never the
+            document's storage key: confirm copies the validated object there.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/UploadIntentResult"
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: >-
+            Replay of an intent whose document is already confirmed (or deleted): no upload URL is issued. A changed
+            file is a new version (POST /{id}/versions).
+
+  /{id}/versions:
+    post:
+      summary: Upload intent for the next version of a document (then PUT and confirm, as for /upload-intent)
+      description: >-
+        Only the latest confirmed version can be followed, and only by the uploader of the document's first
+        version. Confirming the new version supersedes the previous one, which stays readable.
+      operationId: requestNewVersion
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, mime_type, size_bytes]
+              properties:
+                filename: { type: string, maxLength: 255 }
+                mime_type: { type: string, maxLength: 128 }
+                size_bytes: { type: integer, minimum: 1 }
+                client_token: { type: string, maxLength: 120, nullable: true }
+      responses:
+        "201": { description: New version registered, content: { application/json: { schema: { $ref: "#/components/schemas/UploadIntentResult" } } } }
+        "200": { description: Idempotent replay of a pending new-version intent, content: { application/json: { schema: { $ref: "#/components/schemas/UploadIntentResult" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: The document is not the latest confirmed version }
+    get:
+      summary: Every version of the document, newest first
+      description: Visible on the same terms as the document itself.
+      operationId: listVersions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Versions, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Document" } }
+                  total: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /{id}/confirm:
     post:
@@ -52,6 +103,7 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: A new version confirmed first against the same predecessor }
 
   /{id}:
     get:
@@ -134,6 +186,11 @@ paths:
           in: query
           required: false
           schema: { type: string }
+        - name: include_superseded
+          in: query
+          required: false
+          description: By default only each document's latest version is listed.
+          schema: { type: boolean, default: false }
         - name: limit
           in: query
           required: false
@@ -245,6 +302,9 @@ components:
         entity_id: { type: string, nullable: true }
         uploaded_by: { type: string }
         client_token: { type: string, nullable: true }
+        version: { type: integer, description: "1 for a document's first version" }
+        version_of: { type: string, nullable: true, description: The first version's id; null on the first version }
+        superseded_by: { type: string, nullable: true, description: The newer version that replaced this one }
         tags:
           type: array
           items: { type: string }

@@ -187,3 +187,151 @@ def test_system_definition_rejects_blank_field_changes(client, org):
     assert client.put(url, json={"parameters_schema": {}}, headers=org.admin_headers).status_code == 403
     # Toggling active state stays allowed
     assert client.put(url, json={"is_active": False}, headers=org.admin_headers).status_code == 200
+
+
+# --- Financial summaries need reporting:report:execute; client_token is per requester (#317 follow-up) ---------
+
+
+def _run(client, headers, code_or_id, **body):
+    r = client.post(f"/api/v1/reporting/definitions/{code_or_id}/run", json=body or None, headers=headers)
+    assert r.status_code in (200, 201), r.text
+    return r.json()
+
+
+def test_financial_summaries_need_execute_academic_ones_only_read(client, org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    attendance = _run(client, org.admin_headers, "department-attendance")
+
+    # Faculty hold reporting:report:read only
+    assert (
+        client.get(f"/api/v1/reporting/executions/{attendance['id']}", headers=org.faculty_headers).status_code == 200
+    )
+    r = client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=org.faculty_headers)
+    assert r.status_code == 404 and "result_summary" not in r.text
+    # ... and neither export nor download the financial run
+    assert (
+        client.get(f"/api/v1/reporting/executions/{fee['id']}/export", headers=org.faculty_headers).status_code == 403
+    )
+    assert (
+        client.get(f"/api/v1/reporting/executions/{fee['id']}/download", headers=org.faculty_headers).status_code == 403
+    )
+
+    # Department admins and management hold reporting:report:execute
+    for headers in (org.dept_admin_headers, org.management_headers, org.admin_headers):
+        r = client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=headers)
+        assert r.status_code == 200 and "result_summary" in r.json()
+
+    # Students hold no reporting permission at all
+    assert (
+        client.get(f"/api/v1/reporting/executions/{attendance['id']}", headers=org.student_headers).status_code == 403
+    )
+
+
+def test_the_recent_reports_widget_lists_financial_runs_only_to_executors(client, org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    attendance = _run(client, org.admin_headers, "department-attendance")
+
+    faculty_view = client.get("/api/v1/reporting/widgets/department-reports", headers=org.faculty_headers).json()
+    assert [r["id"] for r in faculty_view["recent_reports"]] == [attendance["id"]]
+
+    dept_view = client.get("/api/v1/reporting/widgets/department-reports", headers=org.dept_admin_headers).json()
+    listed = {r["id"]: r for r in dept_view["recent_reports"]}
+    assert set(listed) == {fee["id"], attendance["id"]}
+    # The widget names the report, not the definition's internal id
+    assert listed[fee["id"]]["code"] == "fee-collection-summary"
+    assert listed[fee["id"]]["title"] == "Fee Collection and Dues Summary"
+
+
+def test_a_financial_run_of_another_organisation_stays_invisible(client, org, other_org):
+    fee = _run(client, org.admin_headers, "fee-collection-summary")
+    assert client.get(f"/api/v1/reporting/executions/{fee['id']}", headers=other_org.admin_headers).status_code == 404
+    other_widget = client.get("/api/v1/reporting/widgets/department-reports", headers=other_org.dept_admin_headers)
+    assert fee["id"] not in {r["id"] for r in other_widget.json()["recent_reports"]}
+
+
+def test_client_token_replay_by_another_user_never_returns_their_run(client, org):
+    mine = _run(client, org.admin_headers, "fee-collection-summary", client_token="shared-token")
+    theirs = _run(client, org.dept_admin_headers, "department-attendance", client_token="shared-token")
+    assert theirs["id"] != mine["id"] and theirs["requested_by"] == org.dept_admin_id
+    assert theirs["report_definition_id"] != mine["report_definition_id"]
+
+    # Each requester's own replay is still idempotent
+    replay = client.post(
+        "/api/v1/reporting/definitions/fee-collection-summary/run",
+        json={"client_token": "shared-token"},
+        headers=org.admin_headers,
+    )
+    assert replay.status_code == 200 and replay.json()["id"] == mine["id"]
+
+
+# --- ingested metrics over HTTP ---------------------------------------------------------------------------------
+
+
+def _ingest(org, name, payload, when="2026-10-15T09:00:00+00:00"):
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from eos_core.db import new_id
+    from eos_reporting.application import ingest
+
+    e = SimpleNamespace(id=new_id(), name=name, organisation_id=org.id, payload=payload,
+                        occurred_at=datetime.fromisoformat(when))  # fmt: skip
+    with organisation_scope(org.id), SessionLocal() as db:
+        ingest.ingest(db, e)
+        db.commit()
+
+
+def test_metrics_are_read_by_period_and_financial_ones_need_execute(client, org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    _ingest(org, "fees-accounts.invoice.issued", {"invoice_id": "i1", "total": "25000.00"})
+    url = "/api/v1/reporting/metrics?from=2026-10&to=2026-10&metric_key="
+
+    r = client.get(url + "admissions.applications_submitted", headers=org.faculty_headers)
+    assert r.status_code == 200
+    (row,) = r.json()["items"]
+    assert (row["tenant_id"], row["value"], row["unit"], row["schema_version"]) == (org.id, 1.0, "count", 1)
+    assert (row["period_start"], row["period_end"]) == ("2026-10-01", "2026-10-31")
+
+    # Faculty (read only) do not see the financial metric at all; department admins (execute) do
+    assert client.get(url + "finance.fees_invoiced", headers=org.faculty_headers).status_code == 404
+    r = client.get(url + "finance.fees_invoiced", headers=org.dept_admin_headers)
+    assert r.status_code == 200 and r.json()["items"][0]["value"] == 25000.0
+    defs = client.get("/api/v1/reporting/metrics/definitions", headers=org.faculty_headers).json()
+    assert not any(d["category"] == "financial" for d in defs["items"])
+    assert set(defs["unavailable"]) == {"attendance", "exam_results"}
+
+
+def test_another_organisations_metrics_stay_invisible(client, org, other_org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    r = client.get(
+        "/api/v1/reporting/metrics?from=2026-10&to=2026-10&metric_key=admissions.applications_submitted",
+        headers=other_org.admin_headers,
+    )
+    assert r.status_code == 200 and r.json()["items"] == []
+
+
+def test_recalculation_needs_manage_and_rebuilds_the_range(client, org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    body = {"from": "2026-10", "to": "2026-10"}
+    assert (
+        client.post("/api/v1/reporting/metrics/recalculate", json=body, headers=org.dept_admin_headers).status_code
+        == 403
+    )
+    r = client.post("/api/v1/reporting/metrics/recalculate", json=body, headers=org.admin_headers)
+    assert r.status_code == 200 and r.json()["cells_written"] == 1
+    bad = client.post("/api/v1/reporting/metrics/recalculate", json={"from": "2026-11", "to": "2026-10"},
+                      headers=org.admin_headers)  # fmt: skip
+    assert bad.status_code == 422
+
+
+def test_the_fee_collection_report_reads_ingested_finance_metrics(client, org):
+    _ingest(
+        org,
+        "fees-accounts.payment.received",
+        {"payment_id": "p", "invoice_id": "i", "person_id": "x", "amount": "1500.00", "mode": "upi", "receipt_id": "r"},
+    )
+    run = client.post("/api/v1/reporting/definitions/fee-collection-summary/run",
+                      json={"parameters": {"period": "2026-10"}}, headers=org.admin_headers)  # fmt: skip
+    assert run.status_code == 201, run.text
+    summary = run.json()["result_summary"]
+    assert summary["available"] is True and summary["totals"]["finance.fees_collected"] == 1500.0

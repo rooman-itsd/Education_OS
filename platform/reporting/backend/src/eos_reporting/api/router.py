@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..application import service
+from ..application import ingest, metrics, service
 from ..application.service import ReportingError
 from ..domain.models import STATUS_COMPLETED
 
@@ -167,7 +167,7 @@ def run_report(
         raise _err(e) from e
     except IntegrityError:
         db.rollback()
-        existing = service.find_execution_by_token(db, p.organisation_id, client_token)
+        existing = service.find_execution_by_token(db, p.organisation_id, p.user_id, client_token)
         if existing:
             return JSONResponse(service.view_execution(existing), status_code=200)
         raise
@@ -182,7 +182,11 @@ def get_execution(
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     execution = service.get_execution(db, p.organisation_id, id)
-    if not execution:
+    if not execution or (
+        not p.can(REPORT_EXECUTE)
+        and service.summary_needs_execute(service.get_definition(db, p.organisation_id, execution.report_definition_id))
+    ):
+        # A financial summary needs reporting:report:execute; without it the run does not exist for the caller.
         raise HTTPException(404, detail={"code": "not_found", "message": f"Execution '{id}' not found"})
     return service.view_execution(execution)
 
@@ -246,7 +250,9 @@ def get_department_reports_widget(
 ):
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
-    return service.get_department_reports_widget_data(db, p.organisation_id, department_id=department_id)
+    return service.get_department_reports_widget_data(
+        db, p.organisation_id, department_id=department_id, include_financial=p.can(REPORT_EXECUTE)
+    )
 
 
 @router.get("/widgets/attendance-and-results")
@@ -257,3 +263,85 @@ def get_attendance_and_results_widget(
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     return service.get_attendance_and_results_widget_data(db, p.organisation_id)
+
+
+# --- ingested metrics (MetricSnapshot, application/ingest.py) ---------------------------------------------------
+
+
+class RecalculateInput(BaseModel):
+    from_period: str = Field(pattern=r"^\d{4}-\d{2}$", alias="from")
+    to_period: str = Field(pattern=r"^\d{4}-\d{2}$", alias="to")
+    metric_key: str | None = None
+
+
+def _metric_or_404(key: str, p: Principal) -> metrics.Metric:
+    metric = metrics.BY_KEY.get(key)
+    # A financial metric needs reporting:report:execute; without it the metric does not exist for the caller.
+    if metric is None or (metric.category == metrics.FINANCIAL and not p.can(REPORT_EXECUTE)):
+        raise HTTPException(404, detail={"code": "not_found", "message": f"Metric '{key}' not found"})
+    return metric
+
+
+@router.get("/metrics/definitions")
+def list_metric_definitions(p: Principal = Depends(require(REPORT_READ))):
+    visible = [m for m in metrics.METRICS if m.category != metrics.FINANCIAL or p.can(REPORT_EXECUTE)]
+    return {
+        "items": [
+            {
+                "metric_key": m.key,
+                "version": m.version,
+                "source_module": m.source_module,
+                "unit": m.unit,
+                "category": m.category,
+                "description": m.description,
+                "source_events": sorted(m.events),
+            }
+            for m in visible
+        ],
+        "unavailable": metrics.UNAVAILABLE,
+    }
+
+
+@router.get("/metrics")
+def read_metric(
+    metric_key: str,
+    from_period: str = Query(..., alias="from", pattern=r"^\d{4}-\d{2}$"),
+    to_period: str = Query(..., alias="to", pattern=r"^\d{4}-\d{2}$"),
+    department_id: str | None = None,
+    p: Principal = Depends(require(REPORT_READ)),
+    db: Session = Depends(get_db),
+):
+    if not p.organisation_id:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    _metric_or_404(metric_key, p)
+    try:
+        start, _ = service._period_bounds(from_period)
+        _, end = service._period_bounds(to_period)
+    except ReportingError as e:
+        raise _err(e) from e
+    rows = service.metric_rows(db, p.organisation_id, metric_key, start, end, department_id)
+    return {"items": [service.view_snapshot(r) for r in rows]}
+
+
+@router.post("/metrics/recalculate")
+def recalculate_metrics(
+    body: RecalculateInput,
+    p: Principal = Depends(require(REPORT_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    """Rebuild this organisation's snapshots for a month range from the ingested facts (historical recalculation,
+    or after a metric definition's version changed)."""
+    if not p.organisation_id:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    if body.metric_key:
+        _metric_or_404(body.metric_key, p)
+    try:
+        start, _ = service._period_bounds(body.from_period)
+        _, end = service._period_bounds(body.to_period)
+    except ReportingError as e:
+        raise _err(e) from e
+    if start > end:
+        raise HTTPException(422, detail={"code": "bad_request", "message": "from must not be after to"})
+    cells = ingest.recalculate(db, p.organisation_id, start, end, body.metric_key)
+    db.commit()
+    return {"cells_written": cells}
