@@ -3,7 +3,7 @@
 module: reporting
 permissions:
   - key: reporting:report:read
-    description: "View report definitions, execution summaries, and dashboard reporting widgets"
+    description: "View report definitions, academic and administrative execution summaries, and dashboard reporting widgets. Financial summaries need reporting:report:execute."
   - key: reporting:report:execute
     description: "Execute reports on demand and export report data to CSV/JSON"
   - key: reporting:report:manage
