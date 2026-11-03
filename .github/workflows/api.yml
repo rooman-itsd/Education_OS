@@ -5,6 +5,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # GitHub's merge queue tests queued PRs together before merging them (docs/team/RULES.md)
+  merge_group:
 
 jobs:
   test:
