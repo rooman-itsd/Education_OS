@@ -23,6 +23,7 @@ job runner (`platform/scheduler`), and does not deliver outside Education OS (`i
 | Retries with exponential backoff (1 s doubling, capped by `EVENT_BUS_RETRY_CAP_S`); dead letter after `EVENT_BUS_MAX_ATTEMPTS`, announced by `event-bus.event.dead-lettered` | built, tested |
 | `event-bus.relay.stalled` once per stall; pruning of delivered events after `EVENT_BUS_RETENTION_DAYS` (pending and dead-lettered rows are kept) | built, tested |
 | In-process transport: consumers found on the `eos.event_consumers` entry-point group; each runs in its own transaction, in the event's organisation, with row-level security on | built, tested |
+| Delivery per consuming module (`event_bus_delivery`, chain 0003): a failing module neither blocks nor re-runs the others; a retry or replay re-runs only the failed modules; the dead-letter notice and `GET /events/{id}` name them | built, tested; host suite on PostgreSQL as `eos_app` |
 | Operator API: `GET /events`, `GET /events/{id}`, `POST /events/{id}/replay`, `GET /relay/health` | built, tested, cross-tenant leak test |
 | `python -m eos_event_bus`: the relay as its own process, until SIGTERM | built |
 
@@ -44,8 +45,9 @@ CONSUMERS = {"scheduler.job.due": on_job_due}
 ```
 
 The handler gets its own session, already in the event's organisation (platform scope for a platform-level
-event), and the relay commits it. **It must be idempotent on `event.id`**: delivery is at-least-once, and if any
-consumer of an event fails, the event is retried for every consumer. A failure is recorded as
+event), and the relay commits it. **It must be idempotent on `event.id`**: delivery is at-least-once. Delivery is
+tracked per module: if another module's consumer fails, yours is not run again for that event (its delivered mark
+commits with your handler's writes), and your own failure never holds back other modules. A failure is recorded as
 `<module>: <exception type>`, never the exception text, which can carry the payload's personal data.
 
 ## What this release does NOT do
