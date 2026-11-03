@@ -298,12 +298,12 @@ def update_production(db: Session, actor: Actor, production_id: str, body: dict)
         if key not in body:
             continue
         value = body[key]
-        if key in NOT_NULLABLE and not value:
-            # The API layer refuses an explicit null on these (422), so this only catches a direct caller of the
-            # service. A production cannot exist without a title, kind or lead, so leave the stored value alone.
-            continue
         if isinstance(value, str):
             value = value.strip()
+        if key in NOT_NULLABLE and not value:
+            # The API layer refuses an explicit null or a blank on these (422), so this only catches a direct caller
+            # of the service. A production cannot exist without a title, kind or lead, so leave the stored value alone.
+            continue
         if getattr(production, key) != value:
             setattr(production, key, value)
             changed.append(key)

@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from ..application.service import NOT_NULLABLE
 
 Kind = Literal["performance", "exhibition", "recital", "screening", "hackathon", "competition", "conference", "other"]
 RoleKind = Literal["cast", "crew", "mentor"]
+#: Stripped *before* the length check, so "   " is a 422 rather than a stored empty string (review of #454).
+Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+RoleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 
 
 class Strict(BaseModel):
@@ -18,7 +21,7 @@ class Strict(BaseModel):
 
 
 class ProductionIn(Strict):
-    title: str = Field(min_length=1, max_length=200)
+    title: Title
     kind: Kind
     department: str | None = Field(default=None, max_length=120)
     summary: str | None = Field(default=None, max_length=2000)
@@ -38,7 +41,7 @@ class ProductionIn(Strict):
 
 
 class ProductionPatch(Strict):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
+    title: Title | None = None
     kind: Kind | None = None
     department: str | None = Field(default=None, max_length=120)
     summary: str | None = Field(default=None, max_length=2000)
@@ -73,7 +76,7 @@ class ReasonIn(Strict):
 
 class RoleIn(Strict):
     user_id: str = Field(min_length=1, max_length=36)
-    role_name: str = Field(min_length=1, max_length=120)
+    role_name: RoleName
     kind: RoleKind = "cast"
     notes: str | None = Field(default=None, max_length=500)
 
@@ -84,7 +87,7 @@ class RespondIn(Strict):
 
 
 class TaskIn(Strict):
-    title: str = Field(min_length=1, max_length=200)
+    title: Title
     due_at: datetime | None = None
     assignee_user_id: str | None = Field(default=None, max_length=36)
 

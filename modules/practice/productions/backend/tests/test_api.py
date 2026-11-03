@@ -225,6 +225,32 @@ def test_a_patch_clears_an_optional_field_but_refuses_to_empty_a_required_one(cl
     assert client.patch(url, json={"kind": "recital"}, headers=coordinator).json()["kind"] == "recital"
 
 
+def test_a_blank_title_or_part_name_is_a_422_not_a_stored_empty_string(client, org):
+    """Review of #454: min_length=1 passed "   " and the service then stripped it to "", so create and PATCH stored an
+    empty title. Text is now stripped before the length check; padding around a real value is trimmed."""
+    _, coordinator = org.user(COORDINATOR)
+    _, lead = org.user(LEAD)
+    base = {"kind": "performance"}
+    for blank in ("   ", "\t\n", ""):
+        r = client.post(f"{BASE}/productions", json={**base, "title": blank}, headers=coordinator)
+        assert r.status_code == 422, (blank, r.status_code, r.text)
+
+    production = make_production(client, coordinator)
+    pid = production["id"]
+    url = f"{BASE}/productions/{pid}"
+    assert client.patch(url, json={"title": "   "}, headers=coordinator).status_code == 422
+    assert client.get(url, headers=coordinator).json()["title"] == "Twelfth Night"  # nothing was written
+
+    assert client.post(f"{BASE}/productions/{pid}/tasks", json={"title": "  "}, headers=lead).status_code == 422
+    role = {"user_id": "u-1", "role_name": "   ", "kind": "cast"}
+    assert client.post(f"{BASE}/productions/{pid}/roles", json=role, headers=lead).status_code == 422
+
+    # padding around a real value is trimmed, not rejected
+    assert client.patch(url, json={"title": "  Hamlet  "}, headers=coordinator).json()["title"] == "Hamlet"
+    created = client.post(f"{BASE}/productions", json={**base, "title": "  Macbeth "}, headers=coordinator)
+    assert created.status_code == 201 and created.json()["title"] == "Macbeth"
+
+
 def test_a_patch_that_sends_nothing_changes_nothing(client, org):
     _, coordinator = org.user(COORDINATOR)
     production = make_production(client, coordinator)
