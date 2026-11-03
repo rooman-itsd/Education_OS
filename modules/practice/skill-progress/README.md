@@ -19,7 +19,8 @@ they are referenced by id), evidence files (only their URLs are kept), course gr
 Learners see only their own assessments, progress and timeline: a caller whose only skill-progress access comes from
 a learner role (a role whose dashboard layout extends `student`, such as musician or medical-student) is narrowed to
 the records whose `learner_id` is their user id. Evaluators, coordinators and administrators see their
-organisation's learners (`application/service.py`, `api/deps.py`).
+organisation's learners (`application/service.py`, `api/deps.py`). A learner's own progress is `GET /me/progress`, which the
+dashboard widget `skill-progress.my-progress` shows (a widget does not know the viewer's id).
 
 How it behaves (the contract's open questions in [docs/prd.md](docs/prd.md) section 9, decided here):
 - **Permissions (Q1).** Every operation names its key in `x-permission`. `progress:export` has no operation yet (Q3).
