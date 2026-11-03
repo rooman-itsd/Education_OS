@@ -19,8 +19,10 @@ modules:
   - facilities/maintenance
   - facilities/sports-facilities
   - finance-operations/budget-grants
+  - finance-operations/e-office
   - finance-operations/fees-accounts
   - finance-operations/procurement
+  - practice/portfolio
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
@@ -30,3 +32,5 @@ platform:
   - tenancy
   - identity
   - audit
+integrations:
+  - payment-sbiepay

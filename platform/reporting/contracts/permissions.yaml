@@ -1,11 +1,43 @@
 # Permission catalogue for reporting. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: reporting
-permissions: []
-#  - key: reporting:record:read
-#    description: ...
-#  - key: reporting:record:write
-#    description: ...
-roles: []
-#  - name: reporting-admin
-#    grants: [reporting:record:read, reporting:record:write]
+permissions:
+  - key: reporting:report:read
+    description: "View report definitions, execution summaries, and dashboard reporting widgets"
+  - key: reporting:report:execute
+    description: "Execute reports on demand and export report data to CSV/JSON"
+  - key: reporting:report:manage
+    description: "Create, update, and manage custom report definitions"
+  - key: platform:reporting:read
+    description: "Super admin only. Cross-organisation analytical monitoring and warehouse oversight"
+
+roles:
+  - name: org-admin
+    description: "Organisation Admin: manage custom report definitions, execute reports, and view all institutional analytics."
+    grants:
+      - reporting:report:read
+      - reporting:report:execute
+      - reporting:report:manage
+
+  - name: management
+    description: "Management (VC, Registrar): view executive reports, cross-department comparisons, and export institutional packs."
+    grants:
+      - reporting:report:read
+      - reporting:report:execute
+
+  - name: department-admin
+    description: "Department Admin / HoD: view departmental report summaries, monitor department metrics, and export department data."
+    grants:
+      - reporting:report:read
+      - reporting:report:execute
+
+  - name: faculty
+    description: "Faculty: view departmental course performance and workload reports."
+    grants:
+      - reporting:report:read
+
+  - name: super-admin
+    description: "Super admin: cross-organisation reporting metrics and warehouse platform monitoring."
+    grants:
+      - reporting:report:read
+      - platform:reporting:read

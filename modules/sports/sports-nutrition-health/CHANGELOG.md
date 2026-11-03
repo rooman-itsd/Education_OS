@@ -4,6 +4,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
 - Module scaffolded.
+- Frontend: dashboard widgets nutrition-plan (athlete), injured-athletes and appointments-today (medical-staff),
+  athletes-on-plans and plan-reviews-due (nutritionist), with an API client for the contract's list endpoints and
+  vitest tests. Athletes are shown by short id; clinical notes are never shown.
 - Backend: domain rules (plan and review dates, a review ending a plan completes it, closed plans stay closed, no
   future dates, appointment status moves, an appointment completed only after its time, an injury linked to an
   appointment belongs to the same athlete); use cases for every operation in the contract; confidential fields

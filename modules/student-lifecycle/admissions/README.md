@@ -9,7 +9,9 @@ Online application, document verification, merit lists, counselling and offers.
 ## Scope
 The application funnel for one academic cycle: public/anonymous submission, document upload,
 staff document verification and eligibility review, merit lists, offers, and offer accept/decline
-(also anonymous, verified by reference number + email — no applicant account is created).
+(also anonymous, verified by reference number + email). A signed-in applicant can link their
+application to their identity account to view their status and pending documents on the Applicant
+dashboard.
 
 Explicitly not this module's responsibility: organisation onboarding or Organisation Admin
 creation (`web-portal-cms` + `platform/tenancy` + `platform/billing`), creating a Person/Student
@@ -27,8 +29,8 @@ module's `accepted` event instead), or running portfolio/selection rounds themse
 | Widget | Kind | Permission | Data |
 |---|---|---|---|
 | `admissions.funnel` | chart | `admissions:report:read` | `GET /reports/funnel` |
-| `admissions.application-status` | list | `admissions:application:read` | `GET /applications` |
-| `admissions.pending-documents` | list | `admissions:document:verify` | `GET /documents?verification_status=pending` |
+| `admissions.application-status` | list | `admissions:self:read` | `GET /me/applications` |
+| `admissions.pending-documents` | list | `admissions:self:read` | `GET /me/applications` |
 
 The frontend also exports `TrackApplicationPage` (`<TrackApplicationPage orgSlug="..." />`), the applicant's public
 view of their application by reference number and email.
@@ -58,13 +60,7 @@ cd modules/student-lifecycle/admissions/db && alembic upgrade head    # uses EOS
 | Path | Purpose |
 |---|---|
 | `docs/` | PRD, user stories, data model, screen list |
-| `contracts/` | OpenAPI, event schemas, permission catalogue |
-| `backend/` | Domain, application, infrastructure, API layers + unit tests |
-| `frontend/` | Pages, components, API client + tests |
-| `mobile/` | Mobile screens (optional) |
-| `db/` | Migrations and seed data, own schema only |
-| `config/` | `env.example`, feature flags |
-| `tests/e2e` | End-to-end tests runnable in isolation |
-
-## Porting this module to another repo
-Follow [docs/architecture/module-standard.md](../../../docs/architecture/module-standard.md#portability-checklist).
+| `contracts/` | OpenAPI 3.1, events, permissions |
+| `backend/` | FastAPI service, SQLAlchemy models, Alembic migrations, tests |
+| `frontend/` | Dashboard widgets, Track page, tests |
+| `db/` | Alembic environment and migration revisions |
