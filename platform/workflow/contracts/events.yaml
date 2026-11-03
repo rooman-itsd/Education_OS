@@ -14,3 +14,30 @@ events:
     description: A workflow request was rejected at an approval step.
   - name: workflow.request.delegated
     description: An approval step was delegated to another user.
+  - name: workflow.step.overdue
+    description: >-
+      The request's current step passed its SLA deadline (its sla_hours, else WORKFLOW_DEFAULT_SLA_HOURS) while
+      pending. Raised once per request step by the scheduled workflow.sla-check job, which records the
+      escalation (workflow_escalation). Consumers notify or escalate; the approver is approver_role, or
+      delegated_to when set.
+    payload:
+      request_id: uuid
+      chain_id: uuid
+      chain_code: string
+      entity_type: string
+      entity_id: string
+      step_order: integer
+      step_name: string
+      approver_role: string
+      delegated_to: uuid?
+      deadline: datetime
+      overdue_seconds: integer
+  - name: workflow.job.finished
+    description: The outcome of a workflow.sla-check run, for platform/scheduler, which closes the run.
+    payload:
+      run_id: uuid
+      outcome: string
+      detail: string
+
+consumes:
+  - scheduler.job.due   # workflow.sla-check

@@ -14,8 +14,10 @@ events:
   - name: billing.trial.expiring
     description: >-
       Sent 7, 3 and 1 days before trial end by the daily billing.trial-reminders job. notification emails
-      the org admin. A repeated run raises the same reminder_key; send each key once.
-    payload: { organisation_id: uuid, days_left: integer, trial_ends_on: date, reminder_key: string }
+      the org admin. threshold is the reminder (7, 3 or 1); days_left is the real days to go, lower when a
+      reminder missed on its day is caught up on the next run. Each threshold is raised once per trial end
+      (billing_trial_reminder); reminder_key (organisation, trial end, threshold) lets a consumer send it once.
+    payload: { organisation_id: uuid, days_left: integer, threshold: integer, trial_ends_on: date, reminder_key: string }
   - name: billing.trial.expired
     description: Trial ended without upgrade. Organisation goes read-only or is suspended per plan policy.
     payload: { organisation_id: uuid, after_trial: string }
