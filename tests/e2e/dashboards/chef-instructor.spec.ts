@@ -65,7 +65,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Stock is healthy",
     unavailable: "Inventory data is not available yet.",
   },
-  { id: "productions.in-preparation", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.in-preparation",
+    module: "practice/productions",
+    batch: "#318",
+    title: "In preparation",
+    probe: "/productions/in-preparation",
+    empty: "Nothing in preparation",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
