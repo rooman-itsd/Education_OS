@@ -4,6 +4,8 @@ update the role the API connects as, `eos_app`, and give it row access only.
   eos_app   LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE, password from EOS_APP_DB_PASSWORD
   tables    SELECT, INSERT, UPDATE, DELETE        sequences   USAGE, SELECT
   later     ALTER DEFAULT PRIVILEGES FOR ROLE <owner>, so tables the migration chains create next get the same
+  except    APPEND_ONLY tables: SELECT and INSERT only (UPDATE, DELETE and TRUNCATE revoked again after the grants
+            above, so a deploy never hands them back); their maintenance runs through SECURITY DEFINER functions
 
 No DDL: tables stay owned by the owner, and the tenant_isolation policy (FORCE ROW LEVEL SECURITY) applies to
 eos_app because it is neither a superuser nor the owner. Safe to run on every deploy."""
@@ -17,6 +19,10 @@ ROLE = "eos_app"
 ATTRIBUTES = "LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE"
 TABLES = "SELECT, INSERT, UPDATE, DELETE"
 SEQUENCES = "USAGE, SELECT"
+# Tables the application may only append to. platform/audit: audit_record is immutable; retention runs through
+# audit_prune(), which its migration grants to eos_app (audit_0002). The migration revokes these on the deploy that
+# creates the table; this list keeps every later deploy's GRANT above from handing them back.
+APPEND_ONLY = ("audit_record",)
 
 
 def say(message: str) -> None:
@@ -48,4 +54,7 @@ with create_engine(os.environ["EOS_DATABASE_URL"]).begin() as conn:
         f"ALTER DEFAULT PRIVILEGES FOR ROLE {owner} IN SCHEMA public GRANT {SEQUENCES} ON SEQUENCES TO {ROLE}",
     ):
         conn.execute(text(statement))
+    for table in APPEND_ONLY:
+        if conn.execute(text("SELECT to_regclass(:t)"), {"t": f"public.{table}"}).scalar() is not None:
+            conn.execute(text(f"REVOKE UPDATE, DELETE, TRUNCATE ON {table} FROM {ROLE}"))
 say(f"{'updated' if exists else 'created'} {ROLE}: row access on every table, and on tables {owner} creates later")
