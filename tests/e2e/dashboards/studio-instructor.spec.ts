@@ -55,10 +55,10 @@ const WIDGETS: LayoutWidget[] = [
     id: "selection-process.to-judge",
     module: "practice/selection-process",
     batch: "#322",
-    title: "Reviews & Judging",
-    probe: "/selection-process/applications?assigned=true&limit=5",
-    empty: "No applications to judge",
-    unavailable: "Selection review data is not available yet.",
+    title: "To Judge",
+    probe: "/selection-process/processes?status=open&page_size=5",
+    empty: "No candidates awaiting review",
+    unavailable: "Judging tasks are not available yet.",
   },
   {
     id: "facility-booking.bookings-today",
@@ -208,14 +208,50 @@ test.describe("with portfolio data", () => {
   });
 });
 
+test.describe("with selection-process data", () => {
+  test("selection-process.to-judge lists the candidates of the instructor's panels awaiting a decision, and only those", async ({ page, request }) => {
+    const w = byId("selection-process.to-judge");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(status[w.id] !== 200, `the selection-process API answered ${status[w.id]} to the studio-instructor role`);
+
+    // A coordinator runs the processes; the instructor judges only on the panels that name them (studio-instructor
+    // holds selection-process-panelist through module_roles). Candidates are people, here an applicant and a student.
+    const coordinator = await addUser(request, user, "selection-process-coordinator");
+    const onPanel = await addUser(request, user, "applicant");
+    const elsewhere = await addUser(request, user, "student");
+    const type = await created<{ id: string }>(request, coordinator, "/selection-process/process-types", { name: "Jury" });
+
+    const openProcess = async (title: string, panelists: string[]) => {
+      const p = await created<{ id: string }>(request, coordinator, "/selection-process/processes", {
+        type_id: type.id,
+        title,
+        stages: [{ name: "Portfolio review", sequence: 1 }],
+      });
+      await created(request, coordinator, `/selection-process/processes/${p.id}/panels`, {
+        name: `${title} panel`,
+        member_person_ids: panelists,
+      });
+      await created(request, coordinator, `/selection-process/processes/${p.id}/open`, {});
+      return p;
+    };
+    const judged = await openProcess("Annual Jury 2026", [user.id]);
+    const other = await openProcess("Residency Selection 2026", [coordinator.id]);
+    await created(request, coordinator, `/selection-process/processes/${judged.id}/candidates`, { person_id: onPanel.id });
+    await created(request, coordinator, `/selection-process/processes/${other.id}/candidates`, { person_id: elsewhere.id });
+
+    await signIn(page, user);
+    const panel = widget(page, w.title!);
+    await expect(panel.getByText(`Candidate #${onPanel.id.slice(0, 8)}`)).toBeVisible();
+    await expect(panel.getByText("Pending Decision", { exact: true })).toBeVisible();
+    await expect(panel.getByText(w.empty!)).toHaveCount(0);
+    await expect(panel.getByText(`Candidate #${elsewhere.id.slice(0, 8)}`)).toHaveCount(0);
+  });
+});
+
 // Backend-dependent: these need their module's API to create data through once the modules are merged.
 
 test.fixme("projects.to-review lists studio projects submitted for evaluation", async () => {
   // practice/projects (sprint batch #339).
-});
-
-test.fixme("selection-process.to-judge lists applicant submissions assigned for jury rating", async () => {
-  // practice/selection-process (sprint batch #322).
 });
 
 test.fixme("productions.in-preparation lists stage productions or gallery exhibitions in preparation", async () => {

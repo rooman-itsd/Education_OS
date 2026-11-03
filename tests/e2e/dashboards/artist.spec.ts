@@ -65,10 +65,10 @@ const WIDGETS: LayoutWidget[] = [
     id: "selection-process.upcoming",
     module: "practice/selection-process",
     batch: "#322",
-    title: "Upcoming Selections",
-    probe: "/selection-process/processes?status=open&limit=5",
-    empty: "No upcoming selection processes",
-    unavailable: "Selection process data is not available yet.",
+    title: "Upcoming Selection Events",
+    probe: "/selection-process/slots/upcoming?limit=6",
+    empty: "No upcoming selection rounds",
+    unavailable: "Schedule data is not available yet.",
   },
   { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
   {
@@ -271,8 +271,10 @@ test.fixme("facility-booking.my-bookings lists the artist's reserved art studio 
   // facilities/facility-booking (sprint batch #331).
 });
 
-test.fixme("selection-process.upcoming lists casting calls or residency selections open for submission", async () => {
-  // practice/selection-process (sprint batch #322).
+test.fixme("selection-process.upcoming lists the artist's scheduled auditions and jury rounds", async () => {
+  // practice/selection-process: the widget lists slots (GET /slots/upcoming), and no API route creates a slot yet
+  // (the service has create_slot; the route and both slot paths in contracts/openapi.yaml are a selection-process
+  // follow-up to #414).
 });
 
 test.fixme("productions.upcoming lists fine art exhibitions or gallery showcases the artist participates in", async () => {
