@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
+import { addUser, organisationWithUser, type DashboardUser } from "./organisation";
 import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -168,10 +168,47 @@ test.describe("with facility-booking data", () => {
   });
 });
 
-// Backend-dependent: these need their module's API to create data through once the modules are merged.
-test.fixme("portfolio.reviews-pending lists student artwork submissions awaiting review", async () => {
-  // practice/portfolio (sprint batch #322, PR #413); reviewer reviews submitted portfolios.
+test.describe("with portfolio data", () => {
+  test("portfolio.reviews-pending lists the artworks submitted for the instructor's review, and only those", async ({ page, request }) => {
+    const w = byId("portfolio.reviews-pending");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(status[w.id] !== 200, `the portfolio API answered ${status[w.id]} to the studio-instructor role`);
+
+    // The instructor holds org-admin here, so it can add the manager who configures item types and the artist who
+    // submits. A reviewer sees items of the types that name them as a reviewer (contract: GET /items?scope=managed).
+    const manager = await addUser(request, user, "portfolio-manager");
+    const artist = await addUser(request, user, "artist");
+    const critique = await created<{ id: string }>(request, manager, "/portfolio/item-types", {
+      name: "Studio Critique",
+      reviewer_person_ids: [user.id],
+    });
+    const otherType = await created<{ id: string }>(request, manager, "/portfolio/item-types", { name: "Thesis Show Piece" });
+
+    const submitted = await created<{ id: string }>(request, artist, "/portfolio/items", {
+      type_id: critique.id,
+      title: "Still Life with Pomegranates",
+    });
+    await created(request, artist, `/portfolio/items/${submitted.id}/submit`, {});
+    // Still a draft: nothing to review yet.
+    await created(request, artist, "/portfolio/items", { type_id: critique.id, title: "Unfinished Landscape" });
+    // Submitted, but of a type the instructor does not review.
+    const notMine = await created<{ id: string }>(request, artist, "/portfolio/items", {
+      type_id: otherType.id,
+      title: "Gallery Wall Proposal",
+    });
+    await created(request, artist, `/portfolio/items/${notMine.id}/submit`, {});
+
+    await signIn(page, user);
+    const panel = widget(page, w.title!);
+    await expect(panel.getByText("Still Life with Pomegranates")).toBeVisible();
+    await expect(panel.getByText("Awaiting Review", { exact: true })).toBeVisible();
+    await expect(panel.getByText(w.empty!)).toHaveCount(0);
+    await expect(panel.getByText("Unfinished Landscape")).toHaveCount(0);
+    await expect(panel.getByText("Gallery Wall Proposal")).toHaveCount(0);
+  });
 });
+
+// Backend-dependent: these need their module's API to create data through once the modules are merged.
 
 test.fixme("projects.to-review lists studio projects submitted for evaluation", async () => {
   // practice/projects (sprint batch #339).

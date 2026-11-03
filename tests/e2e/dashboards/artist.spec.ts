@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
+import { addUser, organisationWithUser } from "./organisation";
 import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -85,7 +85,7 @@ const WIDGETS: LayoutWidget[] = [
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
-let user: DashboardUser;
+let user: Awaited<ReturnType<typeof organisationWithUser>>;
 /** Per shipped widget id: what its GET answered the artist user. */
 const status: Record<string, number> = {};
 
@@ -221,10 +221,47 @@ test.describe("with inventory-equipment data", () => {
   });
 });
 
-// Backend-dependent: these need their module's API to create data through once the modules are merged.
-test.fixme("portfolio.my-portfolio lists the artist's artworks and creative submissions", async () => {
-  // practice/portfolio (sprint batch #322, PR #413); an artwork is a portfolio item.
+test.describe("with portfolio data", () => {
+  test("portfolio.my-portfolio lists the artist's artworks with their status, and no other organisation's", async ({ page, request }) => {
+    const w = byId("portfolio.my-portfolio");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(status[w.id] !== 200, `the portfolio API answered ${status[w.id]} to the artist role`);
+
+    // Item types are organisation data that a portfolio manager configures; the artist only holds learner rights.
+    const manager = await addUser(request, user.admin, "portfolio-manager");
+    const artwork = await created<{ id: string }>(request, manager, "/portfolio/item-types", { name: "Artwork" });
+
+    // A draft and a submitted artwork of the artist's own.
+    await created(request, user, "/portfolio/items", {
+      type_id: artwork.id,
+      title: "Monsoon Study in Oils",
+      description: "Oil on canvas, 60 x 90 cm",
+    });
+    const series = await created<{ id: string }>(request, user, "/portfolio/items", {
+      type_id: artwork.id,
+      title: "Charcoal Figure Series",
+    });
+    await created(request, user, `/portfolio/items/${series.id}/submit`, {});
+
+    // Another organisation's artwork must never appear.
+    const other = await organisationWithUser(request, { academyType: "arts-academy", role: "artist" });
+    const otherManager = await addUser(request, other.admin, "portfolio-manager");
+    const otherType = await created<{ id: string }>(request, otherManager, "/portfolio/item-types", { name: "Artwork" });
+    await created(request, other, "/portfolio/items", { type_id: otherType.id, title: "Bronze Casting - Org B" });
+
+    await signIn(page, user);
+    const panel = widget(page, w.title!);
+    await expect(panel.getByText("Monsoon Study in Oils")).toBeVisible();
+    await expect(panel.getByText("Oil on canvas, 60 x 90 cm")).toBeVisible();
+    await expect(panel.getByText("Draft", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Charcoal Figure Series")).toBeVisible();
+    await expect(panel.getByText("Submitted", { exact: true })).toBeVisible();
+    await expect(panel.getByText(w.empty!)).toHaveCount(0);
+    await expect(panel.getByText("Bronze Casting - Org B")).toHaveCount(0);
+  });
 });
+
+// Backend-dependent: these need their module's API to create data through once the modules are merged.
 
 test.fixme("projects.my-projects lists the artist's studio projects", async () => {
   // practice/projects (sprint batch #339).
