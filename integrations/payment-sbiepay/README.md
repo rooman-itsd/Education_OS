@@ -100,8 +100,9 @@ The tests mount only this adapter's router and issue tokens with `eos_core.secur
 ## Frontend
 
 `frontend/src/widgets/index.ts` exports the dashboard widget. The Finance Staff layout in
-`platform/identity/config/dashboards/finance-staff.yaml` places it, and the `integrations:` list in `apps/frontend`
-registers it (a separate PR).
+`platform/identity/config/dashboards/finance-staff.yaml` places it, and `apps/frontend/config/modules.enabled.yaml`
+registers it by listing `payment-sbiepay` under `integrations:`. The Finance Staff Playwright journey
+(`tests/e2e/dashboards/finance-staff.spec.ts`) checks its title and empty state.
 
 | Widget | Dashboard | Endpoint | Permission |
 |---|---|---|---|
@@ -131,4 +132,3 @@ registers it (a separate PR).
 - **Days use UTC.** That applies to the summary, reconciliation and list filters.
 - **Auth reads the platform token through `eos_core`** (`api/deps.py`), because an integration can't import `eos_identity`. It will move to the SDK dependency when one exists.
 - **The reconciliation summary's default day is UTC,** while the contract says the organisation's time zone. Pass `date` to choose the day.
-- **The Finance Staff widget `payment-sbiepay.reconciliation` (#376) isn't on the dashboard yet.** `apps/frontend` must read an `integrations:` list (#375) and list `payment-sbiepay` in it (a follow-up PR).

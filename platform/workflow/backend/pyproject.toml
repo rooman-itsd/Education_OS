@@ -8,7 +8,7 @@ dependencies = [
   "sqlalchemy>=2",
   "alembic",
   "eos-core",
-  "eos-sdk",
+  "eos-identity",
 ]
 
 [tool.pytest.ini_options]
