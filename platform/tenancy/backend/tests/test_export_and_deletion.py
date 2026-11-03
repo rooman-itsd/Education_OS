@@ -335,3 +335,33 @@ def test_a_blocked_purge_is_a_409_naming_the_table(monkeypatch):
     with pytest.raises(tenancy.TenancyError, match="purge_blocked") as e:
         tenancy.purge_organisation(db, "o1", actor="a")
     assert e.value.status == 409 and db.rolled_back
+
+
+def test_purge_keeps_append_only_tables_and_says_so(client, super_admin, monkeypatch):
+    """A table the API's database role may not DELETE from (on PostgreSQL: platform/audit's audit_record after
+    audit_0002) is append-only by design: purge leaves its rows, lists it under `kept`, and its module erases on
+    tenancy.organisation.purged. SQLite has no grants, so the decision is stood in for here."""
+    from sqlalchemy import text
+
+    a = organisation(client, "keep-a")
+    with SessionLocal() as db, platform_scope():
+        db.execute(text("CREATE TABLE trail_extra (id TEXT PRIMARY KEY, organisation_id TEXT NOT NULL, what TEXT)"))
+        db.execute(text("INSERT INTO trail_extra VALUES ('t1', :o, 'approved')"), {"o": a["org"]["id"]})
+        db.commit()
+    monkeypatch.setattr(tables, "append_only", lambda db, found: [t for t in found if t.name == "trail_extra"])
+    try:
+        url = f"{BASE}/{a['org']['id']}"
+        assert client.request("DELETE", url, headers=super_admin).status_code == 200
+        r = client.post(f"{url}/purge", json={"force": True}, headers=super_admin)
+        assert r.status_code == 200, r.text
+        assert r.json()["kept"] == ["trail_extra"] and "trail_extra" not in r.json()["rows_deleted"]
+        assert rows_left(a["org"]["id"]) == {"trail_extra": 1}  # everything else is gone
+    finally:
+        with SessionLocal() as db:
+            db.execute(text("DROP TABLE trail_extra"))
+            db.commit()
+
+
+def test_nothing_is_append_only_on_sqlite():
+    with SessionLocal() as db, platform_scope():
+        assert tables.append_only(db, tables.organisation_tables(db)) == []
