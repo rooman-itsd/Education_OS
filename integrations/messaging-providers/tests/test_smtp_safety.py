@@ -129,3 +129,89 @@ def test_healthcheck_reports_unreachable_without_leaking_detail():
     server.noop = lambda: (_ for _ in ()).throw(smtplib.SMTPServerDisconnected("closed by relay.example.net"))
     health = provider(server).healthcheck()
     assert not health.reachable and "relay.example.net" not in health.detail
+
+
+# --- TLS: credentials never cross a network in clear (#316 audit M2, L1, L2) ------------------------------------
+
+
+def _with(**changes) -> SmtpConfig:
+    return SmtpConfig(**{**CONFIG.__dict__, **changes})
+
+
+def test_credentials_to_a_remote_relay_without_tls_are_never_sent():
+    remote = _with(host="smtp.relay.example.net", port=587, username="mailer", password="secret")
+    connected = []
+    p = SmtpEmailProvider(config=remote, client_factory=lambda c: connected.append(c) or FakeSmtp())
+    result = p.send(**request())
+    assert not result.accepted and result.reason == "transport_unavailable" and result.retryable
+    assert connected == []  # refused before connecting, so the password never left the process
+    health = p.healthcheck()
+    assert not health.reachable and "without TLS" in health.detail
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1", "[::1]"])
+def test_a_loopback_relay_may_take_credentials_without_tls(host):
+    server = FakeSmtp()
+    local = _with(host=host, username="mailer", password="secret")
+    assert SmtpEmailProvider(config=local, client_factory=lambda _c: server).send(**request()).accepted
+    assert server.logins == [("mailer", "secret")]
+
+
+@pytest.mark.parametrize("tls", [{"use_tls": True}, {"use_ssl": True}])
+def test_a_remote_relay_with_tls_takes_credentials(tls):
+    server = FakeSmtp()
+    remote = _with(host="smtp.relay.example.net", username="mailer", password="secret", **tls)
+    assert SmtpEmailProvider(config=remote, client_factory=lambda _c: server).send(**request()).accepted
+    assert server.logins == [("mailer", "secret")]
+
+
+def test_starttls_and_implicit_tls_are_exclusive(monkeypatch):
+    with pytest.raises(ValueError, match="exclusive"):
+        _with(use_tls=True, use_ssl=True)
+    monkeypatch.setenv("MESSAGING_PROVIDERS_SMTP_SSL", "true")
+    monkeypatch.setenv("MESSAGING_PROVIDERS_SMTP_PORT", "465")
+    config = SmtpConfig.from_env()
+    assert config.use_ssl and not config.use_tls and config.port == 465 and "tls=ssl" in config.describe()
+
+
+def test_implicit_tls_connects_with_smtp_ssl_and_a_verifying_context(monkeypatch):
+    made = {}
+
+    class FakeSsl(FakeSmtp):
+        def __init__(self, host, port, timeout, context):
+            super().__init__()
+            made.update(host=host, port=port, context=context)
+
+        def starttls(self, **kwargs):
+            raise AssertionError("SMTP_SSL is already encrypted; no STARTTLS")
+
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSsl)
+    config = _with(host="smtp.relay.example.net", port=465, use_ssl=True, username="u", password="p")
+    assert SmtpEmailProvider(config=config).send(**request()).accepted
+    assert made["port"] == 465 and made["context"].verify_mode.name == "CERT_REQUIRED"
+
+
+def test_a_failed_starttls_closes_the_connection(monkeypatch):
+    closed = []
+
+    class NoTls(FakeSmtp):
+        def __init__(self, host, port, timeout):
+            super().__init__()
+
+        def starttls(self, **kwargs):
+            raise smtplib.SMTPNotSupportedError("STARTTLS extension not supported by server.")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(smtplib, "SMTP", NoTls)
+    result = SmtpEmailProvider(config=_with(use_tls=True)).send(**request())
+    assert not result.accepted and result.retryable and closed == [True]
+
+
+def test_metadata_keys_must_be_header_names():
+    server = FakeSmtp()
+    bad = provider(server).send(**request(metadata={"x: injected\r\nBcc": "a@b.example"}))
+    assert not bad.accepted and bad.reason == "rejected" and not bad.retryable and server.sent == []
+    good = provider(server).send(**request(metadata={"Template": "verify"}))
+    assert good.accepted and server.sent[-1]["X-EOS-Template"] == "verify"

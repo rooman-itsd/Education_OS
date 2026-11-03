@@ -52,6 +52,10 @@ class StoragePort(Protocol):
         """Get object metadata (size, content_type) or None if object does not exist."""
         ...
 
+    def copy_object(self, bucket: str, source_key: str, dest_key: str) -> None:
+        """Server-side copy within the bucket (confirm moves an upload to the document's own key)."""
+        ...
+
 
 class MinioStorage:
     """MinIO / S3-compatible storage implementation."""
@@ -123,6 +127,11 @@ class MinioStorage:
         except Exception:
             return None
 
+    def copy_object(self, bucket: str, source_key: str, dest_key: str) -> None:
+        from minio.commonconfig import CopySource
+
+        self.client.copy_object(bucket, dest_key, CopySource(bucket, source_key))
+
 
 class MemoryStorage:
     """Thread-safe in-memory object storage for tests and development."""
@@ -156,6 +165,12 @@ class MemoryStorage:
         if item is None:
             return None
         return ObjectStat(size=len(item[0]), content_type=item[1])
+
+    def copy_object(self, bucket: str, source_key: str, dest_key: str) -> None:
+        item = self.objects.get((bucket, source_key))
+        if item is None:
+            raise KeyError(f"Object {bucket}/{source_key} not found")
+        self.objects[(bucket, dest_key)] = (bytes(item[0]), item[1])
 
 
 _storage_singleton: StoragePort | None = None

@@ -11,6 +11,12 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   subscriptions count as `comped`, not as recurring revenue; an unknown status counts as `other`; trials past their
   end but not yet expired by the daily job are listed (negative `days_left`). A paid invoice on a deleted plan still counts
   (its own row); trial dates are read in UTC whatever the connection's zone; the three widgets share one request.
+- A trial reminder missed on its day is sent on the next run (#316 follow-up). Reminders fired only when exactly
+  7, 3 or 1 days were left, so a day the scheduler missed lost that reminder. Chain `billing_0003` adds
+  `billing_trial_reminder` (one row per organisation, trial end and threshold; unique; RLS); each run raises the
+  most urgent due threshold with no row yet, so a missed reminder goes out with the real days left, a superseded
+  one is not sent late, and no run raises one twice. `billing.trial.expiring` gains `threshold` (additive);
+  `reminder_key` keeps its format. Trial end dates are counted in UTC whatever offset the database returns.
 - Scheduled jobs for platform/scheduler (#316): `billing.expire-trials` (daily 00:15 UTC) and
   `billing.trial-reminders` (daily 06:00 UTC), declared on the `eos.scheduler_jobs` entry point and run from
   `scheduler.job.due` (consumer on `eos.event_consumers`); each reports `billing.job.finished`.
