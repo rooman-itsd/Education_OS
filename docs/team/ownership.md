@@ -20,7 +20,7 @@ per-widget checklist: the "Dashboard Assignment Plan" doc.
 | 7 | Finance & operations | Gokula Lakshmi (@gokulalakshmirooman-source) | Ashritha | `modules/finance-operations/*`, `integrations/payment-sbiepay`, `modules/campus-life/placement-career`, `modules/campus-life/alumni` (since 29 Oct 2026) | 13 |
 | 8 | Campus life | Tejaswini (@tejaswini-rooman) | Madhumita | `modules/campus-life/*` except placement-career and alumni, `modules/practice/field-training`, `modules/practice/projects` | 15 |
 | 9 | Governance & support | Madhumita (@madhumitha-rooman) | Tejaswini | `modules/governance/*`, `modules/support/*` | 11 |
-| 10 | Apps, infra & QA | Srujan (@srujanrooman) | Faizan | `apps/*` (web incl. admin screens, api, mobile), `infra/*`, `packages/testing`, CI | 0 |
+| 10 | Apps, infra & QA | Srujan (@srujanrooman) | Faizan, Himanshu | `apps/*` (web incl. admin screens, api, mobile), `infra/*`, `packages/testing`, CI | 0 |
 
 Institution profiles (`platform/identity/config/profiles/`) and dashboard layouts belong to the Architecture & platform lead.
 A specialized suite for a new field gets its own owner row when the field has a customer.
