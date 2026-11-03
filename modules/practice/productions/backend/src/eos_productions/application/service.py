@@ -470,8 +470,9 @@ def list_roles(db: Session, production_id: str) -> list[dict]:
 
 
 def assign_role(db: Session, actor: Actor, production_id: str, body: dict) -> tuple[dict, bool]:
-    """Offer a part. Offering the same person the same part again returns the standing offer."""
-    production = _production(db, production_id)
+    """Offer a part. Offering the same person the same part again returns the standing offer.
+    The production row is locked so a cancel racing this call cannot leave a live part on a cancelled production."""
+    production = _production(db, production_id, lock=True)
     kind = body.get("kind", "cast")
     try:
         check_action("assign_role", production.status)
@@ -607,7 +608,7 @@ def list_tasks(db: Session, production_id: str) -> list[dict]:
 
 
 def add_task(db: Session, actor: Actor, production_id: str, body: dict) -> dict:
-    production = _production(db, production_id)
+    production = _production(db, production_id, lock=True)
     try:
         check_action("add_task", production.status)
     except RuleViolationError as e:
@@ -648,6 +649,11 @@ def complete_task(db: Session, actor: Actor, task_id: str) -> dict:
         raise _not_found("task")
     if task.status == TASK_DONE:
         return task_json(task)  # doing it twice is not an error
+    production = _production(db, task.production_id, lock=True)
+    try:
+        check_action("complete_task", production.status)
+    except RuleViolationError as e:
+        raise _rule_error(e) from e
     task.status = TASK_DONE
     task.completed_at = clock()
     task.completed_by = actor.user_id

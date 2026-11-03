@@ -92,8 +92,8 @@ paths:
   /tasks/{id}/complete:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     post:
-      summary: Mark a preparation task done. Permission productions:task:manage. Doing it twice is not an error.
-      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+      summary: Mark a preparation task done. Permission productions:task:manage. Doing it twice is not an error; a completed or cancelled production refuses it (409).
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/Conflict" } }
 
   /calendar:
     get:

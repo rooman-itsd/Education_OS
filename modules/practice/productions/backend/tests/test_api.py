@@ -355,6 +355,21 @@ def test_cancelling_a_production_withdraws_the_parts_people_hold(client, org):
 # ---------------------------------------------------------------- preparation tasks
 
 
+def test_a_task_cannot_be_completed_once_its_production_is_cancelled(client, org):
+    """Review of #454 (follow-up): complete_task used to ignore the production's status."""
+    _, coordinator = org.user(COORDINATOR)
+    production = make_production(client, coordinator)
+    pid = production["id"]
+    task = client.post(f"{BASE}/productions/{pid}/tasks", json={"title": "Hire lights"}, headers=coordinator).json()
+    assert client.post(f"{BASE}/productions/{pid}/cancel", json={}, headers=coordinator).status_code == 200
+
+    refused = client.post(f"{BASE}/tasks/{task['id']}/complete", headers=coordinator)
+    assert refused.status_code == 409, refused.text
+    assert "wrong_status" in refused.text
+    open_tasks = client.get(f"{BASE}/productions/{pid}/tasks", headers=coordinator).json()
+    assert [t["status"] for t in open_tasks] == ["open"]
+
+
 def test_tasks_are_added_listed_outstanding_first_and_completed_once(client, org):
     _, coordinator = org.user(COORDINATOR)
     _, lead = org.user(LEAD)

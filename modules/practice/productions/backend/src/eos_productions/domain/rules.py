@@ -48,6 +48,7 @@ ALLOWED_FROM: dict[str, tuple[str, ...]] = {
     "cancel": OPEN_STATUSES,
     "assign_role": OPEN_STATUSES,
     "add_task": OPEN_STATUSES,
+    "complete_task": OPEN_STATUSES,
 }
 
 
@@ -101,6 +102,7 @@ def _past(action: str) -> str:
         "cancel": "cancelled",
         "assign_role": "cast",
         "add_task": "given tasks",
+        "complete_task": "have tasks completed",
     }[action]
 
 
