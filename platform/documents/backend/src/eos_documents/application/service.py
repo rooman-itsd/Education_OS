@@ -51,6 +51,9 @@ def view_document(doc: Document) -> dict[str, Any]:
         "entity_type": doc.entity_type,
         "entity_id": doc.entity_id,
         "uploaded_by": doc.uploaded_by,
+        "version": doc.version or 1,
+        "version_of": doc.version_of,
+        "superseded_by": doc.superseded_by,
         "client_token": doc.client_token,
         "tags": doc.tags or [],
         "created_at": doc.created_at.isoformat() if isinstance(doc.created_at, datetime) else doc.created_at,
@@ -103,13 +106,8 @@ def request_upload_intent(
     if client_token:
         existing = find_by_token(db, organisation_id, client_token, uploaded_by=actor_id)
         if existing:
-            url = store.generate_upload_url(
-                existing.bucket,
-                existing.storage_path,
-                existing.mime_type,
-                cfg.url_expires_seconds,
-            )
-            return existing, False, url, cfg.url_expires_seconds
+            url, exp = upload_url_for(existing, store)
+            return existing, False, url, exp
 
     doc_id = new_id()
     safe_name = sanitize_filename(filename)
@@ -125,6 +123,7 @@ def request_upload_intent(
         mime_type=mime_type.lower(),
         size_bytes=size_bytes,
         storage_path=storage_path,
+        upload_path=_upload_key(organisation_id, doc_id),
         bucket=cfg.minio_bucket,
         status=STATUS_PENDING_UPLOAD,
         entity_type=entity_type,
@@ -137,13 +136,26 @@ def request_upload_intent(
     )
     db.add(doc)
 
-    upload_url = store.generate_upload_url(
-        doc.bucket,
-        doc.storage_path,
-        doc.mime_type,
-        cfg.url_expires_seconds,
-    )
-    return doc, True, upload_url, cfg.url_expires_seconds
+    upload_url, exp = upload_url_for(doc, store)
+    return doc, True, upload_url, exp
+
+
+def _upload_key(organisation_id: str, document_id: str) -> str:
+    """A key of its own for this upload, under the organisation's prefix, never the document's storage_path."""
+    return f"{organisation_id}/uploads/{document_id}/{new_id()}"
+
+
+def upload_url_for(doc: Document, store: StoragePort | None = None) -> tuple[str, int]:
+    """A presigned PUT for a document still waiting for its file. Once confirmed there is nothing to upload: a
+    replayed intent answers 409 rather than hand out a URL (it used to point at the confirmed file's own key)."""
+    if doc.status != STATUS_PENDING_UPLOAD:
+        raise DocumentError(
+            f"Document is already {doc.status}; upload a new version instead (POST /{doc.id}/versions)", status=409
+        )
+    cfg = load_settings()
+    store = store or get_storage(cfg)
+    key = doc.upload_path or doc.storage_path  # rows from before upload_path uploaded to storage_path
+    return store.generate_upload_url(doc.bucket, key, doc.mime_type, cfg.url_expires_seconds), cfg.url_expires_seconds
 
 
 def confirm_upload(
@@ -155,7 +167,7 @@ def confirm_upload(
 ) -> Document:
     """Confirm client finished uploading to storage and mark document available."""
     store = storage or get_storage()
-    doc = get_document(db, organisation_id, document_id)
+    doc = get_document(db, organisation_id, document_id, for_update=True)  # concurrent confirms run one at a time
     if not doc:
         raise DocumentError("Document not found", status=404)
     if doc.status == STATUS_DELETED:
@@ -169,32 +181,51 @@ def confirm_upload(
     if doc.status == STATUS_AVAILABLE:
         return doc
 
+    previous = None
+    if doc.version_of:
+        # Only the current latest version may be superseded, and only once: a second new version confirmed in
+        # parallel against the same predecessor is refused rather than forking the history.
+        previous = _latest_available(db, organisation_id, doc.version_of, exclude=doc.id, for_update=True)
+        if previous is None or previous.version != doc.version - 1:
+            raise DocumentError("A newer version was confirmed first; request a new version of the latest", 409)
+
     # Check object exists and verify upload integrity
-    stat = store.stat_object(doc.bucket, doc.storage_path)
+    upload_key = doc.upload_path or doc.storage_path
+    stat = store.stat_object(doc.bucket, upload_key)
     if stat is None:
         raise DocumentError("Document file was not found in storage. Upload may not have completed.", status=400)
 
     cfg = load_settings()
     if stat.size > cfg.max_file_size_bytes:
-        store.delete_object(doc.bucket, doc.storage_path)
+        store.delete_object(doc.bucket, upload_key)
         raise DocumentError(f"Uploaded file exceeds maximum allowed size ({cfg.max_file_size_bytes} bytes)", status=400)
 
     if doc.size_bytes and doc.size_bytes > 0 and stat.size != doc.size_bytes:
-        store.delete_object(doc.bucket, doc.storage_path)
+        store.delete_object(doc.bucket, upload_key)
         raise DocumentError(
             f"Uploaded file size ({stat.size} bytes) does not match declared size ({doc.size_bytes} bytes)", status=400
         )
 
     if stat.content_type and not stat.content_type.startswith(doc.mime_type):
-        store.delete_object(doc.bucket, doc.storage_path)
+        store.delete_object(doc.bucket, upload_key)
         raise DocumentError(
             f"Uploaded content type ({stat.content_type}) does not match declared mime-type ({doc.mime_type})",
             status=400,
         )
 
+    if upload_key != doc.storage_path:
+        # The validated bytes move to the document's own key, which no presigned PUT ever names. A PUT that
+        # arrives later (the old URL is valid for a while, or a replay) lands on an upload key nothing reads.
+        store.copy_object(doc.bucket, upload_key, doc.storage_path)
+        store.delete_object(doc.bucket, upload_key)
+    doc.upload_path = None
+
     doc.size_bytes = stat.size
     doc.status = STATUS_AVAILABLE
     doc.updated_at = utcnow()
+    if previous is not None:
+        previous.superseded_by = doc.id
+        previous.updated_at = doc.updated_at
 
     # Publish outbox event
     events.publish(
@@ -215,12 +246,117 @@ def confirm_upload(
     return doc
 
 
-def get_document(db: Session, organisation_id: str, document_id: str) -> Document | None:
+def get_document(db: Session, organisation_id: str, document_id: str, *, for_update: bool = False) -> Document | None:
     stmt = select(Document).where(
         Document.organisation_id == organisation_id,
         Document.id == document_id,
     )
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     return db.execute(stmt).scalars().first()
+
+
+# --- versions --------------------------------------------------------------------------------------------------
+
+
+def _root_id(doc: Document) -> str:
+    return doc.version_of or doc.id
+
+
+def _latest_available(
+    db: Session, organisation_id: str, root_id: str, *, exclude: str | None = None, for_update: bool = False
+) -> Document | None:
+    """The newest confirmed, not deleted, not superseded version of a document."""
+    stmt = select(Document).where(
+        Document.organisation_id == organisation_id,
+        (Document.id == root_id) | (Document.version_of == root_id),
+        Document.status == STATUS_AVAILABLE,
+        Document.superseded_by.is_(None),
+    )
+    if exclude:
+        stmt = stmt.where(Document.id != exclude)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return db.execute(stmt.order_by(Document.version.desc())).scalars().first()
+
+
+def list_versions(db: Session, organisation_id: str, document_id: str) -> list[Document]:
+    """Every version of the document `document_id` belongs to, newest first (deleted ones left out)."""
+    doc = get_document(db, organisation_id, document_id)
+    if not doc:
+        return []
+    root = _root_id(doc)
+    stmt = select(Document).where(
+        Document.organisation_id == organisation_id,
+        (Document.id == root) | (Document.version_of == root),
+        Document.status != STATUS_DELETED,
+    )
+    return list(db.execute(stmt.order_by(Document.version.desc())).scalars().all())
+
+
+def request_new_version(
+    db: Session,
+    organisation_id: str,
+    actor_id: str,
+    document_id: str,
+    filename: str,
+    mime_type: str,
+    size_bytes: int,
+    client_token: str | None = None,
+    storage: StoragePort | None = None,
+) -> tuple[Document, bool, str, int]:
+    """Upload intent for the next version of a document. Only the latest confirmed version can be followed, and
+    only by the person who uploaded the document's first version. The new version is a document of its own
+    (pending until confirmed); confirming it supersedes the previous one. Earlier versions stay readable."""
+    cfg = load_settings()
+    store = storage or get_storage(cfg)
+    try:
+        validate_file_policy(filename, mime_type, size_bytes, cfg.max_file_size_bytes)
+    except ValueError as e:
+        raise DocumentError(str(e), status=400) from e
+
+    if client_token:
+        existing = find_by_token(db, organisation_id, client_token, uploaded_by=actor_id)
+        if existing:
+            url, exp = upload_url_for(existing, store)
+            return existing, False, url, exp
+
+    base = get_document(db, organisation_id, document_id)
+    if not base or base.status == STATUS_DELETED:
+        raise DocumentError("Document not found", status=404)
+    root = get_document(db, organisation_id, _root_id(base))
+    if root is None or root.uploaded_by != actor_id:
+        raise DocumentError("Only the document's uploader can add a version", status=403)
+    if base.status != STATUS_AVAILABLE or base.superseded_by:
+        raise DocumentError("Only the latest confirmed version can be followed by a new one", status=409)
+
+    doc_id = new_id()
+    now = utcnow()
+    version = (base.version or 1) + 1
+    doc = Document(
+        id=doc_id,
+        organisation_id=organisation_id,
+        title=base.title,
+        filename=filename,
+        mime_type=mime_type.lower(),
+        size_bytes=size_bytes,
+        storage_path=f"{organisation_id}/{now.strftime('%Y/%m')}/{doc_id}/{sanitize_filename(filename)}",
+        upload_path=_upload_key(organisation_id, doc_id),
+        bucket=cfg.minio_bucket,
+        status=STATUS_PENDING_UPLOAD,
+        entity_type=base.entity_type,
+        entity_id=base.entity_id,
+        uploaded_by=actor_id,
+        client_token=client_token,
+        tags=list(base.tags or []),
+        version=version,
+        version_of=_root_id(base),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(doc)
+    url, exp = upload_url_for(doc, store)
+    return doc, True, url, exp
 
 
 def get_download_url(
@@ -255,6 +391,7 @@ def list_documents(
     entity_type: str | None = None,
     entity_id: str | None = None,
     uploaded_by: str | None = None,
+    include_superseded: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Document], int]:
@@ -278,6 +415,10 @@ def list_documents(
     if uploaded_by:
         stmt = stmt.where(Document.uploaded_by == uploaded_by)
         count_stmt = count_stmt.where(Document.uploaded_by == uploaded_by)
+    if not include_superseded:
+        # One entry per document: its latest version (GET /{id}/versions lists the others)
+        stmt = stmt.where(Document.superseded_by.is_(None))
+        count_stmt = count_stmt.where(Document.superseded_by.is_(None))
 
     total = db.execute(count_stmt).scalar() or 0
     items = list(db.execute(stmt.order_by(Document.created_at.desc()).offset(offset).limit(limit)).scalars().all())
