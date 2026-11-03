@@ -20,6 +20,7 @@ REQUIRED = [
     ("verification", "tenancy.organisation.verify",
      {"organisation_name": "Rooman College", "token": "s3cr3t-token-value", "token_id": str(uuid.uuid4())}),
     ("approval", "tenancy.organisation.approved", {"organisation_name": "Rooman College"}),
+    ("package change", "tenancy.package.changed", {"organisation_name": "Rooman College", "package": "law-college"}),
     ("trial reminder", "billing.trial.reminder",
      {"organisation_name": "Rooman College", "trial_ends_on": "2026-10-20", "days_left": "3"}),
     ("invoice", "billing.invoice.issued",

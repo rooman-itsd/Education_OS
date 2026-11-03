@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `tenancy.package.changed` is consumed (#316 follow-up): the organisation's admins get the new template
+  `tenancy.package.changed` ("Academic package approved", with the new package) when a super admin approves a
+  requested package change. tenancy still logs a copy through the `eos_core.notify` stub, which sends nothing;
+  removing that call is tenancy's own change, once this is merged.
 - Failed emails are retried (#316 follow-up). A retryable provider failure (SMTP 4xx, dropped connection) left
   the message `queued`, and `recover_stuck()`, the only thing that re-sends it, had no caller, so approval and
   trial emails were lost after one transient failure. Notification now declares the platform job

@@ -27,7 +27,7 @@ consumes_events:
   - tenancy.organisation.verified
   - tenancy.organisation.approved
   - tenancy.package.requested
-  - tenancy.package.changed
+  - tenancy.package.changed             # wired: template tenancy.package.changed
   - identity.user.created
   - billing.subscription.started
   - billing.trial.expired
