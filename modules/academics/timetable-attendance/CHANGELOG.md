@@ -3,6 +3,18 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Event consumers (issue #325, part 3), registered under `eos.event_consumers` and listed in `module.yaml`:
+  academic-management `term.created` into the new `term_ref` (a term's dates), `offering.created` and
+  `offering.status-changed` into `offering_ref`, `section.created` and `section.updated` into `section_ref`. Migration
+  `tt_0002` adds `term_ref` and `processed_event` (both with `organisation_id` and the forced `tenant_isolation`
+  policy), makes the creation-only columns and `status` of `offering_ref` and `section_ref` nullable and adds
+  `status_as_of`, because an event can arrive before its creation. Idempotent on the envelope id; a status is replaced
+  only by an event that occurred at or after the one that set it; an event is applied only in its own organisation; a
+  malformed payload or an envelope version other than 1 is refused. Slot validation now treats an offering or section
+  as known only once its creation event has arrived. Not consumed: `faculty-assignment.*` (the `faculty_id` against
+  `instructor_id` mapping is unconfirmed), `enrolment-registration.*` (the `student_id` mapping is unconfirmed),
+  `offering.updated` and `course.*` (their payloads carry no new values). `docs/reviewer-decisions.md` records the
+  decisions confirmed in the PR #459 review, what stays open, and the consumers' unreviewed design choices.
 - Timetable API (issue #325, part 2): `GET`/`POST /timetables`, `GET`/`PATCH /timetables/{id}`,
   `PUT /timetables/{id}/slots` and `GET /timetables/{id}/conflicts`, as the contract declares them. Request bodies are
   checked by the use cases, so a malformed body is the contract's 400 with a code and the offending field. Slots are
