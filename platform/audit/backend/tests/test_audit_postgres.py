@@ -9,8 +9,9 @@ freely create and drop databases on, for example:
       pytest tests/test_audit_postgres.py -q
 
 The admin URL is used only for setup. Every assertion runs as `eos_app`, which is NOT a superuser and NOT
-BYPASSRLS, and which is deliberately GRANTED update, delete and truncate: so a refusal here can only come from
-the trigger, never from a missing privilege.
+BYPASSRLS. The trigger tests deliberately GRANT it update, delete and truncate after the migration has revoked
+them (audit_0002): so a refusal there can only come from the trigger, never from a missing privilege. What the
+migration itself leaves eos_app is checked from PRIVILEGES_AFTER_MIGRATION, recorded before that grant.
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ def _app_url() -> str:
     return f"{scheme}://{APP_ROLE}:{APP_PASSWORD}@{rest.rsplit('@', 1)[-1]}/{DATABASE}"
 
 
+PRIVILEGES_AFTER_MIGRATION: dict[str, bool] = {}
+
+
 @pytest.fixture(scope="module")
 def app_engine():
     with _admin().begin() as conn:
@@ -55,10 +59,30 @@ def app_engine():
             conn.execute(text(f"CREATE ROLE {APP_ROLE} LOGIN PASSWORD '{APP_PASSWORD}'"))
         conn.execute(text(f"ALTER ROLE {APP_ROLE} NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE"))
         conn.execute(text(f"CREATE DATABASE {DATABASE}"))
+    with _admin(DATABASE).begin() as conn:  # what infra/docker/db-roles.py sets before the chains run
+        conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {APP_ROLE}"))
+        conn.execute(
+            text(
+                f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {APP_ROLE}"
+            )
+        )
     cfg = Config(str(DB_DIR / "alembic.ini"))
     cfg.cmd_opts = type("Opts", (), {"x": [f"url={ADMIN_URL.rsplit('/', 1)[0]}/{DATABASE}"]})()
-    command.upgrade(cfg, "head")  # installs the policy and the trigger, exactly as a deployment would
+    command.upgrade(cfg, "head")  # installs the policy, the trigger and the revokes, exactly as a deployment would
     with _admin(DATABASE).begin() as conn:
+        for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+            PRIVILEGES_AFTER_MIGRATION[privilege] = conn.execute(
+                text("SELECT has_table_privilege(:r, 'audit_record', :p)"), {"r": APP_ROLE, "p": privilege}
+            ).scalar()
+        for fn, signature in (
+            ("audit_prune", "audit_prune(timestamptz)"),
+            ("audit_redact", "audit_redact(varchar)"),
+            ("audit_redact_organisation", "audit_redact_organisation(varchar)"),
+        ):
+            PRIVILEGES_AFTER_MIGRATION[f"EXECUTE {fn}"] = conn.execute(
+                text("SELECT has_function_privilege(:r, :f, 'EXECUTE')"), {"r": APP_ROLE, "f": signature}
+            ).scalar()
+        # The trigger tests below need the privilege, so a refusal there can only be the trigger's.
         conn.execute(text(f"GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON audit_record TO {APP_ROLE}"))
     engine = create_engine(_app_url(), future=True)
     yield engine
@@ -149,30 +173,102 @@ def test_truncate_is_refused(app_engine):
     assert _refused(app_engine, "TRUNCATE audit_record", _row(app_engine))
 
 
-def test_a_redaction_tombstone_is_the_one_allowed_update(app_engine):
+def test_the_application_role_cannot_redact_even_with_the_privilege(app_engine):
+    """A tombstone written by eos_app itself: refused. Redaction is the owner's (audit_redact), maintenance only."""
     rid = _row(app_engine)
-    tombstone = "UPDATE audit_record SET before = NULL, after = '{\"redacted\": true}', redacted = true WHERE id = :id"
-    assert not _refused(app_engine, tombstone, rid)
-    with app_engine.begin() as conn:
+    tombstone = "UPDATE audit_record SET before = NULL, after = NULL, redacted = true WHERE id = :id"
+    assert _refused(app_engine, tombstone, rid)
+
+
+def test_the_owner_redacts_through_audit_redact_and_only_to_a_tombstone(app_engine):
+    rid = _row(app_engine)
+    with _admin(DATABASE).begin() as conn:
         _as(conn, None, bypass=True)
-        summary, redacted = conn.execute(
-            text("SELECT summary, redacted FROM audit_record WHERE id = :id"), {"id": rid}
+        assert conn.execute(text("SELECT audit_redact(:id)"), {"id": rid}).scalar() is True
+        assert conn.execute(text("SELECT audit_redact(:id)"), {"id": rid}).scalar() is False  # not twice
+        summary, redacted, before, after = conn.execute(
+            text("SELECT summary, redacted, before, after FROM audit_record WHERE id = :id"), {"id": rid}
         ).one()
-    assert redacted and summary == "Accepted"  # the fact of the action survives
+    assert redacted and summary == "Accepted" and before is None and after is None  # the fact survives
 
 
-def test_a_redaction_cannot_carry_another_change_and_cannot_be_repeated(app_engine):
+def test_a_tombstone_cannot_carry_another_change_even_for_the_owner(app_engine):
     rid = _row(app_engine)
-    sneaky = "UPDATE audit_record SET after = NULL, redacted = true, summary = 'gone' WHERE id = :id"
-    assert _refused(app_engine, sneaky, rid)
-    assert not _refused(app_engine, "UPDATE audit_record SET after = NULL, redacted = true WHERE id = :id", rid)
-    assert _refused(app_engine, "UPDATE audit_record SET before = NULL WHERE id = :id", rid)
+    with pytest.raises(DBAPIError, match="cannot be altered"), _admin(DATABASE).begin() as conn:
+        _as(conn, None, bypass=True)
+        conn.execute(
+            text(
+                "UPDATE audit_record SET before = NULL, after = NULL, redacted = true, summary = 'gone' WHERE id = :id"
+            ),
+            {"id": rid},
+        )
 
 
-def test_a_delete_is_allowed_only_inside_a_declared_prune(app_engine):
+def test_the_pruning_flag_no_longer_lets_the_application_delete(app_engine):
+    """The audit's A3 bypass: set audit.pruning, then DELETE one chosen record. Refused now."""
     rid = _row(app_engine)
     assert _refused(app_engine, "DELETE FROM audit_record WHERE id = :id", rid)
-    assert not _refused(app_engine, "DELETE FROM audit_record WHERE id = :id", rid, prune=True)
+    assert _refused(app_engine, "DELETE FROM audit_record WHERE id = :id", rid, prune=True)
+
+
+def test_audit_prune_removes_only_records_past_the_floor(app_engine):
+    old, recent = _row(app_engine), _row(app_engine)
+    with _admin(DATABASE).begin() as conn:  # backdate one record past the floor (as the owner, bypassing nothing)
+        conn.execute(text("ALTER TABLE audit_record DISABLE TRIGGER audit_record_immutable"))
+        conn.execute(
+            text("UPDATE audit_record SET occurred_at = now() - interval '2600 days' WHERE id = :id"), {"id": old}
+        )
+        conn.execute(text("ALTER TABLE audit_record ENABLE TRIGGER audit_record_immutable"))
+    with app_engine.begin() as conn:
+        _as(conn, None, bypass=True)
+        removed = conn.execute(text("SELECT audit_prune(now() - interval '2555 days')")).scalar()
+        left = set(
+            conn.execute(text("SELECT id FROM audit_record WHERE id IN (:a, :b)"), {"a": old, "b": recent}).scalars()
+        )
+    assert removed >= 1 and left == {recent}
+
+
+def test_audit_prune_refuses_a_cutoff_inside_the_floor(app_engine):
+    rid = _row(app_engine)
+    with pytest.raises(DBAPIError, match="retention floor"), app_engine.begin() as conn:
+        _as(conn, None, bypass=True)
+        conn.execute(text("SELECT audit_prune(now())"))
+    with app_engine.begin() as conn:
+        _as(conn, None, bypass=True)
+        assert conn.execute(text("SELECT count(*) FROM audit_record WHERE id = :id"), {"id": rid}).scalar() == 1
+
+
+def test_the_migration_leaves_the_application_role_insert_and_select_only(app_engine):
+    assert PRIVILEGES_AFTER_MIGRATION == {
+        "SELECT": True,
+        "INSERT": True,
+        "UPDATE": False,
+        "DELETE": False,
+        "TRUNCATE": False,
+        "EXECUTE audit_prune": True,
+        "EXECUTE audit_redact": False,
+        "EXECUTE audit_redact_organisation": True,
+    }
+
+
+def test_an_organisations_trail_is_redacted_only_once_it_no_longer_exists(app_engine):
+    org = str(uuid.uuid4())
+    rid = _row(app_engine, org)
+    with _admin(DATABASE).begin() as conn:  # tenancy's table, as in a deployment, with the organisation still in it
+        conn.execute(text("CREATE TABLE IF NOT EXISTS tenancy_organisation (id varchar(36) PRIMARY KEY)"))
+        conn.execute(text("INSERT INTO tenancy_organisation (id) VALUES (:o)"), {"o": org})
+    with pytest.raises(DBAPIError, match="still exists"), app_engine.begin() as conn:
+        _as(conn, None, bypass=True)
+        conn.execute(text("SELECT audit_redact_organisation(:o)"), {"o": org})
+    with _admin(DATABASE).begin() as conn:  # the purge removed it
+        conn.execute(text("DELETE FROM tenancy_organisation WHERE id = :o"), {"o": org})
+    with app_engine.begin() as conn:
+        _as(conn, None, bypass=True)
+        assert conn.execute(text("SELECT audit_redact_organisation(:o)"), {"o": org}).scalar() == 1
+        redacted, after, summary = conn.execute(
+            text("SELECT redacted, after, summary FROM audit_record WHERE id = :id"), {"id": rid}
+        ).one()
+    assert redacted and after is None and summary == "Accepted"
 
 
 def test_the_trigger_binds_a_superuser_too(app_engine):

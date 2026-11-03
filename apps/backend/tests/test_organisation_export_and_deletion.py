@@ -76,7 +76,8 @@ def test_export_then_delete_restore_and_purge(client, monkeypatch):
     r = client.post(f"{BASE}/{a_id}/purge", headers=sa)
     assert r.status_code == 200, r.text
     assert r.json()["rows_deleted"]["identity_user"] == 1
-    assert rows_left(a_id) == {}
+    # Append-only tables (audit_record on PostgreSQL) keep their rows; their module erases on the purged event
+    assert set(rows_left(a_id)) <= set(r.json()["kept"])
     assert rows_left(b_id) == before_b
     assert client.get(f"{BASE}/{a_id}", headers=sa).status_code == 404
     assert client.get("/api/v1/tenancy/organisation", headers=auth(b["token"])).status_code == 200

@@ -52,9 +52,25 @@ const WIDGETS: LayoutWidget[] = [
   // The scholar's own widgets.
   { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
   { id: "projects.milestones-due", module: "practice/projects", batch: "#339" },
-  { id: "portfolio.my-portfolio", module: "practice/portfolio", batch: "#322" },
+  {
+    id: "portfolio.my-portfolio",
+    module: "practice/portfolio",
+    batch: "#322",
+    title: "My Portfolio",
+    probe: "/portfolio/items?scope=mine",
+    empty: "No portfolio items yet",
+    unavailable: "Portfolio data is not available yet.",
+  },
   { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
-  { id: "selection-process.my-applications", module: "practice/selection-process", batch: "#322" },
+  {
+    id: "selection-process.my-applications",
+    module: "practice/selection-process",
+    batch: "#322",
+    title: "My Applications",
+    probe: "/selection-process/processes?status=open&page_size=5",
+    empty: "No active applications",
+    unavailable: "Application data is not available yet.",
+  },
   {
     id: "budget-grants.my-grants",
     module: "finance-operations/budget-grants",

@@ -18,6 +18,9 @@ touches a dev server you have running, and stops them afterwards.
 | Super Admin signs in to their dashboard; an organisation waiting for approval shows in `tenancy.approval-queue` and leaves it once approved; `tenancy.organisations-by-status` and `tenancy.recent-registrations` count and list this run's organisations; a trial set to end in three days shows in `billing.trials-expiring`; the organisation moved to Standard shows in `billing.revenue-by-plan` and `billing.subscriptions-by-plan`. `audit.super-admin-actions` skips until platform/audit exports it (#317) | [dashboards/super-admin.spec.ts](dashboards/super-admin.spec.ts) |
 | Research Office (research-university) signs in to their dashboard; `budget-grants.budget-vs-spend` shows its empty state, then the grant the research office records; the rest skip until their module ships | [dashboards/research-office.spec.ts](dashboards/research-office.spec.ts) |
 | HR Staff signs in to their dashboard; the hr-payroll and e-office widgets render and show their empty state, then a leave request an employee applies for shows in `hr-payroll.leave-requests` and their joining in `hr-payroll.joinings-and-exits`, the month's payroll run HR starts in `hr-payroll.payroll-run-status`, and a file a colleague forwards to HR in `e-office.files-pending`. Each part skips until its module is enabled (sprint batch #336) | [dashboards/hr-staff.spec.ts](dashboards/hr-staff.spec.ts) |
+| Hospitality Trainee (hospitality-institute) signs in to their dashboard; every widget of an enabled module, the inherited Student ones included, renders and shows its empty state, `inventory-equipment.my-loans` among them, then a chef knife set the trainee asks to borrow, stocked by facility staff, shows in `inventory-equipment.my-loans`. `facility-booking.my-bookings` skips until sprint batch #331 exports it, the other widgets until their module ships | [dashboards/hospitality-trainee.spec.ts](dashboards/hospitality-trainee.spec.ts) |
+| Chef / Operations Instructor (hospitality-institute) signs in to their dashboard; the inherited Faculty widgets of enabled modules, `facility-booking.bookings-today` and `inventory-equipment.low-stock` render and show their empty state, then an item a store keeper receives below its reorder level shows in `inventory-equipment.low-stock`. skill-progress and productions skip until their module ships | [dashboards/chef-instructor.spec.ts](dashboards/chef-instructor.spec.ts) |
+| Industry Coordinator (hospitality-institute) signs in to their dashboard; the field-training, placement-career and productions widgets skip until their module ships | [dashboards/industry-coordinator.spec.ts](dashboards/industry-coordinator.spec.ts) |
 
 The approval step calls the API until the super admin approval queue exists in `apps/frontend`.
 
@@ -59,7 +62,11 @@ Failures keep a screenshot and a trace in `tests/e2e/.cache/test-results/`
 | `E2E_API_PORT`, `E2E_WEB_PORT` | `8100`, `5180` | Ports for the suite's own servers |
 
 The script is `e2e`, not `test`, on purpose: `web.yml` runs every package's `test` script on each PR,
-and this suite needs browsers and both servers. CI runs it on merge to `main` once that job exists.
+and this suite needs browsers and both servers. CI runs it in `.github/workflows/system.yml`: after every merge to
+`main`, on PRs that change the journeys, `apps/frontend` or the dashboard layouts, and by hand (Actions → system →
+Run workflow; a URL there also runs the smoke checks against that site). A failed run keeps the report as the
+`e2e-report` artifact. Before the journeys start, `warmup.ts` signs in once so the dev server has compiled every
+module (a cold first dashboard load used to outlast the assertions).
 
 ## Adding a journey
 

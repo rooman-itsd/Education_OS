@@ -92,12 +92,14 @@ events:
     version: 1
     description: >-
       An event exhausted its retries and was moved to the dead-letter state. It will not be
-      delivered again until an operator replays it.
+      delivered again until an operator replays it. failed_modules names the consuming modules
+      that never accepted it; every other module already has, and a replay re-runs only these.
     payload:
       event_id: uuid
       event_name: string
       attempts: integer
       last_error: string
+      failed_modules: array
 
   - name: event-bus.relay.stalled
     version: 1
