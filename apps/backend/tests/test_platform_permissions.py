@@ -23,6 +23,7 @@ PUBLIC = {
     ("GET", "/api/v1/tenancy/academy-types"): "shown on the sign-up page",
     ("POST", "/api/v1/tenancy/register"): "self-service registration",
     ("POST", "/api/v1/tenancy/register/verify"): "email verification token",
+    ("POST", "/api/v1/tenancy/register/resend"): "resend the verification email: the admin cannot sign in yet",
     ("GET", "/api/v1/billing/plans"): "published price list on the sign-up page",
     ("POST", "/api/v1/billing/webhooks/payment"): "signed by the payment adapter, not a user",
 }

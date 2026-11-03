@@ -10,7 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.values import DAYS_OF_WEEK
-from .models import AssignmentRef, AuditEntry, OfferingRef, SectionRef, TimetableRow, TimetableSlotRow
+from .models import (
+    AssignmentRef,
+    AuditEntry,
+    OfferingRef,
+    SectionRef,
+    TimetableRow,
+    TimetableSlotRow,
+)
 
 
 def q(db: Session, model) -> Select:
@@ -40,6 +47,12 @@ RECORD_STUDENT_CONSTRAINTS = {
     "uq_timetable_attendance_record_student": (
         "timetable_attendance_attendance_record",
         ("organisation_id", "attendance_session_id", "student_id"),
+    ),
+}
+PROCESSED_EVENT_CONSTRAINTS = {
+    "uq_timetable_attendance_processed_event": (
+        "timetable_attendance_processed_event",
+        ("organisation_id", "event_id"),
     ),
 }
 # One audit record per client_token (platform/audit NewRecord: a replayed token returns the original record).
@@ -79,6 +92,11 @@ def is_session_conflict(err: IntegrityError) -> bool:
 def is_record_conflict(err: IntegrityError) -> bool:
     """The student already has a record in the session, and nothing else."""
     return _violates(err, RECORD_STUDENT_CONSTRAINTS)
+
+
+def is_processed_event_conflict(err: IntegrityError) -> bool:
+    """This envelope id is already recorded for the organisation (two deliveries racing), and nothing else."""
+    return _violates(err, PROCESSED_EVENT_CONSTRAINTS)
 
 
 def is_audit_token_conflict(err: IntegrityError) -> bool:
@@ -160,15 +178,19 @@ def published_slots_in_period(
 def offering_refs(db: Session, ids: set[str]) -> dict[str, OfferingRef]:
     if not ids:
         return {}
-    rows = db.scalars(q(db, OfferingRef).where(OfferingRef.course_offering_id.in_(ids)))
-    return {r.course_offering_id: r for r in rows}
+    # a row whose creation event has not arrived yet (academic_period_id is NULL) is not known
+    query = q(db, OfferingRef).where(
+        OfferingRef.course_offering_id.in_(ids), OfferingRef.academic_period_id.is_not(None)
+    )
+    return {r.course_offering_id: r for r in db.scalars(query)}
 
 
 def section_refs(db: Session, ids: set[str]) -> dict[str, SectionRef]:
     if not ids:
         return {}
-    rows = db.scalars(q(db, SectionRef).where(SectionRef.section_id.in_(ids)))
-    return {r.section_id: r for r in rows}
+    # a row whose creation event has not arrived yet (code is NULL) is not known
+    query = q(db, SectionRef).where(SectionRef.section_id.in_(ids), SectionRef.code.is_not(None))
+    return {r.section_id: r for r in db.scalars(query)}
 
 
 def assignment_refs(db: Session, ids: set[str]) -> dict[str, AssignmentRef]:
@@ -176,3 +198,9 @@ def assignment_refs(db: Session, ids: set[str]) -> dict[str, AssignmentRef]:
         return {}
     rows = db.scalars(q(db, AssignmentRef).where(AssignmentRef.instructor_assignment_id.in_(ids)))
     return {r.instructor_assignment_id: r for r in rows}
+
+
+def ref_row(db: Session, model, column, value: str, organisation_id: str):
+    """The read-model row with this key in this organisation, or None. The organisation is named as well as scoped,
+    so a handler never reads a row of another organisation even if the session scope were wrong."""
+    return db.scalars(q(db, model).where(column == value, model.organisation_id == organisation_id)).first()
