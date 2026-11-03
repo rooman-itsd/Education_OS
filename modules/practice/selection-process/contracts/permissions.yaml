@@ -33,3 +33,32 @@ roles:
   - name: org-admin
     description: Read-only visibility into the organisation's selection activity.
     grants: [selection-process:process:read]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards)
+  # Learner and applicant roles: upcoming and my-applications widgets.
+  - name: applicant
+    description: Candidate in open selection calls or admissions.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: student
+    description: Enrolled student participating in auditions, moot tryouts, or selection calls.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: actor
+    description: Profile role, candidate in auditions and selections.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: artist
+    description: Profile role, candidate in juries and exhibitions.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: dancer
+    description: Profile role, candidate in auditions and juries.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: designer
+    description: Profile role, candidate in critiques and showcases.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: law-student
+    description: Profile role, candidate in moot court selections.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: musician
+    description: Profile role, candidate in auditions and ensembles.
+    grants: [selection-process:process:read, selection-process:candidate:read]
+  - name: research-scholar
+    description: Profile role, candidate in viva and allocation selections.
+    grants: [selection-process:process:read, selection-process:candidate:read]
