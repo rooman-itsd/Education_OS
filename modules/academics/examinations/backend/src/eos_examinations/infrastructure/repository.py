@@ -1,0 +1,152 @@
+"""Queries, always scoped to the caller's organisation (eos_core.db.scoped). On Postgres row-level security enforces
+the same rule underneath; on SQLite, which has none, `q` is what keeps a query inside the organisation, so no query in
+this module is written without it. The use cases that call these are a later slice; this is the scoped base they use."""
+
+from __future__ import annotations
+
+from eos_core.db import scoped
+from sqlalchemy import Select, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from .models import (
+    AssessmentComponentRow,
+    AssessmentSchemeRow,
+    AuditEntry,
+    ExamCycleRow,
+    ExamDutyRow,
+    ExamPaperRow,
+    ExamSessionPaperRow,
+    ExamSessionRow,
+    GradingBandRow,
+    GradingSchemeRow,
+)
+
+
+def q(db: Session, model) -> Select:
+    """`select(model)` limited to the session's organisation. With no organisation on the session it matches nothing."""
+    return scoped(db, select(model), model)
+
+
+def get(db: Session, model, row_id: str):
+    """One row of the caller's organisation by id, or None (another organisation's row is not found)."""
+    return db.scalars(q(db, model).where(model.id == row_id)).first()
+
+
+# Constraint name -> (table, columns), for telling a conflict the module answers with 409 from any other integrity error.
+CONSTRAINTS = {
+    "default_grading_scheme": {
+        "uq_examinations_grading_scheme_default": ("examinations_grading_scheme", ("organisation_id",)),
+    },
+    "assessment_scheme_version": {
+        "uq_examinations_assessment_scheme_version": (
+            "examinations_assessment_scheme",
+            ("organisation_id", "course_offering_id", "version"),
+        ),
+    },
+    "active_assessment_scheme": {
+        "uq_examinations_assessment_scheme_active": (
+            "examinations_assessment_scheme",
+            ("organisation_id", "course_offering_id"),
+        ),
+    },
+    "paper_component": {
+        "uq_examinations_paper_component": (
+            "examinations_exam_paper",
+            ("organisation_id", "exam_cycle_id", "assessment_component_id"),
+        ),
+    },
+    "paper_in_session": {
+        "uq_examinations_session_paper": ("examinations_session_paper", ("organisation_id", "exam_paper_id")),
+    },
+    "audit_token": {
+        "uq_examinations_audit_client_token": ("examinations_audit_entry", ("organisation_id", "client_token")),
+    },
+}
+
+
+def _violates(err: IntegrityError, constraints: dict[str, tuple[str, tuple[str, ...]]]) -> bool:
+    """True only when `err` is a violation of one of `constraints`. PostgreSQL names the constraint (psycopg
+    `diag.constraint_name`); SQLite names its columns ("UNIQUE constraint failed: t.a, t.b"). Any other integrity
+    error (another constraint, a foreign key, a NOT NULL) does not count."""
+    orig = err.orig
+    name = getattr(getattr(orig, "diag", None), "constraint_name", None)
+    if name:
+        return name in constraints
+    message = str(orig)
+    return any(
+        message == "UNIQUE constraint failed: " + ", ".join(f"{table}.{column}" for column in columns)
+        for table, columns in constraints.values()
+    )
+
+
+def violates(err: IntegrityError, which: str) -> bool:
+    """Whether the integrity error is a violation of the named uniqueness rule in CONSTRAINTS."""
+    return _violates(err, CONSTRAINTS[which])
+
+
+def audit_entry_by_token(db: Session, organisation_id: str, client_token: str) -> AuditEntry | None:
+    query = q(db, AuditEntry).where(
+        AuditEntry.organisation_id == organisation_id, AuditEntry.client_token == client_token
+    )
+    return db.scalars(query).first()
+
+
+# ---------------------------------------------------------------- the lookups the use cases of the next slice start from
+
+
+def bands_of(db: Session, grading_scheme_id: str) -> list[GradingBandRow]:
+    rows = db.scalars(q(db, GradingBandRow).where(GradingBandRow.grading_scheme_id == grading_scheme_id))
+    return sorted(rows, key=lambda r: (r.min_percent, r.max_percent, r.id))
+
+
+def default_grading_scheme(db: Session) -> GradingSchemeRow | None:
+    return db.scalars(q(db, GradingSchemeRow).where(GradingSchemeRow.is_default.is_(True))).first()
+
+
+def schemes_of_offering(db: Session, course_offering_id: str) -> list[AssessmentSchemeRow]:
+    rows = db.scalars(q(db, AssessmentSchemeRow).where(AssessmentSchemeRow.course_offering_id == course_offering_id))
+    return sorted(rows, key=lambda r: r.version)
+
+
+def components_of(db: Session, assessment_scheme_id: str) -> list[AssessmentComponentRow]:
+    rows = db.scalars(
+        q(db, AssessmentComponentRow).where(AssessmentComponentRow.assessment_scheme_id == assessment_scheme_id)
+    )
+    return sorted(rows, key=lambda r: (r.code, r.id))
+
+
+def papers_of_cycle(db: Session, exam_cycle_id: str) -> list[ExamPaperRow]:
+    rows = db.scalars(q(db, ExamPaperRow).where(ExamPaperRow.exam_cycle_id == exam_cycle_id))
+    return sorted(rows, key=lambda r: r.id)
+
+
+def paper_ids_in_sessions(db: Session, paper_ids: list[str]) -> set[str]:
+    """Which of these papers are already in a session."""
+    if not paper_ids:
+        return set()
+    rows = db.scalars(q(db, ExamSessionPaperRow).where(ExamSessionPaperRow.exam_paper_id.in_(paper_ids)))
+    return {r.exam_paper_id for r in rows}
+
+
+def assigned_invigilation_sessions(db: Session, staff_id: str) -> list[ExamSessionRow]:
+    """The sessions a staff member invigilates through an assigned duty (FR-9's overlap check starts from these)."""
+    query = (
+        q(db, ExamSessionRow)
+        .join(ExamDutyRow, ExamDutyRow.exam_session_id == ExamSessionRow.id)
+        .where(
+            ExamDutyRow.staff_id == staff_id,
+            ExamDutyRow.duty_type == "invigilation",
+            ExamDutyRow.status == "assigned",
+            ExamDutyRow.organisation_id == ExamSessionRow.organisation_id,
+        )
+    )
+    return sorted(db.scalars(query), key=lambda r: (r.starts_at, r.id))
+
+
+def count(db: Session, model) -> int:
+    return db.scalar(select(func.count()).select_from(q(db, model).subquery())) or 0
+
+
+def cycle(db: Session, exam_cycle_id: str) -> ExamCycleRow | None:
+    return get(db, ExamCycleRow, exam_cycle_id)

@@ -92,7 +92,8 @@ def as_role(engine, role: str, organisation_id: str | None):
         yield c
 
 
-# One table of each shape that needs no parent row: a timetable, a read model, a membership and the audit entry.
+# One table of each shape that needs no parent row: a timetable, the read models, a membership, the processed-event
+# marker and the audit entry.
 INSERTS = {
     "timetable_attendance_timetable": (
         "INSERT INTO timetable_attendance_timetable (id, organisation_id, created_at, academic_period_id, name, "
@@ -105,6 +106,14 @@ INSERTS = {
     "timetable_attendance_section_member": (
         "INSERT INTO timetable_attendance_section_member (id, organisation_id, created_at, section_id, student_id, "
         "allocated_from) VALUES (:id, :org, now(), :id, :id, current_date)"
+    ),
+    "timetable_attendance_term_ref": (
+        "INSERT INTO timetable_attendance_term_ref (id, organisation_id, created_at, academic_period_id, code, name, "
+        "starts_on, ends_on) VALUES (:id, :org, now(), :id, 'T', 'T', current_date, current_date)"
+    ),
+    "timetable_attendance_processed_event": (
+        "INSERT INTO timetable_attendance_processed_event (id, organisation_id, created_at, event_id, name) "
+        "VALUES (:id, :org, now(), :id, 'probe')"
     ),
     "timetable_attendance_audit_entry": (
         "INSERT INTO timetable_attendance_audit_entry (id, organisation_id, client_token, action, entity_type, "
