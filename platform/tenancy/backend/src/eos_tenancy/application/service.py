@@ -572,8 +572,10 @@ def purge_organisation(db: Session, organisation_id: str, *, actor: str, force: 
     requested_by = org.deletion_requested_by
     requested_at = _aware(org.deletion_requested_at).isoformat() if org.deletion_requested_at else None
     with platform_scope():
+        found = tables.organisation_tables(db)
+        kept = tables.append_only(db, found)
         try:
-            counts = tables.delete_rows(db, tables.organisation_tables(db), org.id)
+            counts = tables.delete_rows(db, [t for t in found if t not in kept], org.id)
             db.execute(tables.organisation_row_table().delete().where(tables.organisation_row_table().c.id == org.id))
         except tables.PurgeBlockedError as e:
             db.rollback()
@@ -595,6 +597,8 @@ def purge_organisation(db: Session, organisation_id: str, *, actor: str, force: 
             "purged_at": now.isoformat(),
             "forced": force,
             "rows_deleted": {name: n for name, n in sorted(counts.items()) if n},
+            # Append-only tables (no DELETE for the API's role) keep their rows; their module erases on the event
+            "kept": sorted(t.name for t in kept),
         }
         # The tenant no longer exists, so this one record is the platform's, not the organisation's.
         events.publish(

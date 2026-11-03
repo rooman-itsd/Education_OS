@@ -19,10 +19,11 @@ from eos_core.db import SessionLocal, utcnow
 from eos_core.events import publish
 from eos_core.tenant import platform_scope
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.cron import Cron
-from ..domain.models import Run, Schedule
+from ..domain.models import Run, Schedule, SeededDefault
 from ..infrastructure.config import SchedulerConfig
 from .jobs import Job
 
@@ -99,14 +100,24 @@ class Ticker:
 
     def seed_platform_defaults(self) -> int:
         """A platform job that ships a default timing gets a schedule (in UTC) the first time it is seen, so
-        billing.expire-trials runs without anyone having to create it. Removing or retiming it later sticks."""
+        billing.expire-trials runs without anyone having to create it. Removing or retiming it later sticks.
+
+        "First time seen" is recorded in scheduler_seeded_default, keyed on the job: a scheduler seeds a job only if
+        its insert there succeeds. Two schedulers starting together therefore create one schedule, not two (the
+        second insert waits for the first and conflicts), and a deleted default is not re-created on restart."""
         now, created = self._now(), 0
         with platform_scope(), self._sessions() as db:
             for job in self.jobs.values():
                 if job.scope != "platform" or not job.default_cron or not job.idempotent:
                     continue
+                try:
+                    with db.begin_nested():
+                        db.add(SeededDefault(job=job.key, organisation_id=None, seeded_at=now))
+                        db.flush()
+                except IntegrityError:
+                    continue  # seeded before, by this scheduler or another one
                 if db.scalar(select(Schedule.id).where(Schedule.job == job.key).limit(1)):
-                    continue
+                    continue  # an operator scheduled it first
                 schedule = Schedule(
                     organisation_id=None,
                     job=job.key,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from eos_core.db import Base, TenantMixin, TimestampMixin, new_id
-from sqlalchemy import JSON, Boolean, DateTime, Integer, Numeric, String
+from eos_core.db import Base, TenantMixin, TimestampMixin, new_id, utcnow
+from sqlalchemy import JSON, Boolean, DateTime, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -106,3 +106,19 @@ class Invoice(Base, TenantMixin, TimestampMixin):
             "payment_reference": self.payment_reference,
             "document_id": self.document_id,
         }
+
+
+class TrialReminder(Base, TenantMixin):
+    """A trial reminder already raised: one row per organisation, trial end date and threshold (7, 3 or 1 days).
+    remind_trials() raises the most urgent threshold that is due and has no row yet, so a reminder missed on its
+    day (scheduler down, a failed run) goes out on the next run, and a second run never raises it again."""
+
+    __tablename__ = "billing_trial_reminder"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "trial_ends_on", "threshold", name="uq_billing_trial_reminder"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    trial_ends_on: Mapped[str] = mapped_column(String(10))  # ISO date, UTC
+    threshold: Mapped[int] = mapped_column(Integer)
+    days_left: Mapped[int] = mapped_column(Integer)  # when it was raised: below the threshold if caught up
+    raised_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

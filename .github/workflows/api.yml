@@ -32,6 +32,10 @@ jobs:
           for t in $(.venv/bin/python tools/scripts/enabled-modules.py tests); do
             echo "::group::$t"; .venv/bin/python -m pytest "$t" -q; echo "::endgroup::"
           done
+      # Modules the host does not enable yet (workflow, documents, reporting among them), each suite in a venv of
+      # its own so their entry points cannot change what the host's tests see. Empty scaffold tests/ are skipped.
+      - name: Disabled modules' tests on SQLite
+        run: tools/scripts/test-disabled-modules.sh
       - name: Migration chains on Postgres (upgrade, policies present, downgrade)
         env:
           EOS_DATABASE_URL: postgresql+psycopg://eos:eos@localhost:5432/eos
