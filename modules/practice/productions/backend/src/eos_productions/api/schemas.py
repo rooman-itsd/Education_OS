@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..application.service import NOT_NULLABLE
+
 Kind = Literal["performance", "exhibition", "recital", "screening", "hackathon", "competition", "conference", "other"]
 RoleKind = Literal["cast", "crew", "mentor"]
 
@@ -43,6 +45,18 @@ class ProductionPatch(Strict):
     venue: str | None = Field(default=None, max_length=200)
     resource_id: str | None = Field(default=None, max_length=36)
     lead_user_id: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def refuse_explicit_null(cls, data):
+        """`{"kind": null}` used to reach the column and raise IntegrityError (a 500); `{"title": null}` was
+        silently ignored. Both are a caller mistake, so both are refused here, before the service sees them.
+        Omitting a field still means "leave it alone" — only an explicit null is an error. (Review of #454.)"""
+        if isinstance(data, dict):
+            nulls = sorted(k for k in NOT_NULLABLE if k in data and data[k] is None)
+            if nulls:
+                raise ValueError(f"{', '.join(nulls)}: cannot be cleared; omit the field to leave it unchanged")
+        return data
 
 
 class ScheduleIn(Strict):

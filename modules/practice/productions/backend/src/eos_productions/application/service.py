@@ -278,6 +278,10 @@ def _dates(body: dict) -> tuple[datetime | None, datetime | None, datetime | Non
 
 
 EDITABLE = ("title", "kind", "department", "summary", "venue", "resource_id", "lead_user_id")
+#: Of those, the ones a production cannot exist without: an explicit null is refused by the API layer (422),
+#: never applied. contracts/openapi.yaml marks the other four `[<type>, "null"]`, and those really can be
+#: cleared. (Review of #454: `{"kind": null}` reached the NOT NULL column and became a 500.)
+NOT_NULLABLE = ("title", "kind", "lead_user_id")
 
 
 def update_production(db: Session, actor: Actor, production_id: str, body: dict) -> dict:
@@ -294,8 +298,10 @@ def update_production(db: Session, actor: Actor, production_id: str, body: dict)
         if key not in body:
             continue
         value = body[key]
-        if key in ("title", "lead_user_id") and not value:
-            continue  # neither may be emptied; a caller clearing them is ignored, not an error
+        if key in NOT_NULLABLE and not value:
+            # The API layer refuses an explicit null on these (422), so this only catches a direct caller of the
+            # service. A production cannot exist without a title, kind or lead, so leave the stored value alone.
+            continue
         if isinstance(value, str):
             value = value.strip()
         if getattr(production, key) != value:

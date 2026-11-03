@@ -201,13 +201,36 @@ def test_an_edit_lists_only_what_really_changed(client, org):
     assert mine[-1].payload["changed"] == ["department"]
 
 
-def test_a_patch_can_clear_an_optional_field_but_not_the_title(client, org):
+def test_a_patch_clears_an_optional_field_but_refuses_to_empty_a_required_one(client, org):
+    """Review of #454: `{"kind": null}` passed the schema, reached the NOT NULL column and became a 500, while
+    `{"title": null}` was silently ignored. An optional field can still be cleared; a required one is a 422."""
     _, coordinator = org.user(COORDINATOR)
-    production = make_production(client, coordinator, venue="Studio 2")
-    cleared = client.patch(f"{BASE}/productions/{production['id']}", json={"venue": None}, headers=coordinator)
+    production = make_production(client, coordinator, venue="Studio 2", department="Drama")
+    url = f"{BASE}/productions/{production['id']}"
+
+    cleared = client.patch(url, json={"venue": None}, headers=coordinator)
+    assert cleared.status_code == 200
     assert cleared.json()["venue"] is None
-    kept = client.patch(f"{BASE}/productions/{production['id']}", json={"title": None}, headers=coordinator)
-    assert kept.json()["title"] == "Twelfth Night"
+    assert client.patch(url, json={"department": None}, headers=coordinator).json()["department"] is None
+
+    for field in ("title", "kind", "lead_user_id"):
+        r = client.patch(url, json={field: None}, headers=coordinator)
+        assert r.status_code == 422, (field, r.status_code)
+        assert "cannot be cleared" in r.text, field
+    # refused before anything was written
+    after = client.get(url, headers=coordinator).json()
+    assert after["title"] == "Twelfth Night" and after["kind"] == "performance"
+    assert after["lead_user_id"] == production["lead_user_id"]
+    # and a real value still goes through
+    assert client.patch(url, json={"kind": "recital"}, headers=coordinator).json()["kind"] == "recital"
+
+
+def test_a_patch_that_sends_nothing_changes_nothing(client, org):
+    _, coordinator = org.user(COORDINATOR)
+    production = make_production(client, coordinator)
+    r = client.patch(f"{BASE}/productions/{production['id']}", json={}, headers=coordinator)
+    assert r.status_code == 200
+    assert r.json()["title"] == production["title"] and r.json()["kind"] == production["kind"]
 
 
 # ---------------------------------------------------------------- cast and crew
