@@ -4,7 +4,8 @@
 #   eos-db-restore --check <file.dump>   restore into a throwaway database, count the rows in every
 #                                        table, drop it again. Live data is not touched. Do this monthly.
 #   eos-db-restore <file.dump>           REPLACE the live database with the backup. Takes a safety backup
-#                                        first, stops the API while restoring, starts it again.
+#                                        first, stops the API, relay and scheduler while restoring, runs
+#                                        the migrations, starts them again.
 set -euo pipefail
 
 CONFIG="${EOS_BACKUP_CONFIG:-/etc/eos/db-backup.env}"
@@ -76,13 +77,32 @@ echo "Safety backup of the current database first:"
 backup="$(command -v eos-db-backup || echo "$(dirname "$(readlink -f "$0")")/eos-db-backup.sh")"
 "$backup" || { echo "error: the safety backup failed; nothing was changed" >&2; exit 1; }
 
-# Stop the API only if it is running, and then start it again however the restore ends.
-if [ -n "$(compose ps --status running -q api)" ]; then
-  compose stop api
-  trap 'echo "Starting the API again."; compose start api; rm -rf "$work"' EXIT
+# Stop whatever uses the database and runs (the API, the event-bus relay, the scheduler: one writing while
+# pg_restore loads would collide with the restored rows), then start them again however the restore ends.
+users=""
+for s in api relay scheduler; do
+  if [ -n "$(compose ps --status running -q "$s")" ]; then users="$users $s"; fi
+done
+if [ -n "$users" ]; then
+  # shellcheck disable=SC2086 # one word per service
+  compose stop $users
+  trap 'echo "Starting$users again."; compose start $users; rm -rf "$work"' EXIT
 fi
 psql_in -d postgres -c "DROP DATABASE $DB_NAME WITH (FORCE)" -c "CREATE DATABASE $DB_NAME OWNER $DB_USER"
 compose exec -T db pg_restore -U "$DB_USER" -d "$DB_NAME" --exit-on-error <"$file"
 echo "Restored. Rows per table:"
 count_rows "$DB_NAME" | sed 's/^/  /'
+# A backup taken by older code (a rebuilt host runs the newest): bring it to this checkout's migrations and set
+# eos_app's password to this host's, as every deploy does (infra/docker/migrate.sh).
+echo "Migrating the restored database to this checkout:"
+migrated=true
+compose run --rm -T migrate || migrated=false
+if ! $migrated; then
+  # The services still start (the EXIT trap above), so the restored data is served, but on a schema this code may
+  # not match: the restore has failed, and says so with its exit status, not a warning that is easy to miss.
+  logger -t eos-db-backup "restored $(basename "$file") into the live database; the migrate step FAILED" 2>/dev/null || true
+  echo "error: the restore is in, but the migrate step failed: the API, relay and scheduler start on an old schema." >&2
+  echo "       Fix the migration, then: docker compose -f $COMPOSE_FILE --env-file $ENV_FILE run --rm -T migrate" >&2
+  exit 1
+fi
 logger -t eos-db-backup "restored $(basename "$file") into the live database" 2>/dev/null || true

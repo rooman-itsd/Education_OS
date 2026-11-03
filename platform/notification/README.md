@@ -82,7 +82,7 @@ reminder and invoice have no caller at all — see the limitations below.
 | A message is sent with the wording chosen when it was accepted (template text snapshot, never values) | built |
 | Preferences, transactional mail that cannot be switched off, in-app inbox | built |
 | Memory transport (dev and tests), refused outside dev mode | built |
-| `recover_stuck()` for abandoned messages and due retries, with a bounded recovery-failure policy | built as a **function**, nothing calls it |
+| `recover_stuck()` for abandoned messages and due retries, with a bounded recovery-failure policy | run every 5 minutes by the scheduled job `notification.recover-stuck` (`application/jobs.py`) |
 | Alembic chain `db/` with RLS, fresh and existing-database paths | built |
 
 ## Reacting to other modules' events
@@ -116,10 +116,10 @@ Do not read this module as a finished notification workflow. Missing, and blocki
    `NOTIFICATION_TRANSPORT=adapter` now works and hands the message to an installed implementation of the
    OutboundMessaging port — see "The adapter transport" below. Delivery through a commercial relay is still
    unproven; the adapter has only been exercised against MailHog.
-2. **No automatic recovery or retries.** A retryable failure leaves the message `queued` with a
-   `next_attempt_at`; a crash leaves it `queued` or `sending`. Nothing re-drives it until
-   `recover_stuck()` is run, because the scheduler (#82) does not exist. There is no operator route
-   to unstick a message (by decision); recovery is internal.
+2. **Recovery runs on a schedule, not instantly.** A retryable failure leaves the message `queued` with a
+   `next_attempt_at`; a crash leaves it `queued` or `sending`. The scheduled job
+   `notification.recover-stuck` (default `*/5 * * * *`) re-drives it, with bounded attempts and a doubling delay.
+   There is no operator route to unstick a message (by decision); recovery is internal.
 3. **No events consumed.** There is no event consumer mechanism or relay (#83). `accept_message(...,
    source_event_id=..., channel=...)` is the dedupe-safe entry a future handler can call; nothing calls it yet.
    The single-key contract that says how an event-linked send derives its key **is implemented** here, with
@@ -321,7 +321,7 @@ carries a secret (the `token`, which lives only in `accepted`, never in the data
 
 | Message | What happens | Why |
 |---|---|---|
-| No secret | Sent by the next `recover_stuck()` sweep, once it has been `queued` longer than `NOTIFICATION_SENDING_LEASE_S`. **Nothing runs that sweep automatically yet** (the scheduler is #82), so until then it waits. | The row has everything needed to render and send it again. |
+| No secret | Sent by the next `recover_stuck()` sweep, once it has been `queued` longer than `NOTIFICATION_SENDING_LEASE_S`. The sweep runs from the `notification.recover-stuck` job. | The row has everything needed to render and send it again. |
 | With a secret (verification) | **Never sent.** The next dispatch or sweep marks it `failed` with `secret_unavailable`. Issue a new secret under a new `client_token`. | `secret_unavailable` means exactly this: a message carrying a secret that never reached a provider, now dispatched by something other than the call that held the secret. If it had reached `sending`, the code is `outcome_unknown` instead, since the provider may have it. |
 
 Delivery that survives a crash without depending on the request process is the outbox relay's job (#83),
@@ -382,8 +382,8 @@ DATA, body, QUIT — so the worst case is about **ten times** the timeout, rough
 That margin is thin, and raising the provider timeout breaks the relationship silently: the two settings live
 in different modules, notification must not import the adapter (the port is resolved by entry point), and
 nothing correlates them. **Raise the lease whenever you raise the provider timeout.** Today the consequence is
-latent rather than live, because nothing triggers `recover_stuck` in this release (**#82**) and the default
-transport is `memory`.
+live wherever the adapter transport is configured, because `recover_stuck` now runs every 5 minutes from the
+`notification.recover-stuck` job.
 
 The 24-hour figure is an **operational ceiling on one configured delay**, not a promise that every message is
 delivered within a day: `NOTIFICATION_MAX_ATTEMPTS` still bounds the attempts, and a message that exhausts
@@ -502,7 +502,6 @@ What #79 cannot finish inside this module, with the owner and the smallest chang
 | Blocker | Owner | Smallest change | #79 criterion affected |
 |---|---|---|---|
 | **No outbox relay.** `packages/core` writes `outbox_event` rows and nothing anywhere sets `published = true`; `platform/event-bus/` has **0 Python files**. So no event can *trigger* a notification, and approval, trial-reminder and invoice mails have no caller. | Himanshu, **issue #83** | the relay itself — a separate issue, deliberately not built here | **outbox-driven**, "visible on staging" |
-| **No scheduler**, so nothing calls `recover_stuck()` and nothing emits trial reminders. `platform/scheduler/` has 0 Python files. | Himanshu, **issue #82** | the scheduler itself; add the reminder event it emits to `consumes:` in `contracts/events.yaml` | retries in practice, trial reminders |
 | **No invoice event.** Billing writes `billing_invoice` rows but publishes no event for them, so even with a relay nothing would trigger `billing.invoice.issued`. | **Faizan** (billing); no issue tracks it yet | publish an invoice event; add it to `consumes:` | invoices |
 | **CI does not run these tests** or check the `notification_` policies (see item 9 above). | **Faizan/Srujan** (`tools/`, `.github/`) | include enabled platform services in `enabled-modules.py tests` and `prefixes` | "tested" |
 | **Adapter not installed in the deployed app.** Entry points register at *install* time, and the host installs only what `apps/backend/config/modules.enabled.yaml` lists. `messaging-providers` can be listed under `integrations:` only once #80 has merged, because listing it also mounts its router. Until then the adapter transport is a 503 everywhere. | Himanshu, **issue #80** | merge #80, then list `messaging-providers` | delivery, staging |

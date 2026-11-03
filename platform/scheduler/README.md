@@ -62,7 +62,7 @@ A handler that raises is retried by the relay; one that never reports is failed 
 | Cron in an explicit timezone (`*`, numbers, ranges, lists, steps; day-of-month OR day-of-week; daylight-saving gaps and repeats) | built, 17 tests |
 | The tick: fire due schedules (FOR UPDATE SKIP LOCKED on Postgres), catch-up once or never within a horizon, overlap refused and announced, unknown or non-idempotent jobs failed visibly | built, tested |
 | Runs: started by the tick or "run now", closed by the owner's report or the timeout; `scheduler.run.succeeded|failed|skipped`; history pruned after `SCHEDULER_RUN_RETENTION_DAYS` | built, tested |
-| Default UTC schedules for platform jobs that ship a `default_cron` | built, tested |
+| Default UTC schedules for platform jobs that ship a `default_cron`: seeded once per job (`scheduler_seeded_default`, keyed on the job), so schedulers starting together create one, and a default an operator deleted stays deleted | built, tested; concurrent start-ups on PostgreSQL |
 | Operator API: jobs, schedules, run now, runs; cross-tenant leak test | built, tested |
 | `python -m eos_scheduler` (no Redis) and `arq eos_scheduler.worker.WorkerSettings` | the loop runs in tests; the arq worker is wired but has not run against Redis |
 | The whole path through the host: tick → relay → owning module → report → relay → run closed | `apps/backend/tests/test_scheduled_job_chain.py`, also on PostgreSQL as `eos_app` |
