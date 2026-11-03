@@ -120,19 +120,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "studio-instructor productions.in-preparation",
         ],
     ),
-    # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
-    "selection-process": (
-        LEARNER_GAP,
-        [
-            "actor selection-process.upcoming",
-            "artist selection-process.upcoming",
-            "dancer selection-process.upcoming",
-            "designer selection-process.upcoming",
-            "law-student selection-process.upcoming",
-            "musician selection-process.upcoming",
-            "research-scholar selection-process.my-applications",
-        ],
-    ),
 }
 KNOWN_UNBACKED_WIDGETS: dict[tuple[str, str], str] = {
     tuple(pair.split(" ")): f"{module}: {reason}"
