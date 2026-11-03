@@ -5,10 +5,12 @@ from __future__ import annotations
 from datetime import UTC, timedelta
 
 from eos_core import events
+from eos_core.config import permissions_for
 from eos_core.db import scoped, utcnow
-from eos_core.tenant import organisation_scope
+from eos_core.tenant import organisation_scope, platform_scope
 from eos_identity.application.service import get_user
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.models import (
@@ -21,6 +23,7 @@ from ..domain.models import (
     ApprovalChain,
     ApprovalStep,
     WorkflowAction,
+    WorkflowEscalation,
     WorkflowRequest,
 )
 from ..infrastructure import config
@@ -30,6 +33,15 @@ class WorkflowError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
         self.status = status
+
+
+ADMIN_ROLES = frozenset({"org-admin", "super-admin"})
+APPROVAL_ACTION = "workflow:approval:action"
+
+
+def is_admin(roles: list[str] | set[str] | None) -> bool:
+    """Org and super admins read every request in the organisation and may act on any step."""
+    return bool(ADMIN_ROLES & set(roles or []))
 
 
 def _scope(organisation_id: str):
@@ -61,6 +73,7 @@ def create_chain(
     if len(steps_data) > config.max_steps():
         raise WorkflowError(422, f"chain exceeds maximum allowed steps ({config.max_steps()})")
 
+    code = code.strip()
     with _scope(organisation_id):
         existing = db.execute(
             scoped(db, select(ApprovalChain), ApprovalChain).where(ApprovalChain.code == code)
@@ -70,7 +83,7 @@ def create_chain(
 
         chain = ApprovalChain(
             organisation_id=organisation_id,
-            code=code.strip(),
+            code=code,
             title=title.strip(),
             description=description.strip() if description else None,
             is_active=True,
@@ -129,12 +142,19 @@ def list_chains(db: Session, organisation_id: str) -> list[ApprovalChain]:
         return list(db.execute(stmt).scalars().all())
 
 
-def find_by_token(db: Session, organisation_id: str, client_token: str | None) -> WorkflowRequest | None:
+def find_by_token(
+    db: Session, organisation_id: str, requester_id: str, client_token: str | None
+) -> WorkflowRequest | None:
+    """The caller's own earlier submission with this token. Tokens are per requester: another user's
+    request with the same token is never returned (it would leak their request and its context)."""
     if not client_token:
         return None
     with _scope(organisation_id):
         return db.execute(
-            scoped(db, select(WorkflowRequest), WorkflowRequest).where(WorkflowRequest.client_token == client_token)
+            scoped(db, select(WorkflowRequest), WorkflowRequest).where(
+                WorkflowRequest.requester_id == requester_id,
+                WorkflowRequest.client_token == client_token,
+            )
         ).scalar_one_or_none()
 
 
@@ -153,7 +173,7 @@ def create_request(
 ) -> tuple[WorkflowRequest, bool]:
     """Submit a new request for approval. Idempotent on client_token."""
     if client_token:
-        existing = find_by_token(db, organisation_id, client_token)
+        existing = find_by_token(db, organisation_id, requester_id, client_token)
         if existing:
             return existing, False
 
@@ -174,7 +194,7 @@ def create_request(
 
     first_step = sorted_steps[0]
     now = utcnow()
-    deadline = now + timedelta(hours=first_step.sla_hours) if first_step.sla_hours else None
+    deadline = step_deadline(first_step, now)
     if not requester_name:
         requester_name = resolve_user_name(db, requester_id)
 
@@ -219,11 +239,53 @@ def create_request(
     return req, True
 
 
-def get_request(db: Session, organisation_id: str, request_id: str) -> WorkflowRequest | None:
+def get_request(
+    db: Session, organisation_id: str, request_id: str, *, for_update: bool = False
+) -> WorkflowRequest | None:
+    """for_update locks the row until the transaction ends (Postgres; SQLite serialises writers anyway), and
+    re-reads it, so a concurrent approve/reject/delegate waits and then sees the committed state."""
     with _scope(organisation_id):
-        return db.execute(
-            scoped(db, select(WorkflowRequest), WorkflowRequest).where(WorkflowRequest.id == request_id)
-        ).scalar_one_or_none()
+        stmt = scoped(db, select(WorkflowRequest), WorkflowRequest).where(WorkflowRequest.id == request_id)
+        if for_update:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
+        return db.execute(stmt).scalar_one_or_none()
+
+
+def _visible_condition(organisation_id: str, user_id: str, approver_roles: list[str]):
+    """SQL condition for the requests a non-admin may read: their own, those delegated to them, those they
+    acted on, and, for approvers, those that reached a step their role approves."""
+    acted = exists(
+        select(WorkflowAction.id).where(
+            WorkflowAction.organisation_id == organisation_id,
+            WorkflowAction.request_id == WorkflowRequest.id,
+            WorkflowAction.actor_id == user_id,
+        )
+    )
+    conditions = [WorkflowRequest.requester_id == user_id, WorkflowRequest.delegated_to == user_id, acted]
+    if approver_roles:
+        conditions.append(
+            exists(
+                select(ApprovalStep.id).where(
+                    ApprovalStep.organisation_id == organisation_id,
+                    ApprovalStep.chain_id == WorkflowRequest.chain_id,
+                    ApprovalStep.step_order <= WorkflowRequest.current_step_order,
+                    ApprovalStep.approver_role.in_(approver_roles),
+                )
+            )
+        )
+    return or_(*conditions)
+
+
+def can_view(req: WorkflowRequest, user_id: str, roles: list[str], can_approve: bool) -> bool:
+    """Python twin of _visible_condition for a single loaded request (see list_requests)."""
+    if is_admin(roles) or req.requester_id == user_id or req.delegated_to == user_id:
+        return True
+    if any(a.actor_id == user_id for a in req.history):
+        return True
+    if can_approve and req.chain:
+        role_set = set(roles)
+        return any(s.step_order <= req.current_step_order and s.approver_role in role_set for s in req.chain.steps)
+    return False
 
 
 def list_requests(
@@ -234,10 +296,21 @@ def list_requests(
     requester_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    viewer_id: str | None = None,
+    viewer_roles: list[str] | None = None,
+    viewer_can_approve: bool = False,
 ) -> tuple[list[WorkflowRequest], int]:
+    """viewer_id limits the result to what that user may read (see can_view); admins and callers that pass
+    no viewer see every request in the organisation."""
     with _scope(organisation_id):
         q = scoped(db, select(WorkflowRequest), WorkflowRequest)
         count_q = scoped(db, select(func.count(WorkflowRequest.id)), WorkflowRequest)
+        if viewer_id and not is_admin(viewer_roles):
+            cond = _visible_condition(
+                organisation_id, viewer_id, list(viewer_roles or []) if viewer_can_approve else []
+            )
+            q = q.where(cond)
+            count_q = count_q.where(cond)
         if status:
             q = q.where(WorkflowRequest.status == status)
             count_q = count_q.where(WorkflowRequest.status == status)
@@ -264,7 +337,6 @@ def list_pending(
 ) -> tuple[list[WorkflowRequest], int]:
     """Requests pending approval where the user is an authorized approver, delegate, or admin."""
     roles = set(user_roles or [])
-    is_admin = "org-admin" in roles or "super-admin" in roles
 
     with _scope(organisation_id):
         q = scoped(db, select(WorkflowRequest), WorkflowRequest).where(WorkflowRequest.status == STATUS_PENDING)
@@ -272,7 +344,7 @@ def list_pending(
             WorkflowRequest.status == STATUS_PENDING
         )
 
-        if not is_admin:
+        if not is_admin(roles):
             q = q.outerjoin(
                 ApprovalStep,
                 (ApprovalStep.chain_id == WorkflowRequest.chain_id)
@@ -310,9 +382,16 @@ def _current_step(req: WorkflowRequest) -> ApprovalStep | None:
     return None
 
 
-def _check_approver_auth(req: WorkflowRequest, actor_id: str, actor_roles: list[str] | None) -> ApprovalStep:
+def _check_approver_auth(
+    req: WorkflowRequest, actor_id: str, actor_roles: list[str] | None, expected_step_order: int | None = None
+) -> ApprovalStep:
     if req.status != STATUS_PENDING:
         raise WorkflowError(409, f"Request is already {req.status}")
+    if expected_step_order is not None and expected_step_order != req.current_step_order:
+        # The caller acted on a step another approver has since completed: never apply it to the next step.
+        raise WorkflowError(
+            409, f"Request moved on to step {req.current_step_order}; step {expected_step_order} is already decided"
+        )
 
     if actor_id == req.requester_id:
         raise WorkflowError(403, "Requesters cannot approve, reject, or delegate their own requests")
@@ -321,9 +400,9 @@ def _check_approver_auth(req: WorkflowRequest, actor_id: str, actor_roles: list[
     if not step:
         raise WorkflowError(500, "Corrupt workflow: current step definition missing in chain")
 
-    roles = set(actor_roles or [])
-    if "org-admin" in roles or "super-admin" in roles:
+    if is_admin(actor_roles):
         return step
+    roles = set(actor_roles or [])
     if req.delegated_to and req.delegated_to == actor_id:
         return step
     if step.approver_role in roles:
@@ -340,12 +419,13 @@ def approve_request(
     actor_name: str | None = None,
     actor_roles: list[str] | None = None,
     comments: str | None = None,
+    expected_step_order: int | None = None,
 ) -> WorkflowRequest:
-    req = get_request(db, organisation_id, request_id)
+    req = get_request(db, organisation_id, request_id, for_update=True)
     if not req:
         raise WorkflowError(404, "Workflow request not found")
 
-    step = _check_approver_auth(req, actor_id, actor_roles)
+    step = _check_approver_auth(req, actor_id, actor_roles, expected_step_order)
 
     if not actor_name:
         actor_name = resolve_user_name(db, actor_id)
@@ -393,7 +473,7 @@ def approve_request(
         # Advance to next step
         next_step = subsequent_steps[0]
         req.current_step_order = next_step.step_order
-        req.current_step_deadline = now + timedelta(hours=next_step.sla_hours) if next_step.sla_hours else None
+        req.current_step_deadline = step_deadline(next_step, now)
         events.publish(
             db,
             "workflow.step.advanced",
@@ -424,12 +504,13 @@ def reject_request(
     actor_name: str | None = None,
     actor_roles: list[str] | None = None,
     comments: str | None = None,
+    expected_step_order: int | None = None,
 ) -> WorkflowRequest:
-    req = get_request(db, organisation_id, request_id)
+    req = get_request(db, organisation_id, request_id, for_update=True)
     if not req:
         raise WorkflowError(404, "Workflow request not found")
 
-    step = _check_approver_auth(req, actor_id, actor_roles)
+    step = _check_approver_auth(req, actor_id, actor_roles, expected_step_order)
 
     if not actor_name:
         actor_name = resolve_user_name(db, actor_id)
@@ -483,12 +564,13 @@ def delegate_request(
     actor_name: str | None = None,
     actor_roles: list[str] | None = None,
     comments: str | None = None,
+    expected_step_order: int | None = None,
 ) -> WorkflowRequest:
-    req = get_request(db, organisation_id, request_id)
+    req = get_request(db, organisation_id, request_id, for_update=True)
     if not req:
         raise WorkflowError(404, "Workflow request not found")
 
-    step = _check_approver_auth(req, actor_id, actor_roles)
+    step = _check_approver_auth(req, actor_id, actor_roles, expected_step_order)
 
     if not delegate_to_user_id or delegate_to_user_id.strip() == "":
         raise WorkflowError(422, "delegate_to_user_id is required")
@@ -498,6 +580,11 @@ def delegate_request(
     target_user = get_user(db, delegate_to_user_id.strip())
     if not target_user or target_user.organisation_id != organisation_id or target_user.status != "active":
         raise WorkflowError(422, "Delegation target must be an active member of this organisation")
+    if target_user.id == req.requester_id:
+        raise WorkflowError(422, "Cannot delegate a request to its requester")
+    if APPROVAL_ACTION not in permissions_for(list(target_user.roles or [])):
+        # Otherwise the item sits in the delegate's queue while every approve/reject they try is refused.
+        raise WorkflowError(422, f"Delegation target must hold '{APPROVAL_ACTION}'")
 
     if not actor_name:
         actor_name = resolve_user_name(db, actor_id)
@@ -533,6 +620,75 @@ def delegate_request(
 
     db.flush()
     return req
+
+
+def step_deadline(step: ApprovalStep, now):
+    """A step's deadline: its own sla_hours, else WORKFLOW_DEFAULT_SLA_HOURS. Before, a step without sla_hours had
+    no deadline at all, so it could never be overdue, and the default setting was read by nothing."""
+    return now + timedelta(hours=step.sla_hours or config.default_sla_hours())
+
+
+def escalate_overdue(db: Session, now=None) -> int:
+    """Run by the scheduled workflow.sla-check job, across every organisation (platform scope): each pending
+    request whose current step is past its deadline and not escalated yet gets one WorkflowEscalation row and one
+    workflow.step.overdue event (which the relay retries until delivered, and audit records). A step escalated
+    before is skipped, so the job is idempotent; the row's unique key settles two checks running at once."""
+    now = now or utcnow()
+    escalated = 0
+    with platform_scope():
+        overdue = db.execute(
+            select(WorkflowRequest).where(
+                WorkflowRequest.status == STATUS_PENDING,
+                WorkflowRequest.current_step_deadline.is_not(None),
+                WorkflowRequest.current_step_deadline < now,
+            )
+        ).scalars()
+        for req in list(overdue):
+            step = _current_step(req)
+            if step is None:
+                continue
+            deadline = (
+                req.current_step_deadline
+                if req.current_step_deadline.tzinfo
+                else req.current_step_deadline.replace(tzinfo=UTC)
+            )
+            overdue_s = int((now - deadline).total_seconds())
+            try:
+                with db.begin_nested():
+                    db.add(
+                        WorkflowEscalation(
+                            organisation_id=req.organisation_id,
+                            request_id=req.id,
+                            step_order=step.step_order,
+                            deadline=deadline,
+                            overdue_seconds=overdue_s,
+                            escalated_at=now,
+                        )
+                    )
+                    db.flush()
+            except IntegrityError:
+                continue  # escalated already, by an earlier check or one running now
+            events.publish(
+                db,
+                "workflow.step.overdue",
+                req.organisation_id,
+                {
+                    "request_id": req.id,
+                    "chain_id": req.chain_id,
+                    "chain_code": req.chain.code,
+                    "entity_type": req.entity_type,
+                    "entity_id": req.entity_id,
+                    "step_order": step.step_order,
+                    "step_name": step.name,
+                    "approver_role": step.approver_role,
+                    "delegated_to": req.delegated_to,
+                    "deadline": deadline.isoformat(),
+                    "overdue_seconds": overdue_s,
+                },
+            )
+            escalated += 1
+        db.commit()
+    return escalated
 
 
 def is_overdue(req: WorkflowRequest) -> bool:

@@ -4,7 +4,7 @@ name: reporting
 kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
+version: 0.2.0
 status: in-progress       # planned | in-progress | stable | deprecated
 description: "Dashboards, MIS reports, analytics and warehouse ETL."
 owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
@@ -21,8 +21,20 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
-
+consumes_events:
+  - academic-management.faculty-assignment.created
+  - academic-management.faculty-assignment.ended
+  - academic-management.offering.created
+  - admissions.application.accepted
+  - admissions.application.declined
+  - admissions.application.submitted
+  - admissions.offer.made
+  - fees-accounts.concession.approved
+  - fees-accounts.invoice.cancelled
+  - fees-accounts.invoice.issued
+  - fees-accounts.payment.received
+  - fees-accounts.payment.voided
+  - fees-accounts.refund.issued
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
 

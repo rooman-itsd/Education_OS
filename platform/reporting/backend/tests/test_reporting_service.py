@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import pytest
-from eos_core.db import utcnow
+from eos_core.db import new_id, utcnow
 from eos_core.events import OutboxEvent
 from eos_reporting.application import service
 from eos_reporting.application.service import ReportingError
-from eos_reporting.domain.models import STATUS_COMPLETED, MetricSnapshot
+from eos_reporting.domain.models import STATUS_COMPLETED
 from sqlalchemy import select
 
 
@@ -107,7 +107,9 @@ def test_run_report_execution_and_idempotency(db, org):
     assert is_new1 is True
     assert exec1.status == STATUS_COMPLETED
     assert exec1.result_summary is not None
-    assert "average_attendance" in exec1.result_summary
+    # Attendance has no source module yet: the report says so instead of reporting 0 % as data
+    assert exec1.result_summary["available"] is False
+    assert "timetable-attendance" in exec1.result_summary["reason"]
 
     # Check outbox event
     events = list(
@@ -182,52 +184,31 @@ def test_widget_data_generation(db, org):
     assert empty_mgmt["institution_average_attendance"] == 0.0
     assert empty_mgmt["departments"] == []
 
-    # 2. Ingest real MetricSnapshot records for org
-    now_period = utcnow().strftime("%Y-%m")
-    snap1 = MetricSnapshot(
-        organisation_id=org.id,
-        metric_type="department_summary",
-        department_id="dept-cs",
-        period=now_period,
-        data={
-            "department_id": "dept-cs",
-            "department_name": "Computer Science",
-            "attendance_rate": 88.5,
-            "pass_rate": 94.2,
-            "faculty_load_average": 16.0,
-            "total_students": 120,
-        },
+    assert empty_dept["unavailable"] == ["attendance", "exam_results"]
+    assert empty_mgmt["unavailable"] == ["attendance", "exam_results"]
+
+    # 2. Ingested academics events feed the department's faculty contact hours
+    from types import SimpleNamespace
+
+    from eos_reporting.application import ingest
+
+    def ev(name, payload):
+        return SimpleNamespace(id=new_id(), name=name, organisation_id=org.id, payload=payload, occurred_at=utcnow())
+
+    ingest.ingest(
+        db,
+        ev(
+            "academic-management.offering.created",
+            {"course_offering_id": "off-1", "department_id": "dept-cs", "academic_period_id": "t1"},
+        ),
     )
-    snap2 = MetricSnapshot(
-        organisation_id=org.id,
-        metric_type="department_summary",
-        department_id="dept-ee",
-        period=now_period,
-        data={
-            "department_id": "dept-ee",
-            "department_name": "Electrical Engineering",
-            "attendance_rate": 82.0,
-            "pass_rate": 90.0,
-            "faculty_load_average": 14.0,
-            "total_students": 100,
-        },
-    )
-    db.add_all([snap1, snap2])
+    ingest.ingest(db, ev("academic-management.faculty-assignment.created",
+                         {"instructor_assignment_id": "ia-1", "course_offering_id": "off-1", "faculty_id": "f1",
+                          "role": "primary", "contact_hours": 6}))  # fmt: skip
     db.commit()
-
-    # Department widget retrieves real metrics
     dept_data = service.get_department_reports_widget_data(db, org.id, department_id="dept-cs")
-    assert dept_data["department_id"] == "dept-cs"
-    assert dept_data["department_name"] == "Computer Science"
-    assert dept_data["attendance_rate"] == 88.5
-    assert dept_data["exam_pass_rate"] == 94.2
-    assert dept_data["faculty_load_average"] == 16.0
-
-    # Management widget aggregates across real department snapshots
-    mgmt_data = service.get_attendance_and_results_widget_data(db, org.id)
-    assert mgmt_data["institution_average_attendance"] == 85.2
-    assert mgmt_data["institution_average_pass_rate"] == 92.1
-    assert len(mgmt_data["departments"]) == 2
+    assert dept_data["faculty_contact_hours"] == 6.0
+    assert dept_data["attendance_rate"] == 0.0 and "attendance" in dept_data["unavailable"]
 
 
 def test_csv_formula_injection_prevention():
