@@ -2,6 +2,9 @@
 # approving review from a code owner of every file touched. Every path has an owner and a backup, so the
 # backup approves the owner's own PRs and nobody waits for the lead. The lead (Faizan) is required only for
 # platform core, packages, docs/architecture and the team rules; module contracts belong to the module owner.
+# Himanshu is the third owner of the host, tests, infra and CI paths: the branch rule refuses an approval from the
+# person who made the last push, and the merge queue pushes updates from Faizan's account, so Srujan's PRs there
+# need an approver who is neither Srujan nor Faizan.
 
 /docs/architecture/                  @faizanrooman @srujanrooman @himanshu-rooman
 /docs/team/                          @faizanrooman @srujanrooman
@@ -12,11 +15,11 @@
 /platform/api-gateway/               @faizanrooman @himanshu-rooman @srujanrooman
 /platform/tenancy/                   @faizanrooman @himanshu-rooman @srujanrooman
 /platform/billing/                   @faizanrooman @himanshu-rooman @srujanrooman
-/.github/                            @faizanrooman @srujanrooman
-/tools/                              @faizanrooman @srujanrooman
-/infra/                              @srujanrooman @faizanrooman
-/apps/                               @srujanrooman @faizanrooman
-/tests/                              @srujanrooman @faizanrooman
+/.github/                            @faizanrooman @srujanrooman @himanshu-rooman
+/tools/                              @faizanrooman @srujanrooman @himanshu-rooman
+/infra/                              @srujanrooman @faizanrooman @himanshu-rooman
+/apps/                               @srujanrooman @faizanrooman @himanshu-rooman
+/tests/                              @srujanrooman @faizanrooman @himanshu-rooman
 
 /platform/                           @himanshu-rooman @faizanrooman @srujanrooman
 /integrations/                       @himanshu-rooman @faizanrooman @akshatatrathodrooman

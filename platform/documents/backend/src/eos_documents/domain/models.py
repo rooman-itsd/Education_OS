@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import PurePosixPath
 
 from eos_core.db import Base, TenantMixin, new_id, utcnow
-from sqlalchemy import JSON, BigInteger, DateTime, Index, String
+from sqlalchemy import JSON, BigInteger, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 STATUS_PENDING_UPLOAD = "pending_upload"
@@ -87,6 +87,7 @@ class Document(Base, TenantMixin):
         Index("ix_documents_document_org_status", "organisation_id", "status"),
         Index("ix_documents_document_org_entity", "organisation_id", "entity_type", "entity_id"),
         Index("uq_documents_document_org_token", "organisation_id", "uploaded_by", "client_token", unique=True),
+        Index("ix_documents_document_org_version_of", "organisation_id", "version_of"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -95,6 +96,15 @@ class Document(Base, TenantMixin):
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Where the client PUTs while the document is pending. Never the document's own key (storage_path): confirm
+    # copies a validated upload there and deletes this, so a replayed or late PUT can never change a confirmed
+    # file. Null once confirmed, and on rows created before this column (they uploaded to storage_path).
+    upload_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Versions: every version is a row. version_of is the first version's id (null on the first version itself);
+    # superseded_by is set on a version once a newer one is confirmed.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    version_of: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    superseded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     bucket: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), default=STATUS_PENDING_UPLOAD, nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
