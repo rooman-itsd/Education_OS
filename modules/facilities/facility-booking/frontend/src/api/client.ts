@@ -10,6 +10,9 @@
 /** contract BookingStatus */
 export type BookingStatus = "pending" | "confirmed" | "rejected" | "cancelled" | "checked_in" | "completed" | "no_show";
 
+/** contract Booking.can: the actions the caller may take now. */
+export type BookingAction = "edit" | "cancel" | "approve" | "reject" | "check_in" | "no_show";
+
 /** contract Booking, the fields the widgets read */
 export interface Booking {
   id: string;
@@ -20,6 +23,8 @@ export interface Booking {
   status: BookingStatus;
   title?: string | null;
   party_size?: number | null;
+  /** Actions the caller may take now; the widgets show a button only for an action listed here. */
+  can?: BookingAction[];
 }
 
 /** contract BookingPage */
@@ -66,13 +71,20 @@ function token(): string | null {
   }
 }
 
-async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
   const t = token();
   if (t) headers.Authorization = `Bearer ${t}`;
-  const res = await fetch(`${API_BASE}/facility-booking${path}`, { headers, signal });
+  const init: RequestInit = { method, headers, signal };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  const res = await fetch(`${API_BASE}/facility-booking${path}`, init);
   if (!res.ok) throw new BookingApiError(res.status, res.statusText || `HTTP ${res.status}`);
   return (await res.json()) as T;
+}
+
+function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return request<T>("GET", path, undefined, signal);
 }
 
 /**
@@ -97,6 +109,24 @@ export function listUpcomingBookings(scope: "mine" | "managed", pageSize: number
 /** GET /summary?date=today: counts over the resources the caller manages or approves. Permission facility-booking:booking:read. */
 export function getSummary(signal?: AbortSignal): Promise<Summary> {
   return get<Summary>("/summary?date=today", signal);
+}
+
+/**
+ * POST /bookings/{id}/cancel, with body { reason } when one is given (the contract's body is optional). The booker may
+ * cancel before the booking starts; facility-booking:booking:manage may cancel at any time and must give a reason.
+ * 409 when the booking already started, finished or was cancelled.
+ */
+export function cancelBooking(id: string, reason?: string, signal?: AbortSignal): Promise<Booking> {
+  const why = reason?.trim();
+  return request<Booking>("POST", `/bookings/${encodeURIComponent(id)}/cancel`, why ? { reason: why } : undefined, signal);
+}
+
+/**
+ * POST /bookings/{id}/check-in, no body: check in to a confirmed booking, from 15 minutes before its start until the
+ * no-show grace ends. Booker, or facility-booking:booking:manage. 409 outside that window or when not confirmed.
+ */
+export function checkInBooking(id: string, signal?: AbortSignal): Promise<Booking> {
+  return request<Booking>("POST", `/bookings/${encodeURIComponent(id)}/check-in`, undefined, signal);
 }
 
 /** "09:00" in the viewer's time; "—" when the value is missing or not a date. */
@@ -150,4 +180,25 @@ export function describeFailure(e: unknown, what: string): Failure {
   if (e.status === 401) return { title: "Sign in again to see this.", retry: false };
   if (e.status === 403) return { title: "You do not have access to this.", retry: false };
   return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
+}
+
+/** The row actions the widgets offer. */
+export type RowAction = "cancel" | "check_in";
+
+/**
+ * What a row says when its cancel or check-in fails, decided by the status code alone: the server's text is never
+ * shown. 409 means the booking moved on since the list loaded (it started, was cancelled, or the check-in window
+ * is not open).
+ */
+export function describeActionFailure(e: unknown, action: RowAction): string {
+  const status = e instanceof BookingApiError ? e.status : 0;
+  if (status === 409) {
+    return action === "cancel" ? "This booking can no longer be cancelled." : "This booking cannot be checked in now.";
+  }
+  if (status === 422 && action === "cancel") return "Give a reason for cancelling.";
+  if (status === 401) return "Sign in again to do this.";
+  if (status === 403) return "You are not allowed to do this.";
+  if (status === 404) return "This booking is no longer available.";
+  if (status === 0 || status === 502 || status === 503) return "Booking service is not available yet. Try again later.";
+  return action === "cancel" ? "Could not cancel this booking. Try again in a moment." : "Could not check in. Try again in a moment.";
 }
