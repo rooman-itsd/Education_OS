@@ -1,37 +1,26 @@
-# admissions — integration points
+# Integration points — admissions
 
-## Events published (contracts/events.yaml)
+Admissions is the front door of the student lifecycle. It coordinates with several other modules
+across its lifecycle. Every integration is event-driven or reference-driven; this module does not
+import code from, nor make direct database joins into, another module's tables.
 
-| Event | Known/likely consumers |
-|---|---|
-| `admissions.application.submitted` | None required this week; available for `platform/notification` (confirmation email) once that module's contract exists |
-| `admissions.application.status-changed` | `platform/notification` (status update emails), when it exists |
-| `admissions.merit-list.published` | `platform/notification`; applicants poll the public tracking endpoint rather than being pushed to |
-| `admissions.offer.made` | `platform/notification` |
-| `admissions.application.accepted` | **`finance-operations/fees-accounts`** — confirmed by the existing example in `docs/architecture/ARCHITECTURE.md` ("fees-accounts... subscribes to admissions.application.accepted and creates a fee invoice") |
-| `admissions.application.declined` | `platform/notification` |
+## Modules that consume admissions events
 
-## Events consumed
+| Event | Consumer | Purpose |
+|---|---|---|
+| `admissions.application.accepted` | `finance-operations/fees-accounts` | Raise confirmation / seat fee invoice (see `docs/architecture/ARCHITECTURE.md`) |
+| `admissions.application.accepted` | `student-lifecycle/student-information` (manual) | Staff creates Person / Student record referencing the application as `source` |
 
-None. `module.yaml`'s `consumes_events: []` stays empty. This module does not react to any other
-module's event in this release.
+## Outgoing references stored by admissions
 
-## Platform services used (via packages/sdk)
+| Reference | Target module | Format | Notes |
+|---|---|---|---|
+| `programme_id` | `academics/academic-management` | UUID | Stored on `Application` and `MeritList`; no foreign key constraint |
+| `selection_process_round_id` | `practice/selection-process` | UUID (nullable) | Optional reference when admission uses a selection round |
+| `portfolio_item_id` | `practice/portfolio` | UUID (nullable) | Optional reference when admission reviews a portfolio item |
+| `document_id` | `platform/documents` | String | References an uploaded file |
 
-| Service | Use |
-|---|---|
-| `platform/documents` | Storage for uploaded application documents; this module stores only `document_id` references (opaque; not validated, since documents has no service to call yet) |
-| `platform/audit` | Every status change, document verification, offer and decision is audited. Until audit has a service, rows go to this module's own `admissions_audit_entry` table, as other built modules do |
-
-## What the host must provide
-
-- **Public routes through the gateway.** `apps/backend`'s entitlement gate must let
-  `/api/v1/admissions/public/{org_slug}/*` through without a token, after resolving the slug to an
-  active organisation entitled to admissions (404 otherwise), and pass that organisation id to the
-  route as `request.state.organisation_id`. Every other admissions path keeps the normal token check.
-  Without it the public routes answer 404 (the module never guesses an organisation).
-
-## Cross-module API dependencies
+## Incoming calls into admissions
 
 None. This module does not call `student-information`, `fees-accounts`, `practice/portfolio`,
 `practice/selection-process`, `platform/tenancy` or `platform/identity`'s business endpoints.
@@ -45,7 +34,7 @@ references, never validated against another module's schema or API in this relea
   a `source` reference back to this application's id. This module does not call that API and does
   not need its contract to exist to publish its own — the relationship is staff-mediated, not
   code-mediated.
-- **An authenticated applicant experience**: not planned. Applicants stay anonymous (see
-  `docs/prd.md` §6) and use the public Track application page. `admissions.application-status`
-  and `admissions.pending-documents` are built as staff widgets; `applicant.yaml` still lists
-  them, and the shell hides them there (see `docs/screens.md`).
+- **An authenticated applicant experience**: Supported via `POST /me/applications` and `GET /me/applications`.
+  Applicants submit applications anonymously and track them via public tracking or link their application to
+  their identity account (`applicant` role holding `admissions:self:read`) to track status and documents on
+  the Applicant dashboard (`platform/identity/config/dashboards/applicant.yaml`).
