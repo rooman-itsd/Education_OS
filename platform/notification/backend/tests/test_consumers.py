@@ -185,6 +185,26 @@ def test_the_lookup_is_found_on_the_entry_point_group(monkeypatch):
         organisations.reset_cache()
 
 
+def test_an_approved_package_change_mails_the_admin_once_with_the_new_package():
+    """Replaces tenancy's eos_core.notify stub, which only logged this email (#316 follow-up)."""
+    o = Org.create(SessionLocal())
+    e = event("tenancy.package.changed", o.id, {"organisation_id": o.id, "from": "music-academy", "to": "law-college"})
+    deliver(e)
+    deliver(e)  # at-least-once: a redelivery mails nobody twice
+    (message,) = messages_of(o.id)
+    assert message.template_key == "tenancy.package.changed" and message.status == "sent"
+    assert message.recipient_id == o.admin.id and NAME in message.subject
+    (mail,) = [m for m in transport_module.sent if m.get("to") == o.admin.email]
+    assert "law-college" in mail["body"] and "music-academy" not in mail["body"]
+
+
+def test_a_package_change_without_the_new_package_is_retried_not_mailed():
+    o = Org.create(SessionLocal())
+    with pytest.raises(KeyError):
+        deliver(event("tenancy.package.changed", o.id, {"organisation_id": o.id, "from": "music-academy"}))
+    assert messages_of(o.id) == []
+
+
 # --- notification.recover-stuck: a temporarily failed email is sent by the scheduled sweep ---------------------
 
 

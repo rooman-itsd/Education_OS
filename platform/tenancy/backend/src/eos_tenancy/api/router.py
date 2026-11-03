@@ -38,6 +38,11 @@ class Verify(BaseModel):
     token: str
 
 
+class ResendVerification(BaseModel):
+    slug: str = Field(min_length=1, max_length=40)
+    email: str = Field(min_length=3, max_length=254)
+
+
 class Toggle(BaseModel):
     enabled: bool
 
@@ -102,6 +107,18 @@ def register(body: RegistrationRequest, db: Session = Depends(get_db)):
     if settings.dev_mode:
         out["verification_token"] = token  # never in production; EOS_DEV_MODE=false removes it
     return out
+
+
+@router.post("/register/resend", status_code=202)
+def resend_verification(body: ResendVerification, db: Session = Depends(get_db)):
+    """Mail a new verification token to the address that registered `slug`, if it is still awaiting
+    verification. 202 whether or not anything was sent, so this reveals nothing about which registrations exist;
+    rate-limited per organisation (see service.resend_verification)."""
+    try:
+        service.resend_verification(db, slug=body.slug, email=body.email)
+    except TenancyError as e:
+        raise _err(e) from e
+    return {"status": "accepted"}
 
 
 @router.post("/register/verify")

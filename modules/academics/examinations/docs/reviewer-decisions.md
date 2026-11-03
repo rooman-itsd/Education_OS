@@ -120,7 +120,24 @@ An architectural decision is needed before the full read-model update handlers a
 The handlers for `offering.created`, `offering.status-changed`, `faculty-assignment.*` and
 `course-registration.*` do not depend on this decision. The same limitation affects timetable-attendance.
 
-## 8. Evidence limits
+## 8. Choices and gaps of the backend foundation
+
+Found while building the domain rules and tables. None is decided; each is isolated or applied literally.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| Whether a grading band's `max_percent` is inclusive (PRD FR-3: bands "cover 0 to 100 without gaps or overlaps") | Validates each band and that the scheme has bands, grades are unique and values lie within 0 to 100. **The coverage rule is not enforced**: a test records that gaps and touching bands are accepted | Shivani, the controller's owner: the boundary convention |
+| Which time zone "a session must fall within the cycle dates" is read in (FR-5) | `ensure_within_cycle` takes the zone as an argument; nothing supplies one yet | A source for the organisation's time zone (the same gap exists in timetable-attendance) |
+| Cycle status moves other than the next one (PRD section 6 shows a line, and says the controller closes a cycle) | Only the next status is allowed, and `results_published` only by publication. Closing early, skipping and going back are refused | Shivani: whether a cycle may be closed or reopened from other statuses |
+| Whether a grading scheme or exam cycle `code` must be unique | No uniqueness rule: the contract declares no 409 for creating a cycle | Shivani |
+| What a cycle uses as grading scheme when the request names none and no default exists | `new_cycle` takes the scheme from the caller; the module does not choose one | Shivani |
+| Candidates, hall tickets, marks, results, `registration_ref` | **No tables or code**: they carry `student_id` or depend on eligibility (the `student_id` mapping, supplementary and backlog candidacy, attendance minimum, dues) | Faizan (Q2), Praveen (Q1), Shivani (Q5) |
+| FR-5's rule that a student may not be a candidate in two overlapping sessions | Not implemented (needs candidates) | As above |
+| Department-scoped keys (`*-department`) | No department is read or assumed; `Actor` has no department | Faizan (Q13) |
+| `offering_ref` | The table follows the PRD's columns, strictly (NOT NULL). It is not written yet; the consumer slice may need to relax it, as timetable-attendance's `offering_ref` had to be, because events arrive unordered and `offering.updated` carries no new values | The consumer slice, and the architectural decision in section 7 |
+| The identity of `staff_id` on duties | Stored as a plain external id (PRD 5.8); no identity lookup or mapping | Faizan (Q11) |
+
+## 9. Evidence limits
 
 This record covers PR #183 (5 comments, 1 review, no inline comments), PRs #168, #175, #179, #216, #243 and
 #459, and parts of #170, #64, #63, #107 and #184. It does **not** cover:
