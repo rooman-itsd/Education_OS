@@ -74,7 +74,8 @@ def list_events(
 def get_event(event_id: str, p: Principal = Depends(require("event-bus:event:read")), db: Session = Depends(get_db)):
     config = EventBusConfig.from_env()
     with _scope(p) as scope, _http_errors():
-        return events.event_out(events.get_event(db, scope, event_id), config)
+        row = events.get_event(db, scope, event_id)
+        return events.event_out(row, config, events.deliveries(db, row.id))
 
 
 @router.post("/events/{event_id}/replay", status_code=202)
@@ -83,7 +84,8 @@ def replay_event(
 ):
     config = EventBusConfig.from_env()
     with _scope(p) as scope, _http_errors():
-        return events.event_out(events.replay(db, scope, config, event_id, actor=p.user_id), config)
+        row = events.replay(db, scope, config, event_id, actor=p.user_id)
+        return events.event_out(row, config, events.deliveries(db, row.id))
 
 
 @router.get("/relay/health")
