@@ -2,9 +2,64 @@
 
 Issue #325 · Reviewer: @praveen-rooman · Raised by: Shivani
 
-Status of this page: **nothing below is decided.** "Implemented now" is what the code on this branch does today
-(domain and database foundations, no API yet). "Proposal" is the author's suggestion; it is not agreed and nothing
-depends on it being accepted. The contracts (`contracts/*.yaml`) are unchanged by this work.
+This page has four parts: the decisions the reviewer has confirmed, what is still unresolved, the design choices the
+code has made that nobody has reviewed, and the original nine points as submitted with PR #459 (sections 1 to 9, which
+describe the code as it was then). The contracts (`contracts/*.yaml`) have not been changed by any of this work.
+Times are UTC.
+
+## A. Confirmed by the reviewer
+
+Praveen's review of PR #459
+([comment 6598201117, 2026-11-03T07:45Z](https://github.com/rooman-itsd/Education_OS/pull/459#issuecomment-6598201117)),
+where he approved the PR and asked for these to be recorded. "Contract change" means a change to
+`contracts/*.yaml`, to be made in a separate `contract/timetable-attendance/...` PR.
+
+| Point | Confirmed decision | Status in the code |
+|---|---|---|
+| Percentage with no counted class (section 1) | `null`, plus the `no_eligible_classes` flag | Domain already returns `None`. **Contract change** (nullable `percentage`) not made yet |
+| Date range for generating classes (section 2) | Keep a `term_ref`; generate inside the term, narrowed by each slot's effective dates; refuse to publish if the term is unknown. `academic-management.term.created` carries `starts_on` and `ends_on` | `term_ref` and its `term.created` consumer exist (this PR). Generation and publish are not built |
+| Cancelling a class with an open session (section 3) | Mark the session cancelled; do not run close (which would make unmarked students absent). Cancelled classes never count | Not built. The contract's session status has only `open` and `closed`, so a cancelled status is a **contract change** |
+| Read models (section 4) | The events exist. `offering_ref`, `section_ref`, `assignment_ref` come from academic-management `offering.*`, `section.*` and `faculty-assignment.created/ended`; `section_member` from enrolment-registration `course-registration.confirmed/withdrawn` and `section-allocation.changed` (`effective_on`). Copy enrolment-registration's `consumers.py` and register it under `eos.event_consumers` | Partly built (this PR): `term_ref`, `offering_ref`, `section_ref`. See B for what is not |
+| Department scope | Waiting on Faizan (Q9). Until then the `*-department` keys grant nothing | Nothing enforces a department. No department claim is read |
+| Exam eligibility | The API, `POST /reports/attendance-eligibility`, as decided in C7 | Contract merged; endpoint not implemented |
+| 401/403 and the unused keys | Agreed, as a separate contract PR using `x-permission-any`. It needs Faizan, because other modules use this contract | Not done. **Contract change** |
+| Student report paths | Intended: students use `/me/...` only | No implementation needed |
+| Deviations from the PRD (schema naming, interim audit table) | All fine: the table prefix and separate version table follow every other module | none |
+
+## B. Not decided, and not built because of it
+
+| Open point | Owner | Effect on the code |
+|---|---|---|
+| Whether `faculty_id` (the person on `academic-management.faculty-assignment.*`) may be stored as the instructor (`instructor_id`). The rename is proposed in academic-management's PR #168; no record of Faizan's confirmation was found in the sources inspected | Faizan | **The `faculty-assignment.created` and `.ended` consumers are not implemented**, so `assignment_ref` is never filled by an event and a slot cannot name an instructor assignment outside tests |
+| Whether `student_id` is the `person_id` carried by the enrolment events (Praveen proposed it and asked for Faizan's confirmation under Q3) | Faizan | **The enrolment-registration consumers are not implemented**, so `section_member` is never filled |
+| How `offering.updated` and `course.*` are applied: they carry only `changed_fields`, not the new values | Shivani, with Faizan | Not consumed. A change to an offering's course code or title after creation is not reflected |
+| How a department is known (Q9) | Faizan | See A |
+
+## C. Design choices of the event consumers (not reviewed)
+
+These are decisions the code makes that no one has approved. They follow `platform/event-bus/contracts/events.yaml`
+(at-least-once, unordered, idempotent on the envelope id) but are the author's.
+
+- **Idempotency** is keyed on the envelope id, kept per organisation in `processed_event`, and written in the handler's
+  own transaction so a failure rolls it back.
+- **A status is unknown until an event reports it.** `offering.created` and `section.created` carry no status, so
+  `status` stays NULL rather than assuming a starting status (`planned`, `open`).
+- **Partial rows.** An event can arrive before its creation event, so `offering_ref` and `section_ref` columns that only
+  the creation fills (and `status`) are nullable. A row is treated as known only after its creation event (`academic_period_id`
+  or `code` is set). Slot validation therefore refuses an offering or section that has only been mentioned.
+- **Ordering** uses the envelope `occurred_at`, compared per row, to decide whether a status change is stale (an equal
+  time applies). The event-bus contract says `occurred_at` is "not a reliable ordering key across modules" and tells
+  consumers that need order to use "the entity's own state or occurred_at". Arrival order is never used.
+- **A creation never overwrites**: a second `offering.created`, `section.created` or `term.created` for a known id is
+  ignored, and the status a later event set is kept.
+- **A malformed payload is refused** (the relay records the failure and retries, then dead-letters), not half applied.
+  An envelope version other than 1 is refused too.
+- **An event is applied only in its own organisation.** The handler refuses to run if the session is not scoped to the
+  event's organisation, and an event with no organisation is not applied.
+
+## Original submission (PR #459)
+
+The nine points below are as submitted with PR #459. Where section A now records an answer, A is current.
 
 Contract check run on the three files: 31 operations, unique operation ids, every `x-permission` is in
 `permissions.yaml`, every `$ref` resolves, every role grant names a catalogue key.
