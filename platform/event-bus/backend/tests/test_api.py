@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from eos_event_bus.api.router import router
 from eos_event_bus.application.relay import DEAD_LETTERED
+from eos_event_bus.infrastructure.config import EventBusConfig
 from event_bus_support import Clock, Org, raise_event, relay, row, super_admin_headers
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -27,7 +28,10 @@ def orgs():
     return Org(), Org()
 
 
-def _dead(event_name: str, organisation_id: str, max_attempts: int = 8) -> str:
+def _dead(event_name: str, organisation_id: str, max_attempts: int | None = None) -> str:
+    # The API reads the limit from the environment, so dead-letter with the same default it uses
+    max_attempts = max_attempts or EventBusConfig().max_attempts
+
     def boom(db, ev):
         raise RuntimeError("down")
 
@@ -119,3 +123,19 @@ def test_health_counts_every_organisation_for_the_super_admin(client, orgs):
     assert body["transport"] == "inprocess" and body["dead_lettered"] == 1
     assert body["backlog"] >= 1 and body["oldest_unpublished_at"] and isinstance(body["stalled"], bool)
     assert DEAD_LETTERED  # the notice itself is pending too, and counted in the backlog
+
+
+def test_an_events_detail_shows_its_delivery_to_each_module(client, orgs):
+    a, _ = orgs
+
+    def boom(db, ev):
+        raise RuntimeError("down")
+
+    eid = raise_event("d.e.f", a.id)
+    relay({"good": {"d.e.f": lambda db, ev: None}, "bad": {"d.e.f": boom}}, Clock()).run_once()
+    body = client.get(f"{PREFIX}/events/{eid}", headers=a.headers(a.admin)).json()
+    assert body["state"] == "pending"
+    assert [(d["module"], d["status"], d["attempts"], d["last_error"]) for d in body["deliveries"]] == [
+        ("bad", "failed", 1, "bad: RuntimeError"),
+        ("good", "delivered", 1, None),
+    ]

@@ -12,7 +12,10 @@ echo "== approved stack";   python3 tools/scripts/check-stack.py
 echo "== module boundaries"; python3 tools/scripts/check-boundaries.py
 echo "== module manifests"; python3 tools/scripts/check-manifests.py
 echo "== migrations";       python3 tools/scripts/check-migrations.py
-echo "== ruff";             $RUFF check $CFG . && $RUFF format $CFG --check .
+# One command per line: under `set -e` bash ignores a failure on the left of `&&`, so `check && format` let a
+# failing `ruff check` through and still printed "precheck ok".
+echo "== ruff";             $RUFF check $CFG .
+echo "== ruff format";      $RUFF format $CFG --check .
 if git rev-parse --verify -q origin/main >/dev/null; then
   echo "== commit messages"; tools/scripts/check-commits.sh "$(git merge-base origin/main HEAD)" HEAD
 fi

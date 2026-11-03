@@ -9,7 +9,7 @@ from eos_core.db import Base, new_id, utcnow
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-TABLE_NAMES = ("scheduler_schedule", "scheduler_run")
+TABLE_NAMES = ("scheduler_schedule", "scheduler_run", "scheduler_seeded_default")
 
 
 class Schedule(Base):
@@ -46,3 +46,15 @@ class Run(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     missed_windows: Mapped[int] = mapped_column(Integer, default=0)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SeededDefault(Base):
+    """A platform job whose default schedule has been created once. The primary key is the job, so two
+    schedulers starting together cannot both seed it (the second insert waits, then conflicts), and the row
+    outlives the schedule: an operator who deletes a seeded schedule does not see it come back on restart.
+    organisation_id is always null (platform), carried with row-level security like every module table."""
+
+    __tablename__ = "scheduler_seeded_default"
+    job: Mapped[str] = mapped_column(String(120), primary_key=True)
+    organisation_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
+    seeded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

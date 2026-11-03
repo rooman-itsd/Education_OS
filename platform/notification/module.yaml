@@ -35,6 +35,8 @@ consumes_events:
   - billing.subscription.started
   - billing.trial.expired
   - billing.subscription.upgraded
+  - billing.trial.expiring
+  - scheduler.job.due
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

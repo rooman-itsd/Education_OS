@@ -33,7 +33,7 @@ except (ImportError, ModuleNotFoundError):
 
 from eos_identity.application.service import create_user
 from eos_reporting.application import service
-from eos_reporting.domain.models import MetricSnapshot, ReportDefinition, ReportExecution
+from eos_reporting.domain.models import MetricFact, MetricSnapshot, ReportDefinition, ReportExecution
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
@@ -53,6 +53,7 @@ def _clean_tables():
         s.execute(delete(ReportExecution))
         s.execute(delete(ReportDefinition))
         s.execute(delete(MetricSnapshot))
+        s.execute(delete(MetricFact))
         if Document is not None:
             s.execute(delete(Document))
         s.execute(delete(OutboxEvent))
