@@ -70,7 +70,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing coming up",
     unavailable: "Production data is not available yet.",
   },
-  { id: "selection-process.my-applications", module: "practice/selection-process", batch: "#322" },
+  {
+    id: "selection-process.my-applications",
+    module: "practice/selection-process",
+    batch: "#322",
+    title: "My Applications",
+    probe: "/selection-process/processes?status=open&page_size=5",
+    empty: "No active applications",
+    unavailable: "Application data is not available yet.",
+  },
   {
     id: "budget-grants.my-grants",
     module: "finance-operations/budget-grants",

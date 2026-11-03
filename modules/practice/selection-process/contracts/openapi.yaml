@@ -45,7 +45,10 @@ paths:
     post:
       summary: Create a selection process as a draft, with its ordered stages. Permission selection-process:process:manage.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProcessInput" } } } }
-      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Process" } } } }
+        "409": { description: "stage_sequence_conflict: a concurrent write took a stage sequence", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+        "422": { description: "duplicate_stage_sequence: two stages share a sequence number", content: { application/json: { schema: { $ref: "#/components/schemas/ValidationError" } } } }
 
   /processes/{id}:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -71,7 +74,8 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Stage" } } } } }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { description: Process is not a draft }
+        "409": { description: "process_not_draft: the process is not a draft; stage_sequence_conflict: a concurrent write took a stage sequence", content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+        "422": { description: "duplicate_stage_sequence: two stages share a sequence number; the existing stages are kept", content: { application/json: { schema: { $ref: "#/components/schemas/ValidationError" } } } }
 
   /processes/{id}/open:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -341,5 +345,11 @@ components:
     ConflictError:
       type: object
       properties:
-        code: { type: string, enum: [process_not_draft, process_not_open, no_stages, duplicate_candidate, already_decided] }
+        code: { type: string, enum: [process_not_draft, process_not_open, no_stages, duplicate_candidate, already_decided, stage_sequence_conflict] }
+        message: { type: string }
+
+    ValidationError:
+      type: object
+      properties:
+        code: { type: string, enum: [duplicate_stage_sequence] }
         message: { type: string }

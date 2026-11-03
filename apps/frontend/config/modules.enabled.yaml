@@ -22,6 +22,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - practice/selection-process
   - practice/portfolio
   - practice/productions
   - student-lifecycle/enrolment-registration
