@@ -55,21 +55,31 @@ def test_report_execution_states():
     assert e.export_file_id is None
 
 
-def test_metric_snapshot():
-    now = utcnow()
+def test_metric_snapshot_has_the_agreed_logical_fields():
+    from datetime import date
+    from decimal import Decimal
+
     s = MetricSnapshot(
         id=new_id(),
         organisation_id="org-1",
-        metric_type="attendance",
-        department_id="dept-cs",
-        period="2026-10",
-        data={"present": 92, "total": 100},
-        captured_at=now,
+        source_module="admissions",
+        metric_key="admissions.applications_submitted",
+        period_start=date(2026, 10, 1),
+        period_end=date(2026, 10, 31),
+        dimensions={"programme_id": "p-1"},
+        dimensions_key='{"programme_id":"p-1"}',
+        value=Decimal("12"),
+        unit="count",
+        calculated_at=utcnow(),
+        schema_version=1,
     )
-    assert s.metric_type == "attendance"
-    assert s.department_id == "dept-cs"
-    assert s.period == "2026-10"
-    assert s.data["present"] == 92
+    assert s.tenant_id == "org-1" and s.metric_key == "admissions.applications_submitted"
+    assert (s.period_start, s.period_end, s.unit, s.schema_version) == (
+        date(2026, 10, 1),
+        date(2026, 10, 31),
+        "count",
+        1,
+    )
 
 
 def test_unique_constraint_on_definition_org_code(db):
@@ -98,27 +108,27 @@ def test_unique_constraint_on_definition_org_code(db):
 
 
 def test_unique_constraint_on_execution_client_token(db):
-    e1 = ReportExecution(
-        id=new_id(),
-        organisation_id="org-unique",
-        report_definition_id="def-1",
-        requested_by="user-1",
-        client_token="tok-123",
-    )
-    db.add(e1)
-    db.commit()
-
-    e2 = ReportExecution(
-        id=new_id(),
-        organisation_id="org-unique",
-        report_definition_id="def-1",
-        requested_by="user-2",
-        client_token="tok-123",
-    )
-    db.add(e2)
+    """client_token is unique per requester: the same user's duplicate is refused, another user's is not (it must
+    never resolve to someone else's run)."""
     import pytest
     from sqlalchemy.exc import IntegrityError
 
+    def run(user: str) -> ReportExecution:
+        return ReportExecution(
+            id=new_id(),
+            organisation_id="org-unique",
+            report_definition_id="def-1",
+            requested_by=user,
+            client_token="tok-123",
+        )
+
+    db.add(run("user-1"))
+    db.commit()
+
+    db.add(run("user-2"))
+    db.commit()  # another requester may use the same token
+
+    db.add(run("user-1"))
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
