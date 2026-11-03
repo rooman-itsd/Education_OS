@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Timetable API (issue #325, part 2): `GET`/`POST /timetables`, `GET`/`PATCH /timetables/{id}`,
+  `PUT /timetables/{id}/slots` and `GET /timetables/{id}/conflicts`, as the contract declares them. Request bodies are
+  checked by the use cases, so a malformed body is the contract's 400 with a code and the offending field. Slots are
+  replaced as a list (the contract has no per-slot routes); a slot identical to an existing one keeps its id. Slot
+  ids must exist in the local read models, agree with each other and belong to the timetable's academic period, else
+  422; until the consumers fill the read models (PRD Q1, Q2) only timetables without slots can be saved. Every change
+  writes an audit entry and publishes `timetable.created` / `timetable.updated` in the same transaction, and a failure
+  at any step rolls all of it back. Settings `TIMETABLE_ATTENDANCE_*` are read by `infrastructure/config.py`. Not
+  here: publishing, class generation, scheduled classes, attendance, reports, widgets.
 - Backend foundations (issue #325, part 1): domain rules for timetables and slots, conflict detection (section and
   instructor block publishing, a shared location is a warning), scheduled-class generation, rescheduling and
   cancelling, attendance sessions, marking, closing and correction, and attendance percentages (excused classes

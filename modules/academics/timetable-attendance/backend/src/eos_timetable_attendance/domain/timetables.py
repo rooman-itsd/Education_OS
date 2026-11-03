@@ -176,6 +176,23 @@ def ensure_known_references(
             )
 
 
+def ensure_offerings_in_period(
+    slots: Iterable[Slot], offering_periods: dict[str, str], academic_period_id: str
+) -> None:
+    """A timetable plans one academic period, so every slot's course offering must be an offering of that period.
+    `offering_periods` maps a known course offering id to its academic period id (from the local read model); offerings
+    it does not hold are the business of `ensure_known_references`."""
+    for slot in slots:
+        period = offering_periods.get(slot.course_offering_id)
+        if period is not None and period != academic_period_id:
+            raise DomainRuleError(
+                "offering_not_in_period",
+                f"course offering {slot.course_offering_id} belongs to another academic period",
+                kind="unprocessable",
+                field="course_offering_id",
+            )
+
+
 @dataclass(frozen=True)
 class Publication:
     """What publishing or unpublishing changes: the timetable as it becomes."""
