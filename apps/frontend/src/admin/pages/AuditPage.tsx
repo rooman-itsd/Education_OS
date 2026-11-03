@@ -1,215 +1,281 @@
-import React, { useState } from 'react';
-import {
-  History,
-  ShieldAlert,
-  Search,
-  Download,
-  CheckCircle2,
-  AlertTriangle,
-  XCircle,
-  KeyRound,
-  FileCheck2,
-  ShieldCheck
-} from '../lib/icons';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from '../lib/router';
+import { History, Search, CheckCircle2, AlertTriangle, FileCheck2, ShieldCheck, ShieldAlert } from '../lib/icons';
 import { MOCK_AUDIT_LOGS } from '../data/mockData';
-import { roleTitle } from '../data/roles';
-import { AuditLog } from '../types';
-import { PageHeader, StatGrid, BTN_PRIMARY, BTN_SECONDARY } from '../components/ui/dashboard';
+import { ApiError } from '../../api/client';
+import { useAuth } from '../lib/auth';
+import { AUDIT_PAGE_SIZE, actorLabel, happenedToday, listAllOrganisations, listAuditRecords, when, type AuditRecord } from '../lib/auditAdmin';
+import type { AdminOrganisation } from '../lib/organisationsAdmin';
+import { PageHeader, StatGrid, BTN_SECONDARY } from '../components/ui/dashboard';
+
+/** Preview mode (no API): the sample events, in the real record's shape, labelled as samples. */
+const SAMPLE: AuditRecord[] = MOCK_AUDIT_LOGS.map((l) => ({
+  id: l.id,
+  organisation_id: null,
+  actor: null,
+  actor_name: l.user,
+  module: l.action.split('.')[0] ?? '',
+  action: l.action,
+  entity_type: l.resource.split(':')[0]?.trim() ?? '',
+  entity_id: l.resource.split(':')[1]?.trim() ?? '',
+  summary: null,
+  context: {},
+  occurred_at: null,
+  redacted: false
+}));
+
+type Load = { state: 'loading' } | { state: 'error'; message: string; retry: boolean } | { state: 'ready' };
+
+/** What the page says when the API refuses or is missing, as the other admin screens do. */
+function failure(e: unknown): { message: string; retry: boolean; expired: boolean } {
+  if (e instanceof ApiError && e.status === 401) return { message: 'Your session has ended. Sign in again.', retry: false, expired: true };
+  if (e instanceof ApiError && e.status === 403) return { message: 'You do not have access to audit records.', retry: false, expired: false };
+  if (!(e instanceof ApiError) || [404, 502, 503].includes(e.status)) {
+    return { message: 'Audit records are not available yet.', retry: true, expired: false };
+  }
+  return { message: 'Could not load audit records. Try again in a moment.', retry: true, expired: false };
+}
 
 export const AuditPage: React.FC = () => {
-  const [logs] = useState<AuditLog[]>(MOCK_AUDIT_LOGS);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedRole, setSelectedRole] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const { session, preview, signOut } = useAuth();
+  const navigate = useNavigate();
+  const superAdmin = Boolean(session?.me.is_super_admin) && !preview;
 
-  const showNotification = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
+  const [records, setRecords] = useState<AuditRecord[]>(preview ? SAMPLE : []);
+  const [total, setTotal] = useState(preview ? SAMPLE.length : 0);
+  const [load, setLoad] = useState<Load>(preview ? { state: 'ready' } : { state: 'loading' });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [organisations, setOrganisations] = useState<AdminOrganisation[]>([]);
+  // Super admin only: '' is the platform's own records, else one organisation's trail.
+  const [organisationId, setOrganisationId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedModule, setSelectedModule] = useState('All');
+  const request = useRef(0);
+
+  const onFailure = useCallback(
+    (e: unknown) => {
+      const f = failure(e);
+      if (f.expired) {
+        signOut();
+        navigate('/login', { replace: true });
+        return;
+      }
+      setLoad({ state: 'error', message: f.message, retry: f.retry });
+    },
+    [navigate, signOut]
+  );
+
+  const loadFirstPage = useCallback(() => {
+    if (preview) return;
+    const mine = ++request.current;
+    setLoad({ state: 'loading' });
+    listAuditRecords({ organisationId: superAdmin ? organisationId || null : null })
+      .then((page) => {
+        if (mine !== request.current) return; // a newer choice of organisation is loading
+        setRecords(page.items);
+        setTotal(page.total);
+        setLoad({ state: 'ready' });
+      })
+      .catch((e: unknown) => mine === request.current && onFailure(e));
+  }, [preview, superAdmin, organisationId, onFailure]);
+
+  useEffect(loadFirstPage, [loadFirstPage]);
+
+  useEffect(() => {
+    if (!superAdmin) return;
+    listAllOrganisations()
+      .then((orgs) => setOrganisations([...orgs].sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => setOrganisations([])); // the platform's own records still show
+  }, [superAdmin]);
+
+  const loadMore = () => {
+    const mine = request.current;
+    setLoadingMore(true);
+    listAuditRecords({ organisationId: superAdmin ? organisationId || null : null, offset: records.length })
+      .then((page) => {
+        if (mine !== request.current) return;
+        setRecords((prev) => [...prev, ...page.items]);
+        setTotal(page.total);
+      })
+      .catch(onFailure)
+      .finally(() => setLoadingMore(false));
   };
 
-  const filteredLogs = logs.filter((log) => {
+  const modules = useMemo(() => ['All', ...Array.from(new Set(records.map((r) => r.module))).sort()], [records]);
+  const filtered = records.filter((r) => {
+    const q = searchQuery.trim().toLowerCase();
     const matchesSearch =
-      log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.resource.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRole = selectedRole === 'All' || log.role === selectedRole;
-    const matchesStatus = selectedStatus === 'All' || log.status === selectedStatus;
-    return matchesSearch && matchesRole && matchesStatus;
+      !q ||
+      [actorLabel(r), r.action, r.entity_type, r.entity_id, r.summary ?? ''].some((v) => v.toLowerCase().includes(q));
+    return matchesSearch && (selectedModule === 'All' || r.module === selectedModule);
   });
 
-  const roles = ['All', ...Array.from(new Set(logs.map((l) => l.role)))];
+  const scopeNote = preview
+    ? 'Sample events: the API is not connected, so these use the event names in the repo’s contracts.'
+    : superAdmin
+      ? organisationId
+        ? 'This organisation’s trail. Reading it is itself recorded, as a super admin action.'
+        : 'The platform’s own records: approvals, impersonation and other super admin actions.'
+      : `Your organisation’s trail${session?.organisation ? `: ${session.organisation.name}` : ''}.`;
 
   return (
     <div className="space-y-6">
-      {/* Toast Alert */}
-      {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#12233F] text-white px-4 py-3 rounded-lg shadow-xl border border-[#12233F] text-xs">
-          <CheckCircle2 className="w-4 h-4 text-[#126B3D]" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
       <PageHeader
         title="Audit Activity"
         subtitle={
           <span className="inline-flex flex-wrap items-center gap-2">
-            Every state change writes to platform/audit, and audit records are immutable (ARCHITECTURE.md). Its API is not
-            built yet, so these are sample events using the event names in the repo's contracts.
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569]">
-              <ShieldCheck className="w-3 h-3" />
-              Sample data
-            </span>
+            Every recorded state change, newest first. Audit records are append-only: nothing here can be edited or
+            deleted. {scopeNote}
+            {preview && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569]">
+                <ShieldCheck className="w-3 h-3" />
+                Sample data
+              </span>
+            )}
           </span>
-        }
-        actions={
-          <>
-            <button onClick={() => showNotification('Export needs the platform/audit API, which is not built yet')} className={BTN_PRIMARY}>
-              <Download className="w-3.5 h-3.5" />
-              Export Audit Log
-            </button>
-          </>
         }
       />
 
       <StatGrid
         stats={[
-          { label: 'Events today', icon: History, value: String(logs.filter((l) => !l.timestamp.startsWith('Yesterday')).length), note: 'Sample events' },
-          { label: 'Successful', icon: CheckCircle2, value: String(logs.filter((l) => l.status === 'Success').length), note: 'State changes recorded' },
-          {
-            label: 'Blocked or failed',
-            icon: ShieldAlert,
-            value: String(logs.filter((l) => l.status !== 'Success').length),
-            delta: 'review',
-            deltaTone: 'alert',
-            note: 'Failed or needs review'
-          },
-          { label: 'Active actors', icon: FileCheck2, value: String(new Set(logs.map((l) => l.user)).size), note: 'Distinct users and services' }
+          { label: 'Records', icon: History, value: String(total), note: preview ? 'Sample events' : 'In this trail' },
+          { label: 'Today', icon: CheckCircle2, value: String(records.filter((r) => happenedToday(r.occurred_at)).length), note: 'Among those loaded' },
+          { label: 'Modules', icon: FileCheck2, value: String(modules.length - 1), note: 'That recorded changes' },
+          { label: 'Actors', icon: ShieldAlert, value: String(new Set(records.map(actorLabel)).size), note: 'Distinct users and the system' }
         ]}
       />
 
       {/* FILTERS BAR */}
       <div className="bg-[#FFFFFF] rounded-xl border border-[#E2E8F0] p-4 shadow-2xs">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Search */}
+        <div className={`grid grid-cols-1 gap-3 ${superAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          {superAdmin && (
+            <div>
+              <select
+                aria-label="Whose trail"
+                value={organisationId}
+                onChange={(e) => {
+                  setOrganisationId(e.target.value);
+                  setSelectedModule('All');
+                }}
+                className="w-full px-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] focus:outline-none focus:ring-2 focus:ring-[#9333EA] bg-[#F6F8FB] text-[#12233F]"
+              >
+                <option value="">Platform (super admin actions)</option>
+                {organisations.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="relative">
             <Search className="w-4 h-4 text-[#475569] absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search by action, user, or resource ID..."
+              aria-label="Search"
+              placeholder="Search by actor, action, entity or summary..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] focus:outline-none focus:ring-2 focus:ring-[#9333EA] bg-[#F6F8FB]"
             />
           </div>
-
-          {/* Role Filter */}
           <div>
             <select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
+              aria-label="Module"
+              value={selectedModule}
+              onChange={(e) => setSelectedModule(e.target.value)}
               className="w-full px-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] focus:outline-none focus:ring-2 focus:ring-[#9333EA] bg-[#F6F8FB] text-[#12233F]"
             >
-              <option value="All">All Roles</option>
-              {roles.filter((r) => r !== 'All').map((r) => (
-                <option key={r} value={r}>{roleTitle(r)}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs rounded-lg border border-[#E2E8F0] focus:outline-none focus:ring-2 focus:ring-[#9333EA] bg-[#F6F8FB] text-[#12233F]"
-            >
-              <option value="All">All Event Outcomes</option>
-              <option value="Success">Success</option>
-              <option value="Failed">Failed</option>
-              <option value="Warning">Warning</option>
+              <option value="All">All modules</option>
+              {modules
+                .filter((m) => m !== 'All')
+                .map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
             </select>
           </div>
         </div>
       </div>
 
-      {/* AUDIT LOGS TABLE */}
+      {/* AUDIT RECORDS TABLE */}
       <div className="bg-[#FFFFFF] rounded-xl border border-[#E2E8F0] shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#F6F8FB] border-b border-[#E2E8F0] text-[#475569] font-semibold">
-                <th className="py-3 px-4 w-32">Timestamp</th>
-                <th className="py-3 px-4">User</th>
-                <th className="py-3 px-4">Role</th>
-                <th className="py-3 px-4">Action</th>
-                <th className="py-3 px-4">Resource Target</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Origin IP</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#F1F5F9] text-[#12233F]">
-              {filteredLogs.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-[#475569]">
-                    No audit records matching search parameters.
-                  </td>
+        {load.state === 'error' ? (
+          <div role="alert" className="py-8 px-4 text-center text-xs text-[#475569] space-y-3">
+            <p className="inline-flex items-center gap-2 text-[#B91C1C]">
+              <AlertTriangle className="w-4 h-4" />
+              {load.message}
+            </p>
+            {load.retry && (
+              <div>
+                <button onClick={loadFirstPage} className={BTN_SECONDARY}>
+                  Try again
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs" aria-busy={load.state === 'loading'}>
+              <thead>
+                <tr className="bg-[#F6F8FB] border-b border-[#E2E8F0] text-[#475569] font-semibold">
+                  <th className="py-3 px-4 w-40">When</th>
+                  <th className="py-3 px-4">Actor</th>
+                  <th className="py-3 px-4">Module</th>
+                  <th className="py-3 px-4">Action</th>
+                  <th className="py-3 px-4">Entity</th>
+                  <th className="py-3 px-4">Summary</th>
                 </tr>
-              ) : (
-                filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[#F6F8FB] transition-colors">
-                    <td className="py-3 px-4 font-mono text-[#475569] whitespace-nowrap">
-                      {log.timestamp}
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-[#12233F]">
-                      {log.user}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#7E22CE]">
-                        {roleTitle(log.role)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-[#12233F]">
-                      {log.action}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[#7E22CE] font-semibold">
-                      {log.resource}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                          log.status === 'Success'
-                            ? 'bg-[#16834B26] text-[#126B3D]'
-                            : log.status === 'Warning'
-                            ? 'bg-[#F39A1926] text-[#8A4F00]'
-                            : 'bg-[#DC262626] text-[#B91C1C]'
-                        }`}
-                      >
-                        {log.status === 'Success' ? (
-                          <CheckCircle2 className="w-3 h-3" />
-                        ) : log.status === 'Warning' ? (
-                          <AlertTriangle className="w-3 h-3" />
-                        ) : (
-                          <XCircle className="w-3 h-3" />
-                        )}
-                        <span>{log.status}</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono text-[11px] text-[#64748B]">
-                      {log.ipAddress}
+              </thead>
+              <tbody className="divide-y divide-[#F1F5F9] text-[#12233F]">
+                {load.state === 'loading' ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-[#475569]">
+                      Loading audit records…
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-[#475569]">
+                      {records.length === 0 ? 'No audit records yet.' : 'No audit records match the search.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r) => (
+                    <tr key={r.id} className="hover:bg-[#F6F8FB] transition-colors">
+                      <td className="py-3 px-4 font-mono text-[#475569] whitespace-nowrap">{when(r.occurred_at) || '–'}</td>
+                      <td className="py-3 px-4 font-semibold text-[#12233F]">{actorLabel(r)}</td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#F1F5F9] text-[#7E22CE]">{r.module}</span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[#12233F]">{r.action}</td>
+                      <td className="py-3 px-4 font-mono text-[#7E22CE] font-semibold">
+                        {r.entity_type}: {r.entity_id}
+                      </td>
+                      <td className="py-3 px-4 text-[#475569]">
+                        {r.summary ?? ''}
+                        {r.redacted && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F39A1926] text-[#8A4F00]">Redacted</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div className="py-3 px-4 border-t border-[#E2E8F0] bg-[#F6F8FB] flex items-center justify-between text-xs text-[#475569]">
           <span>
-            Displaying <strong className="text-[#12233F]">{filteredLogs.length}</strong> sequential ledger entries
+            Showing <strong className="text-[#12233F]">{filtered.length}</strong> of {total} records
           </span>
-          <span className="text-[11px]">platform/audit: append-only by design; API not built yet</span>
+          {!preview && load.state === 'ready' && records.length < total && (
+            <button onClick={loadMore} disabled={loadingMore} className={BTN_SECONDARY}>
+              {loadingMore ? 'Loading…' : `Load ${Math.min(AUDIT_PAGE_SIZE, total - records.length)} more`}
+            </button>
+          )}
         </div>
       </div>
     </div>
