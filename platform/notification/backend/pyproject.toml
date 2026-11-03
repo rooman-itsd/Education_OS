@@ -18,6 +18,9 @@ test = ["pytest>=8", "httpx>=0.27", "eos-testing"]
 [project.entry-points."eos.event_consumers"]
 notification = "eos_notification.application.consumers:CONSUMERS"
 
+[project.entry-points."eos.scheduler_jobs"]
+notification = "eos_notification.application.jobs:JOBS"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

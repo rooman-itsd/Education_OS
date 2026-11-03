@@ -3,8 +3,9 @@
 module: audit
 version: 1
 
-# Audit is a sink: every module writes to it, it reacts to nothing. The few events here are
-# about the audit trail itself, not about what was audited. Re-publishing audited actions as
+# Audit is a sink: it records other modules' state changes from their events (see `consumes`,
+# application/consumers.py). The few events here are about the audit trail itself, not about
+# what was audited. Re-publishing audited actions as
 # events would duplicate the publishing module's own events and double every consumer's work.
 events:
   - name: audit.export.ready
@@ -37,4 +38,48 @@ events:
       removed_count: integer
       older_than: datetime
 
-consumes: []
+  - name: audit.job.finished
+    version: 1
+    description: >-
+      The outcome of an audit.prune run, for platform/scheduler, which closes the run.
+    payload:
+      run_id: uuid
+      outcome: string
+      detail: string
+
+# Each becomes one record in the event's organisation (idempotent on the event id); super admin
+# operations on an organisation also get a platform-level record. scheduler.job.due runs audit.prune.
+consumes:
+  - tenancy.organisation.registered
+  - tenancy.organisation.verified
+  - tenancy.package.requested
+  - tenancy.organisation.approved
+  - tenancy.package.changed
+  - tenancy.organisation.activated
+  - tenancy.organisation.suspended
+  - tenancy.organisation.archived
+  - tenancy.organisation.exported
+  - tenancy.organisation.deletion_requested
+  - tenancy.organisation.restored
+  - tenancy.organisation.purged
+  - tenancy.entitlement.changed
+  - tenancy.impersonation.started
+  - identity.user.created
+  - identity.user.oidc_linked
+  - billing.subscription.started
+  - billing.subscription.upgraded
+  - billing.subscription.downgraded
+  - billing.subscription.expired
+  - billing.trial.expired
+  - billing.invoice.issued
+  - billing.invoice.paid
+  - workflow.request.submitted
+  - workflow.step.advanced
+  - workflow.request.approved
+  - workflow.request.rejected
+  - workflow.request.delegated
+  - documents.document.uploaded
+  - documents.document.deleted
+  - reporting.report.executed
+  - reporting.report.exported
+  - scheduler.job.due
