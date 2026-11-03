@@ -27,6 +27,14 @@ from .deps import require
 router = APIRouter(tags=["selection-process"])
 
 
+def _csv(values: list[str] | None) -> list[str] | None:
+    """`status` as the contract defines it (style form, explode false: `?status=a,b`), and also repeated (`?status=a&status=b`)."""
+    if not values:
+        return None
+    parts = [part.strip() for value in values for part in value.split(",") if part.strip()]
+    return parts or None
+
+
 def _run(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
@@ -103,7 +111,7 @@ def list_processes(
         svc.list_processes,
         actor,
         type_id=type_id,
-        statuses=status,
+        statuses=_csv(status),
         q=q,
         page=page,
         page_size=page_size,
@@ -252,7 +260,7 @@ def list_candidates(
         actor,
         id,
         scope=scope,
-        statuses=status,
+        statuses=_csv(status),
         page=page,
         page_size=page_size,
     )
@@ -329,6 +337,17 @@ def finalize_candidate(
 # ------------------------------------------------------------------
 # Slots (Upcoming Events)
 # ------------------------------------------------------------------
+
+
+@router.post("/processes/{id}/slots", status_code=status.HTTP_201_CREATED)
+def create_slot(
+    id: str,
+    body: s.SlotInput,
+    actor: Actor = Depends(require(PROCESS_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    svc = SelectionProcessService(db)
+    return _run(svc.create_slot, actor, id, body.model_dump(mode="json"))
 
 
 @router.get("/slots/upcoming")
