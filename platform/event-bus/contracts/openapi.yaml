@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: event-bus API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Operator view of the event bus: inspect the outbox, watch relay health, replay
     dead-lettered events. Modules do NOT publish through this API - they call
@@ -172,6 +172,19 @@ components:
         attempts: { type: integer }
         last_error: { type: [string, "null"] }
         published_at: { type: [string, "null"], format: date-time }
+        deliveries:
+          type: array
+          description: >-
+            GET /events/{id} and replay only: the event's delivery to each consuming module. A delivered module
+            is never handed the event again; a retry or replay re-runs only the failed ones.
+          items:
+            type: object
+            properties:
+              module: { type: string }
+              status: { type: string, enum: [delivered, failed] }
+              attempts: { type: integer }
+              last_error: { type: [string, "null"] }
+              delivered_at: { type: [string, "null"], format: date-time }
 
     Error:
       type: object

@@ -75,3 +75,13 @@ already used somewhere in this folder has no CSS until `admin.css` is regenerate
 4.3.3 compiler from `admin.source.css` (outside this repo; Tailwind is not a dependency here).
 Prefer classes that already appear in the design, or plain CSS in `admin.source.css` and
 `admin.css`.
+
+## Audit log
+
+`#/audit-logs` (`pages/AuditPage.tsx`, `lib/auditAdmin.ts`) reads `platform/audit`'s `GET /audit/records`, 50 at a
+time, newest first, with "Load more". An organisation admin sees their organisation's trail; a super admin sees the
+platform's own records (approvals, impersonation, cross-organisation reads) and can choose an organisation to read its
+trail, which the API itself records as a super admin action. The columns are what a record holds: when, the actor's
+current name (or "System"), module, action, entity and summary, with a badge on a redacted record; search and the
+module filter work on the records loaded. Records are append-only, so the page has no edit or delete. Export waits for
+`POST /records/export`, which the API does not serve yet. In preview mode the page shows labelled sample events.
