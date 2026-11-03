@@ -2,8 +2,8 @@
 
 What this provides, and what it does not (README states the same):
 - accept + dispatch are driven by a call (API route or direct service call). Nothing in this module polls.
-- `recover_stuck` is a function. NOTHING triggers it automatically yet (scheduler #82 is unbuilt), so a message
-  left `queued` or `sending` after a crash waits until someone runs it.
+- `recover_stuck` runs from the scheduled `notification.recover-stuck` job (application/jobs.py, every 5 minutes
+  by default): a message left `queued` (retry due) or `sending` (lease expired) is re-driven by the next sweep.
 - Delivery is at-least-once at the provider: the provider port has no idempotency key, so a crash after the
   provider accepted a message and before we recorded it can send a duplicate. Exactly-once is not claimed.
 - Events are not consumed here. `accept_message(source_event_id=...)` is the dedupe-safe entry a future event
@@ -349,8 +349,7 @@ def accept_in_transaction(
 
     Secrets, such as a verification token, exist only in the returned object, never in the database. If the
     process stops after the caller's commit and before deliver_accepted(), the row stays `queued`:
-    - a message without a secret is sent by the next recover_stuck() sweep, but nothing runs that sweep
-      automatically until the scheduler (#82) exists, so until then it waits;
+    - a message without a secret is sent by the next recover_stuck() sweep (the notification.recover-stuck job);
     - a message with a secret can never be sent later, because the secret is gone. The next dispatch or sweep
       marks it `failed` with `secret_unavailable`, and the caller must issue a new secret under a new
       client_token."""
@@ -683,7 +682,7 @@ def recover_stuck(
     limit: int = 100,
 ) -> dict[str, int]:
     """Re-drive messages nothing is working on: queued rows whose retry is due or that were never dispatched, and
-    sending rows whose lease expired. NOT TRIGGERED BY ANYTHING in this release. Secret-bearing messages cannot be
+    sending rows whose lease expired. Run by the notification.recover-stuck job. Secret-bearing messages cannot be
     re-rendered (their secret was never stored), so they are failed: `secret_unavailable` if never sent,
     `outcome_unknown` if a provider call may have succeeded. Attempts are bounded by NOTIFICATION_MAX_ATTEMPTS."""
     config = config or NotificationConfig.from_env()
