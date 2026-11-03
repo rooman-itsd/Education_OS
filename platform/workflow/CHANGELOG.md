@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- SLA monitoring (#317 follow-up). Deadlines were only computed when read, a step without `sla_hours` had none, and
+  `WORKFLOW_DEFAULT_SLA_HOURS` was read by nothing. A step now gets its `sla_hours`, else the default; the scheduled
+  platform job `workflow.sla-check` (`*/15 * * * *`, entry point `eos.scheduler_jobs`) records each pending step
+  past its deadline once (`workflow_escalation`, migration `workflow_0003`, unique per request step, RLS) and
+  publishes `workflow.step.overdue`; it reports `workflow.job.finished`. `backend/pyproject.toml` gains its build
+  system, package location, `test` extra and the two entry points.
 Contract 0.2.0: request reads and delegation targets are narrower (security fixes below); `step_order` on
 actions is new and optional.
 

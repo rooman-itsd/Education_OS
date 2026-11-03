@@ -7,9 +7,10 @@ from datetime import UTC, timedelta
 from eos_core import events
 from eos_core.config import permissions_for
 from eos_core.db import scoped, utcnow
-from eos_core.tenant import organisation_scope
+from eos_core.tenant import organisation_scope, platform_scope
 from eos_identity.application.service import get_user
 from sqlalchemy import exists, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.models import (
@@ -22,6 +23,7 @@ from ..domain.models import (
     ApprovalChain,
     ApprovalStep,
     WorkflowAction,
+    WorkflowEscalation,
     WorkflowRequest,
 )
 from ..infrastructure import config
@@ -192,7 +194,7 @@ def create_request(
 
     first_step = sorted_steps[0]
     now = utcnow()
-    deadline = now + timedelta(hours=first_step.sla_hours) if first_step.sla_hours else None
+    deadline = step_deadline(first_step, now)
     if not requester_name:
         requester_name = resolve_user_name(db, requester_id)
 
@@ -471,7 +473,7 @@ def approve_request(
         # Advance to next step
         next_step = subsequent_steps[0]
         req.current_step_order = next_step.step_order
-        req.current_step_deadline = now + timedelta(hours=next_step.sla_hours) if next_step.sla_hours else None
+        req.current_step_deadline = step_deadline(next_step, now)
         events.publish(
             db,
             "workflow.step.advanced",
@@ -618,6 +620,75 @@ def delegate_request(
 
     db.flush()
     return req
+
+
+def step_deadline(step: ApprovalStep, now):
+    """A step's deadline: its own sla_hours, else WORKFLOW_DEFAULT_SLA_HOURS. Before, a step without sla_hours had
+    no deadline at all, so it could never be overdue, and the default setting was read by nothing."""
+    return now + timedelta(hours=step.sla_hours or config.default_sla_hours())
+
+
+def escalate_overdue(db: Session, now=None) -> int:
+    """Run by the scheduled workflow.sla-check job, across every organisation (platform scope): each pending
+    request whose current step is past its deadline and not escalated yet gets one WorkflowEscalation row and one
+    workflow.step.overdue event (which the relay retries until delivered, and audit records). A step escalated
+    before is skipped, so the job is idempotent; the row's unique key settles two checks running at once."""
+    now = now or utcnow()
+    escalated = 0
+    with platform_scope():
+        overdue = db.execute(
+            select(WorkflowRequest).where(
+                WorkflowRequest.status == STATUS_PENDING,
+                WorkflowRequest.current_step_deadline.is_not(None),
+                WorkflowRequest.current_step_deadline < now,
+            )
+        ).scalars()
+        for req in list(overdue):
+            step = _current_step(req)
+            if step is None:
+                continue
+            deadline = (
+                req.current_step_deadline
+                if req.current_step_deadline.tzinfo
+                else req.current_step_deadline.replace(tzinfo=UTC)
+            )
+            overdue_s = int((now - deadline).total_seconds())
+            try:
+                with db.begin_nested():
+                    db.add(
+                        WorkflowEscalation(
+                            organisation_id=req.organisation_id,
+                            request_id=req.id,
+                            step_order=step.step_order,
+                            deadline=deadline,
+                            overdue_seconds=overdue_s,
+                            escalated_at=now,
+                        )
+                    )
+                    db.flush()
+            except IntegrityError:
+                continue  # escalated already, by an earlier check or one running now
+            events.publish(
+                db,
+                "workflow.step.overdue",
+                req.organisation_id,
+                {
+                    "request_id": req.id,
+                    "chain_id": req.chain_id,
+                    "chain_code": req.chain.code,
+                    "entity_type": req.entity_type,
+                    "entity_id": req.entity_id,
+                    "step_order": step.step_order,
+                    "step_name": step.name,
+                    "approver_role": step.approver_role,
+                    "delegated_to": req.delegated_to,
+                    "deadline": deadline.isoformat(),
+                    "overdue_seconds": overdue_s,
+                },
+            )
+            escalated += 1
+        db.commit()
+    return escalated
 
 
 def is_overdue(req: WorkflowRequest) -> bool:

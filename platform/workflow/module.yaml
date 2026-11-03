@@ -21,7 +21,8 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - scheduler.job.due
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
