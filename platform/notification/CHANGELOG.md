@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The rest of tenancy's stub emails are notification's (#316 follow-up): new templates
+  `tenancy.organisation.suspended`, `.closed`, `.reactivated` and `.deletion_scheduled`, chosen by
+  `on_status_changed` from `tenancy.organisation.archived`, `.suspended` and (new) `.activated`: suspended or
+  archived from `active`, activated from `suspended`/`archived`, and an archive carrying `delete_after` (a deletion
+  request, with the date the data goes). A first activation after approval sends nothing here (`approved` already
+  mails). With the rejection and package-change emails, every `eos_core.notify` call in tenancy now has a
+  replacement, so tenancy can drop them.
 - A refused registration is emailed (#316 follow-up). tenancy refuses a registration by archiving (or suspending)
   an organisation that is still pending, and only logged the email through the `eos_core.notify` stub. New
   template `tenancy.organisation.rejected` (with the reason) and one handler for `tenancy.organisation.archived` and

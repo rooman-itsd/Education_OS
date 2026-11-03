@@ -55,21 +55,41 @@ def on_event(db: Session, event) -> None:
     _send_to_admins(db, event, template, variables_of(event.payload or {}))
 
 
-# --- an organisation's status changed (tenancy.organisation.archived | suspended) --------------------------------
+# --- an organisation's status changed (tenancy.organisation.archived | suspended | activated) ---------------------
 # One handler, because one event can mean different things: tenancy refuses a registration by archiving (or
 # suspending) an organisation that is still pending, and closes or suspends an active one the same way. The payload's
 # previous_status (tenancy contract 0.3.0) tells them apart. Without it nothing is sent: guessing would mail a
 # rejection to an organisation that was closed, or the reverse.
 REFUSED_FROM = frozenset({"pending_verification", "pending_approval"})
-STATUS_EVENTS = ("tenancy.organisation.archived", "tenancy.organisation.suspended")
+OFF_STATUSES = frozenset({"suspended", "archived"})
+STATUS_EVENTS = ("tenancy.organisation.archived", "tenancy.organisation.suspended", "tenancy.organisation.activated")
 
 
 def status_template(event) -> tuple[str, dict] | None:
-    """(template, variables) for a status-change event, or None when it calls for no email."""
+    """(template, variables) for a status-change event, or None when it calls for no email.
+
+    archived with delete_after         a deletion request: data kept until delete_after   -> deletion_scheduled
+    archived | suspended, from pending  a refused registration                             -> rejected
+    suspended, from active              suspended by the platform operator                 -> suspended
+    archived, from active               closed by the platform operator                    -> closed
+    activated, from suspended|archived  back in service                                    -> reactivated
+    Anything else (a first activation after approval, which `approved` already mails; no previous_status) -> None."""
     payload = event.payload or {}
     previous = payload.get("previous_status")
-    if event.name in STATUS_EVENTS and previous in REFUSED_FROM:
-        return "tenancy.organisation.rejected", {"reason": str(payload.get("reason") or "not given")}
+    reason = str(payload.get("reason") or "not given")
+    if event.name == "tenancy.organisation.archived" and payload.get("delete_after"):
+        return "tenancy.organisation.deletion_scheduled", {
+            "reason": reason,
+            "delete_on": str(payload["delete_after"])[:10],
+        }
+    if event.name in ("tenancy.organisation.archived", "tenancy.organisation.suspended") and previous in REFUSED_FROM:
+        return "tenancy.organisation.rejected", {"reason": reason}
+    if event.name == "tenancy.organisation.suspended" and previous == "active":
+        return "tenancy.organisation.suspended", {"reason": reason}
+    if event.name == "tenancy.organisation.archived" and previous == "active":
+        return "tenancy.organisation.closed", {"reason": reason}
+    if event.name == "tenancy.organisation.activated" and previous in OFF_STATUSES:
+        return "tenancy.organisation.reactivated", {}
     return None
 
 

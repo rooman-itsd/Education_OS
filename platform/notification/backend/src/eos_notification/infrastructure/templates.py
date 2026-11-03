@@ -144,6 +144,60 @@ DEFAULTS: dict[str, DefaultTemplate] = {
             },
         ),
         _t(
+            "tenancy.organisation.suspended",
+            "operational",
+            ["email"],
+            ["organisation_name", "reason"],
+            {
+                ("email", "en"): (
+                    "${organisation_name} has been suspended on Education OS",
+                    "${organisation_name} has been suspended by the platform operator, and its users cannot sign in "
+                    "until it is reactivated.\n\nReason: ${reason}" + _FOOTER,
+                )
+            },
+        ),
+        _t(
+            "tenancy.organisation.closed",
+            "operational",
+            ["email"],
+            ["organisation_name", "reason"],
+            {
+                ("email", "en"): (
+                    "${organisation_name} has been closed on Education OS",
+                    "${organisation_name} has been closed by the platform operator, and its users can no longer "
+                    "sign in.\n\nReason: ${reason}" + _FOOTER,
+                )
+            },
+        ),
+        _t(
+            "tenancy.organisation.reactivated",
+            "operational",
+            ["email", "in_app"],
+            ["organisation_name"],
+            {
+                ("email", "en"): (
+                    "${organisation_name} is active again",
+                    "${organisation_name} has been reactivated. Its users can sign in again." + _FOOTER,
+                ),
+                ("in_app", "en"): (None, "${organisation_name} is active again."),
+            },
+            in_app_allowed=True,
+        ),
+        _t(
+            "tenancy.organisation.deletion_scheduled",
+            "operational",
+            ["email"],
+            ["organisation_name", "reason", "delete_on"],
+            {
+                ("email", "en"): (
+                    "${organisation_name} is scheduled for deletion",
+                    "${organisation_name} has been archived and its users can no longer sign in. Its data is kept "
+                    "until ${delete_on} and deleted after that unless the organisation is restored.\n\n"
+                    "Reason: ${reason}" + _FOOTER,
+                )
+            },
+        ),
+        _t(
             "billing.trial.reminder",
             "reminder",
             ["email", "in_app"],
