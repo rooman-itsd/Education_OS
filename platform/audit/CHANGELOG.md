@@ -3,6 +3,32 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Contact details never reach an immutable record (review of #434). `tenancy.organisation.registered` carries
+  `admin_email` and the consumer stored the payload verbatim in `after`; a record cannot be edited or deleted, so the
+  address could never be removed on a DPDP erasure request. The consumer now drops a key that names a contact detail
+  (`email`, `phone`, `mobile`, in any spelling) and any string value that contains an email address, under any key
+  and at any depth, including items of a list. The record keeps the key's name in `context.dropped_keys`, never the
+  address. Tested for every one of the audited events, in the organisation's record and in the platform copy.
+- Tamper protection at the database (#317 follow-up, audit finding A3). Migration `audit_0002`:
+  - the API's role `eos_app` loses UPDATE, DELETE and TRUNCATE on `audit_record` (INSERT and SELECT only);
+    `infra/docker/db-roles.py` re-applies this after its grants on every deploy (`APPEND_ONLY`);
+  - retention runs through `audit_prune(cutoff)` (SECURITY DEFINER, granted to eos_app), which refuses a cutoff
+    younger than the 2555-day floor; `prune()` calls it on PostgreSQL;
+  - `audit_redact(record_id)` (SECURITY DEFINER, owner only) writes a tombstone and nothing else;
+  - the trigger allows a delete or a tombstone only as the table owner: setting `audit.pruning` no longer lets
+    any session delete a chosen record, and a "redaction" can no longer write arbitrary before/after values.
+- A purged organisation's trail is kept with its payloads redacted (decision on #317): on
+  `tenancy.organisation.purged`, `redact_organisation()` tombstones its records and the platform-level copies about
+  it, through `audit_redact_organisation(org)` (SECURITY DEFINER, granted to eos_app, refuses while the
+  organisation still exists). tenancy's purge leaves `audit_record` alone (#450).
+- Audit is fed by the outbox (#317 follow-up). Nothing called `record()` outside this module and audit consumed no
+  events, so the store and both widgets stayed empty. `application/consumers.py` (entry point
+  `eos.event_consumers`) records 32 state-change events from tenancy, identity, billing, workflow, documents and
+  reporting, idempotent on the event id, with the event's actor and time (`record()` takes `occurred_at`). Super
+  admin operations also get a platform-level record for `audit.super-admin-actions`. Secret-looking payload keys
+  are dropped and named in `context.dropped_keys` rather than refusing the record.
+- Retention runs: the platform job `audit.prune` (`30 2 * * *`, entry point `eos.scheduler_jobs`) consumes
+  `scheduler.job.due`, runs `prune()` and reports `audit.job.finished`. `prune()` existed but nothing ran it.
 - `contracts/openapi.yaml`: append a record, search, read one, full history of an entity,
   and a per-organisation compliance export. No PUT, PATCH or DELETE on a record: immutability
   is enforced by the absence of the endpoints, not by convention.

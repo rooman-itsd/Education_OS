@@ -77,21 +77,85 @@ def request_upload_intent(
         db.rollback()
         existing = service.find_by_token(db, p.organisation_id, body.client_token, uploaded_by=p.user_id)
         if existing:
-            cfg = service.load_settings()
-            store = service.get_storage(cfg)
-            url = store.generate_upload_url(
-                existing.bucket, existing.storage_path, existing.mime_type, cfg.url_expires_seconds
-            )
+            try:
+                url, exp = service.upload_url_for(existing)
+            except DocumentError as e:
+                raise _err(e) from e
             return JSONResponse(
                 {
                     "document": service.view_document(existing),
                     "upload_url": url,
                     "method": "PUT",
-                    "expires_in_seconds": cfg.url_expires_seconds,
+                    "expires_in_seconds": exp,
                 },
                 status_code=200,
             )
         raise
+
+
+class NewVersionInput(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    mime_type: str = Field(min_length=3, max_length=128)
+    size_bytes: int = Field(ge=1)
+    client_token: str | None = Field(default=None, max_length=120)
+
+
+def _visible(p: Principal, doc) -> bool:
+    return bool(
+        doc and doc.status != service.STATUS_DELETED and (_is_elevated_reader(p) or doc.uploaded_by == p.user_id)
+    )
+
+
+@router.post("/{id}/versions", status_code=201)
+def request_new_version(
+    id: str,
+    body: NewVersionInput,
+    p: Principal = Depends(require(DOCUMENT_WRITE)),
+    db: Session = Depends(get_db),
+):
+    """Upload intent for the next version of a document: same flow as /upload-intent (PUT, then confirm).
+    Confirming it supersedes the previous version, which stays readable through GET /{id}/versions."""
+    if not p.organisation_id:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    if not _visible(p, service.get_document(db, p.organisation_id, id)):
+        raise HTTPException(404, detail={"code": "not_found", "message": "Document not found"})
+    try:
+        doc, created, url, exp = service.request_new_version(
+            db,
+            p.organisation_id,
+            actor_id=p.user_id,
+            document_id=id,
+            filename=body.filename,
+            mime_type=body.mime_type,
+            size_bytes=body.size_bytes,
+            client_token=body.client_token,
+        )
+        db.commit()
+    except DocumentError as e:
+        db.rollback()
+        raise _err(e) from e
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(409, detail={"code": "document_error", "message": "client_token already used"}) from e
+    return JSONResponse(
+        {"document": service.view_document(doc), "upload_url": url, "method": "PUT", "expires_in_seconds": exp},
+        status_code=201 if created else 200,
+    )
+
+
+@router.get("/{id}/versions")
+def list_versions(
+    id: str,
+    p: Principal = Depends(require(DOCUMENT_READ)),
+    db: Session = Depends(get_db),
+):
+    """Every version of the document, newest first. Visible on the same terms as the document itself."""
+    if not p.organisation_id:
+        raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
+    if not _visible(p, service.get_document(db, p.organisation_id, id)):
+        raise HTTPException(404, detail={"code": "not_found", "message": "Document not found"})
+    versions = [d for d in service.list_versions(db, p.organisation_id, id) if _visible(p, d)]
+    return {"items": [service.view_document(d) for d in versions], "total": len(versions)}
 
 
 @router.post("/{id}/confirm")
@@ -153,6 +217,7 @@ def list_documents(
     entity_type: str | None = None,
     entity_id: str | None = None,
     uploaded_by: str | None = None,
+    include_superseded: bool = False,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     p: Principal = Depends(require(DOCUMENT_READ)),
@@ -168,6 +233,7 @@ def list_documents(
         entity_type=entity_type,
         entity_id=entity_id,
         uploaded_by=effective_uploaded_by,
+        include_superseded=include_superseded,
         limit=limit,
         offset=offset,
     )

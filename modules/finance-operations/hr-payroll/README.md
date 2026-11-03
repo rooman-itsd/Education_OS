@@ -2,7 +2,8 @@
 
 **Domain:** finance-operations
 **Kind:** feature
-**Status:** in-progress (backend built; not yet enabled in `apps/backend`; widgets in a later PR)
+**Status:** in-progress (backend built; enabled in `apps/backend` and `apps/frontend`; the three widgets are on the
+HR Staff dashboard)
 
 The institution's staff from joining to exit: employee master, leave, salary and monthly payroll, payslips,
 appraisals and the service book. Requirements: [docs/prd.md](docs/prd.md). Sprint batch #336.
@@ -119,17 +120,23 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting, install and CI:** a `finance-operations/hr-payroll` entry in `apps/backend/config/modules.enabled.yaml`
-  (a separate PR) mounts `eos_hr_payroll.api.router:router` at `/api/v1/hr-payroll`; install, CI and deploy pick it up
-  from that entry and upgrade its chain.
+- **Mounting, install and CI:** the `finance-operations/hr-payroll` entry in `apps/backend/config/modules.enabled.yaml`
+  mounts `eos_hr_payroll.api.router:router` at `/api/v1/hr-payroll` behind the entitlement gate; `py-setup.sh`, the API
+  image, CI and the auto-deploy install it, run its tests and upgrade its chain from that entry.
+- **documents:** `module.yaml` depends on the documents platform service, which the host does not enable (the
+  `platform` list in `apps/backend/config/modules.enabled.yaml` has no `documents`). hr-payroll does not call it yet:
+  service-book entries keep `document_id` empty and no payslip PDFs or service orders are produced until the documents
+  SDK exists. Enabling documents is a separate PR to the host.
 - **Scheduler and event bus:** installing the package registers the job and the consumer through their entry points.
   The scheduler creates the job's default schedule itself; the event-bus relay delivers `scheduler.job.due` to
   hr-payroll and `hr-payroll.job.finished` back to the scheduler. Until both run in the deployment, exits dated in the
   future stay `on_notice` and are not published (recording the exit again on or after the day publishes it).
 - **identity:** nothing consumes `employee.joined` or `employee.exited` yet, so accounts are neither created nor
   disabled from them; notification has no handlers for hr-payroll's events.
-- **Dashboards:** the HR Staff widgets (later PR) read `GET /leave-requests?status=pending`, `GET /payroll-runs/current`
-  and `GET /reports/joinings-and-exits`.
+- **Dashboard:** the entry in `apps/frontend/config/modules.enabled.yaml` registers `frontend/src/widgets/index.ts`.
+  It exports `hr-payroll.leave-requests`, `hr-payroll.payroll-run-status` and `hr-payroll.joinings-and-exits` (#412),
+  which the HR Staff layout places; they read `GET /leave-requests?status=pending`, `GET /payroll-runs/current` and
+  `GET /reports/joinings-and-exits`.
 
 ### Assumptions to revisit
 - **User accounts** (PRD open question 2): HR links an existing identity user with `user_id` when adding or editing
@@ -164,8 +171,8 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ## Frontend
 
 `frontend/src/widgets/index.ts` exports the dashboard widgets. The HR Staff layout in
-`platform/identity/config/dashboards/` places them; `apps/frontend/config/modules.enabled.yaml` registers the module
-(a separate PR).
+`platform/identity/config/dashboards/` places them; the module's entry in `apps/frontend/config/modules.enabled.yaml`
+registers them.
 
 | Widget | Title | Dashboard | Endpoint | Permission |
 |---|---|---|---|---|
@@ -197,7 +204,7 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 | `docs/` | PRD |
 | `contracts/` | OpenAPI, event schemas, permission catalogue |
 | `backend/` | Domain, application, infrastructure, API layers and tests |
-| `frontend/` | Pages, components, API client and widgets (later PR) |
+| `frontend/` | Pages, components, API client and widgets |
 | `db/` | Alembic chain, own tables only |
 | `config/` | `env.example` |
 | `tests/e2e` | End-to-end tests runnable in isolation |
