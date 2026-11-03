@@ -12,7 +12,13 @@ from eos_core.db import SessionLocal, init_db
 from eos_core.events import OutboxEvent
 from eos_core.tenant import platform_scope
 from eos_workflow.api.router import router
-from eos_workflow.domain.models import ApprovalChain, ApprovalStep, WorkflowAction, WorkflowRequest
+from eos_workflow.domain.models import (
+    ApprovalChain,
+    ApprovalStep,
+    WorkflowAction,
+    WorkflowEscalation,
+    WorkflowRequest,
+)
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
@@ -29,6 +35,7 @@ def _workflow_clean():
     with platform_scope(), SessionLocal() as s:
         if s.get_bind().dialect.name != "sqlite":
             return
+        s.execute(delete(WorkflowEscalation))
         s.execute(delete(WorkflowAction))
         s.execute(delete(WorkflowRequest))
         s.execute(delete(ApprovalStep))

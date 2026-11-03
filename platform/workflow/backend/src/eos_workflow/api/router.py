@@ -30,11 +30,11 @@ REQUEST_CREATE = "workflow:request:create"
 REQUEST_READ = "workflow:request:read"
 APPROVAL_ACTION = "workflow:approval:action"
 PLATFORM_READ = "platform:workflow:read"
-APPROVER_OR_ADMIN_PERMISSIONS = {APPROVAL_ACTION, CHAIN_WRITE, PLATFORM_READ}
 
 
-def _is_elevated_reader(p: Principal) -> bool:
-    return bool(p.super_admin or (p.permissions & APPROVER_OR_ADMIN_PERMISSIONS))
+def _reads_everything(p: Principal) -> bool:
+    """Org and super admins read every request; everyone else reads what service.can_view allows."""
+    return bool(p.super_admin or service.is_admin(p.roles))
 
 
 class NewStepInput(BaseModel):
@@ -64,11 +64,15 @@ class NewRequestInput(BaseModel):
 
 class ActionInput(BaseModel):
     comments: str | None = None
+    # Optional: the step the caller is deciding. If another approver already moved the request on, the action
+    # is refused with 409 instead of being applied to the next step.
+    step_order: int | None = Field(default=None, ge=1)
 
 
 class DelegateInput(BaseModel):
     delegate_to_user_id: str = Field(min_length=1)
     comments: str | None = None
+    step_order: int | None = Field(default=None, ge=1)
 
 
 def _err(e: WorkflowError) -> HTTPException:
@@ -101,6 +105,10 @@ def create_chain(body: NewChainInput, p: Principal = Depends(require(CHAIN_WRITE
     except WorkflowError as e:
         db.rollback()
         raise _err(e) from e
+    except IntegrityError as e:
+        # Two concurrent creates passed the existence check; the unique (organisation_id, code) index decides.
+        db.rollback()
+        raise HTTPException(409, f"Approval chain with code '{body.code.strip()}' already exists") from e
 
 
 @router.get("/chains/{id}")
@@ -125,15 +133,18 @@ def search_requests(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
-    effective_requester_id = requester_id if _is_elevated_reader(p) else p.user_id
+    reads_all = _reads_everything(p)
     items, total = service.list_requests(
         db,
         p.organisation_id,
         status=status,
         entity_type=entity_type,
-        requester_id=effective_requester_id,
+        requester_id=requester_id,
         limit=limit,
         offset=offset,
+        viewer_id=None if reads_all else p.user_id,
+        viewer_roles=list(p.roles),
+        viewer_can_approve=p.can(APPROVAL_ACTION),
     )
     return {"items": [service.view_request(r) for r in items], "total": total}
 
@@ -165,7 +176,7 @@ def create_request(
         raise _err(e) from e
     except IntegrityError:
         db.rollback()
-        existing = service.find_by_token(db, p.organisation_id, body.client_token)
+        existing = service.find_by_token(db, p.organisation_id, p.user_id, body.client_token)
         if existing:
             return JSONResponse(service.view_request(existing), status_code=200)
         raise
@@ -196,7 +207,9 @@ def get_request(id: str, p: Principal = Depends(require(REQUEST_READ)), db: Sess
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
     req = service.get_request(db, p.organisation_id, id)
-    if not req or (not _is_elevated_reader(p) and req.requester_id != p.user_id):
+    if not req or (
+        not _reads_everything(p) and not service.can_view(req, p.user_id, list(p.roles), p.can(APPROVAL_ACTION))
+    ):
         raise HTTPException(404, "Workflow request not found")
     return service.view_request_detail(req)
 
@@ -210,7 +223,6 @@ def approve_request(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
-    comments = body.comments if body else None
     try:
         req = service.approve_request(
             db,
@@ -218,7 +230,8 @@ def approve_request(
             request_id=id,
             actor_id=p.user_id,
             actor_roles=list(p.roles),
-            comments=comments,
+            comments=body.comments if body else None,
+            expected_step_order=body.step_order if body else None,
         )
         db.commit()
         return service.view_request(req)
@@ -236,7 +249,6 @@ def reject_request(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
-    comments = body.comments if body else None
     try:
         req = service.reject_request(
             db,
@@ -244,7 +256,8 @@ def reject_request(
             request_id=id,
             actor_id=p.user_id,
             actor_roles=list(p.roles),
-            comments=comments,
+            comments=body.comments if body else None,
+            expected_step_order=body.step_order if body else None,
         )
         db.commit()
         return service.view_request(req)
@@ -271,6 +284,7 @@ def delegate_request(
             delegate_to_user_id=body.delegate_to_user_id,
             actor_roles=list(p.roles),
             comments=body.comments,
+            expected_step_order=body.step_order,
         )
         db.commit()
         return service.view_request(req)
