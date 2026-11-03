@@ -6,7 +6,8 @@ One pass (`run_once`):
 2. hand them to the transport;
 3. mark delivered rows published; for a failed one count the attempt, record a short reason and back off
    exponentially (1 s, 2 s, 4 s ... capped), or dead-letter it at the limit and raise
-   event-bus.event.dead-lettered;
+   event-bus.event.dead-lettered naming the modules that failed. Delivery is tracked per consuming module
+   (transport.py, EventDelivery): a retry re-runs only the modules not yet delivered;
 4. raise event-bus.relay.stalled once when the oldest pending event is older than the threshold.
 
 The claim runs in platform scope: the relay reads every organisation's events by design. Each consumer then runs
@@ -27,7 +28,7 @@ from eos_core.tenant import platform_scope
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from ..domain.models import Event
+from ..domain.models import Event, EventDelivery
 from ..infrastructure.config import EventBusConfig
 from .transport import Transport
 
@@ -79,7 +80,11 @@ class Relay:
                 rows = self._claim(db, now)
             delivery = self.transport.deliver([Event.of(r) for r in rows]) if rows else None
             with platform_scope():
-                result = self._record(db, rows, delivery.accepted, delivery.failed, now) if delivery else Pass()
+                result = (
+                    self._record(db, rows, delivery.accepted, delivery.failed, now, delivery.failed_modules)
+                    if delivery
+                    else Pass()
+                )
                 self._check_stall(db, now)
                 db.commit()
         return result
@@ -95,11 +100,20 @@ class Relay:
             .limit(self.config.batch_size)
         )
         if db.get_bind().dialect.name == "postgresql":
-            q = q.with_for_update(skip_locked=True)
+            # FOR NO KEY UPDATE (key_share=True), not FOR UPDATE: still exclusive between relays with SKIP LOCKED,
+            # but it does not block the KEY SHARE lock a consumer's delivery row takes through its foreign key to
+            # this event. With FOR UPDATE the consumer would wait for this transaction, which waits for it.
+            q = q.with_for_update(skip_locked=True, key_share=True)
         return list(db.scalars(q))
 
     def _record(
-        self, db: Session, rows: list[OutboxEvent], accepted: list[str], failed: dict[str, str], now: datetime
+        self,
+        db: Session,
+        rows: list[OutboxEvent],
+        accepted: list[str],
+        failed: dict[str, str],
+        now: datetime,
+        failed_modules: dict[str, list[str]] | None = None,
     ) -> Pass:
         delivered = dead = 0
         ok = set(accepted)
@@ -127,6 +141,7 @@ class Relay:
                             "event_name": row.name,
                             "attempts": row.attempts,
                             "last_error": row.last_error,
+                            "failed_modules": (failed_modules or {}).get(row.id, []),
                         },
                         now,
                     )
@@ -162,6 +177,9 @@ class Relay:
         """Delete delivered events older than the retention window. Pending and dead-lettered rows are kept."""
         cutoff = self._now() - timedelta(days=self.config.retention_days)
         with platform_scope(), self._sessions() as db:
+            old = select(OutboxEvent.id).where(OutboxEvent.published.is_(True), OutboxEvent.published_at < cutoff)
+            # Explicitly, not only through the foreign key's ON DELETE CASCADE: SQLite enforces no foreign keys.
+            db.execute(delete(EventDelivery).where(EventDelivery.event_id.in_(old)))
             removed = db.execute(
                 delete(OutboxEvent).where(OutboxEvent.published.is_(True), OutboxEvent.published_at < cutoff)
             ).rowcount
