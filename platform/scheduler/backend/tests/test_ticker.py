@@ -188,3 +188,25 @@ def test_prune_keeps_running_runs_and_recent_history():
     left = runs()
     assert first not in [r.id for r in left]  # finished 31 days ago: gone
     assert left and all(r.started_at.replace(tzinfo=NOW.tzinfo) == clock.now for r in left)  # today's stay
+
+
+def test_a_seeded_default_an_operator_deleted_is_not_re_created_on_restart():
+    clock = Clock()
+    assert ticker(clock).seed_platform_defaults() == 1
+    with platform_scope(), SessionLocal() as db:
+        db.delete(db.scalars(select(Schedule)).one())
+        db.commit()
+    assert ticker(clock).seed_platform_defaults() == 0  # a fresh process: the removal sticks
+    with platform_scope(), SessionLocal() as db:
+        assert db.scalars(select(Schedule)).all() == []
+
+
+def test_a_job_an_operator_scheduled_first_is_not_seeded_again():
+    from eos_scheduler.domain.models import SeededDefault
+
+    clock = Clock()
+    add_schedule(job="billing.expire-trials", cron="0 3 * * *")
+    assert ticker(clock).seed_platform_defaults() == 0
+    with platform_scope(), SessionLocal() as db:
+        assert [s.cron for s in db.scalars(select(Schedule))] == ["0 3 * * *"]
+        assert db.get(SeededDefault, "billing.expire-trials") is not None

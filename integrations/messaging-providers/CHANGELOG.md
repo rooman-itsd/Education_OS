@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- SMTP credentials never cross a network in clear (#316 follow-up, raised in #355's review). With a username and
+  password configured, no TLS and a remote host, `send` refuses before connecting (`transport_unavailable`,
+  retryable, logged without the secret) and `healthcheck` reports it; a loopback relay is still allowed.
+  `MESSAGING_PROVIDERS_SMTP_SSL=true` adds implicit TLS (SMTPS, port 465) through `smtplib.SMTP_SSL`; it and
+  `MESSAGING_PROVIDERS_SMTP_USE_TLS` are exclusive. A failed STARTTLS now closes the connection (it leaked the
+  socket), and metadata keys must be header names (`[A-Za-z0-9-]`, else the message is refused as `rejected`).
 - The outbound email send path. `SmtpEmailProvider` implements the OutboundMessaging port's `send`,
   `capabilities` and `healthcheck` over the standard library's `smtplib` (no third-party mail library), configured from
   `MESSAGING_PROVIDERS_SMTP_*` and defaulting to a local MailHog. Every provider failure maps to one of the four

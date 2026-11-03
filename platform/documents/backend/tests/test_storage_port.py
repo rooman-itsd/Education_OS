@@ -54,3 +54,16 @@ def test_minio_storage_initializes_and_conforms():
     assert hasattr(storage, "get_object")
     assert hasattr(storage, "delete_object")
     assert hasattr(storage, "object_exists")
+
+
+def test_memory_storage_copies_an_object_server_side():
+    from eos_documents.infrastructure.storage import MemoryStorage
+
+    storage = MemoryStorage()
+    storage.put_object("b", "uploads/1", b"data", "application/pdf")
+    storage.copy_object("b", "uploads/1", "final/1")
+    storage.delete_object("b", "uploads/1")
+    assert storage.get_object("b", "final/1") == b"data" and not storage.object_exists("b", "uploads/1")
+    assert hasattr(
+        __import__("eos_documents.infrastructure.storage", fromlist=["MinioStorage"]).MinioStorage, "copy_object"
+    )

@@ -52,7 +52,7 @@ def test_confirm_and_download_flow(client, org, db):
     # 3. Simulate client PUT into storage
     doc = service.get_document(db, org.id, doc_id)
     store = service.get_storage()
-    store.put_object(doc.bucket, doc.storage_path, data, doc.mime_type)
+    store.put_object(doc.bucket, doc.upload_path, data, doc.mime_type)
 
     # 4. Confirm upload -> 200
     r_confirm = client.post(f"/api/v1/documents/{doc_id}/confirm", headers=org.student_headers)
@@ -180,19 +180,19 @@ def test_confirm_upload_security_and_idempotency(client, org, db):
 
     # 2. Size mismatch -> deleted from storage and 400
     doc = service.get_document(db, org.id, doc_id)
-    store.put_object(doc.bucket, doc.storage_path, b"wrong size data", doc.mime_type)
+    store.put_object(doc.bucket, doc.upload_path, b"wrong size data", doc.mime_type)
     r_bad_size = client.post(f"/api/v1/documents/{doc_id}/confirm", headers=org.student_headers)
     assert r_bad_size.status_code == 400
-    assert not store.object_exists(doc.bucket, doc.storage_path)
+    assert not store.object_exists(doc.bucket, doc.upload_path)
 
     # 3. Content type mismatch -> deleted and 400
-    store.put_object(doc.bucket, doc.storage_path, b"x" * 100, "text/plain")
+    store.put_object(doc.bucket, doc.upload_path, b"x" * 100, "text/plain")
     r_bad_type = client.post(f"/api/v1/documents/{doc_id}/confirm", headers=org.student_headers)
     assert r_bad_type.status_code == 400
-    assert not store.object_exists(doc.bucket, doc.storage_path)
+    assert not store.object_exists(doc.bucket, doc.upload_path)
 
     # 4. Correct upload -> 200
-    store.put_object(doc.bucket, doc.storage_path, b"x" * 100, "application/pdf")
+    store.put_object(doc.bucket, doc.upload_path, b"x" * 100, "application/pdf")
     r_good = client.post(f"/api/v1/documents/{doc_id}/confirm", headers=org.student_headers)
     assert r_good.status_code == 200
 
