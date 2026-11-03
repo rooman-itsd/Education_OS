@@ -6,6 +6,7 @@ import csv
 import io
 import json
 import logging
+from datetime import UTC, date, datetime
 from typing import Any
 
 from eos_core import events
@@ -30,6 +31,7 @@ from ..domain.models import (
     ReportDefinition,
     ReportExecution,
 )
+from . import ingest, metrics
 
 logger = logging.getLogger(__name__)
 
@@ -326,49 +328,90 @@ def _sanitize_error_message(exc: Exception) -> str:
     return f"Report computation failed: {msg[:200]}"
 
 
-def _compute_report_data(db: Session, organisation_id: str, code: str, params: dict) -> dict[str, Any]:
-    """Compute reporting aggregate summary based on real MetricSnapshot data for this organisation."""
-    dept_id = params.get("department_id")
-    period = params.get("period") or utcnow().strftime("%Y-%m")
+REPORT_METRICS = {
+    "faculty-workload": ("academics.faculty_contact_hours",),
+    "fee-collection-summary": (
+        "finance.fees_invoiced",
+        "finance.fees_collected",
+        "finance.refunds_issued",
+        "finance.concessions_approved",
+    ),
+}
+REPORT_UNAVAILABLE = {"department-attendance": "attendance", "exam-results-summary": "exam_results"}
 
+
+def _period_bounds(period: str) -> tuple[date, date]:
+    try:
+        year, month = (int(x) for x in period.split("-")[:2])
+        return ingest.month_of(datetime(year, month, 1, tzinfo=UTC))
+    except (ValueError, TypeError) as e:
+        raise ReportingError(f"period must be YYYY-MM, not {period!r}") from e
+
+
+def metric_rows(
+    db: Session, organisation_id: str, metric_key: str, start: date, end: date, department_id: str | None = None
+) -> list[MetricSnapshot]:
+    """The metric's snapshots (current schema version) for every month from start to end, this organisation only."""
+    metric = metrics.BY_KEY[metric_key]
     stmt = select(MetricSnapshot).where(
         MetricSnapshot.organisation_id == organisation_id,
-        MetricSnapshot.metric_type == code,
+        MetricSnapshot.metric_key == metric_key,
+        MetricSnapshot.schema_version == metric.version,
+        MetricSnapshot.period_start >= start,
+        MetricSnapshot.period_end <= end,
     )
-    if dept_id:
-        stmt = stmt.where(MetricSnapshot.department_id == dept_id)
-    if period:
-        stmt = stmt.where(MetricSnapshot.period == period)
+    rows = list(db.execute(stmt.order_by(MetricSnapshot.period_start)).scalars().all())
+    if department_id:
+        rows = [r for r in rows if (r.dimensions or {}).get("department_id") == department_id]
+    return rows
 
-    snapshots = list(db.execute(stmt.order_by(MetricSnapshot.captured_at.desc())).scalars().all())
 
-    if snapshots:
-        items = [s.data for s in snapshots if isinstance(s.data, dict)]
-        avg_val = 0.0
-        rates = [
-            float(item.get("attendance_rate", item.get("rate", 0)))
-            for item in items
-            if "attendance_rate" in item or "rate" in item
-        ]
-        if rates:
-            avg_val = round(sum(rates) / len(rates), 1)
-        avg_key = "average_attendance" if "attendance" in code else "average_metric"
+def view_snapshot(row: MetricSnapshot) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "tenant_id": row.organisation_id,
+        "source_module": row.source_module,
+        "metric_key": row.metric_key,
+        "period_start": row.period_start.isoformat(),
+        "period_end": row.period_end.isoformat(),
+        "dimensions": row.dimensions or {},
+        "value": float(row.value),
+        "unit": row.unit,
+        "calculated_at": row.calculated_at.isoformat() if row.calculated_at else None,
+        "schema_version": row.schema_version,
+    }
+
+
+def _compute_report_data(db: Session, organisation_id: str, code: str, params: dict) -> dict[str, Any]:
+    """A report from the ingested MetricSnapshot data (application/ingest.py) for the month in `period`. A report
+    whose source module publishes nothing yet says so (available: false), rather than reporting zeros as data."""
+    dept_id = params.get("department_id")
+    period = params.get("period") or utcnow().strftime("%Y-%m")
+    if code in REPORT_UNAVAILABLE:
+        reason = metrics.UNAVAILABLE[REPORT_UNAVAILABLE[code]]
+        return {"title": f"Report: {code}", "period": period, "available": False, "reason": reason, "items": []}
+    start, end = _period_bounds(period)
+    if code == "faculty-workload":
+        # Contact hours currently assigned: every assignment and release up to the end of the period
+        rows = metric_rows(db, organisation_id, "academics.faculty_contact_hours", date(1970, 1, 1), end, dept_id)
+        by_department: dict[str, float] = {}
+        for r in rows:
+            d = (r.dimensions or {}).get("department_id", ingest.UNKNOWN)
+            by_department[d] = by_department.get(d, 0.0) + float(r.value)
+        items = [{"department_id": d, "contact_hours": round(h, 2)} for d, h in sorted(by_department.items())]
         return {
-            "title": f"Report: {code}",
+            "title": "Faculty Workload Analysis",
             "period": period,
-            avg_key: avg_val,
+            "available": True,
+            "unit": "hours",
             "items": items,
         }
-
-    # If no snapshots have been ingested yet for this tenant, return real empty structure
-    avg_key = "average_attendance" if "attendance" in code else "average_metric"
-    return {
-        "title": f"Report: {code}",
-        "period": period,
-        "parameters": params,
-        avg_key: 0.0,
-        "items": [],
-    }
+    keys = REPORT_METRICS.get(code) or ((code,) if code in metrics.BY_KEY else ())
+    items = [view_snapshot(r) for key in keys for r in metric_rows(db, organisation_id, key, start, end, dept_id)]
+    totals: dict[str, float] = {}
+    for item in items:
+        totals[item["metric_key"]] = round(totals.get(item["metric_key"], 0.0) + item["value"], 4)
+    return {"title": f"Report: {code}", "period": period, "available": True, "totals": totals, "items": items}
 
 
 def get_execution(db: Session, organisation_id: str, execution_id: str) -> ReportExecution | None:
@@ -530,65 +573,34 @@ def get_department_reports_widget_data(
         for run, definition in recent_runs
     ]
 
-    # Query real metrics from MetricSnapshot
-    stmt = select(MetricSnapshot).where(
-        MetricSnapshot.organisation_id == organisation_id,
+    # Faculty contact hours from the ingested academics metric; attendance and pass rates have no source yet
+    _, end = ingest.month_of(utcnow())
+    hours = sum(
+        float(r.value)
+        for r in metric_rows(
+            db, organisation_id, "academics.faculty_contact_hours", date(1970, 1, 1), end, dept_id or None
+        )
     )
-    if dept_id:
-        stmt = stmt.where(MetricSnapshot.department_id == dept_id)
-    latest_snapshot = db.execute(stmt.order_by(MetricSnapshot.captured_at.desc()).limit(1)).scalar_one_or_none()
-
-    data = latest_snapshot.data if latest_snapshot and isinstance(latest_snapshot.data, dict) else {}
-    dept_name = data.get("department_name", f"Department {dept_id}" if dept_id else "General Department")
-    attendance_rate = float(data.get("attendance_rate", 0.0))
-    exam_pass_rate = float(data.get("pass_rate", data.get("exam_pass_rate", 0.0)))
-    faculty_load = float(data.get("faculty_load_average", 0.0))
-
     return {
         "department_id": dept_id,
-        "department_name": dept_name,
-        "attendance_rate": attendance_rate,
-        "exam_pass_rate": exam_pass_rate,
-        "faculty_load_average": faculty_load,
+        "department_name": f"Department {dept_id}" if dept_id else "All departments",
+        "attendance_rate": 0.0,
+        "exam_pass_rate": 0.0,
+        "faculty_load_average": 0.0,
+        "faculty_contact_hours": round(hours, 2),
         "recent_reports": recent_reports,
+        "unavailable": sorted(metrics.UNAVAILABLE),
     }
 
 
 def get_attendance_and_results_widget_data(db: Session, organisation_id: str) -> dict[str, Any]:
-    """Retrieve cross-department comparison from real MetricSnapshot data for management widget (read-only)."""
-    stmt = select(MetricSnapshot).where(
-        MetricSnapshot.organisation_id == organisation_id,
-        MetricSnapshot.metric_type.in_(["department_summary", "attendance", "exam_results"]),
-    )
-    snapshots = list(db.execute(stmt.order_by(MetricSnapshot.captured_at.desc())).scalars().all())
-
-    departments = []
-    seen_depts = set()
-    for s in snapshots:
-        d = s.data if isinstance(s.data, dict) else {}
-        d_id = s.department_id or d.get("department_id", "default")
-        if d_id not in seen_depts:
-            seen_depts.add(d_id)
-            att = float(d.get("attendance_rate", 0.0))
-            pass_r = float(d.get("pass_rate", d.get("exam_pass_rate", 0.0)))
-            departments.append(
-                {
-                    "department_id": d_id,
-                    "department_name": d.get("department_name", f"Department {d_id}"),
-                    "attendance_rate": att,
-                    "pass_rate": pass_r,
-                    "total_students": int(d.get("total_students", 0)),
-                    "is_attendance_low": att < 75.0 if att > 0 else False,
-                }
-            )
-
-    avg_att = round(sum(d["attendance_rate"] for d in departments) / len(departments), 1) if departments else 0.0
-    avg_pass = round(sum(d["pass_rate"] for d in departments) / len(departments), 1) if departments else 0.0
-
+    """Cross-department attendance and results for management. Neither has a source yet (metrics.UNAVAILABLE):
+    the widget gets an empty comparison and says why, instead of zeros presented as institution averages."""
     return {
-        "institution_average_attendance": avg_att,
-        "institution_average_pass_rate": avg_pass,
-        "departments": departments,
+        "institution_average_attendance": 0.0,
+        "institution_average_pass_rate": 0.0,
+        "departments": [],
+        "unavailable": sorted(metrics.UNAVAILABLE),
     }
 
 

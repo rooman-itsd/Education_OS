@@ -262,3 +262,76 @@ def test_client_token_replay_by_another_user_never_returns_their_run(client, org
         headers=org.admin_headers,
     )
     assert replay.status_code == 200 and replay.json()["id"] == mine["id"]
+
+
+# --- ingested metrics over HTTP ---------------------------------------------------------------------------------
+
+
+def _ingest(org, name, payload, when="2026-10-15T09:00:00+00:00"):
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from eos_core.db import new_id
+    from eos_reporting.application import ingest
+
+    e = SimpleNamespace(id=new_id(), name=name, organisation_id=org.id, payload=payload,
+                        occurred_at=datetime.fromisoformat(when))  # fmt: skip
+    with organisation_scope(org.id), SessionLocal() as db:
+        ingest.ingest(db, e)
+        db.commit()
+
+
+def test_metrics_are_read_by_period_and_financial_ones_need_execute(client, org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    _ingest(org, "fees-accounts.invoice.issued", {"invoice_id": "i1", "total": "25000.00"})
+    url = "/api/v1/reporting/metrics?from=2026-10&to=2026-10&metric_key="
+
+    r = client.get(url + "admissions.applications_submitted", headers=org.faculty_headers)
+    assert r.status_code == 200
+    (row,) = r.json()["items"]
+    assert (row["tenant_id"], row["value"], row["unit"], row["schema_version"]) == (org.id, 1.0, "count", 1)
+    assert (row["period_start"], row["period_end"]) == ("2026-10-01", "2026-10-31")
+
+    # Faculty (read only) do not see the financial metric at all; department admins (execute) do
+    assert client.get(url + "finance.fees_invoiced", headers=org.faculty_headers).status_code == 404
+    r = client.get(url + "finance.fees_invoiced", headers=org.dept_admin_headers)
+    assert r.status_code == 200 and r.json()["items"][0]["value"] == 25000.0
+    defs = client.get("/api/v1/reporting/metrics/definitions", headers=org.faculty_headers).json()
+    assert not any(d["category"] == "financial" for d in defs["items"])
+    assert set(defs["unavailable"]) == {"attendance", "exam_results"}
+
+
+def test_another_organisations_metrics_stay_invisible(client, org, other_org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    r = client.get(
+        "/api/v1/reporting/metrics?from=2026-10&to=2026-10&metric_key=admissions.applications_submitted",
+        headers=other_org.admin_headers,
+    )
+    assert r.status_code == 200 and r.json()["items"] == []
+
+
+def test_recalculation_needs_manage_and_rebuilds_the_range(client, org):
+    _ingest(org, "admissions.application.submitted", {"programme_id": "prog-1", "academic_year": "2026-27"})
+    body = {"from": "2026-10", "to": "2026-10"}
+    assert (
+        client.post("/api/v1/reporting/metrics/recalculate", json=body, headers=org.dept_admin_headers).status_code
+        == 403
+    )
+    r = client.post("/api/v1/reporting/metrics/recalculate", json=body, headers=org.admin_headers)
+    assert r.status_code == 200 and r.json()["cells_written"] == 1
+    bad = client.post("/api/v1/reporting/metrics/recalculate", json={"from": "2026-11", "to": "2026-10"},
+                      headers=org.admin_headers)  # fmt: skip
+    assert bad.status_code == 422
+
+
+def test_the_fee_collection_report_reads_ingested_finance_metrics(client, org):
+    _ingest(
+        org,
+        "fees-accounts.payment.received",
+        {"payment_id": "p", "invoice_id": "i", "person_id": "x", "amount": "1500.00", "mode": "upi", "receipt_id": "r"},
+    )
+    run = client.post("/api/v1/reporting/definitions/fee-collection-summary/run",
+                      json={"parameters": {"period": "2026-10"}}, headers=org.admin_headers)  # fmt: skip
+    assert run.status_code == 201, run.text
+    summary = run.json()["result_summary"]
+    assert summary["available"] is True and summary["totals"]["finance.fees_collected"] == 1500.0
