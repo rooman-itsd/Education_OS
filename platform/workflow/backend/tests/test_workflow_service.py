@@ -195,14 +195,17 @@ def test_request_rejection(workflow_db):
 
 def test_delegation_flow(workflow_db):
     org = Org(workflow_db)
-    chain_data = sample_chain("leave_del")
+    # Step 1 needs a role nobody in the org holds, so only a delegation can move it.
     service.create_chain(
         workflow_db,
         org.id,
-        code=chain_data["code"],
-        title=chain_data["title"],
-        description=chain_data["description"],
-        steps_data=chain_data["steps"],
+        code="leave_del",
+        title="Leave",
+        description=None,
+        steps_data=[
+            {"step_order": 1, "name": "HoD CS", "approver_role": "hod-cs", "is_final": False},
+            {"step_order": 2, "name": "Director", "approver_role": "org-admin", "is_final": True},
+        ],
     )
     workflow_db.commit()
 
@@ -217,31 +220,55 @@ def test_delegation_flow(workflow_db):
     )
     workflow_db.commit()
 
-    # Dept admin delegates to faculty member
+    # Org admin delegates step 1 to a department admin: an approver (workflow:approval:action) without hod-cs
     req = service.delegate_request(
         workflow_db,
         org.id,
         req.id,
-        actor_id=org.dept_admin.id,
-        delegate_to_user_id=org.faculty.id,
-        actor_roles=["department-admin"],
+        actor_id=org.admin.id,
+        delegate_to_user_id=org.dept_admin.id,
+        actor_roles=["org-admin"],
         comments="Please cover review while I am away",
     )
     workflow_db.commit()
+    assert req.delegated_to == org.dept_admin.id
 
-    assert req.delegated_to == org.faculty.id
-
-    # The delegate can now approve despite not having department-admin role
+    # The delegate can now approve despite not holding the step's role
     req = service.approve_request(
         workflow_db,
         org.id,
         req.id,
-        actor_id=org.faculty.id,
-        actor_roles=["faculty"],
+        actor_id=org.dept_admin.id,
+        actor_roles=["department-admin"],
         comments="Covering for HoD",
     )
     workflow_db.commit()
     assert req.current_step_order == 2
+    assert req.delegated_to is None
+
+
+def test_delegation_target_must_be_able_to_act(workflow_db):
+    org = Org(workflow_db)
+    data = sample_chain("leave_del_target")
+    service.create_chain(workflow_db, org.id, data["code"], data["title"], None, data["steps"])
+    req, _ = service.create_request(
+        workflow_db, org.id, "leave_del_target", "leave", "l-201", "Leave", requester_id=org.student.id
+    )
+    workflow_db.commit()
+
+    # Faculty hold no workflow:approval:action: the item would sit in their queue while every action is refused
+    with pytest.raises(WorkflowError) as exc:
+        service.delegate_request(
+            workflow_db, org.id, req.id, org.dept_admin.id, org.faculty.id, actor_roles=["department-admin"]
+        )
+    assert exc.value.status == 422 and "workflow:approval:action" in str(exc.value)
+
+    # Nor to the requester, who may never act on their own request
+    with pytest.raises(WorkflowError) as exc:
+        service.delegate_request(
+            workflow_db, org.id, req.id, org.dept_admin.id, org.student.id, actor_roles=["department-admin"]
+        )
+    assert exc.value.status == 422
 
 
 def test_missing_and_inactive_chain_validation(workflow_db):
