@@ -39,3 +39,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `e-office.job.finished` added for the scheduler; `file.overdue` `due_on` is the computed due date;
   `file.forwarded` `due_on` may be null. `module.yaml`: version 0.2.0, status in-progress, consumes
   `scheduler.job.due`.
+- Enabled (#336) in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/e-office`; installed, tested and
+  migrated in CI and the auto-deploy) and `apps/frontend/config/modules.enabled.yaml` (the dashboard registers the
+  module's widgets; `e-office.files-pending`, from #411). The README says how mounting works.

@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .gateway import EntitlementGate
 from .modules import enabled, middleware_only, router_for
+from .observability import REQUEST_ID, RequestContext, configure_logging, init_sentry
 
 log = logging.getLogger("eos.api")
 
@@ -79,8 +80,11 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID],
     )
     app.add_middleware(SecurityHeaders, settings=gateway)
+    # Outermost: every log line of the request carries its request and organisation ids (observability.py).
+    app.add_middleware(RequestContext)
 
     @app.get("/api/v1/health")
     def health():
@@ -98,4 +102,6 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
     return app
 
 
+configure_logging()
+init_sentry()
 app = create_app()

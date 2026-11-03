@@ -16,6 +16,12 @@ x-app-environment: &app-environment
   EOS_SUPER_ADMIN_PASSWORD: ${EOS_SUPER_ADMIN_PASSWORD:?set EOS_SUPER_ADMIN_PASSWORD}
   EOS_CORS_ORIGINS: ${EOS_CORS_ORIGINS:-https://educationos.futureacad.ae}
   BILLING_PAYMENT_ADAPTER: ${BILLING_PAYMENT_ADAPTER:-none}
+  # Logs and errors (#91, apps/backend observability.py): one JSON object per line with request_id and
+  # organisation_id; Sentry only when a DSN is set, and with nothing personal.
+  EOS_LOG_FORMAT: ${EOS_LOG_FORMAT:-json}
+  EOS_LOG_LEVEL: ${EOS_LOG_LEVEL:-INFO}
+  EOS_SENTRY_DSN: ${EOS_SENTRY_DSN:-}
+  EOS_ENVIRONMENT: ${EOS_ENVIRONMENT:-staging}
   # ADR-0006: empty keeps OIDC off; the API then accepts only its own tokens.
   EOS_OIDC_ISSUER_BASE: ${EOS_OIDC_ISSUER_BASE:-}
   EOS_OIDC_CLIENT_ID: ${EOS_OIDC_CLIENT_ID:-education-os-web}
