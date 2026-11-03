@@ -2,12 +2,52 @@
 
 **Domain:** academics
 **Kind:** feature
-**Status:** planned
+**Status:** in progress (issue #325). Built: the backend domain rules and persistence foundation (exam cycles, grading
+and assessment schemes, papers, sessions, duties), the permission keys and the authentication guard, and the three
+Examination Staff widgets (their endpoints are not served yet). Not built: the API, candidates and eligibility, hall tickets,
+marks, results, the event consumers, and the widgets `exam-duties`, `upcoming-assessments` and `results-summary`. Open
+decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Runs the examination lifecycle of an organisation: exam cycles, assessment and grading schemes, papers, sessions, candidates
+and eligibility, hall tickets, duties, mark entry, moderation and results. What it does not own (student and staff identity,
+academic catalogue, attendance, fees, files) is in [docs/prd.md](docs/prd.md) section 3.
+
+## Backend foundation
+Under `backend/src/eos_examinations/`:
+
+| Layer | What it holds |
+|---|---|
+| `domain/` | Rules independent of FastAPI and SQLAlchemy: `cycles` (lifecycle, FR-1), `grading` (FR-3), `assessment` (FR-2, activation supersedes), `papers` (FR-4, marks pipeline), `sessions` (FR-5, FR-6 and duties, FR-9) |
+| `infrastructure/` | `models.py` (11 `examinations_` tables, all with `organisation_id`) and `repository.py` (every query goes through `eos_core.db.scoped`) |
+| `application/` | `access.py` (the 43 permission keys of `contracts/permissions.yaml`, checked by a test) and `errors.py` |
+| `api/` | `deps.py`: token authentication and `require()`. No routes yet |
+
+Tables: `grading_scheme`, `grading_band`, `exam_cycle`, `assessment_scheme`, `assessment_component`, `exam_paper`,
+`exam_session`, `session_paper`, `exam_duty`, `offering_ref` and `audit_entry`. The database itself holds one default grading
+scheme per organisation, one active assessment scheme per course offering, one paper per component and cycle, a paper in at
+most one session, and the rule that a duty names a session (invigilation) or a paper (evaluation, moderation), never both.
+
+Deliberately not built, because they depend on decisions not yet taken: candidates, hall tickets, mark entries, results and the
+registration read model (the `student_id` mapping and the eligibility inputs), grading-band coverage (whether `max_percent` is
+inclusive), department-scoped authorisation, and every event consumer. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+
+## Tests
+Backend, from `modules/academics/examinations/backend` (a throwaway SQLite database, never a real one):
+```
+PYTHONPATH="src:../../../../packages/core/src:../../../../packages/testing/src" python -m pytest -q
+```
+(use `;` instead of `:` on Windows). The PostgreSQL row-level-security tests run only when `EXAMINATIONS_TEST_POSTGRES_URL`
+points at a throwaway PostgreSQL server as a superuser.
+
+## Migrations
+```
+cd modules/academics/examinations/db && alembic upgrade head
+```
+The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`. The chain is `ex_0001`, with its own
+version table `examinations_alembic_version`.
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
