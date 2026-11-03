@@ -11,6 +11,7 @@ import pytest
 from eos_core.db import SessionLocal, init_db
 from eos_core.events import OutboxEvent
 from eos_core.tenant import platform_scope
+from eos_event_bus.domain.models import EventDelivery
 from sqlalchemy import delete
 
 
@@ -26,6 +27,7 @@ def _clean():
     with platform_scope(), SessionLocal() as s:
         if s.get_bind().dialect.name != "sqlite":
             pytest.exit("event-bus tests delete every outbox row; they run on SQLite only")
+        s.execute(delete(EventDelivery))
         s.execute(delete(OutboxEvent))
         s.commit()
 

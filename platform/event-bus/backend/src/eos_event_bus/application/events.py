@@ -13,7 +13,7 @@ from eos_core.events import OutboxEvent
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..domain.models import State, state_of
+from ..domain.models import EventDelivery, State, state_of
 from ..infrastructure.config import EventBusConfig
 from .relay import pending_filter
 
@@ -85,8 +85,16 @@ def get_event(db: Session, scope: Scope, event_id: str) -> OutboxEvent:
     return row
 
 
+def deliveries(db: Session, event_id: str) -> list[EventDelivery]:
+    """Per-module delivery of one event the caller may already see (get_event scoped it first)."""
+    return list(
+        db.scalars(select(EventDelivery).where(EventDelivery.event_id == event_id).order_by(EventDelivery.module))
+    )
+
+
 def replay(db: Session, scope: Scope, config: EventBusConfig, event_id: str, actor: str) -> OutboxEvent:
-    """Only a dead-lettered event: replaying a delivered one would re-trigger every consumer."""
+    """Only a dead-lettered event: replaying a delivered one would re-trigger every consumer. A replay re-runs only
+    the modules not yet delivered (transport.py): one that succeeded before is never handed the event again."""
     row = get_event(db, scope, event_id)
     if state_of(row, config.max_attempts) != "dead_lettered":
         raise EventBusError(409, "only a dead-lettered event can be replayed")
@@ -118,11 +126,11 @@ def health(db: Session, config: EventBusConfig, transport: str) -> dict:
     }
 
 
-def event_out(row: OutboxEvent, config: EventBusConfig) -> dict:
+def event_out(row: OutboxEvent, config: EventBusConfig, delivered_to: list[EventDelivery] | None = None) -> dict:
     def iso(value: datetime | None) -> str | None:
         return value.isoformat() if value else None
 
-    return {
+    out = {
         "id": row.id,
         "name": row.name,
         "version": row.version or 1,
@@ -135,3 +143,15 @@ def event_out(row: OutboxEvent, config: EventBusConfig) -> dict:
         "last_error": row.last_error,
         "published_at": iso(row.published_at),
     }
+    if delivered_to is not None:
+        out["deliveries"] = [
+            {
+                "module": d.module,
+                "status": d.status,
+                "attempts": d.attempts,
+                "last_error": d.last_error,
+                "delivered_at": iso(d.delivered_at),
+            }
+            for d in delivered_to
+        ]
+    return out
