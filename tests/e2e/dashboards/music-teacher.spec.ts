@@ -45,7 +45,16 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The music teacher's own widgets.
-  { id: "skill-progress.assessments-due", module: "practice/skill-progress", batch: "#329" },
+  {
+    id: "skill-progress.assessments-due",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "Assessments to verify",
+    probe: "/skill-progress/assessments?status=submitted&limit=1",
+    empty: "Nothing to verify",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     // Texts of ToJudgeWidget.tsx in PR #414 (feat/selection-process/module-build). The widget first lists the open
     // processes; a failure there is what its panel shows.

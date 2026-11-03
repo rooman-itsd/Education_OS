@@ -85,7 +85,16 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Schedule data is not available yet.",
   },
   { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
-  { id: "skill-progress.my-progress", module: "practice/skill-progress", batch: "#329" },
+  {
+    id: "skill-progress.my-progress",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "My progress",
+    probe: "/skill-progress/me/progress",
+    empty: "No assessments yet",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     id: "inventory-equipment.my-loans",
     module: "facilities/inventory-equipment",
