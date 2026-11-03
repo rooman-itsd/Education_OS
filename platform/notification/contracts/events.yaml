@@ -78,7 +78,7 @@ consumes:
   - tenancy.organisation.verified       # awaiting operator approval
   - tenancy.organisation.approved       # academy is live, how to sign in
   - tenancy.package.requested           # package change requested
-  - tenancy.package.changed             # package change applied
+  - tenancy.package.changed             # package change applied (template tenancy.package.changed)
   - identity.user.created               # welcome, set your password
   - billing.subscription.started        # trial started, what it includes
   - billing.trial.expiring              # 7, 3 and 1 days before the trial ends
