@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Platform defaults are seeded once per job (#316 follow-up). Seeding checked "no schedule yet" and inserted with
+  no lock or key: two schedulers starting together both created the schedule (20 out of 20 on PostgreSQL), so the
+  job ran twice per window; and a seeded schedule an operator deleted came back on restart. Chain `scheduler_0002`
+  adds `scheduler_seeded_default` (primary key: the job; organisation_id + row-level security); a scheduler seeds
+  a job only if its insert there succeeds. Existing platform schedules are backfilled as seeded. A deployment that
+  already has a duplicate keeps it: list `GET /schedules?job=<job>` and delete the extra one.
 - The scheduler (#316, was #82). A module declares its jobs on the `eos.scheduler_jobs` entry point, consumes
   `scheduler.job.due` and reports with `<module>.job.finished` (run_id, outcome, detail); scheduler consumes that
   from every module with a job and closes the run only if that module owns it. A run nobody closes within

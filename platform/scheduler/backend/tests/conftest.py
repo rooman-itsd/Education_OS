@@ -11,7 +11,7 @@ import pytest
 from eos_core.db import SessionLocal, init_db
 from eos_core.events import OutboxEvent
 from eos_core.tenant import platform_scope
-from eos_scheduler.domain.models import Run, Schedule
+from eos_scheduler.domain.models import Run, Schedule, SeededDefault
 from sqlalchemy import delete
 
 
@@ -26,7 +26,7 @@ def _clean():
     with platform_scope(), SessionLocal() as s:
         if s.get_bind().dialect.name != "sqlite":
             pytest.exit("scheduler tests delete every schedule; they run on SQLite only")
-        for table in (Run, Schedule, OutboxEvent):
+        for table in (Run, Schedule, SeededDefault, OutboxEvent):
             s.execute(delete(table))
         s.commit()
 
