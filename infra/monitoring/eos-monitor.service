@@ -1,0 +1,11 @@
+[Unit]
+Description=Education OS: check the API host and alert
+# No Requires=docker.service: with Docker down this check must still run, and alert.
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/eos-monitor
+SyslogIdentifier=eos-monitor
+# Worst case: two health tries (5 s each, 10 s apart), two docker calls (20 s each) and webhook posts (10 s each).
+TimeoutStartSec=90s

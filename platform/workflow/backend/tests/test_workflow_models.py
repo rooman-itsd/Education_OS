@@ -19,7 +19,13 @@ from eos_workflow.domain.models import (
 
 
 def test_table_names_declared():
-    assert set(TABLE_NAMES) == {"workflow_chain", "workflow_step", "workflow_request", "workflow_action"}
+    assert set(TABLE_NAMES) == {
+        "workflow_chain",
+        "workflow_step",
+        "workflow_request",
+        "workflow_action",
+        "workflow_escalation",
+    }
 
 
 def test_approval_chain_creation():
