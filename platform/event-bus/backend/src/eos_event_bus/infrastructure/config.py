@@ -27,7 +27,7 @@ class EventBusConfig:
     transport: str = "inprocess"
     poll_interval_ms: int = 1000
     batch_size: int = 100
-    max_attempts: int = 8
+    max_attempts: int = 20  # about an hour of retries at the 300 s cap before an event is dead-lettered
     retry_cap_s: int = 300
     stall_threshold_s: int = 300
     retention_days: int = 30
@@ -41,7 +41,7 @@ class EventBusConfig:
             transport=transport,
             poll_interval_ms=_int("EVENT_BUS_POLL_INTERVAL_MS", 1000, 50, 60_000),
             batch_size=_int("EVENT_BUS_BATCH_SIZE", 100, 1, 1000),
-            max_attempts=_int("EVENT_BUS_MAX_ATTEMPTS", 8, 1, 50),
+            max_attempts=_int("EVENT_BUS_MAX_ATTEMPTS", 20, 1, 50),
             retry_cap_s=_int("EVENT_BUS_RETRY_CAP_S", 300, 1, 86_400),
             stall_threshold_s=_int("EVENT_BUS_STALL_THRESHOLD_S", 300, 10, 86_400),
             retention_days=_int("EVENT_BUS_RETENTION_DAYS", 30, 1, 3650),

@@ -68,15 +68,20 @@ keeps the single-deployment default of ADR-0005 working on day one.
 ### The loop
 
 1. Claim a batch: oldest unpublished rows, `ORDER BY occurred_at, id`, `LIMIT batch_size`,
-   with `FOR UPDATE SKIP LOCKED` so several relay workers can run without doubling up.
+   with `FOR NO KEY UPDATE SKIP LOCKED` so several relay workers can run without doubling up (NO KEY:
+   a consumer's delivery row references the event, and FOR UPDATE would block its foreign-key check).
 2. Set `app.organisation_id` from the envelope before invoking each consumer, so row-level
    security applies to consumer writes exactly as it does to API requests.
-3. Hand the batch to the transport.
-4. Mark accepted ids `published = true`, `published_at = now()`.
+3. Hand the batch to the transport. Delivery is tracked **per consuming module** in
+   `event_bus_delivery` (the consumer group per module of #83): a module's `delivered` row is written
+   in its handler's own transaction; a module already delivered is skipped; a failing module does not
+   stop the others.
+4. Mark accepted ids (every module delivered) `published = true`, `published_at = now()`.
 5. On failure, increment `attempts`, record `last_error`, and retry with exponential backoff
-   (1s, 2s, 4s … capped). After `EVENT_BUS_MAX_ATTEMPTS` the row is dead-lettered and
-   `event-bus.event.dead-lettered` is raised. Dead-lettered rows are never retried
-   automatically; an operator replays them through the API.
+   (1s, 2s, 4s … capped); the retry re-runs only the modules not yet delivered. After
+   `EVENT_BUS_MAX_ATTEMPTS` (default 20, about an hour) the row is dead-lettered and
+   `event-bus.event.dead-lettered` is raised with `failed_modules`. Dead-lettered rows are never retried
+   automatically; an operator replays them through the API, which re-runs only the failed modules.
 6. Sleep `EVENT_BUS_POLL_INTERVAL_MS` when the outbox is empty.
 
 Polling, not `LISTEN/NOTIFY`: notifications are not durable, so a missed one loses an event.
@@ -84,8 +89,10 @@ Polling is dull and correct, and the interval is small enough that latency is no
 
 ### Guarantees
 
-- **At-least-once.** A crash between delivery and step 4 redelivers. Consumers must be
-  idempotent on `envelope.id`; this is stated in `contracts/events.yaml` and is not optional.
+- **At-least-once.** A crash between delivery and step 4 redelivers, but never to a module whose
+  delivered mark committed with its handler. Consumers must still be idempotent on `envelope.id`
+  (a handler that commits elsewhere first may run again); this is stated in `contracts/events.yaml`.
+- **Isolation between consumers.** One module's failure neither blocks nor re-runs another module.
 - **No ordering guarantee.** `SKIP LOCKED` and retries both reorder. A consumer that needs
   order must use the entity's own state.
 - **No cross-tenant delivery.** `organisation_id` rides on the envelope and is set as the
@@ -116,7 +123,7 @@ dependency in this design** and is why the week-1 deliverable is the design, not
 | `EVENT_BUS_TRANSPORT` | `inprocess` | Which transport |
 | `EVENT_BUS_POLL_INTERVAL_MS` | `1000` | Idle poll interval |
 | `EVENT_BUS_BATCH_SIZE` | `100` | Rows per claim |
-| `EVENT_BUS_MAX_ATTEMPTS` | `8` | Then dead-letter |
+| `EVENT_BUS_MAX_ATTEMPTS` | `20` | Then dead-letter (about an hour at the 300 s cap) |
 | `EVENT_BUS_STALL_THRESHOLD_S` | `300` | Oldest unpublished age that raises `relay.stalled` |
 
 The relay runs as an `arq` worker (the approved job runner) beside `apps/backend`. In the

@@ -84,8 +84,10 @@ def _insert_records(conn, org: str) -> tuple[str, str, str]:
 
     conn.execute(
         text(
-            "INSERT INTO reporting_metric_snapshot (id, organisation_id, metric_type, period, data, captured_at) "
-            "VALUES (:id, :org, 'attendance', '2026-10', '{\"val\": 1}', now())"
+            "INSERT INTO reporting_metric_snapshot (id, organisation_id, source_module, metric_key, period_start,"
+            " period_end, dimensions, dimensions_key, value, unit, calculated_at, schema_version) VALUES (:id, :org,"
+            " 'admissions', 'admissions.applications_submitted', '2026-10-01', '2026-10-31', '{}', '{}', 1, 'count',"
+            " now(), 1)"
         ),
         {"id": snap_id, "org": org},
     )
