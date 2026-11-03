@@ -3,6 +3,14 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Failed emails are retried (#316 follow-up). A retryable provider failure (SMTP 4xx, dropped connection) left
+  the message `queued`, and `recover_stuck()`, the only thing that re-sends it, had no caller, so approval and
+  trial emails were lost after one transient failure. Notification now declares the platform job
+  `notification.recover-stuck` (`*/5 * * * *`, entry point `eos.scheduler_jobs`) and consumes
+  `scheduler.job.due` for it: the sweep re-sends due retries with the existing bounded attempts and doubling
+  delay, and reports `notification.job.finished` to close the run.
+- A consumed event whose organisation name cannot be looked up now raises, so the relay retries and finally
+  dead-letters it. It used to log and return, which marked the event done and lost the email.
 - Notification now reacts to other modules' events (#316). It declared nine consumed events in its contract but
   registered no consumer, so the relay delivered them to nobody, marked them published and sent nothing.
   `application/consumers.py` is published on the `eos.event_consumers` entry point and mails the organisation's
