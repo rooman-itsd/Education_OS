@@ -81,7 +81,7 @@ consumes:
   - tenancy.organisation.suspended      # refused (pending_*) or suspended (active)
   - tenancy.organisation.activated      # reactivated (previous_status suspended or archived)
   - tenancy.package.requested           # package change requested
-  - tenancy.package.changed             # package change applied
+  - tenancy.package.changed             # package change applied (template tenancy.package.changed)
   - identity.user.created               # welcome, set your password
   - billing.subscription.started        # trial started, what it includes
   - billing.trial.expiring              # 7, 3 and 1 days before the trial ends

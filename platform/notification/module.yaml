@@ -30,7 +30,7 @@ consumes_events:
   - tenancy.organisation.suspended      # refused or suspended
   - tenancy.organisation.activated      # reactivated
   - tenancy.package.requested
-  - tenancy.package.changed
+  - tenancy.package.changed             # wired: template tenancy.package.changed
   - identity.user.created
   - billing.subscription.started
   - billing.trial.expired

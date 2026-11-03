@@ -41,6 +41,10 @@ Variables = Callable[[dict], dict]
 EVENTS: dict[str, tuple[str, Variables]] = {
     "tenancy.organisation.verified": ("tenancy.organisation.verified", lambda p: {}),
     "tenancy.organisation.approved": ("tenancy.organisation.approved", lambda p: {}),
+    # A super admin approved a requested academic package change (replaces tenancy's eos_core.notify stub)
+    # p["to"], not .get: an event without the new package must fail loudly (retried, then dead-lettered), never
+    # mail "changed to ."
+    "tenancy.package.changed": ("tenancy.package.changed", lambda p: {"package": str(p["to"])}),
     "billing.trial.expiring": (
         "billing.trial.reminder",
         lambda p: {"trial_ends_on": str(p.get("trial_ends_on", "")), "days_left": str(p.get("days_left", ""))},

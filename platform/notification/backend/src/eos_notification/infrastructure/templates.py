@@ -180,6 +180,17 @@ DEFAULTS: dict[str, DefaultTemplate] = {
                     "${organisation_name} has been reactivated. Its users can sign in again." + _FOOTER,
                 ),
                 ("in_app", "en"): (None, "${organisation_name} is active again."),
+            "tenancy.package.changed",
+            "operational",
+            ["email", "in_app"],
+            ["organisation_name", "package"],
+            {
+                ("email", "en"): (
+                    "Academic package approved for ${organisation_name}",
+                    "Your request to change the academic package of ${organisation_name} to ${package} has been "
+                    "approved. The modules it includes are available now." + _FOOTER,
+                ),
+                ("in_app", "en"): (None, "Your academic package is now ${package}."),
             },
             in_app_allowed=True,
         ),
