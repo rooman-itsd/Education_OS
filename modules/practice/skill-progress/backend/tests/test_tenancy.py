@@ -51,6 +51,12 @@ def test_no_cross_tenant_leak(client, org, other_org):
         a["skill"]["id"]
     ]
 
+    # the framework summary of each organisation counts its own learners only
+    for who, mine in ((org, a), (other_org, b)):
+        items = client.get(f"{BASE}/reports/framework-summary", headers=who.admin).json()["items"]
+        assert [i["framework_id"] for i in items] == [mine["framework"]["id"]]
+        assert items[0]["learners_assessed"] == 1
+
     # another organisation's ids are unknown here, so they cannot be referenced
     steal = other_org.body(new_id(), a["skill"], b["rubric"])
     r = client.post(f"{BASE}/assessments", json=steal, headers=other_org.evaluator)

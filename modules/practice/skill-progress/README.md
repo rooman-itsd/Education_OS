@@ -21,6 +21,10 @@ a learner role (a role whose dashboard layout extends `student`, such as musicia
 the records whose `learner_id` is their user id. Evaluators, coordinators and administrators see their
 organisation's learners (`application/service.py`, `api/deps.py`). A learner's own progress is `GET /me/progress`, which the
 dashboard widget `skill-progress.my-progress` shows (a widget does not know the viewer's id).
+`skill-progress.assessments-due` lists assessments that are submitted and not yet verified (`GET /assessments?status=submitted`).
+`skill-progress.cohort-overview` shows `GET /reports/framework-summary`: per framework, the learners assessed and how many
+skills sit at each level. It covers every assessed learner, not a cohort (the module has no groups), and a learner-only
+caller gets 403. The summary reads every counted assessment of the organisation, so move it into SQL if that grows large.
 
 How it behaves (the contract's open questions in [docs/prd.md](docs/prd.md) section 9, decided here):
 - **Permissions (Q1).** Every operation names its key in `x-permission`. `progress:export` has no operation yet (Q3).
