@@ -15,6 +15,7 @@ Two rules run through the whole file:
 from __future__ import annotations
 
 import logging
+import re
 import smtplib
 import ssl
 import uuid
@@ -37,6 +38,7 @@ log = logging.getLogger("eos.messaging_providers.smtp")
 # RFC 5321: a 4xx reply is temporary and the sender should try again; 5xx is permanent. Two 4xx codes mean
 # "too fast" specifically, and the port has a separate reason for that.
 _THROTTLE_CODES = {421, 450, 451, 452}
+_HEADER_KEY = re.compile(r"^[A-Za-z0-9-]{1,64}$")  # a metadata key becomes X-EOS-<key>: a header name, nothing else
 
 
 class SmtpEmailProvider:
@@ -91,6 +93,12 @@ class SmtpEmailProvider:
             return self._refuse(message_id, REJECTED, "a header value is not valid")
         provider_message_id = message["Message-ID"]
 
+        if self._config.credentials_would_leak:
+            # Refuse rather than log in over plain text to a remote relay. A configuration problem an operator
+            # fixes (turn on TLS), so retryable like a failed login; notification bounds the attempts.
+            log.error("smtp credentials are configured without TLS for %s: refusing to send", self._config.describe())
+            return self._refuse(message_id, TRANSPORT_UNAVAILABLE, "credentials need TLS", retryable=True)
+
         try:
             with self._connect() as client:
                 if self._config.authenticated:
@@ -143,6 +151,8 @@ class SmtpEmailProvider:
 
     def healthcheck(self) -> Health:
         """Connect, authenticate if configured, NOOP, quit. Never sends a message."""
+        if self._config.credentials_would_leak:
+            return Health(reachable=False, detail="credentials are configured without TLS")
         try:
             with self._connect() as client:
                 if self._config.authenticated:
@@ -159,9 +169,18 @@ class SmtpEmailProvider:
     def _connect(self):
         if self._client_factory is not None:
             return self._client_factory(self._config)
+        context = ssl.create_default_context()
+        if self._config.use_ssl:
+            return smtplib.SMTP_SSL(
+                self._config.host, self._config.port, timeout=self._config.timeout_s, context=context
+            )
         client = smtplib.SMTP(self._config.host, self._config.port, timeout=self._config.timeout_s)
         if self._config.use_tls:
-            client.starttls(context=ssl.create_default_context())
+            try:
+                client.starttls(context=context)
+            except BaseException:
+                client.close()  # created outside the caller's `with`: nothing else would close the socket
+                raise
         return client
 
     def _build(self, *, message_id, to, sender, subject, body, body_html, metadata, reply_to=None) -> EmailMessage:
@@ -177,6 +196,8 @@ class SmtpEmailProvider:
         # can correlate; notification guarantees it carries no secret, and nothing else is added here.
         message["X-EOS-Message-Id"] = str(message_id)
         for key, value in sorted(metadata.items()):
+            if not _HEADER_KEY.match(str(key)):
+                raise ValueError("a metadata key is not a header name")  # refused below as REJECTED
             message[f"X-EOS-{key}"] = str(value)
         message.set_content(body)
         if body_html:
