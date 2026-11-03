@@ -28,7 +28,7 @@ ACTION_APPROVED = "approved"
 ACTION_REJECTED = "rejected"
 ACTION_DELEGATED = "delegated"
 
-TABLE_NAMES = ["workflow_chain", "workflow_step", "workflow_request", "workflow_action"]
+TABLE_NAMES = ["workflow_chain", "workflow_step", "workflow_request", "workflow_action", "workflow_escalation"]
 
 
 class ApprovalChain(Base, TenantMixin):
@@ -89,7 +89,9 @@ class WorkflowRequest(Base, TenantMixin):
     __table_args__ = (
         Index("ix_workflow_request_org_status", "organisation_id", "status"),
         Index("ix_workflow_request_org_entity", "organisation_id", "entity_type", "entity_id"),
-        Index("uq_workflow_request_org_token", "organisation_id", "client_token", unique=True),
+        Index(
+            "uq_workflow_request_org_requester_token", "organisation_id", "requester_id", "client_token", unique=True
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -146,3 +148,23 @@ class WorkflowAction(Base, TenantMixin):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     request: Mapped[WorkflowRequest] = relationship("WorkflowRequest", back_populates="history")
+
+
+class WorkflowEscalation(Base, TenantMixin):
+    """A step that missed its SLA, recorded once. The unique (request_id, step_order) is what keeps the scheduled
+    workflow.sla-check from escalating the same step twice, including two checks running at once."""
+
+    __tablename__ = "workflow_escalation"
+    __table_args__ = (
+        UniqueConstraint("request_id", "step_order", name="uq_workflow_escalation_request_step"),
+        Index("ix_workflow_escalation_org", "organisation_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    request_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("workflow_request.id", ondelete="CASCADE"), nullable=False
+    )
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    overdue_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    escalated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
