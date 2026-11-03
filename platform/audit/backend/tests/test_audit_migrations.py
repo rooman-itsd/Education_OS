@@ -56,7 +56,7 @@ def test_fresh_upgrade_matches_the_models_and_downgrades_cleanly():
         )
         head = RuntimeContext.configure(conn, opts={"version_table": "audit_alembic_version"}).get_current_revision()
         unique = conn.execute(text("SELECT sql FROM sqlite_master WHERE name = 'uq_audit_record_org_token'")).scalar()
-    assert head == "audit_0001"
+    assert head == "audit_0002"
     assert unique and "UNIQUE" in unique.upper() and "coalesce" in unique
     command.downgrade(cfg, "base")
     assert not TABLES & set(inspect(create_engine(url)).get_table_names())
