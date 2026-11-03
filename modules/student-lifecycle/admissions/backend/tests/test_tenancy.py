@@ -80,3 +80,25 @@ def test_another_organisation_cannot_touch_anything_by_id(client):
     assert owner["status"] == e.ELIGIBLE and owner["offer"] is None
     assert owner["documents"][0]["verification_status"] == e.PENDING
     assert client.get(f"{BASE}/merit-lists/{merit['id']}", headers=headers(org_a)).json()["status"] == e.DRAFT
+
+
+def test_an_applicant_never_links_or_reads_another_organisations_application(client):
+    """The same user id, reference number and email in two organisations: each token sees only its own."""
+    org_a, org_b = new_id(), new_id()
+    user = new_id()
+    reference = f"ADM-2026-{new_id()[:6].upper()}"
+    app_a = seed(add_application, org_a, reference_number=reference, applicant_user_id=user)
+    app_b = seed(add_application, org_b, reference_number=reference)
+
+    as_a, as_b = headers(org_a, "applicant", user), headers(org_b, "applicant", user)
+    assert [a["id"] for a in client.get(f"{BASE}/me/applications", headers=as_a).json()["items"]] == [app_a]
+    assert client.get(f"{BASE}/me/applications", headers=as_b).json() == {"items": []}
+
+    # Linking from org B reaches org B's application only, never org A's already-linked one.
+    body = {"reference_number": reference, "email": "ana@example.com"}
+    linked = client.post(f"{BASE}/me/applications", json=body, headers=as_b)
+    assert linked.status_code == 200 and linked.json()["id"] == app_b
+    assert (
+        client.post(f"{BASE}/me/applications", json=body, headers=headers(new_id(), "applicant", user)).status_code
+        == 404
+    )
