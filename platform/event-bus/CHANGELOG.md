@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Delivery is per consuming module (#316 follow-up; #83's "consumer groups per module"). Chain 0003 adds
+  `event_bus_delivery`, one row per (event, module) with `organisation_id` and row-level security. A module's
+  delivered mark commits with its handler; a module already delivered is skipped; a failing module no longer
+  stops the modules after it. A retry, and an operator's replay, re-run only the failed modules. The dead-letter
+  notice carries `failed_modules`; `GET /events/{id}` and replay show `deliveries`. Contract 0.2.0 (additive).
+- The claim is `FOR NO KEY UPDATE SKIP LOCKED`, so a consumer's delivery row (a foreign key to the event) is not
+  blocked by the relay's own lock.
+- `EVENT_BUS_MAX_ATTEMPTS` defaults to 20 (about an hour at the 300 s cap) instead of 8, which dead-lettered an
+  event after about two minutes of failures.
 - The relay (#316, was #83): drains `outbox_event` oldest first, `FOR UPDATE SKIP LOCKED` on Postgres; marks
   delivered events published; retries a failure with exponential backoff and dead-letters it after
   `EVENT_BUS_MAX_ATTEMPTS`, raising `event-bus.event.dead-lettered` (never for the bus's own events); raises

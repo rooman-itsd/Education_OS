@@ -95,15 +95,23 @@ def test_backoff_doubles_and_is_capped():
     assert backoff(20, 300).total_seconds() == 300
 
 
-def test_one_failing_consumer_holds_the_event_for_every_consumer():
-    ok = []
+def test_a_failing_consumer_holds_back_only_itself():
+    """Delivery is per module (#83): b failing does not stop a, and the retry re-runs b only."""
+    ok, tries = [], []
 
-    def boom(db, ev):
-        raise ValueError("no")
+    def flaky(db, ev):
+        tries.append(1)
+        if len(tries) == 1:
+            raise ValueError("no")
 
+    clock = Clock()
     eid = raise_event("a.b.c", ORG_A)
-    relay({"a": {"a.b.c": lambda db, ev: ok.append(1)}, "b": {"a.b.c": boom}}, Clock()).run_once()
+    r = relay({"a": {"a.b.c": lambda db, ev: ok.append(1)}, "b": {"a.b.c": flaky}}, clock)
+    r.run_once()
     assert ok == [1] and not row(eid).published and row(eid).last_error == "b: ValueError"
+    clock.advance(1)
+    assert r.run_once().delivered == 1 and row(eid).published
+    assert ok == [1] and len(tries) == 2  # a was never handed the event again
 
 
 def test_a_failing_consumer_leaves_none_of_its_own_writes():
@@ -142,6 +150,7 @@ def test_after_the_last_attempt_the_event_is_dead_lettered_and_announced_once():
             "event_name": "a.b.c",
             "attempts": 3,
             "last_error": "mod: RuntimeError",
+            "failed_modules": ["mod"],
         }
 
 
@@ -192,3 +201,111 @@ def test_prune_removes_only_delivered_events_past_retention():
     pending = raise_event("x.y.z", ORG_A, at=clock.now)
     assert r.prune() == 1
     assert row(delivered) is None and row(dead) is not None and row(pending) is not None
+
+
+# --- Per-module delivery (#83's consumer group per module) ---------------------------------------------------
+
+
+def _deliveries(event_id: str) -> dict[str, tuple[str, int, str | None]]:
+    from eos_event_bus.domain.models import EventDelivery
+
+    with platform_scope(), SessionLocal() as db:
+        rows = db.query(EventDelivery).filter(EventDelivery.event_id == event_id).all()
+        return {d.module: (d.status, d.attempts, d.last_error) for d in rows}
+
+
+def test_a_module_that_keeps_failing_never_blocks_the_modules_after_it():
+    """'a' sorts before 'b': before per-module delivery, a failing 'a' meant 'b' never ran at all."""
+    ran_b = []
+
+    def boom(db, ev):
+        raise RuntimeError("down")
+
+    clock = Clock()
+    eid = raise_event("x.y.z", ORG_A)
+    r = relay({"a": {"x.y.z": boom}, "b": {"x.y.z": lambda db, ev: ran_b.append(ev.id)}}, clock, max_attempts=3)
+    for _ in range(3):
+        r.run_once()
+        clock.advance(10)
+    assert ran_b == [eid]  # once, on the first attempt, never again
+    assert _deliveries(eid) == {"a": ("failed", 3, "a: RuntimeError"), "b": ("delivered", 1, None)}
+    stored = row(eid)
+    assert not stored.published and stored.attempts == 3  # dead-lettered for 'a' only
+
+
+def test_the_dead_letter_notice_names_the_failed_modules():
+    def boom(db, ev):
+        raise KeyError("x")
+
+    clock = Clock()
+    eid = raise_event("x.y.z", ORG_A)
+    r = relay({"a": {"x.y.z": lambda db, ev: None}, "c": {"x.y.z": boom}}, clock, max_attempts=1)
+    assert r.run_once().dead_lettered == 1
+    with platform_scope(), SessionLocal() as db:
+        (notice,) = [e for e in db.query(OutboxEvent).all() if e.name == "event-bus.event.dead-lettered"]
+    assert notice.payload["event_id"] == eid and notice.payload["failed_modules"] == ["c"]
+
+
+def test_a_replay_re_runs_only_the_modules_that_failed():
+    from eos_event_bus.application import events as operator
+    from eos_event_bus.infrastructure.config import EventBusConfig
+
+    calls = {"a": 0, "b": 0}
+    broken = {"b": True}
+
+    def handler(module):
+        def run(db, ev):
+            calls[module] += 1
+            if broken.get(module):
+                raise RuntimeError("down")
+
+        return run
+
+    clock = Clock()
+    eid = raise_event("x.y.z", ORG_A)
+    r = relay({"a": {"x.y.z": handler("a")}, "b": {"x.y.z": handler("b")}}, clock, max_attempts=1)
+    r.run_once()
+    assert calls == {"a": 1, "b": 1} and not row(eid).published
+
+    broken["b"] = False  # the module is fixed; an operator replays the dead letter
+    with platform_scope(), SessionLocal() as db:
+        operator.replay(db, operator.Scope(None, every_organisation=True), EventBusConfig(max_attempts=1), eid, "op")
+    r.run_once()  # also delivers the dead-letter notice, which nothing consumes
+    assert row(eid).published
+    assert calls == {"a": 1, "b": 2}
+    assert _deliveries(eid) == {"a": ("delivered", 1, None), "b": ("delivered", 2, None)}
+
+
+def test_a_delivered_mark_exists_only_when_the_handlers_writes_committed():
+    from eos_core.events import publish
+
+    def half_done(db, ev):
+        publish(db, "fees.invoice.raised", ev.organisation_id, {})
+        db.flush()
+        raise RuntimeError("after writing")
+
+    eid = raise_event("x.y.z", ORG_A)
+    relay({"fees": {"x.y.z": half_done}}, Clock()).run_once()
+    assert names("fees.") == [] and _deliveries(eid)["fees"][0] == "failed"
+
+
+def test_delivery_rows_carry_the_events_organisation_and_go_when_it_is_pruned():
+    clock = Clock()
+    eid = raise_event("x.y.z", ORG_A)
+    r = relay({"a": {"x.y.z": lambda db, ev: None}}, clock, retention_days=1)
+    r.run_once()
+    from eos_event_bus.domain.models import EventDelivery
+
+    with platform_scope(), SessionLocal() as db:
+        (d,) = db.query(EventDelivery).filter(EventDelivery.event_id == eid).all()
+        assert d.organisation_id == ORG_A
+    clock.advance(2 * 86400)
+    assert r.prune() == 1 and _deliveries(eid) == {}
+
+
+def test_the_default_retry_window_is_about_an_hour_not_two_minutes():
+    from eos_event_bus.infrastructure.config import EventBusConfig
+
+    config = EventBusConfig.from_env()
+    total = sum(backoff(n, config.retry_cap_s).total_seconds() for n in range(1, config.max_attempts))
+    assert config.max_attempts == 20 and 3000 < total < 4000

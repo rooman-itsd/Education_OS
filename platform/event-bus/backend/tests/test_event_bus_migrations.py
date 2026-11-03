@@ -79,8 +79,33 @@ def test_a_database_the_api_created_keeps_its_rows_which_are_not_redelivered():
     assert published and attempts == 0 and version == 1
 
 
+def test_the_delivery_table_matches_the_model():
+    from eos_event_bus.domain.models import EventDelivery
+
+    url = _url()
+    command.upgrade(_config(url), "head")
+    model_url = _url()
+    model_engine = create_engine(model_url)
+    OutboxEvent.__table__.create(model_engine)
+    EventDelivery.__table__.create(model_engine)
+
+    def shape(u):
+        t = inspect(create_engine(u))
+        columns = {
+            c["name"]: (type(c["type"]).__name__.upper(), c["nullable"]) for c in t.get_columns("event_bus_delivery")
+        }
+        uniques = {tuple(u["column_names"]) for u in t.get_unique_constraints("event_bus_delivery")}
+        keys = {
+            (fk["referred_table"], tuple(fk["constrained_columns"])) for fk in t.get_foreign_keys("event_bus_delivery")
+        }
+        return columns, uniques, keys
+
+    assert shape(url) == shape(model_url)
+
+
 def test_the_chain_downgrades_to_nothing():
     url = _url()
     command.upgrade(_config(url), "head")
     command.downgrade(_config(url), "base")
-    assert "outbox_event" not in inspect(create_engine(url)).get_table_names()
+    tables = inspect(create_engine(url)).get_table_names()
+    assert "outbox_event" not in tables and "event_bus_delivery" not in tables
