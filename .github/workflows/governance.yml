@@ -6,6 +6,9 @@ on:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
+  # GitHub's merge queue: the PR-only steps below skip themselves (no pull_request event); the rest run on
+  # the combined merge group.
+  merge_group:
 
 jobs:
   rules:
