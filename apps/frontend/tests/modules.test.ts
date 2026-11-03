@@ -5,7 +5,9 @@ import { registerEnabledModules, registry } from "../src/modules";
 
 // React StrictMode runs effects twice in development, so App.tsx calls registerEnabledModules() twice on
 // start-up. Every enabled module's widgets must still be registered exactly once, without an error.
-describe("registerEnabledModules", () => {
+// Each test imports every enabled module's widgets, a list that grows with every module enabled: alone this takes about
+// 5 s, the default timeout, so a slower runner failed it for no reason.
+describe("registerEnabledModules", { timeout: 30_000 }, () => {
   it("registers each enabled module once, however often it is called", async () => {
     const [first, second] = await Promise.all([registerEnabledModules(), registerEnabledModules()]);
     const third = await registerEnabledModules();
