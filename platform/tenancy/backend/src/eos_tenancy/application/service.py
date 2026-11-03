@@ -7,7 +7,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 from eos_billing.application import service as billing
-from eos_core import events, notify
+from eos_core import events
 from eos_core.config import load_profiles
 from eos_core.db import scoped, utcnow
 from eos_core.entitlement import compute_entitlement
@@ -217,16 +217,6 @@ def verify(db: Session, token: str) -> Organisation:
         return org
 
 
-def _admin_email(db: Session, organisation_id: str) -> str | None:
-    """The address that registered the organisation: every registration leaves a token row with it."""
-    with platform_scope():
-        return db.scalar(
-            select(RegistrationToken.email)
-            .where(RegistrationToken.organisation_id == organisation_id)
-            .order_by(RegistrationToken.expires_at.desc())
-        )
-
-
 def _activate(db: Session, org: Organisation, *, approved_by: str | None, reason: str) -> None:
     org.status, org.status_reason = "active", reason
     events.publish(
@@ -255,15 +245,7 @@ def approve(db: Session, organisation_id: str, *, approved_by: str, reason: str 
                 actor=approved_by,
             )
             _changed(db, org.id)
-            email = _admin_email(db, org.id)
-            if email:
-                notify.send_email(
-                    email,
-                    f"Academic package approved for {org.name}",
-                    f"Your request to change academic package to {org.academy_type} has been approved.",
-                    organisation_id=org.id,
-                    academy_type=org.academy_type,
-                )
+            # The admins' email is notification's, on tenancy.package.changed (template tenancy.package.changed).
             if org.status == "active":
                 db.commit()
                 return org
@@ -410,34 +392,8 @@ def set_status(db: Session, organisation_id: str, status: str, reason: str) -> O
             # an active organisation being suspended or closed, and a reactivation from a first activation.
             {"organisation_id": org.id, "reason": reason, "previous_status": prev_status},
         )
-        email = _admin_email(db, org.id)
-        rejected = prev_status in ("pending_verification", "pending_approval") and status in ("archived", "suspended")
-        if email and rejected:
-            notify.send_email(
-                email,
-                f"Your Education OS registration for {org.name} was not approved",
-                f"Your registration for {org.name} was not approved. Reason: {reason}",
-                organisation_id=org.id,
-                status=status,
-                reason=reason,
-            )
-        elif email and status in ("suspended", "archived") and prev_status == "active":
-            notify.send_email(
-                email,
-                f"Your Education OS organisation {org.name} has been {status}",
-                f"Your organisation {org.name} status was updated to {status}. Reason: {reason}",
-                organisation_id=org.id,
-                status=status,
-                reason=reason,
-            )
-        elif email and status == "active" and prev_status != "active":
-            notify.send_email(
-                email,
-                f"Your Education OS organisation {org.name} has been activated",
-                f"Your organisation {org.name} is now active.",
-                organisation_id=org.id,
-                status=status,
-            )
+        # The admins' email is notification's, chosen from this event and previous_status: rejected (from pending_*),
+        # suspended or closed (from active), reactivated (back to active).
         db.commit()
     return org
 
@@ -575,18 +531,7 @@ def request_deletion(
         }
         events.publish(db, "tenancy.organisation.archived", org.id, payload, actor=requested_by)
         events.publish(db, "tenancy.organisation.deletion_requested", org.id, payload, actor=requested_by)
-        email = _admin_email(db, org.id)
-        if email:
-            notify.send_email(
-                email,
-                f"Your Education OS organisation {org.name} has been archived",
-                f"Your organisation {org.name} has been archived and its users can no longer sign in. Its data is "
-                f"kept until {org.delete_after.date().isoformat()} and deleted after that unless the organisation "
-                f"is restored. Reason: {org.status_reason}",
-                organisation_id=org.id,
-                status="archived",
-                delete_after=org.delete_after.isoformat(),
-            )
+        # The admins' email is notification's, on the archive carrying delete_after (tenancy.organisation.deletion_scheduled).
         db.commit()
     return org
 

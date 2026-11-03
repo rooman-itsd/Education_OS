@@ -120,12 +120,10 @@ def test_package_rejection_sends_email(client, manual_approval):
     )
     assert r.status_code == 401 and "archived" in r.json()["detail"]
 
-    # rejection email was sent
-    rejection_emails = [
-        m for m in notify.sent if m["to"] == "admin@rejected.example.com" and "not approved" in m["subject"].lower()
-    ]
-    assert len(rejection_emails) == 1
-    assert "Incomplete documentation" in rejection_emails[0]["body"]
+    # The rejection email is notification's, from the archived event above (previous_status pending_approval):
+    # end to end in test_notification_consumers.py. tenancy no longer calls the eos_core.notify stub, which only
+    # logged it.
+    assert not [m for m in notify.sent if m["to"] == "admin@rejected.example.com"]
 
     # rejecting again fails with 409
     assert (
