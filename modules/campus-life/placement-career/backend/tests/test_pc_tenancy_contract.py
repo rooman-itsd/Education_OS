@@ -14,7 +14,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from eos_core.config import permissions_for
-from eos_core.db import SessionLocal
+from eos_core.db import SessionLocal, new_id
 from eos_core.tenant import platform_scope
 from eos_placement_career.api.router import router
 from eos_placement_career.application import access, common
@@ -213,6 +213,55 @@ def test_every_contract_operation_is_served_with_its_permission():
         assert len(perms) == 1 and perms[0] in contract[key], (key, perms)
         named = set(re.findall(r"placement-career:[a-z]+:[a-z]+", contract[key]))
         assert set(perms) <= named, (key, perms, named)
+
+
+def _served() -> list[tuple[str, str, str]]:
+    """(method, path with a made-up id, permission) for every route the router serves."""
+    out = []
+    for route in router.routes:
+        perms = next(d.call.permissions for d in route.dependant.dependencies if hasattr(d.call, "permissions"))
+        path = re.sub(r"\{[a-z_]+_id\}", new_id(), route.path)
+        out += [(m, path, perms[0]) for m in route.methods]
+    return out
+
+
+def test_every_operation_refuses_a_caller_without_its_permission(client, org):
+    """401 without a token on every route; 403 `forbidden` for every role of the tests that lacks the operation's
+    permission, before any body or record is looked at."""
+    refused = 0
+    for method, path, permission in _served():
+        kwargs = {"json": {}} if method in ("POST", "PUT") else {}
+        r = client.request(method, f"{BASE}{path}", **kwargs)
+        assert r.status_code == 401 and r.json()["detail"]["code"] == "unauthenticated", (method, path)
+        for who, roles in org.ROLES.items():
+            if permission in permissions_for(roles):
+                continue
+            r = client.request(method, f"{BASE}{path}", headers=org.headers[who], **kwargs)
+            assert r.status_code == 403 and r.json()["detail"]["code"] == "forbidden", (method, path, who, r.text)
+            refused += 1
+    assert refused >= len(_served())  # every route is refused to someone (the role-less user at least)
+
+
+def test_the_event_the_audit_record_and_the_change_are_one_transaction(client, org, monkeypatch):
+    """A failure after the event is written keeps nothing: not the event, not the audit record, not the new status."""
+    d = drive(client, org, schedule=False)
+    real = common.publish
+
+    def publish_then_fail(*args, **kwargs):
+        real(*args, **kwargs)
+        raise RuntimeError("fails after the event is in the outbox")
+
+    monkeypatch.setattr(common, "publish", publish_then_fail)
+    with pytest.raises(RuntimeError):
+        client.post(f"{BASE}/drives/{d['id']}/schedule", headers=org.officer)
+    monkeypatch.setattr(common, "publish", real)
+    assert ok(client.get(f"{BASE}/drives/{d['id']}", headers=org.officer))["status"] == "draft"
+    assert outbox(org.id, "placement-career.drive.scheduled") == []
+    with SessionLocal() as db, platform_scope():
+        actions = set(db.scalars(select(AuditEntry.action).where(AuditEntry.entity_id == d["id"])))
+    assert actions == {"drive.created"}
+    ok(client.post(f"{BASE}/drives/{d['id']}/schedule", headers=org.officer))
+    assert len(outbox(org.id, "placement-career.drive.scheduled")) == 1
 
 
 def _raised_codes() -> set[str]:

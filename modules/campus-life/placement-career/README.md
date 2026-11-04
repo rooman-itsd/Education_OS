@@ -106,7 +106,8 @@ pytest modules/campus-life/placement-career/backend
 
 The suite needs no other module: tokens are made with the platform's signing secret through `eos_core`, and every
 `contracts/permissions.yaml` and dashboard layout is read from the repository, as the host does. It covers every route
-with its permission and every error code, the cross-tenant leak test, the Alembic chain against the models (upgrade and
+with its permission and every error code (401 without a token and 403 for every role without the operation's
+permission, on every route), the cross-tenant leak test, the event, audit record and change kept or dropped together, the Alembic chain against the models (upgrade and
 downgrade), drift between code and contract (routes, permissions, error codes both ways, enums, response properties)
 and every event's payload against `events.yaml`.
 

@@ -24,7 +24,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   Every event of `events.yaml` goes to the outbox in the same transaction; every state change writes an audit record.
 - Alembic chain `placement_career_0001` (6 `placement_career_*` tables with `organisation_id` and the
   `tenant_isolation` policy on Postgres, version table `placement_career_alembic_version`).
-- Tests: every route with its permission and error codes, the cross-tenant leak test, migrations against the models,
+- Tests: every route with its permission and error codes (401 and 403 on every route), the cross-tenant leak test, one
+  transaction for the event, the audit record and the change, migrations against the models,
   contract drift (routes, permissions, error codes, enums, response properties) and event payloads against
   `events.yaml`.
 - `docs/data-model.md`, `docs/integration-points.md` and `docs/screens.md`; README backend section with the
