@@ -26,3 +26,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - API: `GET /reports/clearances` (`clearance:read`): every active athlete's clearance, most urgent first, with counts;
   athletes see their own row. Replaces one request per athlete in the clearance widget.
 - Permissions: the sports-college `nutritionist` profile role reads the catalogue, athletes and summary reports.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/athlete-performance`) and
+  `apps/frontend/config/modules.enabled.yaml` (its four widgets on the coach, medical staff, athlete and
+  nutritionist dashboards) (#330).
