@@ -1,0 +1,16 @@
+"""The module's tests run alone (module standard rule 6): only eos_core, eos_testing and this package. Set before eos_core
+is imported: the database is always a throwaway SQLite file and tokens are signed with a test key. Both are overwritten,
+not defaulted, so a shell that points at a real database or holds a real key can never be reached from these tests."""
+
+import os
+import tempfile
+import uuid
+from pathlib import Path
+
+os.environ["EOS_DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/examinations_test.db"
+os.environ["EOS_JWT_SECRET"] = "examinations-tests-only-not-a-real-key-32-bytes"
+os.environ.setdefault("EOS_REPO_ROOT", str(Path(__file__).resolve().parents[5]))
+
+
+def uid() -> str:
+    return str(uuid.uuid4())

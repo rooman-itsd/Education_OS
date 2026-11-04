@@ -60,12 +60,10 @@ LEARNER_GAP = (
     "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # alumni: empty catalogue (alumni module, batch #337)
+    # alumni: backed now (alumni-mentee on management-student, #422); the empty entry goes after #424 (batch #337)
     "alumni": (
-        EMPTY,
-        [
-            "management-student alumni.mentoring",
-        ],
+        "nothing unbacked: management-student holds alumni-mentee (#422)",
+        [],
     ),
     # productions: empty catalogue (productions module, batch #318)
     "productions": (

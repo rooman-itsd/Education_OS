@@ -1,11 +1,30 @@
 # Permission catalogue for alumni. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Roles below are the module's own. Each profile role's dashboard layout lists the ones it holds in `module_roles`
+# (management-institute: placement-officer holds alumni-coordinator, management-student holds alumni-mentee).
 module: alumni
-permissions: []
-#  - key: alumni:record:read
-#    description: ...
-#  - key: alumni:record:write
-#    description: ...
-roles: []
-#  - name: alumni-admin
-#    grants: [alumni:record:read, alumni:record:write]
+permissions:
+  - key: alumni:directory:read
+    description: View alumni records, contact details included.
+  - key: alumni:directory:manage
+    description: Add, edit, archive and restore alumni records; flag an alumnus as a mentor.
+  - key: alumni:mentoring:read
+    description: View every mentoring assignment and session.
+  - key: alumni:mentoring:manage
+    description: Assign mentors to students, end assignments, and schedule, edit, complete and cancel sessions.
+  - key: alumni:self:read
+    description: >-
+      View one's own active mentor, with the mentor's contact details, and one's own upcoming sessions. Gives no
+      access to the directory.
+roles:
+  - name: alumni-coordinator
+    description: Runs the alumni directory and mentoring for the organisation (management-institute placement officer).
+    grants:
+      - alumni:directory:read
+      - alumni:directory:manage
+      - alumni:mentoring:read
+      - alumni:mentoring:manage
+  - name: alumni-mentee
+    description: A student who may be assigned an alumni mentor.
+    grants:
+      - alumni:self:read
