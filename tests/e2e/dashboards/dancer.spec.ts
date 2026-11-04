@@ -54,7 +54,16 @@ const WIDGETS: LayoutWidget[] = [
   { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
   { id: "library.loans", module: "campus-life/library", batch: "#338" },
   // The dancer's own widgets.
-  { id: "skill-progress.my-progress", module: "practice/skill-progress", batch: "#329" },
+  {
+    id: "skill-progress.my-progress",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "My progress",
+    probe: "/skill-progress/me/progress",
+    empty: "No assessments yet",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   { id: "productions.my-roles", module: "practice/productions", batch: "#318" },
   {
     // Texts of UpcomingWidget.tsx in PR #414 (feat/selection-process/module-build), not merged yet.
