@@ -3,14 +3,34 @@
 **Domain:** academics
 **Kind:** feature
 **Status:** in progress (issue #325). Built: domain rules, persistence (prefixed tables, row-level security, own
-Alembic chain, interim audit table) and the timetable operations of `contracts/openapi.yaml` (list, create, get, update,
-replace slots, list conflicts). Not built yet: publishing, class generation, scheduled classes, attendance, reports,
-widgets, and the consumers that fill the read models. Open decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+Alembic chain `tt_0001`, `tt_0002`, interim audit table), the timetable operations of `contracts/openapi.yaml` (list,
+create, get, update, replace slots, list conflicts) and the academic-management event consumers that fill the term,
+offering and section read models. Not built yet: publishing, class generation, scheduled classes, attendance, reports,
+widgets, and the consumers whose identity mappings are unconfirmed. Open decisions:
+[docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 Timetable generation, class scheduling, attendance capture and reports.
 
 ## Scope
 _Owner fills in: what this module is responsible for, and what it explicitly is not._
+
+## Event consumers
+`application/consumers.py` is registered under the `eos.event_consumers` entry point (`backend/pyproject.toml`) and
+lists its events in `module.yaml` (`consumes_events`). The event relay (`platform/event-bus`) finds the consumers of the
+modules the host has enabled, so they run only when this module is enabled in `apps/backend/config/modules.enabled.yaml`.
+
+| Event | Read model |
+|---|---|
+| `academic-management.term.created` | `term_ref` (code, name, `starts_on`, `ends_on`) |
+| `academic-management.offering.created` | `offering_ref` (period, course code and title, department) |
+| `academic-management.offering.status-changed` | `offering_ref.status` |
+| `academic-management.section.created` | `section_ref` (code) |
+| `academic-management.section.updated` | `section_ref.status` |
+
+Delivery is at-least-once and unordered: each handler is idempotent on the envelope id (`processed_event`), tolerates an
+event arriving before its creation, orders status changes by the envelope `occurred_at`, and applies an event only in its
+own organisation. Not consumed, pending decisions (see the decisions page): `faculty-assignment.*` (identity mapping),
+`enrolment-registration.*` (`student_id` mapping), `offering.updated` and `course.*` (no new values in the payload).
 
 ## Tests
 Backend, from `modules/academics/timetable-attendance/backend` (a throwaway SQLite database, never a real one):
