@@ -1,5 +1,6 @@
 import type { DashboardWidget } from "@eos/ui-kit";
 import { ReviewsPending } from "./ReviewsPending";
+import { SessionPlan, TrainingSchedule } from "./UpcomingSessions";
 import "./widgets.css";
 
 /**
@@ -21,5 +22,23 @@ export const widgets: DashboardWidget[] = [
     size: "2x1",
     subtitle: "Recent videos with no annotation yet",
     component: ReviewsPending,
+  },
+  {
+    id: "training-video-analysis.session-plan",
+    title: "Session plan",
+    permission: "training-video-analysis:session:read",
+    kind: "list",
+    size: "2x1",
+    subtitle: "Your coming training sessions",
+    component: SessionPlan,
+  },
+  {
+    id: "training-video-analysis.training-schedule",
+    title: "Training schedule",
+    permission: "training-video-analysis:session:read",
+    kind: "list",
+    size: "1x1",
+    subtitle: "Your coming training sessions",
+    component: TrainingSchedule,
   },
 ];
