@@ -3,10 +3,11 @@
 role: industry-liaison
 title: "Industry Liaison"
 module_roles:
+  - placement-career-viewer
   - field-training-viewer
   - projects-viewer
 widgets:
   - field-training.placements-open
   - projects.active
   - productions.calendar
-  - placement-career.openings
+  - placement-career.openings-summary
