@@ -5,11 +5,13 @@ kind: feature              # feature | platform | integration
 domain: campus-life
 tier: common        # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Alumni directory, events, donations, engagement campaigns."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+status: in-progress       # planned | in-progress | stable | deprecated
+description: "Alumni directory and mentoring (v1.0). Events, donations and engagement campaigns come later."
+owners: [gokulalakshmirooman-source]                # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
+# identity: who the caller is and their keys. audit: every state change. Nothing is sent to notification in v1.0;
+# it may consume the published events later.
 depends_on:
   platform: [identity, audit]
   integrations: []
