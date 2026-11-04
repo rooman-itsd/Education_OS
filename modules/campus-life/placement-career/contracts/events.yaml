@@ -1,9 +1,90 @@
 # Domain events published by placement-career.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries organisation_id, in the envelope and in the payload.
+# No module consumes these in v1.0 (#337); notification may tell students and the officer.
+# Payloads carry ids, dates and the cancel reason only: no names, declarations, offered CTC or company contacts
+# (decided by the owner on #337). Read the rest through the API.
 module: placement-career
 version: 1
-events: []
-#  - name: placement-career.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+# Envelope fields as stored by the outbox in packages/core (eos_core.events.OutboxEvent).
+# actor is the acting user's id, null when the system acts. The outbox stores no per-event
+# version; the contract version is `version` above.
+envelope:
+  id: uuid
+  name: string
+  organisation_id: uuid
+  actor: "uuid?"
+  occurred_at: datetime
+  payload: object
+events:
+  - name: placement-career.drive.scheduled
+    description: A drive was announced and students can see it.
+    consumers: []
+    payload: { organisation_id: uuid, drive_id: uuid, company_id: uuid, scheduled_on: date, registration_closes_on: "date?" }
+
+  - name: placement-career.drive.rescheduled
+    description: >-
+      The dates of a scheduled drive changed (PUT /drives/{id} with a different scheduled_on or ends_on). Notification
+      may tell the students who were told about the old date.
+    consumers: []
+    payload: { organisation_id: uuid, drive_id: uuid, scheduled_on: date, ends_on: "date?" }
+
+  - name: placement-career.drive.completed
+    description: A scheduled drive was held. Its openings and applications are unchanged.
+    consumers: []
+    payload: { organisation_id: uuid, drive_id: uuid, company_id: uuid, scheduled_on: date }
+
+  - name: placement-career.drive.cancelled
+    description: A drive with no applications was cancelled; its draft and open openings were cancelled with it.
+    consumers: []
+    payload: { organisation_id: uuid, drive_id: uuid, company_id: uuid, reason: string }
+
+  - name: placement-career.opening.published
+    description: A job opening takes applications until applications_close_on (IST, inclusive). drive_id is null for an opening outside a drive.
+    consumers: []
+    payload: { organisation_id: uuid, opening_id: uuid, company_id: uuid, drive_id: "uuid?", applications_close_on: date }
+
+  - name: placement-career.opening.closed
+    description: An opening stopped taking applications. Existing applications continue.
+    consumers: []
+    payload: { organisation_id: uuid, opening_id: uuid }
+
+  - name: placement-career.opening.cancelled
+    description: An open opening with no applications was cancelled, on its own or with its drive.
+    consumers: []
+    payload: { organisation_id: uuid, opening_id: uuid, reason: string }
+
+  - name: placement-career.application.submitted
+    description: A student applied to an opening, declaring they meet its criteria. Notification may tell the officer.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.shortlisted
+    description: The officer shortlisted an application after verifying the student's declaration.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.offered
+    description: The company made the student an offer, recorded by the officer. The offer itself is read through the API.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, company_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.accepted
+    description: The student accepted the offer; from now on they are flagged as placed to the officer. Nothing is blocked.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, company_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.declined
+    description: The student declined the offer.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.rejected
+    description: The officer rejected an application with a reason, which the student sees. The reason is not in the event.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, student_id: uuid }
+
+  - name: placement-career.application.withdrawn
+    description: The student withdrew their application before an offer.
+    consumers: []
+    payload: { organisation_id: uuid, application_id: uuid, opening_id: uuid, student_id: uuid }
