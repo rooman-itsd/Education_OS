@@ -11,7 +11,9 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from eos_core import events
+from eos_core.config import expand_roles
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -100,6 +102,15 @@ def _not_found(what: str) -> TransportError:
 
 def _conflict(code: str, message: str) -> TransportError:
     return TransportError(409, code, message)
+
+
+def _flush_unique(db: Session, code: str, message: str) -> None:
+    """Write now, so a duplicate that slipped past the check (two requests at once) is a 409, not a 500."""
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise _conflict(code, message) from None
 
 
 def _rule(v: RuleViolationError) -> TransportError:
@@ -363,7 +374,7 @@ def create_route(db: Session, actor: Actor, data: dict) -> dict:
         active=data.get("active", True),
     )
     db.add(r)
-    db.flush()
+    _flush_unique(db, "route_exists", f"route {data['code']} already exists")
     _set_route_stops(db, r, stops)
     _audit(db, actor, "route.created", "route", r.id, actor.organisation_id)
     db.commit()
@@ -391,6 +402,7 @@ def update_route(db: Session, actor: Actor, route_id: str, data: dict) -> dict:
     if in_use:
         raise _conflict("stop_in_use", "a stop being removed is the boarding stop of a current pass or request")
     r.code, r.name = data["code"], data["name"]
+    _flush_unique(db, "route_exists", f"route {data['code']} already exists")
     if "direction" in data:
         r.direction = data["direction"]
     if "active" in data and data["active"] is not None:
@@ -456,7 +468,7 @@ def create_vehicle(db: Session, actor: Actor, data: dict) -> dict:
     v = Vehicle(organisation_id=actor.organisation_id, active=True)
     _vehicle_fields(v, data)
     db.add(v)
-    db.flush()
+    _flush_unique(db, "vehicle_exists", f"vehicle {data['registration_no']} already exists")
     _audit(db, actor, "vehicle.created", "vehicle", v.id, actor.organisation_id)
     db.commit()
     return vehicle_dict(v)
@@ -473,6 +485,7 @@ def update_vehicle(db: Session, actor: Actor, vehicle_id: str, data: dict) -> di
                 "capacity_below_passes", f"route {r.code} has {held} issued passes; capacity {data['capacity']}"
             )
     _vehicle_fields(v, data)
+    _flush_unique(db, "vehicle_exists", f"vehicle {data['registration_no']} already exists")
     _audit(db, actor, "vehicle.updated", "vehicle", v.id, v.organisation_id)
     db.commit()
     return vehicle_dict(v)
@@ -536,6 +549,7 @@ def _bookable(db: Session, route_id: str, stop_id: str, start: date, end: date) 
 
 
 def _check_no_overlap(db: Session, person_id: str, start: date, end: date, exclude_id: str | None = None) -> None:
+    repo.lock_person_passes(db, person_id)
     for other in repo.blocking_passes(db, person_id, exclude_id):
         if rules.periods_overlap(start, end, other.valid_from, other.valid_to):
             raise _conflict("overlapping_pass", "the person already has a pass or request for these dates")
@@ -658,7 +672,8 @@ def request_pass(db: Session, actor: Actor, data: dict) -> dict:
     p = Pass(
         organisation_id=actor.organisation_id,
         person_id=actor.user_id,
-        rider_type="student" if "student" in actor.roles else "staff",
+        # A student is anyone whose roles reach `student`, the extending layouts (medical-student, ...) included.
+        rider_type="student" if "student" in expand_roles(actor.roles) else "staff",
         route_id=route.id,
         stop_id=data["stop_id"],
         valid_from=start,
@@ -716,7 +731,10 @@ def _drives(db: Session, actor: Actor, route: Route) -> bool:
 
 
 def start_trip(db: Session, actor: Actor, route_id: str) -> dict:
-    route = _get(db, Route, route_id, "route")
+    # Locked, so two starts at once (a double tap) run one after the other and the second sees the running trip.
+    route = repo.route_for_update(db, route_id)
+    if route is None:
+        raise _not_found("route")
     if not _drives(db, actor, route):
         raise _conflict("not_route_driver", "you are not the current driver of this route")
     if not route.active or route.vehicle_id is None:

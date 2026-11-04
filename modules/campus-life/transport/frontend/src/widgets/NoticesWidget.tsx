@@ -10,12 +10,12 @@ import {
   type BadgeTone,
   type WidgetProps,
 } from "@eos/ui-kit";
-import { getMyNotices, type Notice, type NoticeKind } from "../api/client";
+import { describeFailure, getMyNotices, type Failure, type Notice, type NoticeKind } from "../api/client";
 
 /** How many notices the dashboard card shows. */
 export const NOTICE_LIMIT = 5;
 
-type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; notices: Notice[] };
+type State = { kind: "loading" } | { kind: "error"; failure: Failure } | { kind: "ready"; notices: Notice[] };
 
 const KIND: Record<NoticeKind, { label: string; tone: BadgeTone }> = {
   delay: { label: "Delay", tone: "warning" },
@@ -41,7 +41,7 @@ export function NoticesWidget(_props: WidgetProps) {
     getMyNotices(NOTICE_LIMIT, signal)
       .then((notices) => setState({ kind: "ready", notices }))
       .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error" });
+        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error", failure: describeFailure(e, "transport notices") });
       });
   }, []);
 
@@ -53,9 +53,10 @@ export function NoticesWidget(_props: WidgetProps) {
 
   if (state.kind === "loading") return <SkeletonLines lines={3} />;
   if (state.kind === "error") {
+    const { title, detail, retry } = state.failure;
     return (
-      <ErrorState title="Could not load transport notices" onRetry={() => load()}>
-        Check your connection and try again.
+      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+        {detail}
       </ErrorState>
     );
   }

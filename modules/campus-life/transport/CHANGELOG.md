@@ -20,3 +20,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: domain rules, every user-story area, real `student` tokens, the cross-tenant leak test, and the migration
   against the models.
 - Widget `transport.notices` for the Student dashboard, built on `@eos/ui-kit`, with tests.
+- Review fixes (#473): a role whose layout extends `student` requests passes as a student; duplicates that pass the
+  check at the same moment answer 409 (route code, vehicle registration); a trip start locks the route, and pass
+  requests of one person run one at a time on Postgres; capacity, stop sequence, delay, speed, reasons, notice body,
+  `expiring_within_days` and instants are bounded (422, never a 500); a cursor we never handed out starts from the top;
+  stop search takes `%` and `_` literally; the notices widget says "not available yet", "sign in again" or "no
+  access" as the other widgets do.

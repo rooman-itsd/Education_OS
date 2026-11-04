@@ -83,9 +83,26 @@ describe("transport.notices widget", () => {
       .mockResolvedValueOnce({ ok: true, status: 200, statusText: "", json: async () => [notice()] });
     vi.stubGlobal("fetch", fetchMock);
     render(<NoticesWidget role="student" />);
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not load transport notices");
+    expect((await screen.findByRole("alert")).textContent).toContain("Transport data is not available yet.");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Bus late today")).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [401, "Sign in again to see this."],
+    [403, "You do not have access to this."],
+  ])("on %i says why and offers no retry", async (status, text) => {
+    vi.stubGlobal("fetch", answer(status, {}));
+    render(<NoticesWidget role="student" />);
+    expect((await screen.findByRole("alert")).textContent).toContain(text);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("on another server error offers a retry", async () => {
+    vi.stubGlobal("fetch", answer(500, {}));
+    render(<NoticesWidget role="student" />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not load transport notices");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });

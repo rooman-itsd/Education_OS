@@ -7,7 +7,7 @@ import base64
 from datetime import date, datetime
 
 from eos_core.db import scoped
-from sqlalchemy import Select, delete, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ..domain.rules import PASS_BLOCKING
@@ -22,6 +22,15 @@ def get(db: Session, model, row_id: str):
     return db.scalars(_scoped(db, model).where(model.id == row_id)).first()
 
 
+def lock_person_passes(db: Session, person_id: str) -> None:
+    """Serialise pass requests of one person, so two at once cannot both pass the overlap check. Postgres only:
+    SQLite runs one writer at a time."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"transport-pass:{person_id}"}
+        )
+
+
 def route_for_update(db: Session, route_id: str) -> Route | None:
     """Lock the route so two passes issued on it run one after the other and capacity is never exceeded."""
     return db.scalars(_scoped(db, Route).where(Route.id == route_id).with_for_update()).first()
@@ -30,6 +39,8 @@ def route_for_update(db: Session, route_id: str) -> Route | None:
 # ---------------------------------------------------------------- pagination
 
 MAX_LIMIT = 100
+# A cursor past this is not one we handed out; like any other bad cursor it starts from the top.
+MAX_OFFSET = 1_000_000
 
 
 def encode_cursor(offset: int) -> str:
@@ -40,9 +51,10 @@ def decode_cursor(cursor: str | None) -> int:
     if not cursor:
         return 0
     try:
-        return max(int(base64.urlsafe_b64decode(cursor.encode()).decode()), 0)
+        offset = int(base64.urlsafe_b64decode(cursor.encode()).decode())
     except (ValueError, UnicodeDecodeError):
         return 0
+    return offset if 0 <= offset <= MAX_OFFSET else 0
 
 
 def page(db: Session, query: Select, cursor: str | None, limit: int) -> tuple[list, str | None]:
@@ -58,7 +70,7 @@ def page(db: Session, query: Select, cursor: str | None, limit: int) -> tuple[li
 def stops(db: Session, q: str | None = None) -> list[Stop]:
     query = _scoped(db, Stop)
     if q:
-        query = query.where(func.lower(Stop.name).contains(q.lower()))
+        query = query.where(func.lower(Stop.name).contains(q.lower(), autoescape=True))
     return list(db.scalars(query.order_by(Stop.name, Stop.id)))
 
 

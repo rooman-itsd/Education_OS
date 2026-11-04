@@ -94,7 +94,7 @@ def live(route_id: str, a: Actor = Depends(require(svc.TRACKING_READ, svc.SELF_R
 @router.get("/vehicles")
 def list_vehicles(
     active: bool | None = None,
-    expiring_within_days: int | None = Query(default=None, ge=0),
+    expiring_within_days: int | None = Query(default=None, ge=0, le=3650),
     _: Actor = Depends(require(svc.VEHICLE_READ)),
     db: Session = Depends(get_db),
 ):
@@ -116,7 +116,7 @@ def update_vehicle(
 @router.get("/drivers")
 def list_drivers(
     active: bool | None = None,
-    expiring_within_days: int | None = Query(default=None, ge=0),
+    expiring_within_days: int | None = Query(default=None, ge=0, le=3650),
     _: Actor = Depends(require(svc.VEHICLE_READ)),
     db: Session = Depends(get_db),
 ):
