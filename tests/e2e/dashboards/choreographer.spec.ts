@@ -57,7 +57,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No candidates awaiting review",
     unavailable: "Judging tasks are not available yet.",
   },
-  { id: "skill-progress.assessments-due", module: "practice/skill-progress", batch: "#329" },
+  {
+    id: "skill-progress.assessments-due",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "Assessments to verify",
+    probe: "/skill-progress/assessments?status=submitted&limit=1",
+    empty: "Nothing to verify",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     id: "facility-booking.bookings-today",
     module: "facilities/facility-booking",
