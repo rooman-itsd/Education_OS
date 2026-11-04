@@ -5,8 +5,9 @@ title: "Placement Officer"
 module_roles:
   - alumni-coordinator
   - field-training-coordinator
+  - placement-career-officer
 widgets:
   - field-training.placements-open
-  - placement-career.openings
+  - placement-career.openings-summary
   - placement-career.drives
   - productions.calendar
