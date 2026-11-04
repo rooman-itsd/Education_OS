@@ -50,7 +50,7 @@ The `nutritionist` profile role reads athletes and summaries (`report:read`) for
 not clearances. Metrics have no category: a metric is body composition when a fitness test
 whose name mentions body composition measures it, or its name does (body fat, weight, BMI, lean or muscle mass,
 skinfolds, waist). The coach's `session-plan` and the athlete's `training-schedule` belong to training-video-analysis
-(plans and sessions), not here; the layouts name `training-video-analysis.session-plan` and `.training-schedule`.
+(plans and sessions), not here.
 
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its

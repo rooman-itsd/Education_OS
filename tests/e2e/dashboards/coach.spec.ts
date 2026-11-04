@@ -15,7 +15,7 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
  *   facility-booking.bookings (upcoming bookings on the resources the coach approves) is checked by its empty state,
  *   then by a booking facility staff make on a track the coach approves;
- *   wearables.alerts is not built in v1 (see NOT_BUILT);
+ *   athlete-performance.session-plan and wearables.alerts are not built in v1 (see NOT_BUILT);
  * - the sports data journeys are fixme: each needs a sports module enabled, and the coach's scoping in
  *   tournament-events and training-video-analysis needs the athlete-performance.athlete.registered event.
  *
@@ -54,15 +54,7 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No athletes yet",
     unavailable: "Athlete performance data is not available yet.",
   },
-  {
-    id: "training-video-analysis.session-plan",
-    module: "sports/training-video-analysis",
-    batch: "#330",
-    title: "Session plan",
-    probe: "/training-video-analysis/sessions?status=scheduled&limit=1",
-    empty: "No sessions scheduled",
-    unavailable: "Training video data is not available yet.",
-  },
+  { id: "athlete-performance.session-plan", module: "sports/athlete-performance", batch: "#330" },
   {
     id: "training-video-analysis.reviews-pending",
     module: "sports/training-video-analysis",
@@ -99,6 +91,8 @@ const WIDGETS: LayoutWidget[] = [
  * (A local helper: widgets.ts has no notion of a widget that is not planned.)
  */
 const NOT_BUILT: Record<string, string> = {
+  "athlete-performance.session-plan":
+    "not built: training plans and sessions belong to training-video-analysis, and sprint batch #330 proposes moving this widget there",
   "wearables.alerts": "not built in v1: integrations/wearables is a placeholder for after launch (docs/team/sprint-v1.0.md)",
 };
 const why = (w: LayoutWidget) => NOT_BUILT[w.id] ?? waitingFor(w);

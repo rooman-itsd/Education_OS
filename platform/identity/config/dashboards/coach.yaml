@@ -8,7 +8,7 @@ module_roles:
   - tournament-events-coach
 widgets:
   - athlete-performance.squad-overview
-  - training-video-analysis.session-plan
+  - athlete-performance.session-plan
   - training-video-analysis.reviews-pending
   - facility-booking.bookings
   - wearables.alerts

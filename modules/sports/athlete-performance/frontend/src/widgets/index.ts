@@ -12,9 +12,9 @@ import "./widgets.css";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's API client in ../api.
  *
- * Endpoints and permissions per contracts/openapi.yaml and contracts/permissions.yaml. The coach's session plan
- * and the athlete's training schedule are not here: this module has no training plans or sessions, so the layouts name
- * training-video-analysis.session-plan and training-video-analysis.training-schedule.
+ * Endpoints and permissions per contracts/openapi.yaml and contracts/permissions.yaml. The coach layout's
+ * athlete-performance.session-plan and the athlete layout's athlete-performance.training-schedule are not built
+ * here: this module has no training plans or sessions (they belong to training-video-analysis).
  */
 export const widgets: DashboardWidget[] = [
   {

@@ -13,6 +13,7 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   state, or says its data is not available while the backend is missing (the athlete holds the student role's
  *   permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
+ *   athlete-performance.training-schedule is not built at all (see NOT_BUILT);
  * - the data journeys are fixme: each needs a sports module enabled, and the athlete's scoping in
  *   sports-nutrition-health and tournament-events needs the athlete-performance.athlete.registered event.
  *
@@ -52,15 +53,7 @@ const WIDGETS: LayoutWidget[] = [
   { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
   { id: "library.loans", module: "campus-life/library", batch: "#338" },
   // The athlete's own widgets.
-  {
-    id: "training-video-analysis.training-schedule",
-    module: "sports/training-video-analysis",
-    batch: "#330",
-    title: "Training schedule",
-    probe: "/training-video-analysis/sessions?status=scheduled&limit=1",
-    empty: "No training sessions scheduled",
-    unavailable: "Training video data is not available yet.",
-  },
+  { id: "athlete-performance.training-schedule", module: "sports/athlete-performance", batch: "#330" },
   {
     id: "athlete-performance.performance-trend",
     module: "sports/athlete-performance",
@@ -95,6 +88,8 @@ const WIDGETS: LayoutWidget[] = [
  * (A local helper: widgets.ts has no notion of a widget that is not planned.)
  */
 const NOT_BUILT: Record<string, string> = {
+  "athlete-performance.training-schedule":
+    "not built: training plans and sessions belong to training-video-analysis, and sprint batch #330 proposes moving this widget there",
 };
 const why = (w: LayoutWidget) => NOT_BUILT[w.id] ?? waitingFor(w);
 
