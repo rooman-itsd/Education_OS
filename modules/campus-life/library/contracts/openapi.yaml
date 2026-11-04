@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: library API
-  version: 0.1.0
+  version: 0.2.0
   description: "Catalogue, circulation, digital library, fines, reservations. See docs/prd.md."
 servers:
   - url: /api/v1/library
