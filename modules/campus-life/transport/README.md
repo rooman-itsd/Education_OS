@@ -3,7 +3,7 @@
 **Domain:** campus-life
 **Kind:** feature
 **Status:** in-progress (contract 0.2.0; backend, migrations, tests and the `transport.notices` widget built;
-registered in `apps/backend` and `apps/frontend`)
+not yet listed in the apps)
 
 Routes, vehicles, passes, driver management, tracking.
 
