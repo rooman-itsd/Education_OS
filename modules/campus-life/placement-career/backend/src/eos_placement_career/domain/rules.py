@@ -46,6 +46,11 @@ EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 NAME_MAX = 200
 TITLE_MAX = 200
 MAX_CGPA = 10
+# Caps the code enforces where the contract gives no maximum, so an oversized integer is 422 with the contract's code
+# (not a 500 from a 32-bit Integer column, or a value no officer meant) on Postgres and SQLite alike.
+MAX_POSITIONS = 10000
+MIN_YEAR, MAX_YEAR = 1900, 2100
+MAX_BACKLOGS = 100
 
 
 class RuleError(Exception):
@@ -120,8 +125,8 @@ def money_text(value: Decimal | None) -> str | None:
 
 
 def positions(value: int | None) -> int | None:
-    if value is not None and value < 1:
-        raise RuleError("invalid_positions", "positions must be at least 1", field="positions")
+    if value is not None and not 1 <= value <= MAX_POSITIONS:
+        raise RuleError("invalid_positions", f"positions must be 1 to {MAX_POSITIONS}", field="positions")
     return value
 
 
@@ -134,8 +139,14 @@ def _cgpa(value, field: str) -> float | None:
 
 
 def _backlogs(value, field: str) -> int | None:
-    if value is not None and value < 0:
-        raise RuleError("invalid_eligibility", f"{field} cannot be negative", field=field)
+    if value is not None and not 0 <= value <= MAX_BACKLOGS:
+        raise RuleError("invalid_eligibility", f"{field} must be 0 to {MAX_BACKLOGS}", field=field)
+    return value
+
+
+def _year(value, field: str) -> int | None:
+    if value is not None and not MIN_YEAR <= value <= MAX_YEAR:
+        raise RuleError("invalid_eligibility", f"{field} must be {MIN_YEAR} to {MAX_YEAR}", field=field)
     return value
 
 
@@ -150,7 +161,7 @@ def eligibility(raw: dict | None) -> dict:
         programmes.append(name)
     return {
         "programmes": programmes,
-        "graduating_years": list(raw.get("graduating_years") or []),
+        "graduating_years": [_year(y, "eligibility.graduating_years") for y in raw.get("graduating_years") or []],
         "min_cgpa": _cgpa(raw.get("min_cgpa"), "eligibility.min_cgpa"),
         "max_active_backlogs": _backlogs(raw.get("max_active_backlogs"), "eligibility.max_active_backlogs"),
         "notes": clean(raw.get("notes")),
@@ -162,7 +173,7 @@ def declaration(raw: dict | None) -> dict:
     raw = raw or {}
     return {
         "programme": clean(raw.get("programme")),
-        "graduating_year": raw.get("graduating_year"),
+        "graduating_year": _year(raw.get("graduating_year"), "declared.graduating_year"),
         "cgpa": _cgpa(raw.get("cgpa"), "declared.cgpa"),
         "active_backlogs": _backlogs(raw.get("active_backlogs"), "declared.active_backlogs"),
     }

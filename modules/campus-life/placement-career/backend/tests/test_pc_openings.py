@@ -91,6 +91,16 @@ def test_completed_drive_takes_no_new_openings(client, org, clock):
         ({"ctc_per_annum": 500000}, "invalid_amount"),
         ({"ctc_per_annum": "1" * 13}, "invalid_amount"),
         ({"positions": 0}, "invalid_positions"),
+        # caps the code enforces: an integer too large for the column is 422, never a 500
+        ({"positions": 10001}, "invalid_positions"),
+        ({"positions": 3_000_000_000}, "invalid_positions"),
+        ({"positions": 2**64}, "invalid_positions"),
+        ({"eligibility": {"graduating_years": [2027, 1899]}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [2101]}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [3_000_000_000]}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [2**64]}}, "invalid_eligibility"),
+        ({"eligibility": {"max_active_backlogs": 101}}, "invalid_eligibility"),
+        ({"eligibility": {"max_active_backlogs": 2**64}}, "invalid_eligibility"),
         ({"applications_close_on": day(-1)}, "invalid_date"),
         ({"eligibility": {"max_active_backlogs": -2}}, "invalid_eligibility"),
     ],
@@ -101,6 +111,44 @@ def test_invalid_opening_values(client, org, fields, expected):
     assert code(client.post(f"{BASE}/openings", json=body, headers=org.officer), 422) == expected
     o = opening(client, org, co=co)
     assert code(client.put(f"{BASE}/openings/{o['id']}", json=body, headers=org.officer), 422) == expected
+
+
+def test_largest_values_the_caps_allow(client, org):
+    eligibility = {"graduating_years": [1900, 2100], "max_active_backlogs": 100}
+    o = opening(client, org, positions=10000, eligibility=eligibility)
+    assert o["positions"] == 10000
+    assert o["eligibility"]["graduating_years"] == [1900, 2100] and o["eligibility"]["max_active_backlogs"] == 100
+
+
+def test_edit_cannot_move_an_opening_into_a_cancelled_drive(client, org):
+    """update_opening locks the drive before the opening and checks its status after the lock: a drive cancelled
+    (with its openings) is never a destination, so no open opening is left in it."""
+    co = company(client, org)
+    o = opening(client, org, co=co)
+    d = drive(client, org, co)
+    sibling = opening(client, org, dr=d)
+    ok(client.post(f"{BASE}/drives/{d['id']}/cancel", json={"reason": "Company withdrew"}, headers=org.officer))
+    body = {"company_id": co["id"], "drive_id": d["id"], "title": "Analyst", "applications_close_on": day(5)}
+    r = client.put(f"{BASE}/openings/{o['id']}", json=body, headers=org.officer)
+    assert code(r, 409) == "drive_not_open_for_openings"
+    assert ok(client.get(f"{BASE}/openings/{o['id']}", headers=org.officer))["drive_id"] is None
+    assert ok(client.get(f"{BASE}/openings/{sibling['id']}", headers=org.officer))["status"] == "cancelled"
+
+
+def test_edit_cannot_move_the_last_day_past_the_drive_date(client, org):
+    """The drive's date is read under its lock, so a drive moved earlier at the same time is seen as moved."""
+    d = drive(client, org)
+    o = opening(client, org, dr=d, applications_close_on=day(8))
+    later = ok(client.put(f"{BASE}/drives/{d['id']}", json={**d, "scheduled_on": day(9)}, headers=org.officer))
+    assert later["scheduled_on"] == day(9)
+    body = {"company_id": d["company_id"], "drive_id": d["id"], "title": "Analyst", "applications_close_on": day(10)}
+    r = client.put(f"{BASE}/openings/{o['id']}", json=body, headers=org.officer)
+    assert code(r, 422) == "close_date_after_drive"
+    body["applications_close_on"] = day(9)  # on the drive date itself is fine
+    edited = ok(client.put(f"{BASE}/openings/{o['id']}", json=body, headers=org.officer))
+    assert edited["applications_close_on"] == day(9)
+    r = client.put(f"{BASE}/drives/{d['id']}", json={**d, "scheduled_on": day(8)}, headers=org.officer)
+    assert code(r, 422) == "close_date_after_drive"
 
 
 def test_opening_company_must_exist_and_be_active(client, org):

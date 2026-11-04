@@ -89,7 +89,7 @@ def count(db: Session, model):
 def get(db: Session, model, row_id: str, what: str, *, lock: bool = False):
     query = q(db, model).where(model.id == row_id)
     if lock:
-        query = query.with_for_update()
+        query = query.with_for_update().execution_options(populate_existing=True)  # fresh values after the wait
     row = db.scalar(query)
     if row is None:
         raise not_found(what)
@@ -159,7 +159,7 @@ def opening_statuses(actor: Actor) -> tuple[str, ...]:
 def visible_drive(db: Session, actor: Actor, drive_id: str, *, lock: bool = False) -> Drive:
     query = q(db, Drive).where(Drive.id == drive_id, Drive.status.in_(drive_statuses(actor)))
     if lock:
-        query = query.with_for_update()
+        query = query.with_for_update().execution_options(populate_existing=True)  # fresh values after the wait
     drive = db.scalar(query)
     if drive is None:
         raise not_found("drive")
@@ -169,7 +169,7 @@ def visible_drive(db: Session, actor: Actor, drive_id: str, *, lock: bool = Fals
 def visible_opening(db: Session, actor: Actor, opening_id: str, *, lock: bool = False) -> Opening:
     query = q(db, Opening).where(Opening.id == opening_id, Opening.status.in_(opening_statuses(actor)))
     if lock:
-        query = query.with_for_update()
+        query = query.with_for_update().execution_options(populate_existing=True)  # fresh values after the wait
     opening = db.scalar(query)
     if opening is None:
         raise not_found("opening")

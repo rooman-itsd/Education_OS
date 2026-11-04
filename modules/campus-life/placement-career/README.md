@@ -93,6 +93,11 @@ Rules the code keeps:
   is the acting user.
 - **Every state change is audited.** An `audit_entry` row (actor, action, entity, id; never a declaration, an offer or
   a contact) is written in the same transaction, until the audit SDK exists, as e-office does.
+- **Caps the code enforces** where the contract gives no maximum, so an oversized integer is 422 with the contract's
+  code on Postgres and SQLite alike (never a 500 from a 32-bit column): `positions` 1 to 10000 (`invalid_positions`);
+  a graduating year (`declared.graduating_year`, each of `eligibility.graduating_years`) 1900 to 2100, and backlogs
+  (`declared.active_backlogs`, `eligibility.max_active_backlogs`) 0 to 100 (`invalid_eligibility`). Money stays below
+  10^12 (`invalid_amount`), list `limit`s are the contract's, and a cursor has at most 9 digits.
 - **Nothing is deleted**: there is no DELETE route.
 - **Pages.** Lists answer `{items, next_cursor}`; pass `next_cursor` back as `cursor` for the next page. A cursor this
   API did not return is 400 `invalid_cursor`.

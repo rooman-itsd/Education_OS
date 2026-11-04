@@ -155,7 +155,15 @@ def create_drive(db: Session, actor: Actor, body: dict) -> dict:
 
 
 def _non_cancelled_openings(db: Session, d: Drive) -> list[Opening]:
-    return list(db.scalars(c.q(db, Opening).where(Opening.drive_id == d.id, Opening.status != "cancelled")))
+    """Locked after the drive, the order of cancel_drive and update_opening (which locks the drive before editing an
+    opening's last day or moving it in), so the dates read here cannot change before the commit."""
+    query = (
+        c.q(db, Opening)
+        .where(Opening.drive_id == d.id, Opening.status != "cancelled")
+        .order_by(Opening.created_at, Opening.id)
+        .with_for_update()
+    )
+    return list(db.scalars(query.execution_options(populate_existing=True)))
 
 
 def update_drive(db: Session, actor: Actor, drive_id: str, body: dict) -> dict:

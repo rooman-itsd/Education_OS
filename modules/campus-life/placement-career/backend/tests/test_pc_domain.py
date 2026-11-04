@@ -77,6 +77,9 @@ def test_names_titles_urls_and_emails():
 def test_positions():
     assert rules.positions(None) is None and rules.positions(1) == 1
     assert _code(rules.positions, 0) == ("invalid_positions", "invalid")
+    assert rules.positions(10000) == 10000
+    for big in (10001, 3_000_000_000, 2**64):
+        assert _code(rules.positions, big) == ("invalid_positions", "invalid")
 
 
 def test_eligibility_is_normalised_and_ranged():
@@ -89,7 +92,17 @@ def test_eligibility_is_normalised_and_ranged():
     }
     got = rules.eligibility({"programmes": [" MBA "], "min_cgpa": 0, "max_active_backlogs": 0, "notes": " "})
     assert got["programmes"] == ["MBA"] and got["min_cgpa"] == 0.0 and got["notes"] is None
-    for bad in ({"min_cgpa": 10.01}, {"min_cgpa": -0.1}, {"max_active_backlogs": -1}, {"programmes": [""]}):
+    for bad in (
+        {"min_cgpa": 10.01},
+        {"min_cgpa": -0.1},
+        {"max_active_backlogs": -1},
+        {"max_active_backlogs": 101},
+        {"max_active_backlogs": 2**64},
+        {"graduating_years": [1899]},
+        {"graduating_years": [2027, 2101]},
+        {"graduating_years": [3_000_000_000]},
+        {"programmes": [""]},
+    ):
         assert _code(rules.eligibility, bad) == ("invalid_eligibility", "invalid"), bad
 
 
@@ -100,7 +113,15 @@ def test_declaration_is_ranged_not_checked():
         "cgpa": 10.0,
         "active_backlogs": 3,
     }
-    for bad in ({"cgpa": 10.5}, {"active_backlogs": -1}):
+    for bad in (
+        {"cgpa": 10.5},
+        {"active_backlogs": -1},
+        {"active_backlogs": 101},
+        {"active_backlogs": 2**64},
+        {"graduating_year": 1899},
+        {"graduating_year": 2101},
+        {"graduating_year": 3_000_000_000},
+    ):
         assert _code(rules.declaration, bad) == ("invalid_eligibility", "invalid"), bad
 
 

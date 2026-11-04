@@ -12,7 +12,7 @@ from ..infrastructure.models import Application, Company, Drive, Opening
 from . import common as c
 from .access import APPLICATION_READ, Actor
 from .drives import required_reason
-from .errors import conflict, invalid
+from .errors import conflict, invalid, not_found
 
 
 def opening_dict(o: Opening, company: Company, drive: Drive | None, applications_count: int | None) -> dict:
@@ -162,28 +162,48 @@ def _has_applications(db: Session, o: Opening) -> bool:
     return bool(db.scalar(c.count(db, Application).where(Application.opening_id == o.id)))
 
 
+def _lock_drives(db: Session, drive_ids: set[str | None]) -> dict[str, Drive]:
+    """The drives, locked in id order so two requests locking the same pair never wait on each other. 404 if one is
+    missing (or of another organisation)."""
+    ids = sorted(i for i in drive_ids if i)
+    query = c.q(db, Drive).where(Drive.id.in_(ids)).order_by(Drive.id).with_for_update()
+    rows = {d.id: d for d in db.scalars(query.execution_options(populate_existing=True))}
+    for i in ids:
+        if i not in rows:
+            raise not_found("drive")
+    return rows
+
+
 def update_opening(db: Session, actor: Actor, opening_id: str, body: dict) -> dict:
     """A draft or open opening. applications_close_on is checked against today only when it changes; the company and
-    the drive change only while there are no applications. Existing applications are not changed."""
+    the drive change only while there are no applications. Existing applications are not changed.
+
+    The drives (the current one and the one it moves to) are locked before the opening, the order of cancel_drive,
+    update_drive and publish_opening, so a drive cancelled or moved earlier at the same time is seen after it changed:
+    an opening never lands in a cancelled drive or closes after its drive's date."""
+    values = _fields(body)
+    company_id, drive_id = body["company_id"], body.get("drive_id") or None
+    o = c.visible_opening(db, actor, opening_id)
+    drives = _lock_drives(db, {o.drive_id, drive_id})
     o = c.visible_opening(db, actor, opening_id, lock=True)
+    if o.drive_id not in drives:  # moved by another officer between the two reads: lock its drive too
+        drives |= _lock_drives(db, {o.drive_id})
     if o.status not in ("draft", "open"):
         raise conflict("not_editable", f"a {o.status} opening cannot be edited")
-    values = _fields(body)
     if values["applications_close_on"] != o.applications_close_on:
         c.rule(rules.not_before, values["applications_close_on"], c.business_today(), "applications_close_on")
-    company_id, drive_id = body["company_id"], body.get("drive_id") or None
     company_changes, drive_changes = company_id != o.company_id, drive_id != o.drive_id
     if company_changes:
         c.get(db, Company, company_id, "company")
-    if drive_changes and drive_id:
-        c.get(db, Drive, drive_id, "drive")
     if (company_changes or drive_changes) and _has_applications(db, o):
         raise conflict("has_applications", "the company and drive of an opening with applications do not change")
     if company_changes:
         _company(db, company_id)
     drive = None
     if drive_id:
-        drive = _drive(db, drive_id) if drive_changes else c.get(db, Drive, drive_id, "drive")
+        drive = drives[drive_id]
+        if drive_changes and drive.status not in ("draft", "scheduled"):
+            raise conflict("drive_not_open_for_openings", f"a {drive.status} drive takes no openings")
         if drive_changes and o.status == "open" and drive.status != "scheduled":
             raise conflict("drive_not_scheduled", "an open opening moves only into a scheduled drive")
     _in_drive(company_id, values["applications_close_on"], drive)

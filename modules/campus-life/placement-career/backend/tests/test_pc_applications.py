@@ -39,6 +39,14 @@ def test_a_token_without_a_name_gives_an_empty_student_name(client, org):
         ({"declared": {"cgpa": 11}}, "invalid_eligibility"),
         ({"declared": {"cgpa": -0.5}}, "invalid_eligibility"),
         ({"declared": {"active_backlogs": -1}}, "invalid_eligibility"),
+        # caps the code enforces: an integer too large for the column is 422, never a 500
+        ({"declared": {"active_backlogs": 101}}, "invalid_eligibility"),
+        ({"declared": {"active_backlogs": 3_000_000_000}}, "invalid_eligibility"),
+        ({"declared": {"active_backlogs": 2**64}}, "invalid_eligibility"),
+        ({"declared": {"graduating_year": 1899}}, "invalid_eligibility"),
+        ({"declared": {"graduating_year": 2101}}, "invalid_eligibility"),
+        ({"declared": {"graduating_year": 3_000_000_000}}, "invalid_eligibility"),
+        ({"declared": {"graduating_year": 2**64}}, "invalid_eligibility"),
     ],
 )
 def test_invalid_application(client, org, body, expected):

@@ -115,6 +115,11 @@ def test_list_filters_and_order(client, org):
         ({"eligibility": {"min_cgpa": 10.5}}, "invalid_eligibility"),
         ({"eligibility": {"min_cgpa": -1}}, "invalid_eligibility"),
         ({"eligibility": {"max_active_backlogs": -1}}, "invalid_eligibility"),
+        ({"eligibility": {"max_active_backlogs": 101}}, "invalid_eligibility"),
+        ({"eligibility": {"max_active_backlogs": 2**64}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [1899]}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [3_000_000_000]}}, "invalid_eligibility"),
+        ({"eligibility": {"graduating_years": [2**64]}}, "invalid_eligibility"),
         ({"eligibility": {"programmes": ["B.Tech", " "]}}, "invalid_eligibility"),
     ],
 )
