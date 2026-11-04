@@ -57,6 +57,25 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface Failure {
+  title: string;
+  detail?: string;
+  retry: boolean;
+}
+
+/**
+ * What a widget's error state says, as the other modules' widgets do. A missing or unreachable service (404, 502,
+ * 503, network failure) is "not available yet", not the user's connection; retrying cannot fix 401 or 403.
+ */
+export function describeFailure(e: unknown, what: string): Failure {
+  if (!(e instanceof LibraryApiError) || [404, 502, 503].includes(e.status)) {
+    return { title: "Library data is not available yet.", retry: true };
+  }
+  if (e.status === 401) return { title: "Sign in again to see this.", retry: false };
+  if (e.status === 403) return { title: "You do not have access to this.", retry: false };
+  return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
+}
+
 /** GET /me/loans: the caller's active loans, earliest due first. Permission library:self:read. */
 export function getMyLoans(signal?: AbortSignal): Promise<Loan[]> {
   return get<Loan[]>("/me/loans", signal);

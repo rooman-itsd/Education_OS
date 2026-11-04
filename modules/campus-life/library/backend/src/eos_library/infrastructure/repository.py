@@ -32,13 +32,18 @@ def encode_cursor(offset: int) -> str:
     return base64.urlsafe_b64encode(str(offset).encode()).decode()
 
 
+# A cursor past this is not one we handed out; like any other bad cursor it starts from the top.
+MAX_OFFSET = 1_000_000
+
+
 def decode_cursor(cursor: str | None) -> int:
     if not cursor:
         return 0
     try:
-        return max(int(base64.urlsafe_b64decode(cursor.encode()).decode()), 0)
+        offset = int(base64.urlsafe_b64decode(cursor.encode()).decode())
     except (ValueError, UnicodeDecodeError):
         return 0
+    return offset if 0 <= offset <= MAX_OFFSET else 0
 
 
 def page(db: Session, query: Select, cursor: str | None, limit: int) -> tuple[list, str | None]:
@@ -111,10 +116,13 @@ def policy_for(db: Session, category: str, organisation_id: str | None = None) -
     return db.scalars(q).first()
 
 
-def member(db: Session, person_id: str, organisation_id: str | None = None) -> Member | None:
+def member(db: Session, person_id: str, organisation_id: str | None = None, *, lock: bool = False) -> Member | None:
+    """lock: two issues to one member run one after the other, so both cannot pass max_loans."""
     q = _scoped(db, Member).where(Member.person_id == person_id)
     if organisation_id:
         q = q.where(Member.organisation_id == organisation_id)
+    if lock:
+        q = q.with_for_update()
     return db.scalars(q).first()
 
 

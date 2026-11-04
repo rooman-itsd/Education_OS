@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # The contract types every id as format: uuid. Checked here so a bad id is a 422, never a stored row.
 Uuid = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
-Money = Annotated[str, Field(pattern=r"^[0-9]+(\.[0-9]{1,2})?$", examples=["25.00"])]
+# At most 10 integer digits: the money columns are Numeric(12, 2).
+Money = Annotated[str, Field(pattern=r"^[0-9]{1,10}(\.[0-9]{1,2})?$", examples=["25.00"])]
+Year = Annotated[int, Field(ge=0, le=9999)]
 
 
 class Strict(BaseModel):
@@ -25,7 +27,7 @@ class TitleIn(Strict):
     title: str = Field(min_length=1, max_length=500)
     authors: list[str] = []
     publisher: str | None = Field(default=None, max_length=200)
-    year: int | None = None
+    year: Year | None = None
     subjects: list[str] = []
     kind: str = Field(min_length=1, max_length=60)
 
@@ -35,7 +37,7 @@ class TitlePatch(Strict):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     authors: list[str] | None = None
     publisher: str | None = Field(default=None, max_length=200)
-    year: int | None = None
+    year: Year | None = None
     subjects: list[str] | None = None
     kind: str | None = Field(default=None, min_length=1, max_length=60)
 
@@ -65,12 +67,12 @@ class MemberPatch(Strict):
 
 class LoanPolicyIn(Strict):
     member_category: str = Field(min_length=1, max_length=60)
-    max_loans: int = Field(ge=0)
-    loan_days: int = Field(ge=1)
-    max_renewals: int = Field(ge=0)
+    max_loans: int = Field(ge=0, le=100)
+    loan_days: int = Field(ge=1, le=365)
+    max_renewals: int = Field(ge=0, le=100)
     fine_per_day: Money
     max_unpaid_fines: Money
-    hold_days: int = Field(ge=1)
+    hold_days: int = Field(ge=1, le=60)
 
 
 class IssueIn(Strict):

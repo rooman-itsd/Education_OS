@@ -6,12 +6,13 @@ string ("25.00") at the API, as the contract's Money schema says."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import Decimal
 
 from eos_core import events
 from eos_core.db import utcnow
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -85,6 +86,15 @@ def _not_found(what: str) -> LibraryError:
 
 def _conflict(code: str, message: str) -> LibraryError:
     return LibraryError(409, code, message)
+
+
+def _flush_unique(db: Session, code: str, message: str) -> None:
+    """Write now, so a duplicate that slipped past the check (two requests at once) is a 409, not a 500."""
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise _conflict(code, message) from None
 
 
 def _rule(v: RuleViolationError) -> LibraryError:
@@ -207,12 +217,12 @@ def member_dict(m: Member) -> dict:
     }
 
 
-def loan_dict(db: Session, loan: Loan, policy: Policy | None = None) -> dict:
-    policy = policy if policy is not None else _policy_of(db, loan.person_id)
+def loan_dict(db: Session, loan: Loan) -> dict:
+    """Accrued fine and renewals left follow the loan's own rate and limit, not today's policy."""
     title = repo.get(db, Title, loan.title_id)
     active = loan.status == "active"
     overdue = active and loan.due_on < today()
-    accrued = rules.overdue_fine(loan.due_on, today(), policy.fine_per_day) if (overdue and policy) else money(0)
+    accrued = rules.overdue_fine(loan.due_on, today(), loan.fine_per_day) if overdue else money(0)
     return {
         "id": loan.id,
         "organisation_id": loan.organisation_id,
@@ -224,7 +234,7 @@ def loan_dict(db: Session, loan: Loan, policy: Policy | None = None) -> dict:
         "due_on": iso(loan.due_on),
         "returned_at": iso(loan.returned_at),
         "renewals": loan.renewals,
-        "renewals_left": rules.renewals_left(loan.renewals, policy),
+        "renewals_left": max(0, loan.max_renewals - loan.renewals),
         "status": loan.status,
         "overdue": overdue,
         "fine_accrued": money_str(accrued),
@@ -365,7 +375,7 @@ def add_copy(db: Session, actor: Actor, title_id: str, data: dict) -> dict:
         status="available",
     )
     db.add(c)
-    db.flush()
+    _flush_unique(db, "copy_exists", "the accession number or barcode is already used")
     _audit(db, actor, "copy.created", "copy", c.id, actor.organisation_id)
     _hold_or_release(db, actor, c)  # someone may already be waiting for this title
     db.commit()
@@ -411,7 +421,7 @@ def add_member(db: Session, actor: Actor, data: dict) -> dict:
         blocked=False,
     )
     db.add(m)
-    db.flush()
+    _flush_unique(db, "already_member", "the person is already a member")
     _audit(db, actor, "member.added", "member", m.id, actor.organisation_id)
     db.commit()
     return member_dict(m)
@@ -426,10 +436,9 @@ def _member_or_404(db: Session, person_id: str) -> Member:
 
 def get_member(db: Session, person_id: str) -> dict:
     m = _member_or_404(db, person_id)
-    policy = _policy(repo.policy_for(db, m.category))
     return {
         **member_dict(m),
-        "loans": [loan_dict(db, loan, policy) for loan in repo.active_loans_of(db, person_id)],
+        "loans": [loan_dict(db, loan) for loan in repo.active_loans_of(db, person_id)],
         "open_fines_total": money_str(repo.open_fines_total(db, person_id)),
     }
 
@@ -472,7 +481,7 @@ def replace_policies(db: Session, actor: Actor, entries: list[dict]) -> list[dic
         row.fine_per_day, row.max_unpaid_fines, row.hold_days = fine, limit, e["hold_days"]
         if category not in existing:
             db.add(row)
-    db.flush()
+    _flush_unique(db, "policies_changed", "the loan policies changed at the same moment; send them again")
     _audit(db, actor, "policies.replaced", "loan_policy", actor.organisation_id, actor.organisation_id)
     db.commit()
     return list_policies(db)
@@ -551,7 +560,7 @@ def issue(db: Session, actor: Actor, barcode: str, person_id: str) -> dict:
     c = repo.copy_for_update(db, barcode=barcode)
     if c is None:
         raise _not_found("copy with that barcode")
-    m = repo.member(db, person_id)
+    m = repo.member(db, person_id, lock=True)
     policy = _policy(repo.policy_for(db, m.category)) if m else None
     held = repo.ready_reservation_for_copy(db, c.id) if c.status == "on-hold" else None
     try:
@@ -579,6 +588,8 @@ def issue(db: Session, actor: Actor, barcode: str, person_id: str) -> dict:
         issued_by=actor.user_id,
         due_on=rules.due_date(today(), policy.loan_days),
         renewals=0,
+        fine_per_day=policy.fine_per_day,
+        max_renewals=policy.max_renewals,
         status="active",
     )
     c.status = "on-loan"
@@ -599,7 +610,7 @@ def issue(db: Session, actor: Actor, barcode: str, person_id: str) -> dict:
     )
     _audit(db, actor, "loan.issued", "loan", loan.id, loan.organisation_id)
     db.commit()
-    return loan_dict(db, loan, policy)
+    return loan_dict(db, loan)
 
 
 def return_copy(db: Session, actor: Actor, barcode: str, damage_note: str | None) -> dict:
@@ -609,7 +620,6 @@ def return_copy(db: Session, actor: Actor, barcode: str, damage_note: str | None
     loan = repo.active_loan_for_copy(db, c.id)
     if loan is None:
         raise _conflict("not_on_loan", "the copy is not on loan")
-    policy = _policy_of(db, loan.person_id)
     late = rules.days_late(loan.due_on, today())
     loan.status, loan.returned_at, loan.damage_note = "returned", clock(), damage_note
     _publish(
@@ -627,12 +637,12 @@ def return_copy(db: Session, actor: Actor, barcode: str, damage_note: str | None
     )
     _audit(db, actor, "loan.returned", "loan", loan.id, loan.organisation_id)
     fine = None
-    if late and policy:
-        fine = _raise_fine(db, actor, loan, "overdue", rules.overdue_fine(loan.due_on, today(), policy.fine_per_day))
+    if late:
+        fine = _raise_fine(db, actor, loan, "overdue", rules.overdue_fine(loan.due_on, today(), loan.fine_per_day))
     held = _hold_or_release(db, actor, c)
     db.commit()
     return {
-        "loan": loan_dict(db, loan, policy),
+        "loan": loan_dict(db, loan),
         "fine": fine_dict(fine) if fine else None,
         "held_for_reservation": reservation_dict(db, held) if held else None,
     }
@@ -649,14 +659,17 @@ def renew(db: Session, actor: Actor, loan_id: str) -> dict:
         raise _rule(RefusedError(rules.NO_RENEWALS_LEFT, "there is no loan policy for the member's category"))
     try:
         rules.check_renew(
-            renewals=loan.renewals, policy=policy, someone_waiting=bool(repo.waiting_queue(db, loan.title_id))
+            renewals=loan.renewals,
+            policy=replace(policy, max_renewals=loan.max_renewals),  # the limit the loan was issued with
+            someone_waiting=bool(repo.waiting_queue(db, loan.title_id)),
         )
     except RuleViolationError as v:
         raise _rule(v) from v
     if loan.due_on < today():
         # Renewing late must not erase the fine for the days already late.
-        _raise_fine(db, actor, loan, "overdue", rules.overdue_fine(loan.due_on, today(), policy.fine_per_day))
+        _raise_fine(db, actor, loan, "overdue", rules.overdue_fine(loan.due_on, today(), loan.fine_per_day))
     loan.renewals += 1
+    loan.fine_per_day = policy.fine_per_day  # a renewal takes the current rate
     loan.due_on = max(loan.due_on, rules.due_date(today(), policy.loan_days))
     loan.overdue_flagged_at = None
     _publish(
@@ -668,7 +681,7 @@ def renew(db: Session, actor: Actor, loan_id: str) -> dict:
     )
     _audit(db, actor, "loan.renewed", "loan", loan.id, loan.organisation_id)
     db.commit()
-    return loan_dict(db, loan, policy)
+    return loan_dict(db, loan)
 
 
 def mark_lost(db: Session, actor: Actor, loan_id: str, replacement_amount: str) -> dict:
@@ -717,7 +730,7 @@ def reserve(db: Session, actor: Actor, title_id: str) -> dict:
         placed_at=clock(),
     )
     db.add(r)
-    db.flush()
+    _flush_unique(db, "already_reserved", "you have already reserved this title")
     out = reservation_dict(db, r)
     _publish(
         db,
@@ -849,8 +862,7 @@ def update_digital(db: Session, actor: Actor, resource_id: str, data: dict) -> d
 
 
 def my_loans(db: Session, actor: Actor) -> list[dict]:
-    policy = _policy_of(db, actor.user_id)
-    return [loan_dict(db, loan, policy) for loan in repo.active_loans_of(db, actor.user_id)]
+    return [loan_dict(db, loan) for loan in repo.active_loans_of(db, actor.user_id)]
 
 
 def my_reservations(db: Session, actor: Actor) -> list[dict]:

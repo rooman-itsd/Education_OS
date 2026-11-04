@@ -20,3 +20,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: domain rules, every user-story area, the consumer, real `student` tokens, the cross-tenant leak test, and the
   migration against the models.
 - Widget `library.loans` for the Student dashboard, built on `@eos/ui-kit`, with tests.
+- Review fixes (#476): a loan keeps the daily fine rate and renewal limit it was issued with (a renewal takes the
+  current rate), so a later `PUT /loan-policies` or a lost category policy no longer changes its fines; policy
+  numbers, title year and money (10 integer digits, as `Numeric(12, 2)` holds) are bounded, 422 never a 500;
+  duplicates that pass the check at the same moment answer 409 (copy, member, policy category, active reservation,
+  now also a partial unique index); an issue locks the member; a cursor we never handed out starts from the top;
+  the consumer scopes by the event envelope's organisation and ignores a non-string reference; the loans widget
+  says "not available yet", "sign in again" or "no access" as the other widgets do.

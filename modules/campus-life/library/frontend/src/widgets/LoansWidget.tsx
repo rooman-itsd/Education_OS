@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge, EmptyState, ErrorState, Icons, List, ListRow, SkeletonLines, type WidgetProps } from "@eos/ui-kit";
-import { getMyLoans, type Loan } from "../api/client";
+import { describeFailure, getMyLoans, type Failure, type Loan } from "../api/client";
 
-type State = { kind: "loading" } | { kind: "error" } | { kind: "ready"; loans: Loan[] };
+type State = { kind: "loading" } | { kind: "error"; failure: Failure } | { kind: "ready"; loans: Loan[] };
 
 function longDate(day: string): string {
   const d = new Date(`${day}T00:00:00`);
@@ -26,7 +26,7 @@ export function LoansWidget(_props: WidgetProps) {
     getMyLoans(signal)
       .then((loans) => setState({ kind: "ready", loans }))
       .catch((e: unknown) => {
-        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error" });
+        if ((e as { name?: string })?.name !== "AbortError") setState({ kind: "error", failure: describeFailure(e, "your library loans") });
       });
   }, []);
 
@@ -38,9 +38,10 @@ export function LoansWidget(_props: WidgetProps) {
 
   if (state.kind === "loading") return <SkeletonLines lines={3} />;
   if (state.kind === "error") {
+    const { title, detail, retry } = state.failure;
     return (
-      <ErrorState title="Could not load your library loans" onRetry={() => load()}>
-        Check your connection and try again.
+      <ErrorState title={title} onRetry={retry ? () => load() : undefined}>
+        {detail}
       </ErrorState>
     );
   }

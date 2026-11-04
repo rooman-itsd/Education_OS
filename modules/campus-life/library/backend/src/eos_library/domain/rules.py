@@ -75,6 +75,9 @@ def money_str(value: Decimal | None) -> str:
 # ---------------------------------------------------------------- policies and fines
 
 
+MAX_MONEY = Decimal("9999999999.99")
+
+
 @dataclass(frozen=True)
 class Policy:
     """The loan policy for one member category."""
@@ -93,7 +96,8 @@ def days_late(due_on: date, on: date) -> int:
 
 
 def overdue_fine(due_on: date, on: date, fine_per_day: Decimal) -> Decimal:
-    return money(Decimal(days_late(due_on, on)) * money(fine_per_day))
+    """Capped at what the money columns hold (Numeric(12, 2))."""
+    return min(money(Decimal(days_late(due_on, on)) * money(fine_per_day)), MAX_MONEY)
 
 
 def due_date(issued_on: date, loan_days: int) -> date:

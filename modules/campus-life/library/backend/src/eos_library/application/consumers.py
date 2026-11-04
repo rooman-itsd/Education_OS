@@ -24,6 +24,8 @@ def on_invoice_paid(db: Session, payload: dict) -> dict:
     if payload.get("source_module") != "library":
         return _ignored("the invoice was not raised for a library fine")
     fine_id, invoice_id = payload["source_reference"], payload["invoice_id"]
+    if not isinstance(fine_id, str) or not isinstance(invoice_id, str):
+        return _ignored("source_reference and invoice_id must be strings")
     outcome = service.fine_paid_through_fees(db, fine_id, invoice_id)
     return {"result": "applied" if outcome == "marked paid" else "ignored", "reason": outcome}
 
@@ -31,12 +33,13 @@ def on_invoice_paid(db: Session, payload: dict) -> dict:
 HANDLERS = {INVOICE_PAID: on_invoice_paid}
 
 
-def handle(db: Session, name: str, payload: dict) -> dict:
-    """Apply one consumed event. Unknown names are ignored, so the host can relay every event."""
+def handle(db: Session, name: str, payload: dict, organisation_id: str | None = None) -> dict:
+    """Apply one consumed event. Unknown names are ignored, so the host can relay every event. The envelope's
+    organisation_id, when the relay passes it, wins over the payload's."""
     handler = HANDLERS.get(name)
     if handler is None:
         return _ignored(f"library does not consume {name}")
-    org = payload.get("organisation_id")
+    org = organisation_id or payload.get("organisation_id")
     if not org:
         return _ignored("the event carries no organisation_id")
     if is_bypass():
@@ -55,7 +58,7 @@ def handle(db: Session, name: str, payload: dict) -> dict:
 
 def _relay(db: Session, event) -> None:
     """The event-bus relay's handler signature: (db, event) with event.name and event.payload."""
-    handle(db, event.name, dict(event.payload or {}))
+    handle(db, event.name, dict(event.payload or {}), getattr(event, "organisation_id", None))
 
 
 CONSUMERS = {INVOICE_PAID: _relay}

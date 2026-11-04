@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -117,6 +118,10 @@ class Loan(Base, TenantMixin):
     due_on: Mapped[date] = mapped_column(Date)
     returned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     renewals: Mapped[int] = mapped_column(Integer, default=0)
+    # The policy's rate and renewal limit when the loan was issued (the rate again at each renewal): a later
+    # PUT /loan-policies applies to new loans and renewals only.
+    fine_per_day: Mapped[Decimal] = mapped_column(MONEY)
+    max_renewals: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), index=True)
     damage_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Set by the daily job when it publishes library.loan.overdue, so the event goes out once per loan.
@@ -125,7 +130,19 @@ class Loan(Base, TenantMixin):
 
 class Reservation(Base, TenantMixin):
     __tablename__ = f"{PREFIX}reservation"
-    __table_args__ = (Index("ix_library_reservation_title_status", "organisation_id", "title_id", "status"),)
+    __table_args__ = (
+        Index("ix_library_reservation_title_status", "organisation_id", "title_id", "status"),
+        # One active reservation per title per person, also when two requests arrive together.
+        Index(
+            "uq_library_reservation_active",
+            "organisation_id",
+            "person_id",
+            "title_id",
+            unique=True,
+            postgresql_where=text("status IN ('waiting', 'ready')"),
+            sqlite_where=text("status IN ('waiting', 'ready')"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     title_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}title.id"))

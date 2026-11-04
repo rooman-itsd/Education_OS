@@ -121,6 +121,8 @@ def upgrade() -> None:
         sa.Column("due_on", sa.Date, nullable=False),
         _ts("returned_at", nullable=True),
         sa.Column("renewals", sa.Integer, nullable=False),
+        sa.Column("fine_per_day", sa.Numeric(12, 2), nullable=False),
+        sa.Column("max_renewals", sa.Integer, nullable=False),
         sa.Column("status", sa.String(20), nullable=False),
         sa.Column("damage_note", sa.Text, nullable=True),
         _ts("overdue_flagged_at", nullable=True),
@@ -187,6 +189,14 @@ def upgrade() -> None:
     op.create_index("ix_library_reservation_person_id", "library_reservation", ["person_id"])
     op.create_index(
         "ix_library_reservation_title_status", "library_reservation", ["organisation_id", "title_id", "status"]
+    )
+    op.create_index(
+        "uq_library_reservation_active",
+        "library_reservation",
+        ["organisation_id", "person_id", "title_id"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('waiting', 'ready')"),
+        sqlite_where=sa.text("status IN ('waiting', 'ready')"),
     )
     op.create_index("ix_library_fine_person_status", "library_fine", ["organisation_id", "person_id", "status"])
     op.create_index("ix_library_audit_entity", "library_audit_entry", ["organisation_id", "entity", "entity_id"])
