@@ -112,3 +112,20 @@ def test_every_module_that_publishes_a_consumed_event_is_matched_by_a_consumer(c
     consumers = discover_consumers()
     for name in ("billing.trial.expiring", "billing.trial.expired", "tenancy.organisation.approved"):
         assert any(module == "notification" for module, _ in consumers.for_event(name)), name
+
+
+def test_an_approved_package_change_really_mails_the_admin(client):
+    """tenancy's own approve() publishes tenancy.package.changed; the relay hands it to notification."""
+    from eos_tenancy.application import service as tenancy
+
+    organisations.reset_cache()
+    organisation_id, address = _organisation_with_admin()
+    with SessionLocal() as db:
+        tenancy.request_package(db, organisation_id, "law-college")
+    with SessionLocal() as db:
+        tenancy.approve(db, organisation_id, approved_by="super-admin-1")
+    sent_before = len([m for m in mail.sent if m.get("to") == address])
+    _drain(Relay(InProcessTransport(discover_consumers()), EventBusConfig()))
+    mails = [m for m in mail.sent if m.get("to") == address][sent_before:]
+    (package_mail,) = [m for m in mails if "Academic package approved" in m["subject"]]
+    assert ACADEMY in package_mail["subject"] and "law-college" in package_mail["body"]

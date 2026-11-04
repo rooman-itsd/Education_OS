@@ -3,6 +3,22 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The rest of tenancy's stub emails are notification's (#316 follow-up): new templates
+  `tenancy.organisation.suspended`, `.closed`, `.reactivated` and `.deletion_scheduled`, chosen by
+  `on_status_changed` from `tenancy.organisation.archived`, `.suspended` and (new) `.activated`: suspended or
+  archived from `active`, activated from `suspended`/`archived`, and an archive carrying `delete_after` (a deletion
+  request, with the date the data goes). A first activation after approval sends nothing here (`approved` already
+  mails). With the rejection and package-change emails, every `eos_core.notify` call in tenancy now has a
+  replacement, so tenancy can drop them.
+- A refused registration is emailed (#316 follow-up). tenancy refuses a registration by archiving (or suspending)
+  an organisation that is still pending, and only logged the email through the `eos_core.notify` stub. New
+  template `tenancy.organisation.rejected` (with the reason) and one handler for `tenancy.organisation.archived` and
+  `.suspended` (`on_status_changed`) that chooses the template from the payload's `previous_status` (tenancy
+  contract 0.3.0, #432): `pending_*` is a rejection; anything else, or no `previous_status`, sends nothing here.
+- `tenancy.package.changed` is consumed (#316 follow-up): the organisation's admins get the new template
+  `tenancy.package.changed` ("Academic package approved", with the new package) when a super admin approves a
+  requested package change. tenancy still logs a copy through the `eos_core.notify` stub, which sends nothing;
+  removing that call is tenancy's own change, once this is merged.
 - Failed emails are retried (#316 follow-up). A retryable provider failure (SMTP 4xx, dropped connection) left
   the message `queued`, and `recover_stuck()`, the only thing that re-sends it, had no caller, so approval and
   trial emails were lost after one transient failure. Notification now declares the platform job

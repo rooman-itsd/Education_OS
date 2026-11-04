@@ -56,7 +56,16 @@ const WIDGETS: LayoutWidget[] = [
   { id: "library.loans", module: "campus-life/library", batch: "#338" },
   // The trainee's own widgets.
   { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
-  { id: "skill-progress.my-progress", module: "practice/skill-progress", batch: "#329" },
+  {
+    id: "skill-progress.my-progress",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "My progress",
+    probe: "/skill-progress/me/progress",
+    empty: "No assessments yet",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     // Texts of MyBookingsWidget.tsx and UpcomingBookings.tsx in PR #395 (sprint batch #331).
     id: "facility-booking.my-bookings",

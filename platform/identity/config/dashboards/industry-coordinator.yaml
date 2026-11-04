@@ -3,9 +3,10 @@
 role: industry-coordinator
 title: "Industry Coordinator"
 module_roles:
+  - placement-career-officer
   - field-training-coordinator
 widgets:
   - field-training.placements-open
   - field-training.active-placements
-  - placement-career.openings
+  - placement-career.openings-summary
   - productions.calendar

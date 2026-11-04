@@ -22,6 +22,7 @@ modules:
   - practice/selection-process
   - practice/portfolio
   - practice/productions
+  - sports/athlete-performance
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
