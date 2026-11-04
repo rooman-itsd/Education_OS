@@ -26,3 +26,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `expiring_within_days` and instants are bounded (422, never a 500); a cursor we never handed out starts from the top;
   stop search takes `%` and `_` literally; the notices widget says "not available yet", "sign in again" or "no
   access" as the other widgets do.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/transport`) and
+  `apps/frontend/config/modules.enabled.yaml` (the `transport.notices` widget on the Student dashboard) (#338).
