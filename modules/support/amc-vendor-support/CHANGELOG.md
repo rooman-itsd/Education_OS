@@ -20,3 +20,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   migration test, settings test, row-level security on Postgres (opt-in).
 - Widget `amc-vendor-support.contracts-expiring` (GET /stats/contracts-expiring) with loading, empty and error states
   following the widget error convention; typed API client in `frontend/src/api/client.ts`; vitest widget tests.
+- NUL characters never reach the database: Postgres cannot store them in text, so a NUL in a request body is a 422
+  and in the URL a 404 (path ids) or 422 (query parameters), instead of a 500 (`api/deps.py` `no_nul`, `Strict`).
