@@ -2,12 +2,17 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** planned
+**Status:** in-progress (contracts and PRD; no code yet)
 
-Global search indexing and query (Elasticsearch-class engine).
+Global and per-module search on OpenSearch, indexed from events, filtered by organisation and by what the caller may read.
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+Search hosts the index and answers queries. A module opts in by declaring which of its records are
+searchable and which permission reads each; search indexes them from the module's events and never
+reads another module's tables. Every query is limited to the caller's organisation and to documents
+the caller may read. Not in scope: ranking by personal behaviour, search over uploaded file contents,
+the record itself (a hit links to the module's own screen), and the physical engine operations
+(`infra/`). Full design and open questions: [docs/prd.md](docs/prd.md).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
