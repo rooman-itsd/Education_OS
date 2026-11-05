@@ -63,3 +63,53 @@ def test_a_coordinator_still_manages_everyone_elses_placements(prog):
     trainee_id, _, p = prog.assigned()
     started = prog.ok(prog.post(f"/placements/{p['id']}/start", None, me))  # a coordinator who is nobody's trainee here
     assert started["status"] == "active" and started["trainee_id"] == trainee_id
+
+
+# ---- ids are one id whatever their case (found in the review of #504)
+
+
+def test_the_own_placement_guard_ignores_the_case_of_the_id(prog):
+    me_id, me = both(prog)
+    # Assign yourself with your own id in capitals: still your own placement.
+    refused(prog.post("/placements", {"opening_id": prog.opening["id"], "trainee_id": me_id.upper()}, me))
+    # Someone else assigns you, with the id in capitals; it is stored in lowercase and the guard still applies.
+    p = prog.ok(
+        prog.post(
+            "/placements", {"opening_id": prog.opening["id"].upper(), "trainee_id": me_id.upper()}, prog.coordinator
+        ),
+        201,
+    )
+    assert p["trainee_id"] == me_id and p["opening_id"] == prog.opening["id"]
+    refused(prog.post(f"/placements/{p['id']}/start", None, me))
+    refused(prog.post(f"/placements/{p['id'].upper()}/start", None, me))  # the path id in capitals too
+    assert prog.get(f"/placements/{p['id']}", me).json()["status"] == "assigned"  # nothing changed
+
+
+def test_a_token_with_the_user_id_in_capitals_is_the_same_user(prog):
+    from eos_core.security import create_token
+
+    me_id, _ = both(prog)
+    token = create_token(
+        user_id=me_id.upper(),
+        organisation_id=prog.org.id.upper(),
+        roles=["field-training-coordinator", "field-training-trainee"],
+    )
+    me = {"Authorization": f"Bearer {token}"}
+    p = prog.ok(prog.post(f"/openings/{prog.opening['id']}/apply", None, me), 201)
+    assert p["trainee_id"] == me_id  # stored in lowercase, in the same organisation
+    refused(prog.post(f"/placements/{p['id']}/decision", {"decision": "approved"}, me))
+
+
+def test_ids_are_stored_in_lowercase_and_supervisors_are_unique_whatever_the_case(prog):
+    c = prog
+    sup = c.supervisor_id
+    r = c.ok(
+        c.patch(
+            f"/sites/{c.site['id'].upper()}",
+            {"name": c.site["name"], "supervisor_ids": [sup, sup.upper()]},
+            c.coordinator,
+        )
+    )
+    assert r["supervisor_ids"] == [sup] and r["id"] == c.site["id"]
+    assert c.ok(c.get(f"/sites/{c.site['id'].upper()}", c.coordinator))["id"] == c.site["id"]
+    assert c.ok(c.get(f"/openings?site_id={c.site['id'].upper()}", c.coordinator))["items"]

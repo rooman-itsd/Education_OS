@@ -5,10 +5,11 @@ caller sees by which key they hold."""
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from eos_core.db import get_db
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from pydantic import AfterValidator
 from sqlalchemy.orm import Session
 
 from ..application import service as svc
@@ -36,13 +37,10 @@ OpeningStatus = Literal["draft", "open", "closed", "cancelled"]
 PlacementStatus = Literal["requested", "assigned", "active", "completed", "rejected", "withdrawn"]
 
 
-def _id() -> str:
-    """A path id. A fresh Path per handler: FastAPI binds a parameter object to the first name it serves."""
-    return Path(pattern=UUID)
-
-
-def _uuid() -> str | None:
-    return Query(None, pattern=UUID)
+# Ids are compared in lowercase everywhere (see schemas.LowerId): a path id or a filter in capitals names the same
+# record as one in lowercase. (A parameter object is shared between handlers here, which is safe: FastAPI copies it.)
+PathId = Annotated[str, Path(pattern=UUID), AfterValidator(str.lower)]
+FilterId = Annotated[str | None, Query(pattern=UUID), AfterValidator(lambda v: None if v is None else v.lower())]
 
 
 def _run(fn, *args):
@@ -71,13 +69,13 @@ def create_site(body: s.SiteIn, a: Actor = Depends(require(svc.SITE_MANAGE)), db
 
 
 @router.get("/sites/{site_id}")
-def get_site(site_id: str = _id(), _: Actor = Depends(require(svc.SITE_READ)), db: Session = Depends(get_db)):
+def get_site(site_id: PathId, _: Actor = Depends(require(svc.SITE_READ)), db: Session = Depends(get_db)):
     return _run(svc.get_site, db, site_id)
 
 
 @router.patch("/sites/{site_id}")
 def update_site(
-    body: s.SiteIn, site_id: str = _id(), a: Actor = Depends(require(svc.SITE_MANAGE)), db: Session = Depends(get_db)
+    body: s.SiteIn, site_id: PathId, a: Actor = Depends(require(svc.SITE_MANAGE)), db: Session = Depends(get_db)
 ):
     return _run(svc.update_site, db, a, site_id, s.dump(body))
 
@@ -88,7 +86,7 @@ def update_site(
 @router.get("/openings")
 def list_openings(
     status: OpeningStatus | None = None,
-    site_id: str | None = _uuid(),
+    site_id: FilterId = None,
     has_seats: bool | None = None,
     starts_after: s.Day | None = None,
     cursor: str | None = CURSOR,
@@ -107,7 +105,7 @@ def create_opening(body: s.OpeningIn, a: Actor = Depends(require(svc.OPENING_MAN
 
 @router.get("/openings/{opening_id}")
 def get_opening(
-    opening_id: str = _id(),
+    opening_id: PathId,
     a: Actor = Depends(require(svc.OPENING_READ, svc.SUPERVISION_READ)),
     db: Session = Depends(get_db),
 ):
@@ -117,7 +115,7 @@ def get_opening(
 @router.patch("/openings/{opening_id}")
 def update_opening(
     body: s.OpeningIn,
-    opening_id: str = _id(),
+    opening_id: PathId,
     a: Actor = Depends(require(svc.OPENING_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -125,23 +123,19 @@ def update_opening(
 
 
 @router.post("/openings/{opening_id}/publish")
-def publish_opening(
-    opening_id: str = _id(), a: Actor = Depends(require(svc.OPENING_MANAGE)), db: Session = Depends(get_db)
-):
+def publish_opening(opening_id: PathId, a: Actor = Depends(require(svc.OPENING_MANAGE)), db: Session = Depends(get_db)):
     return _run(svc.publish_opening, db, a, opening_id)
 
 
 @router.post("/openings/{opening_id}/close")
-def close_opening(
-    opening_id: str = _id(), a: Actor = Depends(require(svc.OPENING_MANAGE)), db: Session = Depends(get_db)
-):
+def close_opening(opening_id: PathId, a: Actor = Depends(require(svc.OPENING_MANAGE)), db: Session = Depends(get_db)):
     return _run(svc.close_opening, db, a, opening_id)
 
 
 @router.post("/openings/{opening_id}/cancel")
 def cancel_opening(
     body: s.ReasonIn,
-    opening_id: str = _id(),
+    opening_id: PathId,
     a: Actor = Depends(require(svc.OPENING_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -150,8 +144,9 @@ def cancel_opening(
 
 @router.post("/openings/{opening_id}/apply", status_code=201)
 def apply(
+    *,
     body: s.ApplyIn | None = None,
-    opening_id: str = _id(),
+    opening_id: PathId,
     a: Actor = Depends(require(svc.SELF_APPLY)),
     db: Session = Depends(get_db),
 ):
@@ -164,10 +159,10 @@ def apply(
 @router.get("/placements")
 def list_placements(
     status: PlacementStatus | None = None,
-    opening_id: str | None = _uuid(),
-    site_id: str | None = _uuid(),
-    trainee_id: str | None = _uuid(),
-    supervisor_id: str | None = _uuid(),
+    opening_id: FilterId = None,
+    site_id: FilterId = None,
+    trainee_id: FilterId = None,
+    supervisor_id: FilterId = None,
     cursor: str | None = CURSOR,
     limit: int = LIMIT,
     a: Actor = Depends(require(svc.PLACEMENT_READ, svc.SUPERVISION_READ)),
@@ -192,7 +187,7 @@ def assign_placement(
 
 @router.get("/placements/{placement_id}")
 def get_placement(
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_READ, svc.SUPERVISION_READ, svc.SELF_READ)),
     db: Session = Depends(get_db),
 ):
@@ -202,7 +197,7 @@ def get_placement(
 @router.patch("/placements/{placement_id}")
 def update_placement(
     body: s.PlacementPatchIn,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -212,7 +207,7 @@ def update_placement(
 @router.post("/placements/{placement_id}/decision")
 def decide(
     body: s.DecisionIn,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -221,15 +216,16 @@ def decide(
 
 @router.post("/placements/{placement_id}/start")
 def start_placement(
-    placement_id: str = _id(), a: Actor = Depends(require(svc.PLACEMENT_MANAGE)), db: Session = Depends(get_db)
+    placement_id: PathId, a: Actor = Depends(require(svc.PLACEMENT_MANAGE)), db: Session = Depends(get_db)
 ):
     return _run(svc.start_placement, db, a, placement_id)
 
 
 @router.post("/placements/{placement_id}/complete")
 def complete_placement(
+    *,
     body: s.CompleteIn | None = None,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_MANAGE)),
     db: Session = Depends(get_db),
 ):
@@ -240,7 +236,7 @@ def complete_placement(
 @router.post("/placements/{placement_id}/withdraw")
 def withdraw_placement(
     body: s.ReasonIn,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_MANAGE, svc.SELF_APPLY)),
     db: Session = Depends(get_db),
 ):
@@ -252,7 +248,7 @@ def withdraw_placement(
 
 @router.get("/placements/{placement_id}/logs")
 def list_logs(
-    placement_id: str = _id(),
+    placement_id: PathId,
     status: Literal["submitted", "verified", "returned"] | None = None,
     a: Actor = Depends(require(svc.PLACEMENT_READ, svc.SUPERVISION_READ, svc.SELF_READ)),
     db: Session = Depends(get_db),
@@ -263,7 +259,7 @@ def list_logs(
 @router.post("/placements/{placement_id}/logs", status_code=201)
 def add_log(
     body: s.LogEntryIn,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.SELF_LOG)),
     db: Session = Depends(get_db),
 ):
@@ -272,19 +268,19 @@ def add_log(
 
 @router.patch("/logs/{log_id}")
 def edit_log(
-    body: s.LogEntryIn, log_id: str = _id(), a: Actor = Depends(require(svc.SELF_LOG)), db: Session = Depends(get_db)
+    body: s.LogEntryIn, log_id: PathId, a: Actor = Depends(require(svc.SELF_LOG)), db: Session = Depends(get_db)
 ):
     return _run(svc.edit_log, db, a, log_id, s.dump(body))
 
 
 @router.post("/logs/{log_id}/verify")
-def verify_log(log_id: str = _id(), a: Actor = Depends(require(svc.LOG_VERIFY)), db: Session = Depends(get_db)):
+def verify_log(log_id: PathId, a: Actor = Depends(require(svc.LOG_VERIFY)), db: Session = Depends(get_db)):
     return _run(svc.verify_log, db, a, log_id)
 
 
 @router.post("/logs/{log_id}/return")
 def return_log(
-    body: s.ReasonIn, log_id: str = _id(), a: Actor = Depends(require(svc.LOG_VERIFY)), db: Session = Depends(get_db)
+    body: s.ReasonIn, log_id: PathId, a: Actor = Depends(require(svc.LOG_VERIFY)), db: Session = Depends(get_db)
 ):
     return _run(svc.return_log, db, a, log_id, body.reason)
 
@@ -294,7 +290,7 @@ def return_log(
 
 @router.get("/placements/{placement_id}/assessments")
 def list_assessments(
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.PLACEMENT_READ, svc.SUPERVISION_READ, svc.SELF_READ)),
     db: Session = Depends(get_db),
 ):
@@ -304,7 +300,7 @@ def list_assessments(
 @router.post("/placements/{placement_id}/assessments", status_code=201)
 def record_assessment(
     body: s.AssessmentIn,
-    placement_id: str = _id(),
+    placement_id: PathId,
     a: Actor = Depends(require(svc.ASSESSMENT_RECORD)),
     db: Session = Depends(get_db),
 ):
@@ -322,9 +318,7 @@ def my_placements(
 
 
 @router.get("/me/hours")
-def my_hours(
-    placement_id: str | None = _uuid(), a: Actor = Depends(require(svc.SELF_READ)), db: Session = Depends(get_db)
-):
+def my_hours(placement_id: FilterId = None, a: Actor = Depends(require(svc.SELF_READ)), db: Session = Depends(get_db)):
     return _run(svc.my_hours, db, a, placement_id)
 
 

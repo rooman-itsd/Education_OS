@@ -32,7 +32,7 @@ def current_actor(authorization: str | None = Header(default=None), db: Session 
         roles=roles,
         permissions=permissions_for(roles, bool(claims.get("sa"))),
     )
-    db.info["organisation_id"] = organisation_id  # the request-scoped session carries the tenant
+    db.info["organisation_id"] = actor.organisation_id  # the request-scoped session carries the tenant
     return actor
 
 
