@@ -1,15 +1,28 @@
 [project]
 name = "eos-library"
-version = "0.1.0"
+version = "0.2.0"
 description = "Education OS module: library (backend)"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi",
+  "fastapi>=0.115",
   "sqlalchemy>=2",
-  "alembic",
+  "alembic>=1.13",
   "eos-core",
-  "eos-sdk",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "httpx>=0.27", "eos-testing"]
+
+# The events library consumes (module.yaml consumes_events), found by the event-bus relay.
+[project.entry-points."eos.event_consumers"]
+library = "eos_library.application.consumers:CONSUMERS"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

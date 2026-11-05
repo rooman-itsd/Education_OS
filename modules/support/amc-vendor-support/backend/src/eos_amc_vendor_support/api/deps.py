@@ -9,7 +9,7 @@ import jwt
 from eos_core.config import permissions_for
 from eos_core.db import get_db
 from eos_core.security import decode_token
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..application.access import Actor
@@ -48,3 +48,14 @@ def require(*permissions: str):
         return actor
 
     return dep
+
+
+def no_nul(request: Request) -> None:
+    """Postgres text cannot hold NUL characters; SQLite can, so tests on SQLite would not show the 500 Postgres gives.
+    A NUL in a path id names no row (404); anywhere else in the URL it is an invalid value (422). Request bodies are
+    checked by the schemas (Strict)."""
+    if any("\x00" in str(v) for v in request.path_params.values()):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, {"code": "not_found", "message": "not found"})
+    if any("\x00" in k or "\x00" in v for k, v in request.query_params.multi_items()):
+        message = "query parameters must not contain NUL characters"
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, {"code": "invalid_query", "message": message})

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..application import service
+from ..application.reports import subscription_report
 from ..application.service import BillingError
 
 router = APIRouter(tags=["billing"])
@@ -97,6 +98,13 @@ def payment_webhook(body: dict, db: Session = Depends(get_db)):
         service.confirm_payment(db, reference=body.get("reference", ""))
     except BillingError as e:
         raise _err(e) from e
+
+
+@router.get("/admin/reports/subscriptions")
+def admin_subscription_report(p: Principal = Depends(require("platform:revenue:read")), db: Session = Depends(get_db)):
+    """Super admin: subscriptions per plan and status, monthly recurring revenue, paid in the last 30 days, and
+    trials ending in the next 14 days (application/reports.py)."""
+    return subscription_report(db)
 
 
 @router.get("/admin/plans")
