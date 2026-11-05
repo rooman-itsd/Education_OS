@@ -32,10 +32,6 @@ def _id() -> sa.Column:
     return sa.Column("id", sa.String(36), primary_key=True)
 
 
-def _org() -> sa.Column:
-    return sa.Column("organisation_id", sa.String(36), nullable=True)
-
-
 def _created() -> sa.Column:
     return sa.Column("created_at", sa.DateTime(timezone=True), nullable=False)
 
@@ -54,7 +50,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_framework",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("code", sa.String(40), nullable=False),
         sa.Column("name", sa.String(200), nullable=False),
@@ -66,7 +62,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_metric",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("framework_id", sa.String(36), sa.ForeignKey("iqac_accreditation_framework.id"), nullable=False),
         sa.Column("code", sa.String(40), nullable=False),
@@ -82,7 +78,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_cycle",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("framework_id", sa.String(36), sa.ForeignKey("iqac_accreditation_framework.id"), nullable=False),
         sa.Column("name", sa.String(200), nullable=False),
@@ -96,7 +92,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_response",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("cycle_id", sa.String(36), sa.ForeignKey("iqac_accreditation_cycle.id"), nullable=False),
         sa.Column("metric_id", sa.String(36), sa.ForeignKey("iqac_accreditation_metric.id"), nullable=False),
@@ -115,7 +111,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_evidence",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("response_id", sa.String(36), sa.ForeignKey("iqac_accreditation_response.id"), nullable=False),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("kind", sa.String(9), nullable=False),
@@ -128,7 +124,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_action_item",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("title", sa.String(200), nullable=False),
         sa.Column("description", sa.Text, nullable=True),
@@ -144,7 +140,7 @@ def upgrade() -> None:
     op.create_table(
         "iqac_accreditation_audit_entry",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("actor", sa.String(36), nullable=True),
         sa.Column("action", sa.String(60), nullable=False),
         sa.Column("entity", sa.String(40), nullable=False),
