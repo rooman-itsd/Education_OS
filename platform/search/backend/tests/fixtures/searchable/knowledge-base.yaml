@@ -1,0 +1,18 @@
+# Test fixture: what knowledge-base must ship as contracts/searchable.yaml. Two audiences, so it proves the
+# per-document permission filter: an internal article carries only the read-internal key.
+module: knowledge-base
+types:
+  - name: article
+    label: Articles
+    url: /support/knowledge-base/{id}
+    triggers:
+      - { event: knowledge-base.article.published, action: upsert, id_field: article_id }
+      - { event: knowledge-base.article.archived,  action: delete, id_field: article_id }
+    fields:
+      title:       { kind: text, analyzer: english, boost: 3, role: title }
+      body:        { kind: text, analyzer: english, snippet: true }
+      slug:        { kind: keyword, display: true }
+      category_id: { kind: keyword, filterable: true }
+      published:   { kind: boolean, filterable: true }
+    read_permissions:
+      any_of: [knowledge-base:article:read, knowledge-base:article:read-internal]
