@@ -124,10 +124,12 @@ the same rules automatically from `.claude/CLAUDE.md`, `.github/copilot-instruct
 Using any other assistant? Give it `docs/team/RULES.md` first. Each person's starter prompt for
 Claude Code, with their owned paths and conflict rules, is in [prompts/](prompts/).
 
-## 12. Sprint v1.0: 29 October to 6 November 2026
+## 12. Sprint v1.0: 29 October to 25 November 2026
 
-The whole board ships on 6 November. The plan, the dates, the reviewer pairs and every person's
-batches are one page: [sprint-v1.0.md](sprint-v1.0.md). During the sprint: tier 1 (the 13 common
-dashboards and their modules) is done by Mon 3 Nov, tier 2 (every academy dashboard) by Wed 5 Nov,
-and Thu 6 Nov is release day with no new code. Standup at 10:00 on the board, every slice a PR
-before 17:00, reviews within four working hours, and nobody waits for the lead.
+The whole application ships, and v1.0 launches only when the launch checklist is complete
+([ADR-0007](../architecture/adr/0007-go-live-v1.md)); the target is Tue 25 Nov. The plan, the dates, the
+reviewer pairs and every person's batches are one page: [sprint-v1.0.md](sprint-v1.0.md). API live on the
+public URL by Fri 7 Nov, tier 1 (the 13 common dashboards and their modules) by Wed 12 Nov, tier 2 (every
+academy dashboard, search, the integrations, DPDP) by Wed 19 Nov, launch hardening and the `v1.0.0` tag by
+Tue 25 Nov. Standup at 10:00 on the board, every slice a PR before 17:00, reviews within four working hours,
+and nobody waits for the lead.
