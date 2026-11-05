@@ -17,9 +17,9 @@ from ..domain.contracts import CONTRACT_STATUSES
 from ..domain.engagements import ENGAGEMENT_KINDS, ENGAGEMENT_STATUSES
 from ..infrastructure.config import MAX_WINDOW_DAYS, MIN_WINDOW_DAYS
 from . import schemas as s
-from .deps import require
+from .deps import no_nul, require
 
-router = APIRouter(tags=["amc-vendor-support"])
+router = APIRouter(tags=["amc-vendor-support"], dependencies=[Depends(no_nul)])
 
 LIMIT = Query(20, ge=1, le=100)
 READ = require(perm.CONTRACT_READ)

@@ -556,3 +556,51 @@ def test_a_learner_sees_only_their_own_records(client, org):
     # a learner who also evaluates is not narrowed
     _, both = org.user(LEARNER, EVALUATOR)
     assert client.get(f"{BASE}/assessments", headers=both).json()["total"] == 2
+
+
+def test_list_assessments_by_status(client, org):
+    f, s, rubric = org.setup()
+    learner = new_id()
+    a1 = org.assess(learner, s, rubric)
+    a2 = org.assess(learner, s, rubric)
+    assert client.post(f"{BASE}/assessments/{a2['id']}/verify", headers=org.admin).status_code == 200
+
+    def ids(status: str) -> list[str]:
+        r = client.get(f"{BASE}/assessments?status={status}", headers=org.admin)
+        assert r.status_code == 200
+        return [a["id"] for a in r.json()["items"]]
+
+    assert ids("submitted") == [a1["id"]]
+    assert ids("verified") == [a2["id"]]
+    assert ids("voided") == []
+    assert client.get(f"{BASE}/assessments?status=pending", headers=org.admin).status_code == 422
+
+
+def test_framework_summary(client, org):
+    f, s, rubric = org.setup()
+    s2 = org.skill(f["id"], "SKILL-02", category="Ensemble")
+    r2 = org.rubric(s2["id"])
+    other = org.framework("OTHER")
+    s3 = org.skill(other["id"], "SKILL-03")
+    r3 = org.rubric(s3["id"])
+    ann, ben = new_id(), new_id()
+    org.assess(ann, s, rubric, 50, "Developing", assessed_at="2026-09-01T10:00:00Z")
+    org.assess(ann, s, rubric, 72, "Proficient", assessed_at="2026-09-15T10:00:00Z")  # replaces Developing
+    org.assess(ann, s2, r2, 45, "Developing", assessed_at="2026-10-02T10:00:00Z")
+    org.assess(ben, s, rubric, 72, "Proficient", assessed_at="2026-10-03T10:00:00Z")
+    org.assess(ben, s3, r3, 30, "Novice", assessed_at="2026-10-03T10:00:00Z")
+    voided = org.assess(new_id(), s, rubric, 95, "Expert")
+    assert client.post(f"{BASE}/assessments/{voided['id']}/void", headers=org.admin).status_code == 200
+
+    r = client.get(f"{BASE}/reports/framework-summary", headers=org.admin)
+    assert r.status_code == 200
+    by_id = {i["framework_id"]: i for i in r.json()["items"]}
+    main = by_id[f["id"]]
+    assert main["learners_assessed"] == 2  # a voided assessment counts for nobody
+    assert {x["level"]: x["count"] for x in main["levels"]} == {"Developing": 1, "Proficient": 2}
+    assert [x["level"] for x in main["levels"]] == ["Developing", "Proficient"]  # lowest first
+    assert by_id[other["id"]]["learners_assessed"] == 1
+
+    # a learner-only caller does not get the organisation-wide picture
+    _, learner = org.user("teacher-trainee")
+    assert client.get(f"{BASE}/reports/framework-summary", headers=learner).status_code == 403
