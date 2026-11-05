@@ -25,7 +25,9 @@ modules:
   - practice/selection-process
   - practice/portfolio
   - practice/productions
+  - practice/skill-progress
   - sports/athlete-performance
+  - sports/sports-nutrition-health
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms

@@ -133,7 +133,8 @@ test("revenue and subscriptions by plan count the Standard organisation", async 
   await signInAsSuperAdmin(page);
   const earning = widget(page, revenue.title).getByRole("listitem").filter({ hasText: "Standard" });
   await expect(earning).toBeVisible();
-  await expect(earning).toContainText(/\d+ active/);
+  // revenue counts paying subscriptions: active ones less comped ones (#401)
+  await expect(earning).toContainText(/\d+ paying/);
   await expect(earning).toContainText(/\/mo/);
   await expect(widget(page, revenue.title).getByText(/a month/)).toBeVisible();
   const plans = widget(page, subscriptions.title);
