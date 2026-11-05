@@ -2,9 +2,347 @@ openapi: 3.1.0
 info:
   title: productions API
   version: 0.1.0
-  description: "Productions and events: performances, exhibitions, recitals, screenings, hackathons, competitions, conferences."
+  description: "Productions and events: performances, exhibitions, recitals, screenings, hackathons, competitions and conferences. One generic pattern (ADR-0004); the profile vocabulary supplies each academy's words. See docs/prd.md."
 servers:
   - url: /api/v1/productions
-paths: {}
+paths:
+  /productions:
+    get:
+      summary: List productions, newest first by start date. Permission productions:production:read.
+      parameters:
+        - { name: status, in: query, description: "One or more, comma separated", schema: { type: string } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/Kind" } }
+        - { name: department, in: query, schema: { type: string } }
+        - { name: from, in: query, description: "Starts at or after this instant", schema: { type: string, format: date-time } }
+        - { name: to, in: query, description: "Starts before this instant", schema: { type: string, format: date-time } }
+        - { name: q, in: query, description: "Search in title, venue and summary", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionPage" } } } } }
+    post:
+      summary: Add a production, in planning. Permission productions:production:manage. `client_token` makes the call idempotent for its own caller.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }
+        "200": { description: "The same client_token from the same caller: the production created the first time" , content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }
+        "422": { $ref: "#/components/responses/RuleViolation" }
+  /productions/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: One production with its cast and preparation counts. Permission productions:production:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    patch:
+      summary: Edit a production that is not completed or cancelled. Permission productions:production:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionPatch" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/Conflict" } }
+  /productions/{id}/preparation:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Move a planned production into preparation. Permission productions:production:manage.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "409": { $ref: "#/components/responses/Conflict" } }
+  /productions/{id}/schedule:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Give a production its dates, venue and call time, or move them. Permission productions:production:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ScheduleInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "409": { $ref: "#/components/responses/Conflict" }, "422": { $ref: "#/components/responses/RuleViolation" } }
+  /productions/{id}/complete:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Close a scheduled production that has been performed. Permission productions:production:manage.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "409": { $ref: "#/components/responses/Conflict" } }
+  /productions/{id}/cancel:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Cancel a production and withdraw its outstanding invitations. Permission productions:production:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Production" } } } }, "409": { $ref: "#/components/responses/Conflict" } }
+
+  /productions/{id}/roles:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: The cast and crew of a production. Permission productions:production:read. `notes` and `reason` are returned only to a caller with productions:role:manage and to the holder of that part; everyone else gets null.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Role" } } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    post:
+      summary: Offer a part or crew job. Permission productions:role:manage. The same person and part twice is the same offer.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RoleInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } }, "200": { description: Already offered, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } }, "409": { $ref: "#/components/responses/Conflict" } }
+  /roles/{id}/respond:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Accept or decline a part offered to the caller. Permission productions:role:respond; only the person the part was offered to, and only while it is still open.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RespondInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } }, "403": { description: The part was offered to somebody else }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/Conflict" } }
+  /roles/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    delete:
+      summary: Withdraw an assignment. Permission productions:role:manage.
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/ReasonInput" } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Role" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/Conflict" } }
+
+  /productions/{id}/tasks:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: Preparation tasks of a production, outstanding first. Permission productions:task:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Task" } } } } }, "404": { $ref: "#/components/responses/NotFound" } }
+    post:
+      summary: Add a preparation task. Permission productions:task:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskInput" } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }, "409": { $ref: "#/components/responses/Conflict" } }
+  /tasks/{id}/complete:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: Mark a preparation task done. Permission productions:task:manage. Doing it twice is not an error; a completed or cancelled production refuses it (409).
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }, "404": { $ref: "#/components/responses/NotFound" }, "409": { $ref: "#/components/responses/Conflict" } }
+
+  /calendar:
+    get:
+      summary: "Dashboard widget productions.calendar: scheduled and running productions in a window, soonest first. Permission productions:production:read."
+      parameters:
+        - { name: from, in: query, description: "Default: now", schema: { type: string, format: date-time } }
+        - { name: to, in: query, description: "Default: 60 days after `from`", schema: { type: string, format: date-time } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CalendarPage" } } } } }
+  /upcoming:
+    get:
+      summary: "Dashboard widget productions.upcoming: the next scheduled productions, soonest first. Permission productions:production:read."
+      parameters: [{ $ref: "#/components/parameters/Limit" }]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CalendarPage" } } } } }
+  /my-roles:
+    get:
+      summary: "Dashboard widget productions.my-roles: the caller's own parts in productions that have not finished, soonest first. Permission productions:role:read-own."
+      parameters:
+        - { name: open, in: query, description: "Only invitations still to answer", schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MyRolePage" } } } } }
+  /in-preparation:
+    get:
+      summary: "Dashboard widget productions.in-preparation: productions being prepared, with what is still outstanding, most pressing first. Permission productions:task:read."
+      parameters:
+        - { name: mine, in: query, description: "Only productions the caller leads or holds a part in", schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PreparationPage" } } } } }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+  responses:
+    NotFound:
+      description: No such row in the caller's organisation.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: The row is not in a state that allows this.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RuleViolation:
+      description: The body breaks a rule of the module (dates, lengths, values).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [not_found, forbidden, conflict, invalid_dates] }
+        message: { type: string }
+        status: { type: string, description: "Present on a conflict: the status the row is in" }
+    Kind:
+      type: string
+      enum: [performance, exhibition, recital, screening, hackathon, competition, conference, other]
+    Status:
+      type: string
+      enum: [planned, in_preparation, scheduled, completed, cancelled]
+    RoleKind: { type: string, enum: [cast, crew, mentor] }
+    RoleStatus: { type: string, enum: [invited, confirmed, declined, withdrawn] }
+    TaskStatus: { type: string, enum: [open, done] }
+    Counts:
+      type: object
+      description: What is outstanding on a production.
+      properties:
+        cast_invited: { type: integer }
+        cast_confirmed: { type: integer }
+        cast_declined: { type: integer }
+        tasks_open: { type: integer }
+        tasks_total: { type: integer }
+    Production:
+      type: object
+      required: [id, organisation_id, title, kind, status, lead_user_id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        kind: { $ref: "#/components/schemas/Kind" }
+        status: { $ref: "#/components/schemas/Status" }
+        department: { type: [string, "null"], maxLength: 120 }
+        summary: { type: [string, "null"] }
+        venue: { type: [string, "null"], maxLength: 200 }
+        resource_id: { type: [string, "null"], description: "A facility-booking resource, by id. No foreign key leaves this module." }
+        starts_at: { type: [string, "null"], format: date-time }
+        ends_at: { type: [string, "null"], format: date-time }
+        call_time: { type: [string, "null"], format: date-time, description: "When cast and crew are called, before the start." }
+        lead_user_id: { type: string, format: uuid }
+        created_by: { type: string, format: uuid }
+        cancelled_reason: { type: [string, "null"] }
+        completed_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        counts: { $ref: "#/components/schemas/Counts" }
+    ProductionPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Production" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    ProductionInput:
+      type: object
+      required: [title, kind]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        kind: { $ref: "#/components/schemas/Kind" }
+        department: { type: string, maxLength: 120 }
+        summary: { type: string, maxLength: 2000 }
+        venue: { type: string, maxLength: 200 }
+        resource_id: { type: string }
+        lead_user_id: { type: string, format: uuid, description: "Defaults to the caller." }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        call_time: { type: string, format: date-time }
+        client_token: { type: string, maxLength: 100, description: "Idempotency key, unique per caller. A repeat returns the first production instead of creating a second." }
+    ProductionPatch:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        kind: { $ref: "#/components/schemas/Kind" }
+        department: { type: [string, "null"], maxLength: 120 }
+        summary: { type: [string, "null"], maxLength: 2000 }
+        venue: { type: [string, "null"], maxLength: 200 }
+        resource_id: { type: [string, "null"] }
+        lead_user_id: { type: string, format: uuid }
+    ScheduleInput:
+      type: object
+      required: [starts_at, ends_at]
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, description: "Must be after starts_at." }
+        call_time: { type: string, format: date-time, description: "Must not be after starts_at." }
+        venue: { type: string, maxLength: 200 }
+        resource_id: { type: string }
+    ReasonInput:
+      type: object
+      properties: { reason: { type: string, maxLength: 500 } }
+    Role:
+      type: object
+      required: [id, production_id, user_id, role_name, kind, status]
+      properties:
+        id: { type: string, format: uuid }
+        production_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role_name: { type: string, maxLength: 120 }
+        kind: { $ref: "#/components/schemas/RoleKind" }
+        status: { $ref: "#/components/schemas/RoleStatus" }
+        notes: { type: [string, "null"] }
+        reason: { type: [string, "null"], description: "Why it was declined or withdrawn." }
+        responded_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+    RoleInput:
+      type: object
+      required: [user_id, role_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        role_name: { type: string, minLength: 1, maxLength: 120 }
+        kind: { $ref: "#/components/schemas/RoleKind" }
+        notes: { type: string, maxLength: 500 }
+    RespondInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [accept, decline] }
+        reason: { type: string, maxLength: 500 }
+    Task:
+      type: object
+      required: [id, production_id, title, status]
+      properties:
+        id: { type: string, format: uuid }
+        production_id: { type: string, format: uuid }
+        title: { type: string, maxLength: 200 }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        due_at: { type: [string, "null"], format: date-time }
+        assignee_user_id: { type: [string, "null"], format: uuid }
+        position: { type: integer }
+        completed_at: { type: [string, "null"], format: date-time }
+        completed_by: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        due_at: { type: string, format: date-time }
+        assignee_user_id: { type: string, format: uuid }
+    CalendarEntry:
+      type: object
+      description: One row of the calendar and upcoming widgets.
+      required: [id, title, kind, status]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { $ref: "#/components/schemas/Kind" }
+        status: { $ref: "#/components/schemas/Status" }
+        department: { type: [string, "null"] }
+        venue: { type: [string, "null"] }
+        starts_at: { type: [string, "null"], format: date-time }
+        ends_at: { type: [string, "null"], format: date-time }
+        call_time: { type: [string, "null"], format: date-time }
+        cast_confirmed: { type: integer }
+    CalendarPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CalendarEntry" } }
+        total: { type: integer, description: "How many match in all, not only the ones returned." }
+    MyRole:
+      type: object
+      required: [role_id, production_id, role_name, role_status, title]
+      properties:
+        role_id: { type: string, format: uuid }
+        production_id: { type: string, format: uuid }
+        role_name: { type: string }
+        role_kind: { $ref: "#/components/schemas/RoleKind" }
+        role_status: { $ref: "#/components/schemas/RoleStatus" }
+        title: { type: string }
+        kind: { $ref: "#/components/schemas/Kind" }
+        status: { $ref: "#/components/schemas/Status" }
+        venue: { type: [string, "null"] }
+        starts_at: { type: [string, "null"], format: date-time }
+        call_time: { type: [string, "null"], format: date-time }
+    MyRolePage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MyRole" } }
+        total: { type: integer }
+    PreparationEntry:
+      type: object
+      required: [id, title, status, tasks_open]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        kind: { $ref: "#/components/schemas/Kind" }
+        status: { $ref: "#/components/schemas/Status" }
+        department: { type: [string, "null"] }
+        starts_at: { type: [string, "null"], format: date-time }
+        lead_user_id: { type: string, format: uuid }
+        tasks_open: { type: integer }
+        tasks_total: { type: integer }
+        tasks_overdue: { type: integer, description: "Open tasks whose due date has passed." }
+        next_task_due_at: { type: [string, "null"], format: date-time }
+        cast_unanswered: { type: integer, description: "Invitations nobody has answered yet." }
+    PreparationPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PreparationEntry" } }
+        total: { type: integer }

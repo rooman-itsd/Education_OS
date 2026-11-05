@@ -15,3 +15,4 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `SEARCH_JOB_RUNNER`, `SEARCH_REDIS_URL`, `SEARCH_JOB_STALE_SECONDS`.
 - PRD and contracts (issue #87): API, events, permissions, config keys.
 - Module scaffolded.
+- PRD and contracts (issue #87): API, events, permissions, config keys. No implementation yet.

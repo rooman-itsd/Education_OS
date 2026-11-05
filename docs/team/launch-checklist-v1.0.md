@@ -1,6 +1,6 @@
 # Launch checklist: v1.0
 
-Issue #149, batch #313. There is no launch date: v1.0 goes live when every box below is ticked, decided by
+Issue #149, batch #313. Target Thursday 12 November 2026; v1.0 goes live when every box below is ticked, decided by
 Faizan with Srujan and recorded in [ADR-0007](../architecture/adr/0007-go-live-v1.md) (5 November 2026).
 A box is ticked only with evidence (a link, a
 command output pasted in the issue, or a screenshot).
@@ -10,6 +10,9 @@ command output pasted in the issue, or a screenshot).
   `apps/backend/config/modules.enabled.yaml` and `apps/frontend/config/modules.enabled.yaml` — Faizan
 - [ ] Every sprint batch closed, tier 1 and tier 2 (#313 to #348); none carried to v1.1 — Faizan
 - [ ] Every academy journey in `tests/e2e/dashboards/` passes with all modules enabled — Srujan
+- [ ] Search (`platform/search`, OpenSearch, #87) answers on the live site — Himanshu
+- [ ] The six integrations (#141 to #146) pass their tests against each provider's sandbox or recorded mock;
+  DigiLocker, NAD and government portals switch to live credentials when the agency approves (not a launch blocker) — Himanshu
 - [ ] `main` green on the last commit; no open PR labelled `sprint:v1.0` — Srujan
 - [ ] Release tag `v1.0.0` on `main`; the API host runs with `EOS_DEPLOY_REF=latest-tag` and `web.yml` publishes the tag to `web-release`, so both follow the highest release tag — Srujan
 
@@ -35,7 +38,7 @@ command output pasted in the issue, or a screenshot).
 ## Governance
 - [ ] Security review filed (`docs/architecture/security-review-2026-10.md`); open findings assigned — Faizan
 - [ ] Runbooks reviewed: deploy, rollback (below), restore, rotate secrets — Srujan (#348)
-- [ ] Privacy notice and terms published on the public site; DPDP items listed for after launch (#148) — Praveen, Faizan
+- [ ] Privacy notice and terms published on the public site; the DPDP pass (#148) done — Praveen, Faizan
 - [ ] Go-live decision recorded in ADR-0007 with the date, the tag and who decided — Faizan
 
 ## Rollback

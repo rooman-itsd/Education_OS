@@ -3,7 +3,7 @@
 **Domain:** campus-life
 **Kind:** feature
 **Status:** in-progress (contract 0.2.0; backend, migrations, tests and the `library.loans` widget built;
-not yet listed in the apps)
+enabled in `apps/backend` and `apps/frontend`)
 
 Catalogue, circulation, digital library, fines, reservations.
 
@@ -35,8 +35,9 @@ What it needs from the host repo:
   holds) wait for `platform/scheduler` to call them.
 - The event-bus relay delivers `fees-accounts.invoice.paid` through the `eos.event_consumers` entry point
   (`eos_library.application.consumers:CONSUMERS`); a host without the relay can call `consumers.handle`.
-- The API router is `eos_library.api.router:router`, mounted under `/api/v1/library` by the module loader from
-  `apps/backend/config/modules.enabled.yaml`. The widgets are registered from `apps/frontend/config/modules.enabled.yaml`.
+- The API router is `eos_library.api.router:router`. `campus-life/library` is listed in
+  `apps/backend/config/modules.enabled.yaml`, which mounts it under `/api/v1/library` behind the entitlement gate, and
+  in `apps/frontend/config/modules.enabled.yaml`, which registers the `library.loans` widget on the Student dashboard.
 
 ## Run the checks
 ```

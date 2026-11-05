@@ -1,0 +1,10 @@
+# Domain events published by digilocker.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. What happens here is reported by integration-hub as port events (integration-hub.certificate.issued,
+# .withdrawn, .pulled; integration-hub.delivery.*), normalised so a consumer never subscribes to a provider's name
+# (integrations/README.md, "Swap rule"). Adding an event here would let a module depend on DigiLocker by name.
+module: digilocker
+version: 1
+events: []
+consumes: []

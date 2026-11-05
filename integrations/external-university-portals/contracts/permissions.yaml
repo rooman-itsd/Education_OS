@@ -1,0 +1,15 @@
+# Permission catalogue for external-university-portals. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Exporting, sending and importing records is done by the calling module (examinations, enrolment-registration,
+# admissions) under its own permissions, through the inter-institution-records port. Partners are integration-hub
+# connections (integration-hub:connection:manage). This catalogue covers only the read-only operator view.
+module: external-university-portals
+permissions:
+  - key: external-university-portals:exchange:read
+    description: See records sent to and received from partner institutions, with status; no transcript content.
+roles:
+  - name: org-admin
+    description: Support view of exchanges with partner institutions.
+    grants:
+      - external-university-portals:exchange:read
