@@ -1,0 +1,20 @@
+# Service level objectives for v1.0 (#152), checked by load/run.py. PROPOSED: the lead confirms or changes them.
+# A run meets them when, at `concurrency` simultaneous users, every scenario stays under its p95 and p99 response time
+# (milliseconds, per request) and its error rate (5xx, timeouts and refused connections over all requests).
+concurrency: 50
+scenarios:
+  # The Organisation Admin dashboard: the seven GETs it makes when it opens, each one counted.
+  dashboard:
+    p95_ms: 500
+    p99_ms: 1500
+    error_rate: 0.005
+  # Signing in checks a password hash, which is deliberately slow; people sign in far less often than they read.
+  signin:
+    p95_ms: 1000
+    p99_ms: 2500
+    error_rate: 0.005
+  # A new organisation registering (rare, and it sends a verification email in production).
+  registration:
+    p95_ms: 1500
+    p99_ms: 3000
+    error_rate: 0.01
