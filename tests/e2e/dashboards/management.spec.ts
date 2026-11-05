@@ -41,7 +41,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "reporting.attendance-and-results-by-department", module: "platform/reporting", batch: "#317" },
   { id: "grievance.open", module: "governance/grievance", batch: "#343" },
   { id: "regulatory-reports.compliance-calendar", module: "governance/regulatory-reports", batch: "#343" },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;

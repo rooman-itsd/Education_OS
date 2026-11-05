@@ -1,0 +1,92 @@
+# The RegulatorySubmission port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). Called through packages/sdk, never against a portal.
+#
+# Most government portals have no API for an institution (AISHE web DCF, NIRF data capturing system, NAAC IIQA, SSR,
+# AQAR and DVV are forms and file uploads behind the institution's own login). The port is therefore built around a
+# submission PACKAGE: the adapter turns data into the portal's own format and a checklist, a person keys or uploads it
+# on the portal, and the person records that they did, with the portal's reference. submit exists for the day a portal
+# opens an API; until then it answers manual_action_required.
+port: RegulatorySubmission
+id: regulatory-submission
+version: 1
+defined_by: integration-hub
+implemented_by: [government-portals]
+consumers: [regulatory-reports, iqac-accreditation]
+
+purpose: >-
+  Prepare a statutory return or accreditation submission in the authority's own format, validate it against that
+  format, hand it to a person with the steps to file it, and record the filing and its acknowledgement.
+
+vocabulary:
+  channel: [api, file_upload, manual_entry]   # how a form reaches the authority
+  package_status: [draft, prepared, invalid, submitted, uploaded_manually, acknowledged, superseded]
+
+operations:
+  - name: list_forms
+    mode: sync
+    description: >-
+      The forms this adapter can prepare, each with its channel, the format version it follows and the JSON Schema of
+      the data it needs. Static per adapter version. regulatory-reports links an obligation to a form_code.
+    output:
+      items: array                            # [{form_code, authority, title, channel, format_version, period_kind,
+                                              #   data_schema, evidence: [{metric, required, accepts}], portal_url}]
+    errors: []
+
+  - name: validate
+    mode: sync
+    description: Check data against a form's schema and the authority's published rules, without preparing anything.
+    input: { form_code: string, period: string, data: object }
+    output: { valid: boolean, issues: array }   # [{path, code, severity}] severity error | warning
+    errors: [invalid_request, unsupported]
+
+  - name: prepare_package
+    mode: async
+    description: >-
+      Build the submission package: the authority's own files (filled Excel or CSV template, data sheet, PDF of the
+      data for the institution's website where the authority requires it), the evidence files arranged by metric, a
+      zip of the lot, and a checklist of portal steps. Files go to platform/documents. Preparing again for the same
+      package_key supersedes the previous package.
+    input:
+      package_key: string                     # caller's idempotency key, e.g. "<filing_id>"
+      form_code: string                       # e.g. aishe.dcf-ii, nirf.dcs.overall, naac.aqar, naac.ssr, naac.dvv-response
+      period: string                          # e.g. "2025-26"
+      data: object                            # matches the form's data_schema
+      evidence: array                         # [{metric, document_id, title}]
+    output:
+      package_id: uuid
+      status: string                          # prepared | invalid
+      files: array                            # [{document_id, filename, role}] role: upload | keying_sheet | website_copy | evidence | bundle
+      checklist: array                        # [{step, detail, portal_section}]
+      issues: array
+    errors: [not_configured, invalid_request, unsupported]
+
+  - name: submit
+    mode: async
+    description: >-
+      Send a prepared package to the authority. Only forms whose channel is api; every other form answers
+      manual_action_required with the package's checklist.
+    input: { package_id: uuid }
+    output: { package_id: uuid, status: string, portal_reference: string }
+    errors: [not_configured, auth_failed, manual_action_required, rejected, throttled, transport_unavailable, provider_error]
+
+  - name: record_manual_submission
+    mode: sync
+    description: >-
+      A person filed the package on the portal: record when, by whom, the portal's reference (AISHE form id, NAAC
+      track id, NIRF application id) and the acknowledgement as a document.
+    input: { package_id: uuid, submitted_on: date, submitted_by: uuid, portal_reference: string, acknowledgement_document_id: uuid }
+    output: { package_id: uuid, status: string }
+    errors: [not_found, conflict]
+
+  - name: get_package
+    mode: sync
+    input: { package_id: uuid }
+    output: { package_id: uuid, form_code: string, period: string, status: string, files: array, checklist: array, portal_reference: string, submitted_on: date }
+    errors: [not_found]
+
+capabilities:
+  forms: array                                # [{form_code, channel, format_version}] same as list_forms, without schemas
+
+inbound: []                                   # no portal calls back

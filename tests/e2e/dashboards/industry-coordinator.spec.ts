@@ -27,7 +27,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "field-training.active-placements", module: "practice/field-training", batch: "#339" },
   // The staff view of openings (#424 splits it from the learner widget placement-career.openings).
   { id: "placement-career.openings-summary", module: "campus-life/placement-career", batch: "#337" },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
