@@ -42,7 +42,15 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The clinical supervisor's own widgets.
-  { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.trainees-to-assess",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Trainees to assess",
+    probe: "/field-training/me/trainees?limit=1",
+    empty: "Nothing to assess right now",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "skill-progress.assessments-due",
     module: "practice/skill-progress",
@@ -53,7 +61,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Skill progress data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.placements-open",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Open placements",
+    probe: "/field-training/openings?status=open&has_seats=true&limit=1",
+    empty: "No open placements with seats",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "facility-booking.bookings-today",
     module: "facilities/facility-booking",

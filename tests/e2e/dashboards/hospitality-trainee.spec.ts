@@ -73,7 +73,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The trainee's own widgets.
-  { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.my-placement",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "My placement",
+    probe: "/field-training/me/placements",
+    empty: "No placement yet",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "skill-progress.my-progress",
     module: "practice/skill-progress",

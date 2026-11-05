@@ -68,8 +68,24 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The medical student's own widgets.
-  { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
-  { id: "field-training.hours-logged", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.my-placement",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "My placement",
+    probe: "/field-training/me/placements",
+    empty: "No placement yet",
+    unavailable: "Field training data is not available yet.",
+  },
+  {
+    id: "field-training.hours-logged",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Hours logged",
+    probe: "/field-training/me/hours",
+    empty: "No hours to show yet",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "skill-progress.my-progress",
     module: "practice/skill-progress",
@@ -90,7 +106,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
-  { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.my-projects",
+    module: "practice/projects",
+    batch: "#339",
+    title: "My projects",
+    probe: "/projects/me/projects",
+    empty: "You are not on a project yet",
+    unavailable: "Projects data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
