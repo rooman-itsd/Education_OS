@@ -1,0 +1,107 @@
+openapi: 3.1.0
+info:
+  title: wearables API
+  version: 0.2.0
+  description: >-
+    Garmin, Polar, Fitbit (Google Health API) and Strava adapter. See docs/prd.md. Modules never call a device provider:
+    athlete-performance and sports-nutrition-health use the wearable-data port (contracts/ports/wearable-data.yaml)
+    through packages/sdk, and integration-hub routes the call here. Athletes link their own accounts through
+    integration-hub (POST /me/account-links).
+
+
+    Exposed over HTTP: (1) the providers' callbacks, received by integration-hub at its app-level route
+    /inbound/wearables?provider=<provider> (one URL per provider app, for every organisation) and verified and parsed
+    by this adapter; (2) the coach's alerts view, backing the dashboard widget wearables.alerts.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor.
+servers:
+  - url: /api/v1/wearables
+
+paths:
+  /provider-callbacks:
+    servers:
+      - url: /api/v1/integration-hub/inbound/wearables
+    get:
+      summary: >-
+        Subscription handshakes. Strava: answer {"hub.challenge": <value>} with 200 within 2 s when hub.verify_token
+        equals WEARABLES_STRAVA_VERIFY_TOKEN; anything else 403. Served at the hub's GET /inbound/wearables.
+      operationId: providerHandshake
+      security: []
+      parameters:
+        - { name: provider, in: query, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+        - { name: hub.mode, in: query, schema: { type: string } }
+        - { name: hub.challenge, in: query, schema: { type: string } }
+        - { name: hub.verify_token, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Handshake answered, content: { application/json: { schema: { type: object, properties: { hub.challenge: { type: string } } } } } }
+        "403": { description: Wrong verify token }
+    post:
+      summary: >-
+        Provider notifications, acknowledged before processing. Verification per provider. Polar: HMAC-SHA256 of the
+        raw body with the webhook's signature_secret_key, in Polar-Webhook-Signature; the PING event is answered 200.
+        Strava: no signature exists, so the event is accepted only when subscription_id is ours and owner_id is an
+        active link, and nothing in the body is trusted: the adapter fetches the activity with the athlete's token.
+        Garmin: push or ping notifications to the endpoint configured in the Garmin developer portal; each entry is
+        matched to an active link by the user's id and token, and deregistrations and userPermissionsChange revoke or
+        narrow the link (Garmin's own signing, if any, applied once the program documentation is available). Google
+        Health API (Fitbit devices): verified as Google's webhook documentation specifies once access is granted.
+        Notifications carry no readings the adapter keeps as is; it fetches and normalises.
+      operationId: providerNotifications
+      security: []
+      parameters:
+        - { name: provider, in: query, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+        - { name: Polar-Webhook-Signature, in: header, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        "200": { description: Acknowledged }
+        "204": { description: Acknowledged }
+        "401": { description: "Signature invalid, or not our subscription" }
+
+  /alerts:
+    get:
+      summary: >-
+        Device alerts for athletes, for the coach's dashboard widget wearables.alerts: a link expired or was revoked, a
+        sync keeps failing, or no data arrived for WEARABLES_STALE_AFTER_DAYS. Statuses and dates only, never readings.
+        Filter by person_id to the coach's own squad (the widget passes it from athlete-performance). Permission
+        wearables:alert:read.
+      operationId: listAlerts
+      parameters:
+        - { name: person_id, in: query, style: form, explode: false, schema: { type: array, items: { type: string, format: uuid }, maxItems: 200 } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/AlertKind" } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AlertPage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    Provider:
+      type: string
+      enum: [garmin, polar, google-health, strava]
+    AlertKind:
+      type: string
+      enum: [link_expired, link_revoked, sync_failing, no_recent_data, not_linked]
+    Alert:
+      type: object
+      required: [person_id, kind, since]
+      properties:
+        person_id: { type: string, format: uuid }
+        provider: { type: [string, "null"] }
+        kind: { $ref: "#/components/schemas/AlertKind" }
+        since: { type: string, format: date-time }
+        last_synced_at: { type: [string, "null"], format: date-time }
+    AlertPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Alert" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }

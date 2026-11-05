@@ -45,4 +45,7 @@ merges (squash) each pull request that is based on main, not a draft, approved b
 has no reviewer whose latest review is "changes requested", no unresolved review thread, satisfies branch
 protection, and has no failed check on its latest commit (the end-to-end journeys included). It works whether or not
 anyone's computer is on. After merging it starts `web.yml` (the site) and `system.yml` (the journeys) on main,
-because merges made with the workflow's token do not start push workflows by themselves.
+because merges made with the workflow's token do not start push workflows by themselves. For the same reason such a merge does not
+close the issues the pull request links with `Closes #N`, and a close by that token starts no workflow, so the job closes
+them itself and hands out the next issue with `tools/scripts/next-issue.py` (checked out from main), as `auto-assign.yml`
+does for a person.

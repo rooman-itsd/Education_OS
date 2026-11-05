@@ -1,0 +1,16 @@
+# Permission catalogue for nad. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Lodging awards and credits is done by the consuming module (examinations) under its own permissions, through the
+# academic-records port; recording a manual upload too. Connection settings and credentials are integration-hub's.
+# This catalogue covers only the read-only operator view; whether examination staff should hold it is docs/prd.md
+# open question 6.
+module: nad
+permissions:
+  - key: nad:submission:read
+    description: See award and credit submissions, their status, upload files and row errors; never learners' rows.
+roles:
+  - name: org-admin
+    description: Support view of depository submissions.
+    grants:
+      - nad:submission:read
