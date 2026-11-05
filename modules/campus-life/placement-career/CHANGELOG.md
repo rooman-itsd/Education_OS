@@ -17,3 +17,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `placement-career.drive.rescheduled`. `PUT /drives/{id}` and `PUT /openings/{id}` check dates against today only
   when they change. `GET /me/openings` and `GET /me/applications` are cursor pages. events.yaml has an `envelope`,
   `consumers` per event and `"date?"`/`"uuid?"` for nullable fields. PRD open questions 7 to 9.
+- Frontend (#337): dashboard widgets `placement-career.openings` ("Job openings", learners, `GET /me/openings`),
+  `placement-career.openings-summary` ("Placement openings", placement staff and industry-liaison,
+  `GET /reports/openings-summary`) and `placement-career.drives` ("Upcoming drives", placement-officer,
+  `GET /reports/drives-upcoming`), with a typed client, loading, empty and error states with retry, Indian dates
+  and rupees, and vitest tests. The module is not enabled in the apps yet.

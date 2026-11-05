@@ -3,7 +3,7 @@
 **Domain:** campus-life
 **Kind:** feature
 **Status:** in-progress (contract 0.2.0; backend, migrations, tests and the `transport.notices` widget built;
-not yet listed in the apps)
+enabled in `apps/backend` and `apps/frontend`)
 
 Routes, vehicles, passes, driver management, tracking.
 
@@ -33,8 +33,9 @@ What it needs from the host repo:
 - `packages/ui-kit` for the widget. No platform service is called directly yet: events go to the outbox, and the
   daily jobs (`backend/src/eos_transport/application/jobs.py`, `run_daily`: expire passes, flag expiring
   documents, purge positions) wait for `platform/scheduler` to call them.
-- The API router is `eos_transport.api.router:router`, mounted under `/api/v1/transport` by the module loader from
-  `apps/backend/config/modules.enabled.yaml`. The widgets are registered from `apps/frontend/config/modules.enabled.yaml`.
+- The API router is `eos_transport.api.router:router`. `campus-life/transport` is listed in
+  `apps/backend/config/modules.enabled.yaml`, which mounts it under `/api/v1/transport` behind the entitlement gate, and
+  in `apps/frontend/config/modules.enabled.yaml`, which registers the `transport.notices` widget on the Student dashboard.
 
 ## Run the checks
 ```

@@ -20,3 +20,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Contract: `x-permission` on every operation (non-breaking).
 - Config: `TOURNAMENT_EVENTS_TIMEZONE` (replaces the unused `TOURNAMENT_EVENTS_FEATURE_ENABLED` placeholder).
 - Tests: domain, API, athlete self-scope, consumers, cross-tenant leak, migration and contract-drift tests.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/tournament-events`) and
+  `apps/frontend/config/modules.enabled.yaml` (widgets `upcoming` and `calendar`) (#330).

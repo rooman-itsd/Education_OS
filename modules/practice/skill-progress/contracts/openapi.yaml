@@ -350,6 +350,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: status
+          in: query
+          description: Only assessments in this status. submitted means recorded and not yet verified.
+          schema:
+            type: string
+            enum: [submitted, verified, voided]
         - name: from_date
           in: query
           schema:
@@ -515,6 +521,22 @@ paths:
                 $ref: "#/components/schemas/LearnerProgressSummary"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /reports/framework-summary:
+    get:
+      summary: Summarise assessed learners per framework
+      description: For each framework with counted (submitted or verified) assessments, the number of learners assessed and how many learner-skill pairs currently sit at each level, the level of the pair's latest counted assessment. Levels run lowest first. It covers the whole organisation, so a caller whose only access comes from a learner role gets 403. Backs the cohort-overview widget; a real cohort needs a learner list fed by events and can come later.
+      operationId: getFrameworkSummary
+      x-permission: skill-progress:progress:read
+      responses:
+        "200":
+          description: One entry per framework with counted assessments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrameworkSummaryReport"
         "403":
           $ref: "#/components/responses/Forbidden"
 
@@ -956,6 +978,34 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SkillProficiencyStatus"
+
+    FrameworkSummaryReport:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [framework_id, framework_title, learners_assessed, levels]
+            properties:
+              framework_id:
+                type: string
+                format: uuid
+              framework_title:
+                type: string
+              learners_assessed:
+                type: integer
+              levels:
+                type: array
+                items:
+                  type: object
+                  required: [level, count]
+                  properties:
+                    level:
+                      type: string
+                    count:
+                      type: integer
 
     SkillProficiencyStatus:
       type: object
