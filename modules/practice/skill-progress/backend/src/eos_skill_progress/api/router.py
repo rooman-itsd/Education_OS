@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from eos_core.db import get_db
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -135,6 +136,7 @@ def list_assessments(
     learner_id: str | None = _id(),
     evaluator_id: str | None = _id(),
     skill_id: str | None = _id(),
+    status: Literal["submitted", "verified", "voided"] | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
     limit: int = LIMIT_50,
@@ -148,6 +150,7 @@ def list_assessments(
         "learner_id": learner_id,
         "evaluator_id": evaluator_id,
         "skill_id": skill_id,
+        "status": status,
         "from_date": from_date,
         "to_date": to_date,
     }
@@ -191,6 +194,11 @@ def get_learner_progress(
     db: Session = Depends(get_db),
 ):
     return _run(svc.learner_progress, db, a, learner_id, framework_id)
+
+
+@router.get("/reports/framework-summary")
+def get_framework_summary(a: Actor = Depends(require(svc.PROGRESS_READ)), db: Session = Depends(get_db)):
+    return _run(svc.framework_summary, db, a)
 
 
 @router.get("/me/progress")
