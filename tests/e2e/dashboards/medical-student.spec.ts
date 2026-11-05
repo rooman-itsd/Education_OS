@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { OPENING, REQUIRED_HOURS, seedPlacement, SITE } from "./field-training-data";
+import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Medical Student dashboard (layout platform/identity/config/dashboards/medical-student.yaml, which extends the Student layout; the role exists in the medical-college
@@ -14,7 +15,11 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (field-training and projects #339, skill-progress #329, facility-booking #331, and the inherited timetable-attendance, examinations and lms ones, and transport and library until they are enabled). Entries whose module is already merged carry that widget's texts, so the journey starts checking them the
  *   day the module is enabled;
- * - no data journeys yet: every widget of this layout that holds data waits for its module (field-training, projects) or for the student to have records of it. The data journeys are added with the modules.
+ * - data journeys: a placement the hospital coordinator assigns and starts, with a log entry the student writes and the
+ *   clinical supervisor verifies, shows in `field-training.my-placement` and `field-training.hours-logged`; a project the
+ *   student proposes shows in `projects.my-projects`. Each skips until its module is enabled. The other widgets
+ *   (skill-progress, facility-booking, lms and the inherited Student ones) hold data of their own modules and get their data
+ *   journeys with those modules.
  *
  * facilities and practice are not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves
  * the organisation to Standard first. Loading states are covered by the modules' unit tests, not here.
@@ -117,16 +122,25 @@ const WIDGETS: LayoutWidget[] = [
   },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
+let admin: DashboardUser;
 let user: DashboardUser;
+/** The hospital coordinator and clinical supervisor who set up the student's placement. */
+let coordinator: DashboardUser;
+let supervisor: DashboardUser;
 /** Per shipped widget id: what its GET answered the medical student. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "medical-college", role: "medical-student" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "medical-college" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "medical-student");
+  coordinator = await addUser(request, admin, "hospital-coordinator");
+  supervisor = await addUser(request, admin, "clinical-supervisor");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -160,4 +174,48 @@ test.describe("medical-student widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with field-training and projects data", () => {
+  test("field-training.my-placement and hours-logged show the placement the coordinator assigns and the hours the supervisor verifies", async ({ page, request }) => {
+    for (const id of ["field-training.my-placement", "field-training.hours-logged"]) {
+      test.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test.skip(!ready(id), `the field-training API answered ${status[id]} to the medical-student role`);
+    }
+    // The coordinator (field-training-coordinator) records the site and the opening and assigns and starts the placement;
+    // the student logs today's hours and the supervisor named on the opening verifies them. Only verified hours count.
+    await seedPlacement(request, { coordinator, supervisor, trainee: user }, { start: true, log: true, verify: true });
+    await signIn(page, user);
+
+    const placement = widget(page, "My placement");
+    await expect(placement.getByText("No placement yet")).toHaveCount(0);
+    const row = placement.getByRole("list", { name: "Your placements" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(row).toContainText(SITE);
+    await expect(row).toContainText(`${4} of ${REQUIRED_HOURS} h verified`);
+    await expect(row).toContainText("Active");
+
+    const hours = widget(page, "Hours logged");
+    await expect(hours.getByText("No hours to show yet")).toHaveCount(0);
+    await expect(hours).toContainText(`4 of ${REQUIRED_HOURS} hours verified`);
+    await expect(hours.getByText("Awaiting verification: 0 h")).toBeVisible();
+  });
+
+  test("projects.my-projects lists a project the student proposes", async ({ page, request }) => {
+    const w = byId("projects.my-projects");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the projects API answered ${status[w.id]} to the medical-student role`);
+    // projects:self:propose (projects-member): the project starts as proposed with the student as its lead.
+    await created(request, user, "/projects/projects", {
+      title: "Hand hygiene audit",
+      kind: "Research",
+      starts_on: dayFromNow(0),
+      ends_on: dayFromNow(90),
+    });
+    await signIn(page, user);
+    const panel = widget(page, "My projects");
+    await expect(panel.getByText("You are not on a project yet")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "My projects" }).getByRole("listitem").filter({ hasText: "Hand hygiene audit" });
+    await expect(row).toContainText("Lead · No milestones yet");
+    await expect(row).toContainText("Proposed");
+  });
 });
