@@ -45,11 +45,16 @@ def at(days: float = 0, hours: float = 0) -> str:
     return (NOW + timedelta(days=days, hours=hours)).isoformat()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def database():
+    """The throwaway SQLite database, created once, for every test (consumer tests need no client)."""
+    init_db()
+
+
 @pytest.fixture(scope="session")
-def client():
+def client(database):
     app = FastAPI()
     app.include_router(router, prefix=BASE)
-    init_db()
     with TestClient(app) as c:
         yield c
 
@@ -268,8 +273,9 @@ def all_events(organisation_id: str) -> list[OutboxEvent]:
 
 
 def audit_actions(organisation_id: str, entity_id: str | None = None) -> list[str]:
+    """The audited actions, sorted: under the frozen clock entries of one test share their time."""
     with SessionLocal() as db:
         query = select(AuditEntry).where(AuditEntry.organisation_id == organisation_id)
         if entity_id:
             query = query.where(AuditEntry.entity_id == entity_id)
-        return [r.action for r in db.scalars(query.order_by(AuditEntry.occurred_at, AuditEntry.id))]
+        return sorted(r.action for r in db.scalars(query))

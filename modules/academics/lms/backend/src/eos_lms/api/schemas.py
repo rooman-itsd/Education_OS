@@ -7,9 +7,19 @@ Every string, number, list and instant is bounded, so nothing reaches a column o
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, ValidationError
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    ValidationError,
+    model_validator,
+)
 
 from ..application.errors import LmsError
 
@@ -40,6 +50,22 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class Patch(Strict):
+    """A PATCH body. A field may be left out to keep its value; only the fields the contract types as nullable may be
+    sent as null (to clear them)."""
+
+    NULLABLE: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_nulls(cls, data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if value is None and key in cls.model_fields and key not in cls.NULLABLE:
+                    raise ValueError(f"{key} may not be null")
+        return data
+
+
 def parse(model: type[BaseModel], body: object) -> dict:
     """The body checked against `model`, as a dict of the fields that were sent; 400 when it does not fit."""
     if not isinstance(body, dict):
@@ -68,7 +94,8 @@ class CreateCourseSpaceIn(Strict):
     visible_section_ids: SectionIds = []
 
 
-class UpdateCourseSpaceIn(Strict):
+class UpdateCourseSpaceIn(Patch):
+    NULLABLE = frozenset({"description"})
     title: Title | None = None
     description: Text | None = None
     visible_section_ids: SectionIds | None = None
@@ -84,7 +111,7 @@ class ContentUnitIn(Strict):
     published: bool = False
 
 
-class UpdateContentUnitIn(Strict):
+class UpdateContentUnitIn(Patch):
     title: Title | None = None
     position: int | None = Field(default=None, ge=0, le=10_000)
     published: bool | None = None
@@ -101,7 +128,8 @@ class CourseMaterialIn(Strict):
     scheduled_class_id: Uuid | None = None
 
 
-class UpdateCourseMaterialIn(Strict):
+class UpdateCourseMaterialIn(Patch):
+    NULLABLE = frozenset({"unit_id", "scheduled_class_id"})
     title: Title | None = None
     unit_id: Uuid | None = None
     document_id: Uuid | None = None
@@ -135,7 +163,8 @@ class AssignmentIn(Strict):
     target_section_ids: SectionIds = []
 
 
-class UpdateAssignmentIn(Strict):
+class UpdateAssignmentIn(Patch):
+    NULLABLE = frozenset({"unit_id"})
     title: Title | None = None
     instructions: Text | None = None
     unit_id: Uuid | None = None
@@ -172,9 +201,6 @@ class QuestionIn(Strict):
     points: PositivePoints
 
 
-Questions = Annotated[list[QuestionIn], Field(max_length=200)]
-
-
 class QuizSettingsIn(Strict):
     title: Title | None = None
     unit_id: Uuid | None = None
@@ -196,7 +222,8 @@ class QuizIn(QuizSettingsIn):
     questions: Annotated[list[QuestionIn], Field(min_length=1, max_length=200)]
 
 
-class UpdateQuizIn(QuizSettingsIn):
+class UpdateQuizIn(Patch, QuizSettingsIn):
+    NULLABLE = frozenset({"unit_id", "time_limit_minutes"})
     questions: Annotated[list[QuestionIn], Field(min_length=1, max_length=200)] | None = None
 
 

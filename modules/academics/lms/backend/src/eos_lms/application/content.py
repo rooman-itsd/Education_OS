@@ -196,12 +196,14 @@ def create_unit(db: Session, a: Actor, space_id: str, body: dict) -> dict:
         organisation_id=a.organisation_id,
         course_space_id=space.id,
         title=body["title"],
-        position=repo.next_unit_position(db, space.id) if position is None else position,
+        position=repo.next_unit_position(db, space.id),
         published=bool(body.get("published", False)),
         created_at=c.clock(),
     )
     db.add(unit)
     db.flush()
+    if position is not None:
+        _move(db, space.id, unit, position)
     c.audit(db, a, "content-unit.created", "content-unit", unit.id, a.organisation_id)
     db.commit()
     return unit_dict(unit)
@@ -213,15 +215,26 @@ def update_unit(db: Session, a: Actor, unit_id: str, body: dict) -> dict:
     c.require_scope(db, a, space, k.MATERIAL_MANAGE_ASSIGNED)
     c.require_writable(space)
     was_published = unit.published
-    for name in ("title", "position", "published"):
-        if name in body and body[name] is not None:
+    for name in ("title", "published"):
+        if body.get(name) is not None:
             setattr(unit, name, body[name])
+    if body.get("position") is not None:
+        _move(db, space.id, unit, body["position"])
     action = "updated"
     if unit.published != was_published:
         action = "published" if unit.published else "unpublished"
     c.audit(db, a, f"content-unit.{action}", "content-unit", unit.id, a.organisation_id)
     db.commit()
     return unit_dict(unit)
+
+
+def _move(db: Session, space_id: str, unit: ContentUnit, position: int) -> None:
+    """Reorder: the unit goes to `position` among the space's units (the end if past it) and the others close up, so
+    positions stay 0..n-1."""
+    others = [u for u in repo.units(db, space_id) if u.id != unit.id]
+    others.insert(min(position, len(others)), unit)
+    for i, u in enumerate(others):
+        u.position = i
 
 
 # ---------------------------------------------------------------- course materials

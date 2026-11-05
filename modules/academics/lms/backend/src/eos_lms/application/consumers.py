@@ -174,7 +174,10 @@ def _assignment_ended(db: Session, org: str, p: dict, occurred_at: datetime) -> 
 # ---------------------------------------------------------------- enrolment-registration
 
 
-def _registration(db: Session, org: str, p: dict, occurred_at: datetime, status: str, section_field: str) -> str:
+def _registration(
+    db: Session, org: str, p: dict, occurred_at: datetime, status: str | None, section_field: str | None
+) -> str:
+    """A withdrawal names the section the registration had; it changes the status only."""
     row = _row(
         db,
         MemberRef,
@@ -187,7 +190,7 @@ def _registration(db: Session, org: str, p: dict, occurred_at: datetime, status:
     )
     if p.get("student_name") is not None:
         row.student_name = _text(p, "student_name", 200)
-    section = _id(p, section_field, required=False)
+    section = _id(p, section_field, required=False) if section_field else None
     if not _newer(row, occurred_at):
         return STALE
     if section is not None:
@@ -203,7 +206,8 @@ def _registration_confirmed(db: Session, org: str, p: dict, occurred_at: datetim
 
 
 def _registration_withdrawn(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
-    return _registration(db, org, p, occurred_at, "withdrawn", "section_id")
+    _id(p, "section_id", required=False)
+    return _registration(db, org, p, occurred_at, "withdrawn", None)
 
 
 def _section_changed(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
