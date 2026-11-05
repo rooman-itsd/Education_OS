@@ -9,3 +9,19 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `field-training.my-placement`, `hours-logged`, `trainees-to-assess`, `placements-open` and
   `active-placements`; events; permissions and generic roles.
 - PRD (`docs/prd.md`).
+- User stories (`docs/user-stories.md`): sites, openings, placements, logbook, assessments and completion,
+  self-service, widgets and the daily job, with the role table from `permissions.yaml`.
+- Backend (`eos_field_training`): all 30 operations of contract 0.1.0 in domain, application, infrastructure and api
+  layers; events to the outbox in the same transaction; an audit entry for every state change; row locks on the
+  opening (seats) and on every placement and log entry that changes status; business dates in Asia/Kolkata; the daily
+  job that starts assigned placements on their start date. Ids must be uuids, strings and numbers are bounded, dates
+  fall in 1900 to 9998 and NUL characters are refused (422, or 404 in the path), forged cursors start from the top, a
+  duplicate written past the check is a 409.
+- Migration `field_training_0001`: eight tables, each with `organisation_id` and the forced `tenant_isolation`
+  row-level-security policy.
+- Tests: domain rules, every user-story area, a 403 for every operation and role without its key, real academy-role
+  tokens, the keys each role holds through `permissions_for`, the cross-tenant leak test, refused inputs, the daily
+  job, and the migration against the models.
+- Widgets `field-training.my-placement`, `hours-logged`, `trainees-to-assess`, `placements-open` and
+  `active-placements` on `@eos/ui-kit`, each with one permission and tests for loading, empty, data and every error
+  state.
