@@ -14,7 +14,7 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   holds the student role's permissions through `extends`);
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (projects and field-training #339, productions #318, placement-career #337, and the inherited
- *   timetable-attendance, examinations, lms, transport and library ones). Entries whose module is built in an open
+ *   timetable-attendance, examinations and lms ones, and transport and library until they are enabled). Entries whose module is built in an open
  *   pull request already carry that widget's texts, so the journey starts checking them the day the module is enabled;
  * - data journey: a booking the student makes for a resource facility staff set up shows in
  *   facility-booking.my-bookings (the student has booking:create). The other widgets' journeys wait for their modules.
@@ -51,8 +51,26 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Could not load hostel notices",
     forbidden: "Could not load hostel notices",
   },
-  { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
-  { id: "library.loans", module: "campus-life/library", batch: "#338" },
+  {
+    // Texts of NoticesWidget.tsx in PR #473 (sprint batch #338), which is on main; the module is not enabled yet.
+    id: "transport.notices",
+    module: "campus-life/transport",
+    batch: "#338",
+    title: "Transport notices",
+    probe: "/transport/me/notices?limit=1",
+    empty: "No transport notices right now",
+    unavailable: "Transport data is not available yet.",
+  },
+  {
+    // Texts of LoansWidget.tsx in PR #476 (sprint batch #338), which is on main; the module is not enabled yet.
+    id: "library.loans",
+    module: "campus-life/library",
+    batch: "#338",
+    title: "Library loans",
+    probe: "/library/me/loans",
+    empty: "No books on loan",
+    unavailable: "Library data is not available yet.",
+  },
   // The engineering student's own widgets.
   { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
   { id: "projects.milestones-due", module: "practice/projects", batch: "#339" },
