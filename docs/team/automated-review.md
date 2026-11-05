@@ -38,3 +38,11 @@ Settings → Secrets and variables → Actions:
 ## For authors
 The review reads like a human's: fix the findings, push, and the next run re-reviews and re-approves. If the
 verdict is wrong, say so on the PR; the prompt in `auto-review.yml` is where the rules live.
+
+## Automatic merging
+`.github/workflows/auto-merge.yml` runs on GitHub every 10 minutes, after every review and after every CI run. It
+merges (squash) each pull request that is based on main, not a draft, approved by someone other than its author,
+has no reviewer whose latest review is "changes requested", no unresolved review thread, satisfies branch
+protection, and has no failed check on its latest commit (the end-to-end journeys included). It works whether or not
+anyone's computer is on. After merging it starts `web.yml` (the site) and `system.yml` (the journeys) on main,
+because merges made with the workflow's token do not start push workflows by themselves.

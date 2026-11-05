@@ -99,3 +99,39 @@ export async function getMyOfferings(signal?: AbortSignal): Promise<MyOfferings>
 export function getRoster(courseOfferingId: string, limit = 200, signal?: AbortSignal): Promise<RosterPage> {
   return get<RosterPage>(`/offerings/${encodeURIComponent(courseOfferingId)}/roster?limit=${limit}`, signal);
 }
+
+/** components.schemas.FacultyLoad. */
+export interface FacultyLoad {
+  faculty_id: string;
+  faculty_name: string;
+  offerings_count: number;
+  contact_hours: number;
+  over_load: boolean;
+}
+
+/** components.schemas.FacultyLoadReport, the 200 body of GET /faculty-load (operationId getFacultyLoad). */
+export interface FacultyLoadReport {
+  academic_period_id: string;
+  academic_period_code: string;
+  academic_period_name: string;
+  department_id?: string | null;
+  max_weekly_contact_hours: number;
+  faculty_count: number;
+  over_load_count: number;
+  items: FacultyLoad[];
+}
+
+/**
+ * GET /faculty-load: teaching load per faculty member for the active term, over-load first. Permission
+ * academic-management:faculty-load:read. For a department admin the server narrows it to their department, so the
+ * widget sends no department_id. The contract answers 404 `active_term_not_found` when no term is active; for the
+ * widget that is "nothing to show yet", not a failure, so it becomes `null`.
+ */
+export async function getFacultyLoad(signal?: AbortSignal): Promise<FacultyLoadReport | null> {
+  try {
+    return await get<FacultyLoadReport>("/faculty-load", signal);
+  } catch (e) {
+    if (e instanceof AcademicManagementApiError && e.status === 404) return null;
+    throw e;
+  }
+}
