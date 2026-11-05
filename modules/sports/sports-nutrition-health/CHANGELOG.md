@@ -25,3 +25,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   reviews-due filter skips closed plans; only active plans are reviewed; a scheduled appointment must be in the future
   and no-show waits for its time; a late, older registration event no longer moves an athlete link; pydantic and PyJWT
   declared; the athlete reassignment risk recorded in the README.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/sports-nutrition-health`) and
+  `apps/frontend/config/modules.enabled.yaml` (widgets `nutrition-plan`, `injured-athletes`, `appointments-today`,
+  `athletes-on-plans` and `plan-reviews-due`) (#330).
