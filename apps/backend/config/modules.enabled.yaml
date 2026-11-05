@@ -22,6 +22,7 @@ modules:
   - practice/selection-process
   - practice/portfolio
   - sports/athlete-performance
+  - sports/sports-nutrition-health
   - sports/tournament-events
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions

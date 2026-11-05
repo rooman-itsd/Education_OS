@@ -4,7 +4,7 @@ name: library
 kind: feature              # feature | platform | integration
 domain: campus-life
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
+version: 0.2.0
 status: in-progress         # planned | in-progress | stable | deprecated
 description: "Catalogue, circulation, digital library, fines, reservations."
 owners: [tejaswini-rooman]              # GitHub handles. Keep in sync with CODEOWNERS.
@@ -21,7 +21,10 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  # Agreed with fees-accounts on #175: when fines are invoiced there, the paid invoice marks the fine paid
+  # (source_module library, source_reference the fine id). Handler: backend/src/eos_library/application/consumers.py.
+  - fees-accounts.invoice.paid
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
