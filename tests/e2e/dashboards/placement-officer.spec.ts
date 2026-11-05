@@ -25,8 +25,26 @@ const TITLE = "Placement Officer";
 const WIDGETS: LayoutWidget[] = [
   { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
   // The staff view of openings (#424 splits it from the learner widget placement-career.openings).
-  { id: "placement-career.openings-summary", module: "campus-life/placement-career", batch: "#337" },
-  { id: "placement-career.drives", module: "campus-life/placement-career", batch: "#337" },
+  {
+    id: "placement-career.openings-summary",
+    module: "campus-life/placement-career",
+    batch: "#337",
+    title: "Placement openings",
+    probe: "/placement-career/reports/openings-summary?limit=1",
+    empty: "No openings yet",
+    unavailable: "Placement data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
+  {
+    id: "placement-career.drives",
+    module: "campus-life/placement-career",
+    batch: "#337",
+    title: "Upcoming drives",
+    probe: "/placement-career/reports/drives-upcoming?limit=1",
+    empty: "No drives scheduled",
+    unavailable: "Placement data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   { id: "productions.calendar", module: "practice/productions", batch: "#318" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);

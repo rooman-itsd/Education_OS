@@ -104,7 +104,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing on loan",
     unavailable: "Inventory data is not available yet.",
   },
-  { id: "placement-career.openings", module: "campus-life/placement-career", batch: "#337" },
+  {
+    id: "placement-career.openings",
+    module: "campus-life/placement-career",
+    batch: "#337",
+    title: "Job openings",
+    probe: "/placement-career/me/openings?limit=1",
+    empty: "No openings right now",
+    unavailable: "Placement data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
