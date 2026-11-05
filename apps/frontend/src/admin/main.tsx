@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './admin.css';
+import { registerServiceWorker } from '../pwa/register';
+
+// Installable, and its pages open offline (public/sw.js); API data is never stored on the device.
+registerServiceWorker();
 
 // Click ripple for every button in the app
 document.addEventListener('pointerdown', (e) => {

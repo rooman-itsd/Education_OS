@@ -4,14 +4,16 @@ name: nad
 kind: integration              # feature | platform | integration
 domain: integrations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "National Academic Depository adapter for academic records."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+version: 0.2.0
+status: in-progress       # planned | in-progress | stable | deprecated
+description: "National Academic Depository and Academic Bank of Credits adapter: awards, credits and APAAR ids."
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
+# integration-hub owns the port this adapter implements, finds it by entry point, holds its connections and
+# secrets, and receives every provider callback for it. documents: the upload files it prepares and the award PDFs.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, integration-hub, documents]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -19,6 +21,10 @@ exposes:
   api: contracts/openapi.yaml
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
+  # Copies of what integration-hub defines; identical to platform/integration-hub/contracts/ports/.
+  ports:
+    - contracts/ports/adapter.yaml
+    - contracts/ports/academic-records.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
 consumes_events: []
