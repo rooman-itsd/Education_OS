@@ -26,6 +26,7 @@ modules:
   - practice/portfolio
   - sports/athlete-performance
   - sports/tournament-events
+  - sports/sports-nutrition-health
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
