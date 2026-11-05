@@ -21,11 +21,11 @@ the Education OS team, and nothing is wrong with your account.
 
 ## What you can do
 
-### Start each day with your panels
+### Link your application
 
-Open your dashboard each morning and read each panel from the top. They show the few things you most need today.
+If Application status is empty, enter the reference number and email of your submitted application to link it to your account. Then Pending documents shows what still has to be verified.
 
 ## Not sure?
 
-Ask your teacher or supervisor about your work, the facility staff about bookings and loans, the accounts office about
-fees, and your organisation admin about anything on your dashboard that looks wrong or missing.
+Ask the admissions office about your application and documents, the accounts office about the application fee, and your
+organisation admin if a panel looks wrong or is missing.
