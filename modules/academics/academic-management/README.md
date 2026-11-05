@@ -5,7 +5,7 @@
 **Status:** in progress (issue #100). Built: domain rules, persistence (prefixed tables, row-level security, own
 Alembic chain), every operation of `contracts/openapi.yaml`, event publishing through the shared outbox, an audit
 entry for every state change (module-local until the audit SDK ships), the roster read model and the
-`academic-management.course-roster` widget. Outstanding shared work (envelope version, audit SDK,
+`academic-management.course-roster` and `academic-management.faculty-load` widgets. Outstanding shared work (envelope version, audit SDK,
 error format, backend module loader, HoD department claim, faculty-name lookup): [docs/prd.md](docs/prd.md) section 13.
 
 Programmes, curriculum, courses, credits, faculty-course assignment.
@@ -28,7 +28,7 @@ PYTHONPATH="src:../../../../packages/core/src:../../../../packages/testing/src" 
 (use `;` instead of `:` on Windows). With `PYTHONPATH=src` only, the domain and application tests run and the
 API, migration and tenancy tests are skipped.
 
-Frontend widget: `pnpm --filter @eos/academic-management test`.
+Frontend widgets: `pnpm --filter @eos/academic-management test`.
 
 ## Migrations
 ```

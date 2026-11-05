@@ -60,16 +60,31 @@ events:
       categories_disabled: array
       channels_disabled: array
 
+  - name: notification.job.finished
+    version: 1
+    description: >-
+      The outcome of a notification.recover-stuck run, for platform/scheduler, which closes the run
+      (see platform/scheduler/contracts/events.yaml). detail counts what the sweep found, re-drove,
+      failed, skipped and exhausted, or names the error class if the sweep itself failed.
+    payload:
+      run_id: uuid
+      outcome: string
+      detail: string
+
 # Events this module reacts to. Every name below is already published by code in this repo;
 # the notification each produces is listed in docs/prd.md.
 consumes:
   - tenancy.organisation.registered     # verification mail; replaces the live eos_core.notify stub
   - tenancy.organisation.verified       # awaiting operator approval
   - tenancy.organisation.approved       # academy is live, how to sign in
+  - tenancy.organisation.archived       # refused (pending_*), closed (active) or deletion scheduled (delete_after)
+  - tenancy.organisation.suspended      # refused (pending_*) or suspended (active)
+  - tenancy.organisation.activated      # reactivated (previous_status suspended or archived)
   - tenancy.package.requested           # package change requested
-  - tenancy.package.changed             # package change applied
+  - tenancy.package.changed             # package change applied (template tenancy.package.changed)
   - identity.user.created               # welcome, set your password
   - billing.subscription.started        # trial started, what it includes
   - billing.trial.expiring              # 7, 3 and 1 days before the trial ends
   - billing.trial.expired               # trial ended, how to upgrade
   - billing.subscription.upgraded       # plan changed, what is now available
+  - scheduler.job.due                   # notification.recover-stuck: retry due and abandoned messages

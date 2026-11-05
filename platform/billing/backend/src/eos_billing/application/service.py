@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from eos_core import events
 from eos_core.config import load_plans
@@ -9,10 +9,11 @@ from eos_core.db import scoped, utcnow
 from eos_core.settings import settings
 from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain.limits import PlanLimits
-from ..domain.models import Invoice, Plan, Subscription
+from ..domain.models import Invoice, Plan, Subscription, TrialReminder
 
 
 class BillingError(Exception):
@@ -235,7 +236,7 @@ def expire_trials(db: Session) -> int:
     with platform_scope():
         now = utcnow()
         for sub in db.scalars(select(Subscription).where(Subscription.status == "trialing")):
-            if sub.trial_ends_at and sub.trial_ends_at.replace(tzinfo=None) < now.replace(tzinfo=None):
+            if sub.trial_ends_at and _utc(sub.trial_ends_at) < now:
                 plan = get_plan(db, sub.plan_id)
                 sub.status = "read_only"
                 events.publish(
@@ -252,31 +253,64 @@ def expire_trials(db: Session) -> int:
 REMINDER_DAYS = (7, 3, 1)
 
 
+def _utc(moment: datetime) -> datetime:
+    """Stored times are UTC; SQLite hands them back naive, PostgreSQL in the session's time zone."""
+    return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+
+
+def due_threshold(days_left: int) -> int | None:
+    """The most urgent reminder due with days_left whole days to go: 7 from 7 to 4 days, 3 at 3 and 2, 1 at 1.
+    None before the first threshold and once the trial has ended (expire_trials takes over)."""
+    if days_left < 1:
+        return None
+    due = [t for t in REMINDER_DAYS if t >= days_left]
+    return min(due) if due else None
+
+
 def remind_trials(db: Session) -> int:
     """Run by the scheduler daily: billing.trial.expiring 7, 3 and 1 whole days (UTC) before a trial ends.
 
-    Delivery of the job is at-least-once, so a second run on the same day raises the same reminder again; its
-    `reminder_key` (organisation, trial end date, days left) lets a consumer send each reminder once."""
+    Each run raises, per trial, the most urgent threshold that is due and not raised yet (billing_trial_reminder).
+    A reminder missed on its day (the scheduler was down, the run failed) therefore goes out on the next run, with
+    the real days left; one superseded by a more urgent one is not sent late. A second run raises nothing again,
+    and two runs at once cannot both raise it (the row's unique key decides). The `reminder_key` (organisation,
+    trial end date, threshold) also lets a consumer send each reminder once."""
     n = 0
     with platform_scope():
         today = utcnow().date()
         for sub in db.scalars(select(Subscription).where(Subscription.status == "trialing")):
             if not sub.trial_ends_at:
                 continue
-            ends_on = sub.trial_ends_at.date()
+            ends_on = _utc(sub.trial_ends_at).date()
             days_left = (ends_on - today).days
-            if days_left in REMINDER_DAYS:
-                events.publish(
-                    db,
-                    "billing.trial.expiring",
-                    sub.organisation_id,
-                    {
-                        "organisation_id": sub.organisation_id,
-                        "days_left": days_left,
-                        "trial_ends_on": ends_on.isoformat(),
-                        "reminder_key": f"{sub.organisation_id}:{ends_on.isoformat()}:{days_left}",
-                    },
-                )
-                n += 1
+            threshold = due_threshold(days_left)
+            if threshold is None:
+                continue
+            try:
+                with db.begin_nested():
+                    db.add(
+                        TrialReminder(
+                            organisation_id=sub.organisation_id,
+                            trial_ends_on=ends_on.isoformat(),
+                            threshold=threshold,
+                            days_left=days_left,
+                        )
+                    )
+                    db.flush()
+            except IntegrityError:
+                continue  # raised already, by an earlier run or one running now
+            events.publish(
+                db,
+                "billing.trial.expiring",
+                sub.organisation_id,
+                {
+                    "organisation_id": sub.organisation_id,
+                    "days_left": days_left,
+                    "threshold": threshold,
+                    "trial_ends_on": ends_on.isoformat(),
+                    "reminder_key": f"{sub.organisation_id}:{ends_on.isoformat()}:{threshold}",
+                },
+            )
+            n += 1
         db.commit()
     return n

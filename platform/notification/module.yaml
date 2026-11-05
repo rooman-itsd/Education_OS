@@ -26,12 +26,17 @@ consumes_events:
   - tenancy.organisation.registered
   - tenancy.organisation.verified
   - tenancy.organisation.approved
+  - tenancy.organisation.archived       # refused, closed, or deletion scheduled
+  - tenancy.organisation.suspended      # refused or suspended
+  - tenancy.organisation.activated      # reactivated
   - tenancy.package.requested
-  - tenancy.package.changed
+  - tenancy.package.changed             # wired: template tenancy.package.changed
   - identity.user.created
   - billing.subscription.started
   - billing.trial.expired
   - billing.subscription.upgraded
+  - billing.trial.expiring
+  - scheduler.job.due
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

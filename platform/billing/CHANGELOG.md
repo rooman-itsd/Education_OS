@@ -3,7 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
-- Plan limits (contract 0.1.2): `plan_limits`, `user_limit` and `usage_vs_limits` in the application service,
+- Plan limits (contract 0.3.0): `plan_limits`, `user_limit` and `usage_vs_limits` in the application service,
   and `GET /usage` (permission `billing:subscription:read`) reporting usage against the plan's limits: users
   counted by identity (a declared dependency), students and storage `null` until a module counts them.
   apps/backend wires `user_limit` into identity's `hooks.user_limit`, so creating a user past the limit
@@ -15,6 +15,20 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   warning in the log, instead of a 500 on `POST /users` and `GET /usage`. `users` means staff accounts:
   usage counts them with identity's `count_staff_users` (learners left out); `students` stays null until
   counted.
+- Super admin report (contract 0.2.0, #346): `GET /admin/reports/subscriptions` on `platform:revenue:read`, the
+  catalogue key no route used yet: subscriptions per plan and status, monthly recurring revenue, paid invoices of
+  the last 30 days (both as decimal strings) and trials ending within 14 days with the organisation's name (from
+  the `eos.organisation_directory` entry point). Three Super Admin widgets read it: `billing.trials-expiring`,
+  `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes. Comped
+  subscriptions count as `comped`, not as recurring revenue; an unknown status counts as `other`; trials past their
+  end but not yet expired by the daily job are listed (negative `days_left`). A paid invoice on a deleted plan still counts
+  (its own row); trial dates are read in UTC whatever the connection's zone; the three widgets share one request.
+- A trial reminder missed on its day is sent on the next run (#316 follow-up). Reminders fired only when exactly
+  7, 3 or 1 days were left, so a day the scheduler missed lost that reminder. Chain `billing_0003` adds
+  `billing_trial_reminder` (one row per organisation, trial end and threshold; unique; RLS); each run raises the
+  most urgent due threshold with no row yet, so a missed reminder goes out with the real days left, a superseded
+  one is not sent late, and no run raises one twice. `billing.trial.expiring` gains `threshold` (additive);
+  `reminder_key` keeps its format. Trial end dates are counted in UTC whatever offset the database returns.
 - Scheduled jobs for platform/scheduler (#316): `billing.expire-trials` (daily 00:15 UTC) and
   `billing.trial-reminders` (daily 06:00 UTC), declared on the `eos.scheduler_jobs` entry point and run from
   `scheduler.job.due` (consumer on `eos.event_consumers`); each reports `billing.job.finished`.

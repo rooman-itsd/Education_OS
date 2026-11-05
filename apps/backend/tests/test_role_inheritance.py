@@ -60,27 +60,10 @@ LEARNER_GAP = (
     "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # alumni: empty catalogue (alumni module, batch #337)
+    # alumni: backed now (alumni-mentee on management-student, #422); the empty entry goes after #424 (batch #337)
     "alumni": (
-        EMPTY,
-        [
-            "management-student alumni.mentoring",
-        ],
-    ),
-    # placement-career: empty catalogue (placement-career module, batch #337)
-    "placement-career": (
-        EMPTY,
-        [
-            "engineering-student placement-career.openings",
-            "hospitality-trainee placement-career.openings",
-            "industry-coordinator placement-career.openings",
-            "industry-liaison placement-career.openings",
-            "law-student placement-career.openings",
-            "management-student placement-career.openings",
-            "placement-officer placement-career.openings",
-            "placement-officer placement-career.drives",
-            "practicum-coordinator placement-career.openings",
-        ],
+        "nothing unbacked: management-student holds alumni-mentee (#422)",
+        [],
     ),
     # productions: empty catalogue (productions module, batch #318)
     "productions": (
@@ -120,19 +103,6 @@ KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
             "stage-manager productions.calendar",
             "stage-manager productions.upcoming",
             "studio-instructor productions.in-preparation",
-        ],
-    ),
-    # selection-process: no role fits (selection-process module owner (P2 sprint batch, issues 116/117/106))
-    "selection-process": (
-        LEARNER_GAP,
-        [
-            "actor selection-process.upcoming",
-            "artist selection-process.upcoming",
-            "dancer selection-process.upcoming",
-            "designer selection-process.upcoming",
-            "law-student selection-process.upcoming",
-            "musician selection-process.upcoming",
-            "research-scholar selection-process.my-applications",
         ],
     ),
 }

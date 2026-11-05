@@ -47,8 +47,26 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Could not load hostel notices",
     forbidden: "Could not load hostel notices",
   },
-  { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
-  { id: "library.loans", module: "campus-life/library", batch: "#338" },
+  {
+    // Texts of NoticesWidget.tsx in PR #473 (sprint batch #338).
+    id: "transport.notices",
+    module: "campus-life/transport",
+    batch: "#338",
+    title: "Transport notices",
+    probe: "/transport/me/notices?limit=1",
+    empty: "No transport notices right now",
+    unavailable: "Transport data is not available yet.",
+  },
+  {
+    // Texts of LoansWidget.tsx in PR #476 (sprint batch #338).
+    id: "library.loans",
+    module: "campus-life/library",
+    batch: "#338",
+    title: "Library loans",
+    probe: "/library/me/loans",
+    empty: "No books on loan",
+    unavailable: "Library data is not available yet.",
+  },
   // The scholar's own widgets.
   { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
   { id: "projects.milestones-due", module: "practice/projects", batch: "#339" },
@@ -62,7 +80,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Portfolio data is not available yet.",
   },
   { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
-  { id: "selection-process.my-applications", module: "practice/selection-process", batch: "#322" },
+  {
+    id: "selection-process.my-applications",
+    module: "practice/selection-process",
+    batch: "#322",
+    title: "My Applications",
+    probe: "/selection-process/processes?status=open&page_size=5",
+    empty: "No active applications",
+    unavailable: "Application data is not available yet.",
+  },
   {
     id: "budget-grants.my-grants",
     module: "finance-operations/budget-grants",

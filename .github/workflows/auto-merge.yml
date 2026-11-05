@@ -1,0 +1,74 @@
+# Merges approved pull requests on GitHub's side, whether or not anyone's computer is on
+# (docs/team/automated-review.md). Runs every 10 minutes, after every review, and after every CI run.
+#
+# A pull request is merged when all of these hold:
+#   - it is open, not a draft, and based on main;
+#   - someone other than its author approved it, and no reviewer's latest review is "changes requested";
+#   - no review thread is unresolved;
+#   - GitHub says it can merge (branch protection satisfied: code owners, required checks) and no check on its
+#     latest commit has failed, required or not (the end-to-end journeys included).
+# Merges are squash merges. A merge made with this workflow's token does not start push workflows on main, so the
+# job starts web.yml (publishes the site) and system.yml (end-to-end journeys) on main itself afterwards.
+name: auto-merge
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: [api, web, governance, system, auto-review]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-merge
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  checks: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge every pull request that is ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          merged=0
+          for n in $(gh pr list -R "$REPO" --state open --base main --limit 100 --json number,isDraft --jq '.[] | select(.isDraft|not) | .number' | sort -n); do
+            info=$(gh pr view "$n" -R "$REPO" --json author,reviews,mergeStateStatus,headRefOid)
+            author=$(echo "$info" | jq -r .author.login)
+            ok=$(echo "$info" | jq --arg a "$author" '
+              ([.reviews[] | select(.author.login != $a and (.state=="APPROVED" or .state=="CHANGES_REQUESTED" or .state=="DISMISSED"))]
+               | group_by(.author.login) | map(max_by(.submittedAt).state)) as $latest
+              | ([.reviews[] | select(.author.login != $a and .state=="APPROVED")] | length > 0)
+                and (($latest | index("CHANGES_REQUESTED")) | not)')
+            [ "$ok" = true ] || continue
+            state=$(echo "$info" | jq -r .mergeStateStatus)
+            case "$state" in CLEAN|BEHIND|HAS_HOOKS) ;; *) echo "#$n: $state, not mergeable yet"; continue;; esac
+            threads=$(gh api graphql -f query="{ repository(owner:\"${REPO%/*}\", name:\"${REPO#*/}\") { pullRequest(number:$n) { reviewThreads(first:100){ nodes { isResolved } } } } }" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)] | length')
+            [ "$threads" = 0 ] || { echo "#$n: $threads unresolved review threads"; continue; }
+            head=$(echo "$info" | jq -r .headRefOid)
+            bad=$(gh api "repos/$REPO/commits/$head/check-runs?per_page=100" --jq '[.check_runs[]] | group_by(.name) | map(max_by(.id)) | map(select(.status!="completed" or (.conclusion as $c | ["success","skipped","neutral"] | index($c) | not))) | map(.name) | join(",")')
+            [ -z "$bad" ] || { echo "#$n: checks not green yet: $bad"; continue; }
+            if gh pr merge "$n" -R "$REPO" --squash --delete-branch --match-head-commit "$head"; then
+              echo "#$n merged"; merged=$((merged + 1))
+            else
+              echo "#$n: merge refused (see above)"
+            fi
+          done
+          echo "merged=$merged" >> "$GITHUB_ENV"
+      - name: Publish the site and run the journeys on main
+        if: env.merged != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run web.yml -R "${{ github.repository }}" --ref main
+          gh workflow run system.yml -R "${{ github.repository }}" --ref main
