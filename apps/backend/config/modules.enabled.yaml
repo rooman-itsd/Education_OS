@@ -9,7 +9,9 @@
 # here); its router is eos_<name>.api.router:router and its Alembic chain, if any, is <entry>/db.
 modules:
   - academics/academic-management
+  - academics/examinations
   - campus-life/hostel
+  - campus-life/library
   - campus-life/transport
   - facilities/asset-management
   - facilities/facility-booking
@@ -23,6 +25,7 @@ modules:
   - finance-operations/procurement
   - practice/selection-process
   - practice/portfolio
+  - practice/productions
   - practice/skill-progress
   - sports/athlete-performance
   - sports/sports-nutrition-health
