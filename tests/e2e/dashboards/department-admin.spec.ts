@@ -12,10 +12,10 @@ import { expectBody, probe, shipped, signIn, waitingFor, widget, type LayoutWidg
  *   its empty state, or says its data is not available while the backend is missing;
  * - widgets of modules not enabled or not built yet are skipped, naming the module and the sprint batch.
  *
- * Four of the five widgets are somebody else's build: academic-management.faculty-load is #326,
- * timetable-attendance.department-attendance and examinations.results-summary are #325 (both modules are
- * scaffolds today), and workflow.approvals-pending and reporting.department-reports exist but their platform
- * services stay disabled until the remediation PRs of #317 merge. Until then this spec asserts the layout and
+ * Two of the five widgets are somebody else's build, #325: timetable-attendance.department-attendance and
+ * examinations.results-summary (neither exists yet). academic-management.faculty-load shipped in #466 and is
+ * checked like any shipped widget; workflow.approvals-pending and reporting.department-reports exist but their
+ * platform services stay disabled until the remediation PRs of #317 merge. Until then this spec asserts the layout and
  * the sign-in, and each skip names what is missing — which is the point: it fails the day one of them ships
  * broken, rather than silently passing.
  *
@@ -36,7 +36,19 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No pending approvals",
     unavailable: "Workflow data is not available yet.",
   },
-  { id: "academic-management.faculty-load", module: "academics/academic-management", batch: "#326" },
+  {
+    // Texts of FacultyLoad.tsx (academic-management, merged in #466). A new organisation has no active term:
+    // GET /faculty-load answers 404 active_term_not_found, which the widget's client turns into "No active term".
+    id: "academic-management.faculty-load",
+    module: "academics/academic-management",
+    batch: "#466",
+    title: "Faculty load",
+    probe: "/academic-management/faculty-load",
+    empty: "No active term",
+    emptyCode: "active_term_not_found",
+    unavailable: "No active term",
+    forbidden: "You do not have access to faculty load.",
+  },
   { id: "timetable-attendance.department-attendance", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.results-summary", module: "academics/examinations", batch: "#325" },
   {
@@ -108,7 +120,8 @@ test.fixme("workflow.approvals-pending lists a request waiting for this head of 
 });
 
 test.fixme("academic-management.faculty-load shows the teaching load of the department's faculty", async () => {
-  // modules/academics/academic-management (sprint batch #326).
+  // modules/academics/academic-management (#466). Needs an active term, offerings and faculty assignments; the
+  // widget's own tests cover the list, this journey covers the empty and "no active term" states.
 });
 
 test.fixme("timetable-attendance.department-attendance shows this week's attendance for the department", async () => {
