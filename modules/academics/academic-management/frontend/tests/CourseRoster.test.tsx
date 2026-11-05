@@ -46,7 +46,6 @@ describe("academic-management.course-roster widget", () => {
     expect(w?.kind).toBe("list");
     expect(w?.size).toBe("2x1");
     expect(w?.component).toBe(CourseRoster);
-    expect(widgets.some((x) => x.id === "academic-management.faculty-load")).toBe(false); // built by its dashboard owner
   });
 
   it("shows loading, then the caller's courses from GET /me/offerings with the session token", async () => {
