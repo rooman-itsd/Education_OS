@@ -79,7 +79,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No portfolio items yet",
     unavailable: "Portfolio data is not available yet.",
   },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   {
     id: "selection-process.my-applications",
     module: "practice/selection-process",

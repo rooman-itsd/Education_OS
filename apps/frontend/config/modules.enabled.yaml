@@ -26,6 +26,7 @@ modules:
   - finance-operations/procurement
   - practice/selection-process
   - practice/portfolio
+  - practice/productions
   - practice/skill-progress
   - sports/athlete-performance
   - sports/sports-nutrition-health
