@@ -1,0 +1,15 @@
+# Permission catalogue for digilocker. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Issuing is done by the consuming module under its own permissions, through the certificate-issuance port.
+# Connection settings and credentials are integration-hub's (integration-hub:connection:manage). This catalogue covers
+# only the read-only operator view. Whether examination staff should also hold it is docs/prd.md open question 7.
+module: digilocker
+permissions:
+  - key: digilocker:issuance:read
+    description: See what the organisation issued through DigiLocker, with status and pull history; no document content.
+roles:
+  - name: org-admin
+    description: Support view of issued documents.
+    grants:
+      - digilocker:issuance:read
