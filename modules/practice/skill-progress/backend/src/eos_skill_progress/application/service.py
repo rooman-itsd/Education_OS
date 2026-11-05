@@ -423,7 +423,7 @@ def list_assessments(db: Session, actor: Actor, filters: dict, limit: int, offse
     learner_id = _learner_filter(actor, filters.get("learner_id"))
     if learner_id:
         q = q.where(Assessment.learner_id == learner_id)
-    for name in ("evaluator_id", "skill_id"):
+    for name in ("evaluator_id", "skill_id", "status"):
         if filters.get(name):
             q = q.where(getattr(Assessment, name) == filters[name])
     if filters.get("from_date"):
@@ -578,6 +578,39 @@ def void_assessment(db: Session, actor: Actor, assessment_id: str) -> dict:
 
 
 # ---------------------------------------------------------------- progress and timeline
+
+
+def framework_summary(db: Session, actor: Actor) -> dict:
+    """Per framework: the learners assessed, and how many learner-skill pairs currently sit at each level (the level
+    of the pair's latest counted assessment). The whole organisation, so a learner-only caller is refused."""
+    if actor.self_only:
+        raise ServiceError(403, "forbidden", "this summary covers every learner; it is not available to learners")
+    rows = list(db.scalars(repo.query(db, Assessment).where(Assessment.status.in_(list(rules.COUNTED)))))
+    latest: dict[tuple[str, str], Assessment] = {}
+    for a in sorted(rows, key=lambda x: (as_utc(x.assessed_at), as_utc(x.created_at), x.id)):
+        latest[(a.learner_id, a.skill_id)] = a
+    skills = repo.skills_by_id(db, {a.skill_id for a in rows})
+    frameworks = {f.id: f for f in db.scalars(repo.query(db, Framework))}
+    learners: dict[str, set[str]] = {}
+    levels: dict[str, dict[str, tuple[int, int]]] = {}  # framework -> level -> (rank, count)
+    for (learner, skill_id), a in latest.items():
+        fid = skills[skill_id].framework_id
+        learners.setdefault(fid, set()).add(learner)
+        rank, count = levels.setdefault(fid, {}).get(a.level_achieved, (a.level_rank, 0))
+        levels[fid][a.level_achieved] = (rank, count + 1)
+    items = [
+        {
+            "framework_id": fid,
+            "framework_title": frameworks[fid].title,
+            "learners_assessed": len(learners[fid]),
+            "levels": [
+                {"level": name, "count": count}
+                for name, (_, count) in sorted(levels[fid].items(), key=lambda kv: (kv[1][0], kv[0]))
+            ],
+        }
+        for fid in sorted(learners, key=lambda i: (frameworks[i].title, i))
+    ]
+    return {"items": items}
 
 
 def learner_progress(db: Session, actor: Actor, learner_id: str, framework_id: str | None) -> dict:

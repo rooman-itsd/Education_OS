@@ -26,6 +26,41 @@ export interface LearnerProgressSummary {
   current_skills: SkillProficiencyStatus[];
 }
 
+/** contract AssessmentRecord, the fields the widgets read */
+export interface Assessment {
+  id: string;
+  learner_id: string;
+  evaluator_id: string;
+  skill_id: string;
+  assessed_at: string;
+  overall_score: number;
+  level_achieved: string;
+  status?: "submitted" | "verified" | "voided";
+}
+
+/** contract Skill, the fields the widgets read */
+export interface Skill {
+  id: string;
+  title: string;
+}
+
+/** The list shape of GET /assessments and GET /skills */
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+/** contract FrameworkSummaryReport */
+export interface FrameworkSummary {
+  framework_id: string;
+  framework_title: string;
+  learners_assessed: number;
+  levels: { level: string; count: number }[];
+}
+export interface FrameworkSummaryReport {
+  items: FrameworkSummary[];
+}
+
 const API_BASE = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_URL ?? "/api/v1";
 const TOKEN_KEY = "eos.token";
 
@@ -58,6 +93,21 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
 /** GET /me/progress: the caller's latest level on every skill they were assessed on. Permission skill-progress:progress:read. */
 export function getMyProgress(signal?: AbortSignal): Promise<LearnerProgressSummary> {
   return get<LearnerProgressSummary>("/me/progress", signal);
+}
+
+/** GET /assessments?status=submitted: recorded and waiting for verification, newest first. Permission skill-progress:assessment:read. */
+export function listAssessmentsToVerify(limit: number, signal?: AbortSignal): Promise<Page<Assessment>> {
+  return get<Page<Assessment>>(`/assessments?status=submitted&limit=${limit}`, signal);
+}
+
+/** GET /skills: the titles the assessments refer to. Permission skill-progress:framework:read. */
+export function listSkills(signal?: AbortSignal): Promise<Page<Skill>> {
+  return get<Page<Skill>>("/skills?limit=100", signal);
+}
+
+/** GET /reports/framework-summary: learners assessed and skills at each level, per framework. Permission skill-progress:progress:read. */
+export function getFrameworkSummary(signal?: AbortSignal): Promise<FrameworkSummaryReport> {
+  return get<FrameworkSummaryReport>("/reports/framework-summary", signal);
 }
 
 /** "12 Oct"; "—" when the value is missing or not a date. */
