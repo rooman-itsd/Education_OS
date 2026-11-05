@@ -1,10 +1,12 @@
 """Discussion threads, posts and moderation (FR-14, FR-15)."""
 
-from conftest import FACULTY, NOW, STUDENT, audit_actions, outbox
+from datetime import timedelta
+
+from conftest import FACULTY, NOW, STUDENT, audit_actions, outbox, set_clock
 from eos_lms.infrastructure.models import new_id
 
 
-def test_threads_and_posts(course):
+def test_threads_and_posts(course, monkeypatch):
     c = course
     base = f"/course-spaces/{c.space['id']}/threads"
     t = c.post(base, {"title": "Help with loops", "body": "Why?"}, 201, c.student)
@@ -20,9 +22,11 @@ def test_threads_and_posts(course):
         }
     ]
     c.post(f"/threads/{t['id']}/posts", {"body": "Because"}, 201, c.teacher)
+    set_clock(monkeypatch, NOW + timedelta(minutes=5))
     c.post(f"/threads/{t['id']}/posts", {"body": "Thanks"}, 201, c.student_b)
     listed = c.get(base, c.student2)
     assert listed["total"] == 1 and listed["items"][0]["post_count"] == 2
+    assert listed["items"][0]["last_activity_at"] == (NOW + timedelta(minutes=5)).isoformat()
     page = c.get(f"/threads/{t['id']}?limit=1", c.student2)
     assert page["total"] == 2 and [p["body"] for p in page["posts"]] == ["Because"]
     assert c.get(f"/threads/{t['id']}?limit=1&offset=1", c.student2)["posts"][0]["body"] == "Thanks"
