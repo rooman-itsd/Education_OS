@@ -1,10 +1,693 @@
 openapi: 3.1.0
 info:
   title: integration-hub API
-  version: 0.1.0
-  description: "Adapter registry, data exchange (XML / JSON / CSV), webhooks, retries."
+  version: 0.2.0
+  description: >-
+    The ports between Education OS and outside systems, and the one place their connections are configured and
+    watched. See docs/prd.md. Modules never call this HTTP API to use a port: they call
+    sdk.integrations.invoke(port, operation, input, idempotency_key) from packages/sdk, which runs the operation on the
+    organisation's enabled connection for that port (contracts/ports/*.yaml). What is exposed over HTTP is
+    configuration (connections, credentials, mode), people linking their own accounts, provider callbacks, health
+    and the delivery log.
+
+
+    Credentials are write-only. They go to the secret store (INTEGRATION_HUB_SECRET_BACKEND), never to the database;
+    the database keeps a reference, a fingerprint and dates. No endpoint returns a secret, masked or otherwise.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor; 401 signature_invalid, state_invalid; 404 not_found;
+    409 adapter_not_installed, provider_not_offered, connection_exists, connection_disabled, credentials_missing,
+    health_check_failed, live_not_allowed, link_exists, not_retryable; 413 payload_too_large; 422 invalid_settings,
+    invalid_mode, unknown_credential, mock_not_allowed, invalid_return_url. Each response lists the codes it can return.
 servers:
   - url: /api/v1/integration-hub
-paths: {}
+
+paths:
+  /ports:
+    get:
+      summary: The ports and their versions, with the adapters that implement each. Permission integration-hub:adapter:read.
+      operationId: listPorts
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Port" } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /adapters:
+    get:
+      summary: >-
+        Installed adapters (the registry, from each adapter's describe()), the providers each offers and the modes and
+        auth each provider supports. Permission integration-hub:adapter:read.
+      operationId: listAdapters
+      parameters:
+        - { name: port, in: query, schema: { $ref: "#/components/schemas/PortId" } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Adapter" } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /connections:
+    get:
+      summary: The organisation's connections. Never returns a credential. Permission integration-hub:connection:read.
+      operationId: listConnections
+      parameters:
+        - { name: port, in: query, schema: { $ref: "#/components/schemas/PortId" } }
+        - { name: adapter, in: query, schema: { type: string } }
+        - { name: enabled, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Connection" } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      summary: >-
+        Create a connection for one adapter, provider and port, in mock or sandbox mode and disabled. A port may have
+        several connections (a sandbox and a live one, or one per partner institution) but only one enabled connection
+        per port and provider. Publishes integration-hub.connection.created. Permission integration-hub:connection:manage.
+      operationId: createConnection
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ConnectionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: "adapter_not_installed, provider_not_offered, connection_exists", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "invalid_settings, invalid_mode, mock_not_allowed", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /connections/{id}:
+    get:
+      summary: One connection with its last health result. Permission integration-hub:connection:read.
+      operationId: getConnection
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      summary: >-
+        Change the display name or the non-secret settings. Settings are validated against the provider's
+        settings_schema. Publishes integration-hub.connection.updated. Permission integration-hub:connection:manage.
+      operationId: updateConnection
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ConnectionUpdateInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { description: invalid_settings, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /connections/{id}/credentials:
+    get:
+      summary: >-
+        Which credentials are set: name, fingerprint (first 8 hex of SHA-256), set_at, set_by, expires_at. Never the
+        value. Permission integration-hub:connection:read.
+      operationId: listCredentials
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/CredentialStatus" } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /connections/{id}/credentials/{name}:
+    put:
+      summary: >-
+        Set or rotate one credential. The value is written to the secret store and never stored in the database,
+        logged, audited or returned; the audit record carries the name and fingerprint only. Publishes
+        integration-hub.connection.credentials-rotated. Permission integration-hub:connection:manage.
+      operationId: setCredential
+      parameters: [{ $ref: "#/components/parameters/Id" }, { name: name, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,63}$" } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CredentialInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CredentialStatus" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { description: unknown_credential, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    delete:
+      summary: Remove one credential from the secret store. An enabled connection that needs it is disabled. Permission integration-hub:connection:manage.
+      operationId: deleteCredential
+      parameters: [{ $ref: "#/components/parameters/Id" }, { name: name, in: path, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Removed }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /connections/{id}/authorise:
+    post:
+      summary: >-
+        Start the provider's OAuth authorisation for an organisation-scope connection (an institution's Zoom, Webex or
+        Microsoft 365 tenant). Returns the provider's authorize URL; the admin approves there and the provider returns
+        to GET /oauth/callback/{adapter}. State is single use, bound to this connection and the caller, and expires in
+        INTEGRATION_HUB_OAUTH_STATE_TTL_S. Permission integration-hub:connection:manage.
+      operationId: authoriseConnection
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { return_url: { type: string, format: uri } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AuthoriseResponse" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "provider_not_offered (the provider does not use authorization code)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: invalid_return_url, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /connections/{id}/mode:
+    post:
+      summary: >-
+        Switch between mock, sandbox and live. Going live needs every credential the provider names, a healthy
+        healthcheck run in the same request, and confirm_live true; the provider's mode list must include live.
+        mock is refused unless INTEGRATION_HUB_ALLOW_MOCK is true (development and demo organisations only). Pending
+        deliveries made in the old mode are not replayed in the new one. Publishes integration-hub.connection.mode-changed.
+        Permission integration-hub:connection:go-live to go live; integration-hub:connection:manage otherwise.
+      operationId: setConnectionMode
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ModeInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "credentials_missing, health_check_failed, live_not_allowed", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: "invalid_mode, mock_not_allowed", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /connections/{id}/enable:
+    post:
+      summary: >-
+        Enable the connection, so the port routes this organisation's calls to it. Needs every credential and a
+        healthcheck that is not auth_failed. Disables any other enabled connection of the same port and provider.
+        Publishes integration-hub.connection.enabled. Permission integration-hub:connection:manage.
+      operationId: enableConnection
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "credentials_missing, health_check_failed", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /connections/{id}/disable:
+    post:
+      summary: >-
+        Disable the connection. New calls to its port answer not_configured; queued deliveries stay queued until it is
+        enabled again or they expire. Inbound requests are still verified and logged, and not processed. Publishes
+        integration-hub.connection.disabled. Permission integration-hub:connection:manage.
+      operationId: disableConnection
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Connection" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /connections/{id}/health:
+    get:
+      summary: The last healthcheck result. Permission integration-hub:connection:read.
+      operationId: getConnectionHealth
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: >-
+        Run the adapter's healthcheck now. Never sends, creates or changes anything at the provider. Limited to
+        INTEGRATION_HUB_HEALTH_RUNS_PER_HOUR per connection. Permission integration-hub:connection:read.
+      operationId: runConnectionHealth
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /oauth/callback/{adapter}:
+    get:
+      summary: >-
+        The provider returns the browser here after an organisation admin or a person approved access. Public by
+        necessity. The state must be one this hub issued, unexpired and unused; the code is exchanged with the stored
+        PKCE verifier, the tokens go to the secret store, and the browser is redirected to the return_url given at the
+        start (on a host in INTEGRATION_HUB_ALLOWED_RETURN_HOSTS) with ?status=connected or ?status=failed&code=<error code>.
+        Publishes integration-hub.connection.authorised or integration-hub.account-link.connected.
+      operationId: oauthCallback
+      security: []
+      parameters:
+        - { name: adapter, in: path, required: true, schema: { type: string } }
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        "302": { description: Redirect to the return_url }
+        "401": { description: state_invalid, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /me/account-links:
+    get:
+      summary: The caller's own account links (devices, document wallet), with status and freshness. Never a token. Permission integration-hub:self:link.
+      operationId: listMyAccountLinks
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/AccountLink" } } } } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      summary: >-
+        Link the caller's own account at a provider whose link_scope is person (a Garmin or Polar account, a DigiLocker
+        wallet). Uses the organisation's enabled connection for the port. Returns the provider's authorize URL; the
+        consent text and purpose are shown on our page before the redirect. Nobody can link an account for someone
+        else. Permission integration-hub:self:link.
+      operationId: createMyAccountLink
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLinkInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLinkStart" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: "connection_disabled (no enabled connection for the port and provider), link_exists, provider_not_offered", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "422": { description: invalid_return_url, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /me/account-links/{id}:
+    delete:
+      summary: >-
+        Disconnect one of the caller's links: revoke at the provider, delete the tokens from the secret store, and
+        publish integration-hub.account-link.revoked so the adapter deletes the data it collected under the link.
+        Permission integration-hub:self:link.
+      operationId: deleteMyAccountLink
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "204": { description: Revoked }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: "not_found (or not the caller's link)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /account-links:
+    get:
+      summary: >-
+        Account links in the organisation, for support: person id, provider, status, linked_at, last_synced_at. No
+        tokens and no collected data. Permission integration-hub:account-link:read.
+      operationId: listAccountLinks
+      parameters:
+        - { name: port, in: query, schema: { $ref: "#/components/schemas/PortId" } }
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/LinkStatus" } }
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLinkPage" } } } }
+        "400": { $ref: "#/components/responses/InvalidCursor" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /account-links/{id}/revoke:
+    post:
+      summary: >-
+        Revoke a person's link on their behalf (they left, or asked support). Same effect as the person disconnecting,
+        with the actor and reason audited. Permission integration-hub:account-link:revoke.
+      operationId: revokeAccountLink
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 3, maxLength: 500 } } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AccountLink" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /inbound/{adapter}:
+    post:
+      summary: >-
+        App-level provider callback, for providers that send every tenant's events to one URL per application (Strava,
+        Polar, Garmin, a Zoom Marketplace app). Public by necessity. The raw body (at most
+        INTEGRATION_HUB_INBOUND_MAX_BYTES) is kept, the adapter's verify_inbound decides accept, reject or handshake
+        and names the connection from the body, a redelivery (same dedupe key) is acknowledged and ignored, and the
+        request is acknowledged before any processing so the provider's deadline (2 to 5 seconds) is met. Processing
+        (parse_inbound, then events) runs in a job and is logged as an inbound delivery.
+      operationId: receiveAppInbound
+      security: []
+      parameters: [{ $ref: "#/components/parameters/Adapter" }]
+      requestBody: { $ref: "#/components/requestBodies/VendorPayload" }
+      responses:
+        "200": { description: "Acknowledged, or a handshake answer in the provider's own format" }
+        "204": { description: Acknowledged }
+        "401": { description: "signature_invalid (the status may be another the provider expects, e.g. 404 for Fitbit)" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: payload_too_large }
+    get:
+      summary: Subscription handshakes sent as GET (Strava hub.challenge, Fitbit verify). Answered by the adapter's verify_inbound. Public.
+      operationId: handshakeAppInbound
+      security: []
+      parameters: [{ $ref: "#/components/parameters/Adapter" }]
+      responses:
+        "200": { description: The handshake answer }
+        "204": { description: Verified }
+        "404": { description: Wrong verification code or unknown adapter }
+
+  /inbound/{adapter}/{connection_key}:
+    post:
+      summary: >-
+        Connection-level provider callback (a webhook an organisation registered with its own account: Zoom, Graph
+        change notifications, Webex, BigBlueButton). connection_key is a random 32-byte token per connection, not its
+        id, rotated with the webhook secret. Same handling as /inbound/{adapter}. Public.
+      operationId: receiveConnectionInbound
+      security: []
+      parameters: [{ $ref: "#/components/parameters/Adapter" }, { $ref: "#/components/parameters/ConnectionKey" }]
+      requestBody: { $ref: "#/components/requestBodies/VendorPayload" }
+      responses:
+        "200": { description: "Acknowledged, or a handshake answer" }
+        "202": { description: "Acknowledged (Graph expects 202)" }
+        "204": { description: Acknowledged }
+        "401": { description: signature_invalid }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: payload_too_large }
+    get:
+      summary: Connection-level GET handshakes and provider GET callbacks (BigBlueButton meetingEndedURL). Public.
+      operationId: handshakeConnectionInbound
+      security: []
+      parameters: [{ $ref: "#/components/parameters/Adapter" }, { $ref: "#/components/parameters/ConnectionKey" }]
+      responses:
+        "200": { description: The handshake answer }
+        "204": { description: Acknowledged }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /inbound/{adapter}/{connection_key}/{channel}:
+    post:
+      summary: >-
+        Provider requests that wait for an answer (DigiLocker's Pull URI and Pull Doc requests). The adapter's
+        verify_inbound then handle_provider_request answer synchronously from the adapter's own records, within
+        INTEGRATION_HUB_PROVIDER_REQUEST_TIMEOUT_S. The request and the status are logged as an inbound delivery; the
+        body of the answer is not kept. Public; the adapter's documentation describes each channel's format.
+      operationId: receiveProviderRequest
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/Adapter" }
+        - { $ref: "#/components/parameters/ConnectionKey" }
+        - { name: channel, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" } }
+      requestBody: { $ref: "#/components/requestBodies/VendorPayload" }
+      responses:
+        "200": { description: "The adapter's answer, in the provider's format (XML or JSON)" }
+        "401": { description: signature_invalid }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { description: payload_too_large }
+
+  /deliveries:
+    get:
+      summary: >-
+        The delivery log: every port operation (outbound) and every provider callback (inbound) for the organisation,
+        newest first, with status, attempts, error code and the calling module's reference. Never the payload.
+        Permission integration-hub:delivery:read.
+      operationId: listDeliveries
+      parameters:
+        - { name: connection_id, in: query, schema: { type: string, format: uuid } }
+        - { name: port, in: query, schema: { $ref: "#/components/schemas/PortId" } }
+        - { name: direction, in: query, schema: { type: string, enum: [outbound, inbound] } }
+        - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/DeliveryStatus" } } }
+        - { name: caller_module, in: query, schema: { type: string } }
+        - { name: caller_reference, in: query, schema: { type: string } }
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeliveryPage" } } } }
+        "400": { $ref: "#/components/responses/InvalidCursor" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /deliveries/{id}:
+    get:
+      summary: One delivery with its attempts (time, outcome, error code, duration). Never the payload. Permission integration-hub:delivery:read.
+      operationId: getDelivery
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DeliveryDetail" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /deliveries/{id}/retry:
+    post:
+      summary: >-
+        Try a dead-lettered or failed outbound delivery once more, with the same idempotency key, after its cause was
+        fixed (credentials, a provider outage). Refused for a delivery whose last error is not retryable unless the
+        connection changed since. Permission integration-hub:delivery:retry.
+      operationId: retryDelivery
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "202": { description: Queued, content: { application/json: { schema: { $ref: "#/components/schemas/Delivery" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "not_retryable (succeeded, in progress, or a non-retryable error and the connection is unchanged)", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /platform/overview:
+    get:
+      summary: >-
+        Super admin: per adapter and provider, how many organisations have a connection in each mode and health
+        status, platform credentials present or missing (names only), and dead-lettered deliveries in the last 24
+        hours. No organisation data beyond counts. Permission platform:integration-hub:admin.
+      operationId: platformOverview
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PlatformOverview" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Adapter: { name: adapter, in: path, required: true, schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,60}$" } }
+    ConnectionKey: { name: connection_key, in: path, required: true, schema: { type: string, pattern: "^[A-Za-z0-9_-]{43}$" } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+
+  requestBodies:
+    VendorPayload:
+      required: false
+      description: The provider's own payload, kept raw for signature verification. Its shape is the adapter's concern.
+      content:
+        application/json: { schema: { type: object, additionalProperties: true } }
+        application/xml: { schema: { type: string } }
+        application/x-www-form-urlencoded: { schema: { type: object, additionalProperties: true } }
+
+  schemas:
+    PortId:
+      type: string
+      enum: [certificate-issuance, academic-records, regulatory-submission, meetings, wearable-data, inter-institution-records]
+    Mode:
+      type: string
+      enum: [mock, sandbox, live]
+      description: mock = recorded provider responses, no network; sandbox = the provider's test environment; live = production.
+    HealthStatus:
+      type: string
+      enum: [not_checked, healthy, degraded, unreachable, auth_failed]
+    LinkStatus:
+      type: string
+      enum: [pending, active, expired, revoked, error]
+    DeliveryStatus:
+      type: string
+      enum: [queued, in_progress, succeeded, retry_scheduled, failed, dead_lettered, manual_action_required, rejected_inbound]
+
+    Port:
+      type: object
+      required: [id, name, version, operations, implemented_by]
+      properties:
+        id: { $ref: "#/components/schemas/PortId" }
+        name: { type: string, examples: ["Meetings"] }
+        version: { type: integer }
+        operations: { type: array, items: { type: object, required: [name, mode], properties: { name: { type: string }, mode: { type: string, enum: [sync, async] } } } }
+        implemented_by: { type: array, items: { type: string } }
+
+    Adapter:
+      type: object
+      required: [adapter, version, ports, providers]
+      properties:
+        adapter: { type: string, examples: ["video-conferencing"] }
+        version: { type: string }
+        ports: { type: array, items: { type: object, properties: { port: { $ref: "#/components/schemas/PortId" }, version: { type: integer } } } }
+        providers:
+          type: array
+          items:
+            type: object
+            required: [provider, title, ports, modes, auth, link_scope]
+            properties:
+              provider: { type: string, examples: ["zoom"] }
+              title: { type: string }
+              ports: { type: array, items: { $ref: "#/components/schemas/PortId" } }
+              modes: { type: array, items: { $ref: "#/components/schemas/Mode" } }
+              auth: { type: string, enum: [none, api_key, oauth2_client_credentials, oauth2_authorization_code, jwt_shared_secret, hmac_shared_secret] }
+              link_scope: { type: string, enum: [organisation, person] }
+              inbound: { type: array, items: { type: string, enum: [webhook, provider_request] } }
+              settings_schema: { type: object, description: JSON Schema of the connection's non-secret settings }
+              credential_names: { type: array, items: { type: string } }
+              platform_credentials_present: { type: boolean, description: "Whether the platform-level secrets this provider needs are configured. Names only to the super admin." }
+
+    ConnectionInput:
+      type: object
+      required: [adapter, provider, port, mode]
+      properties:
+        adapter: { type: string }
+        provider: { type: string }
+        port: { $ref: "#/components/schemas/PortId" }
+        mode: { type: string, enum: [mock, sandbox], description: "A connection starts in mock or sandbox; live is reached through POST /connections/{id}/mode" }
+        display_name: { type: string, maxLength: 120 }
+        settings: { type: object, additionalProperties: true }
+
+    ConnectionUpdateInput:
+      type: object
+      properties:
+        display_name: { type: string, maxLength: 120 }
+        settings: { type: object, additionalProperties: true }
+
+    Connection:
+      type: object
+      required: [id, adapter, provider, port, mode, enabled, health]
+      properties:
+        id: { type: string, format: uuid }
+        adapter: { type: string }
+        provider: { type: string }
+        port: { $ref: "#/components/schemas/PortId" }
+        mode: { $ref: "#/components/schemas/Mode" }
+        enabled: { type: boolean }
+        display_name: { type: [string, "null"] }
+        settings: { type: object, additionalProperties: true }
+        credentials_complete: { type: boolean }
+        authorised: { type: boolean, description: "For organisation-scope OAuth providers: whether an admin completed authorisation" }
+        inbound_urls: { type: array, items: { type: string }, description: "The callback URLs to register at the provider, built on INTEGRATION_HUB_PUBLIC_BASE_URL" }
+        health: { $ref: "#/components/schemas/Health" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CredentialInput:
+      type: object
+      required: [value]
+      properties:
+        value: { type: string, minLength: 1, maxLength: 16384, writeOnly: true }
+        expires_at: { type: [string, "null"], format: date-time }
+
+    CredentialStatus:
+      type: object
+      required: [name, set]
+      properties:
+        name: { type: string }
+        set: { type: boolean }
+        fingerprint: { type: [string, "null"], description: First 8 hex characters of the value's SHA-256 }
+        set_at: { type: [string, "null"], format: date-time }
+        set_by: { type: [string, "null"], format: uuid }
+        expires_at: { type: [string, "null"], format: date-time }
+        source: { type: string, enum: [admin, oauth], description: oauth = written by the OAuth callback or a token refresh }
+
+    ModeInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: { $ref: "#/components/schemas/Mode" }
+        confirm_live: { type: boolean, description: Must be true to go live }
+
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/HealthStatus" }
+        detail: { type: [string, "null"] }
+        checked_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: [string, "null"], format: date-time, description: When a credential or token expires, if known }
+
+    AuthoriseResponse:
+      type: object
+      required: [authorize_url, expires_at]
+      properties:
+        authorize_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+
+    AccountLinkInput:
+      type: object
+      required: [port, provider]
+      properties:
+        port: { $ref: "#/components/schemas/PortId" }
+        provider: { type: string }
+        purpose: { type: string, maxLength: 200, description: "Shown to the person with the consent text, e.g. 'Share daily training data with your coaches'" }
+        return_url: { type: string, format: uri }
+
+    AccountLinkStart:
+      type: object
+      required: [account_link, authorize_url]
+      properties:
+        account_link: { $ref: "#/components/schemas/AccountLink" }
+        authorize_url: { type: string, format: uri }
+
+    AccountLink:
+      type: object
+      required: [id, person_id, port, provider, status]
+      properties:
+        id: { type: string, format: uuid }
+        person_id: { type: string, format: uuid }
+        port: { $ref: "#/components/schemas/PortId" }
+        provider: { type: string }
+        status: { $ref: "#/components/schemas/LinkStatus" }
+        purpose: { type: [string, "null"] }
+        granted_scopes: { type: array, items: { type: string } }
+        linked_at: { type: [string, "null"], format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        last_synced_at: { type: [string, "null"], format: date-time }
+        revoked_at: { type: [string, "null"], format: date-time }
+
+    AccountLinkPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AccountLink" } }
+        next_cursor: { type: [string, "null"] }
+
+    Delivery:
+      type: object
+      required: [id, direction, port, status, attempts, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        direction: { type: string, enum: [outbound, inbound] }
+        connection_id: { type: [string, "null"], format: uuid }
+        port: { $ref: "#/components/schemas/PortId" }
+        operation: { type: string, description: "Port operation, or the inbound kind" }
+        caller_module: { type: [string, "null"] }
+        caller_reference: { type: [string, "null"] }
+        idempotency_key: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/DeliveryStatus" }
+        attempts: { type: integer }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        last_error_code: { type: [string, "null"], description: An error code from contracts/ports/adapter.yaml, or signature_invalid for inbound }
+        provider_reference: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+
+    DeliveryDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Delivery" }
+        - type: object
+          properties:
+            attempt_log:
+              type: array
+              items:
+                type: object
+                properties:
+                  attempt: { type: integer }
+                  started_at: { type: string, format: date-time }
+                  duration_ms: { type: integer }
+                  outcome: { type: string, enum: [succeeded, failed] }
+                  error_code: { type: [string, "null"] }
+                  provider_code: { type: [string, "null"] }
+
+    DeliveryPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Delivery" } }
+        next_cursor: { type: [string, "null"] }
+
+    PlatformOverview:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              adapter: { type: string }
+              provider: { type: string }
+              platform_credentials_missing: { type: array, items: { type: string } }
+              connections_by_mode: { type: object, additionalProperties: { type: integer } }
+              connections_by_health: { type: object, additionalProperties: { type: integer } }
+              dead_lettered_24h: { type: integer }
+
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }
+
+  responses:
+    Forbidden:
+      description: Missing permission
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: not_found
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    InvalidCursor:
+      description: invalid_cursor
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooManyRequests:
+      description: Rate limit reached
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

@@ -1,0 +1,15 @@
+# Permission catalogue for video-conferencing. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Meetings are created, changed and cancelled by the calling module (lms, timetable-attendance, ...) under its own
+# permissions, through the meetings port. Connections and credentials are integration-hub's. This catalogue covers
+# only the read-only operator view.
+module: video-conferencing
+permissions:
+  - key: video-conferencing:meeting:read
+    description: See meetings created through the port, with provider and status; no join links and no participants.
+roles:
+  - name: org-admin
+    description: Support view of online meetings.
+    grants:
+      - video-conferencing:meeting:read
