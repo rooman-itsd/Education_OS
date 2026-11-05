@@ -1,6 +1,12 @@
-# Sprint v1.0: 29 October to 6 November 2026
+# Sprint v1.0: from 29 October 2026 until complete
 
-Everything on the board ships in nine days. One page, read it once.
+Everything on the board ships. One page, read it once.
+
+**5 November 2026: no release on 6 November.** v1.0 launches only when it is complete: every module built
+and enabled, every batch closed, every box of the [launch checklist](launch-checklist-v1.0.md) ticked
+([ADR-0007](../architecture/adr/0007-go-live-v1.md)). The dates below were the plan; the order still holds.
+Reviews come back the same day, the review bot approves for the lead and GitHub merges approved PRs on its
+own, so a finished PR is on `main` within minutes of its last approval.
 
 ## Dates
 
@@ -9,7 +15,7 @@ Everything on the board ships in nine days. One page, read it once.
 | Wed 29 Oct | Sprint issues on the board; first API deployment (Srujan with Faizan); every open PR reviewed and merged by its reviewer |
 | Mon 3 Nov | **Tier 1 done**: the 13 common dashboards show real data on the live site, with the modules behind them. Blocks the release |
 | Wed 5 Nov | **Tier 2 done**: every academy dashboard (waves B to D) and the remaining modules |
-| Thu 6 Nov | Release v1.0: tag, launch checklist, no new code. Fixes only |
+| ~~Thu 6 Nov~~ | Release v1.0 when the launch checklist is complete (no fixed date) |
 
 ## How work is organised
 
