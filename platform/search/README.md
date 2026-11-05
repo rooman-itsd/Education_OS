@@ -103,7 +103,7 @@ the product, its owning module adds, in its own PR:
 Until a module does, `GET /types` is empty and nothing is indexed, by design.
 
 ## Tests
-`backend/tests` (199 tests on the in-memory engine). The engine **contract suite**
+`backend/tests` (200 tests on the in-memory engine, 20 more that need a cluster). The engine **contract suite**
 (`test_search_engine_contract.py`) runs against the fake always and against a real cluster when
 `SEARCH_TEST_OPENSEARCH_URL` points at one (the tests marked `opensearch` are skipped otherwise):
 ```bash
