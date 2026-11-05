@@ -1,6 +1,6 @@
 # ADR-0007: Go-live decision for v1.0
 
-- **Status:** proposed (decided on 6 November 2026 at 16:00 IST)
+- **Status:** accepted on 5 November 2026: no launch on 6 November; v1.0 goes live only when it is complete
 - **Date:** 2026-10-29
 - **Deciders:** Faizan (lead), Srujan (infrastructure)
 
@@ -11,8 +11,10 @@ dashboards live with real data, the modules behind them, and the production envi
 true, with evidence, before the release is declared.
 
 ## Decision
-Go-live is declared when every box of the launch checklist is ticked with evidence, or when the lead
-records here which boxes are open, why that is acceptable, and the date by which each is closed. The
+Go-live is declared only when every box of the launch checklist is ticked with evidence. There is no fixed
+date and no partial launch: the lead decided on 5 November 2026 not to release on 6 November and not to
+launch with open boxes. The checklist's scope section requires every module in `modules/` to be built,
+reviewed, merged and enabled, and the API to answer on the public URL. The
 release is the tag `v1.0.0`; the API and the web app follow tags from that moment (`EOS_DEPLOY_REF=latest-tag`),
 so a later merge to `main` reaches production only through a new tag.
 
@@ -26,6 +28,6 @@ Record at decision time:
 | Decided by | |
 
 ## Consequences
-- Production changes only through tags from 6 November; `main` keeps deploying to staging.
-- Tier 2 work not finished by 5 November continues as v1.1 on the same board.
+- Production changes only through tags from go-live; until then `main` keeps deploying to staging.
+- Tier 2 is not deferred to v1.1: every batch stays on the v1.0 board until it is closed.
 - The external penetration test (#147) and the DPDP legal pass (#148) are scheduled after launch.

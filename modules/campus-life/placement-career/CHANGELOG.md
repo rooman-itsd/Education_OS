@@ -17,6 +17,19 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `placement-career.drive.rescheduled`. `PUT /drives/{id}` and `PUT /openings/{id}` check dates against today only
   when they change. `GET /me/openings` and `GET /me/applications` are cursor pages. events.yaml has an `envelope`,
   `consumers` per event and `"date?"`/`"uuid?"` for nullable fields. PRD open questions 7 to 9.
+- Backend (#337): package `eos_placement_career` serving every operation of `contracts/openapi.yaml` with its
+  permission and error codes: companies, drives (schedule, reschedule, complete, cancel with their openings), openings
+  (publish, close, cancel), applications along the fixed sequence with the offer, rejection, withdrawal, history and
+  the placed flag, the student's openings and applications, and the upcoming drives and openings summary reports.
+  Every event of `events.yaml` goes to the outbox in the same transaction; every state change writes an audit record.
+- Alembic chain `placement_career_0001` (6 `placement_career_*` tables with `organisation_id` and the
+  `tenant_isolation` policy on Postgres, version table `placement_career_alembic_version`).
+- Tests: every route with its permission and error codes (401 and 403 on every route), the cross-tenant leak test, one
+  transaction for the event, the audit record and the change, migrations against the models,
+  contract drift (routes, permissions, error codes, enums, response properties) and event payloads against
+  `events.yaml`.
+- `docs/data-model.md`, `docs/integration-points.md` and `docs/screens.md`; README backend section with the
+  assumptions to revisit.
 - Frontend (#337): dashboard widgets `placement-career.openings` ("Job openings", learners, `GET /me/openings`),
   `placement-career.openings-summary` ("Placement openings", placement staff and industry-liaison,
   `GET /reports/openings-summary`) and `placement-career.drives` ("Upcoming drives", placement-officer,

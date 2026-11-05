@@ -9,8 +9,7 @@ PATTERN='^(feat|fix|docs|test|refactor|chore|ci|perf|build)\([a-z0-9-]+\): .{8,}
 bad=0
 while IFS= read -r line; do
   subject="${line#* }"
-  if [[ "$subject" =~ ^Merge ]]; then continue; fi
   if ! [[ "$subject" =~ $PATTERN ]]; then echo "bad commit message: $subject"; bad=1; fi
-done < <(git log --format='%H %s' "$BASE..$HEAD")
+done < <(git log --no-merges --format='%H %s' "$BASE..$HEAD")  # merge commits vanish in the squash merge
 [ $bad -eq 0 ] && echo "commit messages ok"
 exit $bad

@@ -1,12 +1,15 @@
-# Launch checklist: v1.0, Thursday 6 November 2026
+# Launch checklist: v1.0
 
-Issue #149, batch #313. Go-live is decided at 16:00 on 6 November by Faizan with Srujan, recorded in
-[ADR-0007](../architecture/adr/0007-go-live-v1.md). A box is ticked only with evidence (a link, a
+Issue #149, batch #313. There is no launch date: v1.0 goes live when every box below is ticked, decided by
+Faizan with Srujan and recorded in [ADR-0007](../architecture/adr/0007-go-live-v1.md) (5 November 2026).
+A box is ticked only with evidence (a link, a
 command output pasted in the issue, or a screenshot).
 
 ## Code and scope
-- [ ] Every tier 1 batch closed (#313, #316, #317, #318, #321, #325, #326, #328, #331, #335, #336, #338, #342, #343, #345, #346) — Faizan
-- [ ] Tier 2 batches closed or explicitly carried to v1.1 with the lead's note on each — Faizan
+- [ ] Every module in `modules/` has its backend, migrations, tests and widgets merged, and is listed in both
+  `apps/backend/config/modules.enabled.yaml` and `apps/frontend/config/modules.enabled.yaml` — Faizan
+- [ ] Every sprint batch closed, tier 1 and tier 2 (#313 to #348); none carried to v1.1 — Faizan
+- [ ] Every academy journey in `tests/e2e/dashboards/` passes with all modules enabled — Srujan
 - [ ] `main` green on the last commit; no open PR labelled `sprint:v1.0` — Srujan
 - [ ] Release tag `v1.0.0` on `main`; the API host runs with `EOS_DEPLOY_REF=latest-tag` and `web.yml` publishes the tag to `web-release`, so both follow the highest release tag — Srujan
 
