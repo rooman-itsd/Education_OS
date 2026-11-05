@@ -3,16 +3,17 @@
 name: wearables
 kind: integration              # feature | platform | integration
 domain: integrations
-tier: specialized   # core (platform) | common (every institution) | specialized (one field)
-field: sports       # only for specialized: sports | music | arts | ...
-version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Fitness and wearable device APIs for athlete data."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+tier: common        # core (platform) | common (every institution) | specialized (one field)
+version: 0.2.0
+status: in-progress       # planned | in-progress | stable | deprecated
+description: "Garmin, Polar, Fitbit and Strava adapter: athletes' own device data, with their consent."
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
+# integration-hub owns the port this adapter implements, finds it by entry point, holds its connections and
+# secrets, and receives every provider callback for it. consumes integration-hub.account-link.revoked to delete what was collected under a link.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, integration-hub]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -20,9 +21,13 @@ exposes:
   api: contracts/openapi.yaml
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
+  # Copies of what integration-hub defines; identical to platform/integration-hub/contracts/ports/.
+  ports:
+    - contracts/ports/adapter.yaml
+    - contracts/ports/wearable-data.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events: [integration-hub.account-link.revoked]
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

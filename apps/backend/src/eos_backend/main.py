@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from eos_core import oidc
 from eos_core.db import SessionLocal, init_db
+from eos_core.http_errors import install_error_handlers
 from eos_core.settings import settings
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,6 +55,7 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
     routers = {e.name: router_for(e) for e in entries}
     mounted = sorted(e.name for e in entries if e.kind != "platform")
     app = FastAPI(title="Education OS API", version="0.1.0", lifespan=lifespan)
+    install_error_handlers(app)
     app.add_middleware(EntitlementGate)
     app.add_middleware(
         CORSMiddleware,

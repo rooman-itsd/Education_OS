@@ -73,7 +73,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The trainee's own widgets.
-  { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.my-placement",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "My placement",
+    probe: "/field-training/me/placements",
+    empty: "No placement yet",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "skill-progress.my-progress",
     module: "practice/skill-progress",
@@ -94,7 +102,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   {
     id: "inventory-equipment.my-loans",
     module: "facilities/inventory-equipment",

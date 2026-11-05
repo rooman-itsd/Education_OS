@@ -1,0 +1,137 @@
+openapi: 3.1.0
+info:
+  title: digilocker API
+  version: 0.2.0
+  description: >-
+    DigiLocker adapter. See docs/prd.md. Modules never call this API: they use the certificate-issuance port
+    (contracts/ports/certificate-issuance.yaml) through packages/sdk, and integration-hub routes the call here.
+
+
+    Two things are exposed over HTTP. (1) The Pull Issuer API DigiLocker calls when a student searches for, or opens,
+    a document the institution issued: two channels served under integration-hub's provider-request route, in the
+    XML format of DigiLocker's Pull API Specification (v1.3; field names below to be confirmed against it during
+    onboarding). (2) A read-only operator view of what was issued, for support.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor; 404 not_found.
+servers:
+  - url: /api/v1/digilocker
+
+paths:
+  /pull-uri:
+    servers:
+      - url: /api/v1/integration-hub/inbound/digilocker/{connection_key}
+        variables: { connection_key: { default: "-", description: "The connection's random key; see integration-hub /inbound/{adapter}/{connection_key}/{channel}" } }
+    post:
+      summary: >-
+        Pull URI Request: DigiLocker asks for the URI of the document matching a student's search (doc type plus the
+        search parameters configured for the doc type, e.g. roll number and year, and the DigiLocker-verified name and
+        date of birth). Verified by keyhash (SHA-256 of the issuer API key and the request timestamp) and the timestamp
+        tolerance. Matches on the hashed search keys and the name and date of birth together; never on Aadhaar, which
+        is neither stored nor used. Returns the URI and, when the doc type is configured to, the PDF. Logged as an
+        inbound delivery; publishes nothing until the document is fetched.
+      operationId: pullUriRequest
+      security: []
+      requestBody: { required: true, content: { application/xml: { schema: { $ref: "#/components/schemas/PullUriRequest" } } } }
+      responses:
+        "200": { description: "PullURIResponse; Status 1 with DocDetails on a single match, Status 0 with no details on none or several", content: { application/xml: { schema: { $ref: "#/components/schemas/PullUriResponse" } } } }
+        "401": { description: "keyhash missing or invalid, or timestamp outside DIGILOCKER_PULL_TOLERANCE_S" }
+
+  /pull-doc:
+    servers:
+      - url: /api/v1/integration-hub/inbound/digilocker/{connection_key}
+        variables: { connection_key: { default: "-" } }
+    post:
+      summary: >-
+        Pull Doc Request: DigiLocker fetches the document behind a URI this issuer gave out. Returns the signed PDF
+        (base64) and, where the doc type has one, the machine-readable XML. A withdrawn document answers Status 0.
+        Publishes integration-hub.certificate.pulled through the hub.
+      operationId: pullDocRequest
+      security: []
+      requestBody: { required: true, content: { application/xml: { schema: { $ref: "#/components/schemas/PullDocRequest" } } } }
+      responses:
+        "200": { description: PullDocResponse, content: { application/xml: { schema: { $ref: "#/components/schemas/PullDocResponse" } } } }
+        "401": { description: keyhash missing or invalid }
+
+  /issuances:
+    get:
+      summary: >-
+        What the organisation issued through DigiLocker, newest first: key, doc kind, URI, status, pushed and last
+        pulled times. No document content and no holder contact details. Permission digilocker:issuance:read.
+      operationId: listIssuances
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pushed, available_for_pull, pending_holder_account, withdrawn, failed] } }
+        - { name: doc_kind, in: query, schema: { type: string } }
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/IssuancePage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    PullUriRequest:
+      type: object
+      description: XML root PullURIRequest. Attributes ver, ts, txn, orgId, keyhash, format (xml | pdf | both).
+      properties:
+        ts: { type: string, description: Request timestamp; keyhash = SHA-256(api key + ts) }
+        txn: { type: string, description: DigiLocker transaction id, echoed in the response and used as the dedupe key }
+        orgId: { type: string, description: The issuer id; must match the connection's issuer_id }
+        keyhash: { type: string }
+        format: { type: string, enum: [xml, pdf, both] }
+        DocDetails:
+          type: object
+          properties:
+            DocType: { type: string, description: The doc type code agreed with DigiLocker }
+            DigiLockerId: { type: string }
+            FullName: { type: string }
+            DOB: { type: string }
+            search_parameters: { type: object, additionalProperties: { type: string }, description: "The doc type's configured search fields, e.g. RollNo, Year" }
+    PullUriResponse:
+      type: object
+      properties:
+        ResponseStatus: { type: object, properties: { Status: { type: string, enum: ["1", "0"] }, ts: { type: string }, txn: { type: string } } }
+        DocDetails: { type: object, properties: { URI: { type: string }, DocContent: { type: string, description: base64 PDF }, DataContent: { type: string, description: base64 XML } } }
+    PullDocRequest:
+      type: object
+      properties:
+        ts: { type: string }
+        txn: { type: string }
+        orgId: { type: string }
+        keyhash: { type: string }
+        format: { type: string, enum: [xml, pdf, both] }
+        DocDetails: { type: object, properties: { URI: { type: string }, DigiLockerId: { type: string } } }
+    PullDocResponse:
+      type: object
+      properties:
+        ResponseStatus: { type: object, properties: { Status: { type: string, enum: ["1", "0"] }, ts: { type: string }, txn: { type: string } } }
+        DocDetails: { type: object, properties: { DocContent: { type: string }, DataContent: { type: string } } }
+    Issuance:
+      type: object
+      required: [issuance_key, doc_kind, status]
+      properties:
+        issuance_key: { type: string }
+        doc_kind: { type: string }
+        provider_doc_type: { type: string }
+        person_id: { type: string, format: uuid }
+        document_number: { type: string }
+        uri: { type: [string, "null"] }
+        status: { type: string, enum: [pushed, available_for_pull, pending_holder_account, withdrawn, failed] }
+        issued_on: { type: string, format: date }
+        pushed_at: { type: [string, "null"], format: date-time }
+        last_pulled_at: { type: [string, "null"], format: date-time }
+        withdrawn_at: { type: [string, "null"], format: date-time }
+    IssuancePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Issuance" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }

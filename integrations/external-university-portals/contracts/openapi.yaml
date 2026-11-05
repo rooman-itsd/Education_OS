@@ -1,0 +1,92 @@
+openapi: 3.1.0
+info:
+  title: external-university-portals API
+  version: 0.2.0
+  description: >-
+    Exchange of academic records with partner institutions. See docs/prd.md. Modules never call this API: they use the
+    inter-institution-records port (contracts/ports/inter-institution-records.yaml) through packages/sdk, and
+    integration-hub routes the call to the partner's connection here. In v1.0 no partner calls back (every channel is
+    a file, an email link or a person uploading), so there are no inbound channels. What is exposed is a read-only
+    operator view of exchanges.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor; 404 not_found.
+servers:
+  - url: /api/v1/external-university-portals
+
+paths:
+  /exchanges:
+    get:
+      summary: >-
+        Records sent to and received from partners, newest first: partner, direction, format, channel, status and
+        dates. No transcript content. Permission external-university-portals:exchange:read.
+      operationId: listExchanges
+      parameters:
+        - { name: partner_id, in: query, schema: { type: string } }
+        - { name: direction, in: query, schema: { type: string, enum: [outbound, inbound] } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ExchangeStatus" } }
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExchangePage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /exchanges/{id}:
+    get:
+      summary: >-
+        One exchange: its file (document id and sha256), the integrity result of an import, the lines that could not be
+        mapped (by position and reason, not content), and the delivery record. Permission
+        external-university-portals:exchange:read.
+      operationId: getExchange
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ExchangeDetail" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: not_found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    ExchangeStatus:
+      type: string
+      enum: [prepared, sent, manual_action_required, delivered_manually, received, parsed, rejected]
+    Exchange:
+      type: object
+      required: [id, partner_id, direction, format, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        exchange_key: { type: string }
+        partner_id: { type: string }
+        partner_name: { type: string }
+        direction: { type: string, enum: [outbound, inbound] }
+        person_id: { type: [string, "null"], format: uuid }
+        format: { type: string, enum: [pdf, csv, elmo_xml, edc_jsonld] }
+        channel: { type: [string, "null"], enum: [download, email, partner_portal, api, null] }
+        status: { $ref: "#/components/schemas/ExchangeStatus" }
+        caller_module: { type: string }
+        created_at: { type: string, format: date-time }
+        delivered_on: { type: [string, "null"], format: date }
+    ExchangeDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Exchange" }
+        - type: object
+          properties:
+            document_id: { type: [string, "null"], format: uuid }
+            sha256: { type: [string, "null"] }
+            integrity: { type: [string, "null"], enum: [verified, unsigned, failed, null] }
+            unmapped: { type: array, items: { type: object, properties: { position: { type: string }, reason: { type: string } } } }
+            partner_reference: { type: [string, "null"] }
+            delivered_by: { type: [string, "null"], format: uuid }
+    ExchangePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Exchange" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }
