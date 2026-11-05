@@ -1,0 +1,17 @@
+{
+  "output": {
+    "meeting_id": "8c7e6a51-2f0b-4c55-9a43-0d0f3c1b2a10",
+    "complete": true,
+    "participants": [
+      {"person_id": "5b0e4a7e-58d4-4c39-8a1b-4f4b8b1f2c01", "display_name": "Host", "email": "host@college.example",
+       "role": "host", "total_seconds": 3540,
+       "intervals": [{"joined_at": "2026-11-05T04:00:00+00:00", "left_at": "2026-11-05T04:59:00+00:00"}]},
+      {"person_id": "0d9d1c52-3f3e-4d0f-9b51-7b3e0f6c9a02", "display_name": "Student", "email": "s@college.example",
+       "role": "attendee", "total_seconds": 1800,
+       "intervals": [{"joined_at": "2026-11-05T04:05:00+00:00", "left_at": "2026-11-05T04:20:00+00:00"},
+                     {"joined_at": "2026-11-05T04:30:00+00:00", "left_at": "2026-11-05T04:45:00+00:00"}]},
+      {"person_id": null, "display_name": "Guest phone", "email": null, "role": "attendee", "total_seconds": 600,
+       "intervals": [{"joined_at": "2026-11-05T04:10:00+00:00", "left_at": "2026-11-05T04:20:00+00:00"}]}
+    ]
+  }
+}
