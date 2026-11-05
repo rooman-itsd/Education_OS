@@ -464,9 +464,20 @@ def cancel(db: Session, actor: Actor, production_id: str, body: dict) -> dict:
 # ---------------------------------------------------------------- cast and crew
 
 
-def list_roles(db: Session, production_id: str) -> list[dict]:
+def list_roles(db: Session, actor: Actor, production_id: str) -> list[dict]:
+    """The cast and crew, which `production:read` shows to everyone by contract. The private fields are not part of
+    that: why someone declined or was withdrawn (`reason`) and the casting `notes` are shown only to a caller who may
+    manage roles, and to the person holding the part (review of #454)."""
     _production(db, production_id)
-    return [role_json(r) for r in repo.roles_of(db, production_id)]
+    manager = actor.can(ROLE_MANAGE)
+    rows = []
+    for r in repo.roles_of(db, production_id):
+        row = role_json(r)
+        if not manager and r.user_id != actor.user_id:
+            row["notes"] = None
+            row["reason"] = None
+        rows.append(row)
+    return rows
 
 
 def assign_role(db: Session, actor: Actor, production_id: str, body: dict) -> tuple[dict, bool]:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from ..application.service import NOT_NULLABLE
 
@@ -14,6 +14,20 @@ RoleKind = Literal["cast", "crew", "mentor"]
 #: Stripped *before* the length check, so "   " is a 422 rather than a stored empty string (review of #454).
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 RoleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+
+#: A production is never dated outside these years. Without a bound, 0001-01-01 or 9999-12-31 reached
+#: `timedelta` arithmetic and `astimezone` and raised OverflowError (a 500). Checked on the year as written, so
+#: the check itself cannot overflow on an offset. (Review of #454.)
+MIN_YEAR, MAX_YEAR = 2000, 2100
+
+
+def _in_range(value: datetime) -> datetime:
+    if not MIN_YEAR <= value.year <= MAX_YEAR:
+        raise ValueError(f"must be between the years {MIN_YEAR} and {MAX_YEAR}")
+    return value
+
+
+Moment = Annotated[datetime, AfterValidator(_in_range)]
 
 
 class Strict(BaseModel):
@@ -28,9 +42,9 @@ class ProductionIn(Strict):
     venue: str | None = Field(default=None, max_length=200)
     resource_id: str | None = Field(default=None, max_length=36)
     lead_user_id: str | None = None
-    starts_at: datetime | None = None
-    ends_at: datetime | None = None
-    call_time: datetime | None = None
+    starts_at: Moment | None = None
+    ends_at: Moment | None = None
+    call_time: Moment | None = None
     client_token: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
@@ -63,9 +77,9 @@ class ProductionPatch(Strict):
 
 
 class ScheduleIn(Strict):
-    starts_at: datetime
-    ends_at: datetime
-    call_time: datetime | None = None
+    starts_at: Moment
+    ends_at: Moment
+    call_time: Moment | None = None
     venue: str | None = Field(default=None, max_length=200)
     resource_id: str | None = Field(default=None, max_length=36)
 
@@ -88,7 +102,7 @@ class RespondIn(Strict):
 
 class TaskIn(Strict):
     title: Title
-    due_at: datetime | None = None
+    due_at: Moment | None = None
     assignee_user_id: str | None = Field(default=None, max_length=36)
 
 

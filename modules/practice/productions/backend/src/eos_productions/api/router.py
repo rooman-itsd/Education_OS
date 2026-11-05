@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from eos_core.db import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -48,8 +46,8 @@ def list_productions(
     status: str | None = None,
     kind: str | None = None,
     department: str | None = None,
-    from_: datetime | None = Query(None, alias="from"),
-    to: datetime | None = None,
+    from_: s.Moment | None = Query(None, alias="from"),
+    to: s.Moment | None = None,
     q: str | None = None,
     page: int = PAGE,
     page_size: int = PAGE_SIZE,
@@ -131,8 +129,8 @@ def cancel(
 
 
 @router.get("/productions/{production_id}/roles")
-def list_roles(production_id: str, _: Actor = Depends(require(svc.PRODUCTION_READ)), db: Session = Depends(get_db)):
-    return _run(svc.list_roles, db, production_id)
+def list_roles(production_id: str, a: Actor = Depends(require(svc.PRODUCTION_READ)), db: Session = Depends(get_db)):
+    return _run(svc.list_roles, db, a, production_id)
 
 
 @router.post("/productions/{production_id}/roles")
@@ -196,8 +194,8 @@ def complete_task(task_id: str, a: Actor = Depends(require(svc.TASK_MANAGE)), db
 
 @router.get("/calendar")
 def calendar(
-    from_: datetime | None = Query(None, alias="from"),
-    to: datetime | None = None,
+    from_: s.Moment | None = Query(None, alias="from"),
+    to: s.Moment | None = None,
     limit: int = LIMIT,
     _: Actor = Depends(require(svc.PRODUCTION_READ)),
     db: Session = Depends(get_db),

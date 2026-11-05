@@ -3,13 +3,16 @@
 from conftest import BASE, COORDINATOR, LEAD, MEMBER, NOW, days, make_production
 from eos_core.db import SessionLocal
 from eos_core.events import OutboxEvent
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 
 
 def events_for(production_id: str) -> list[str]:
-    """Event names the module published for one production, in order (the transactional outbox)."""
+    """Event names the module published for one production, in order (the transactional outbox).
+
+    Ordered by SQLite's rowid, the insertion order. `(occurred_at, id)` was flaky: events written in the same tick
+    tie on the time and then sort by their random uuid (review of #454)."""
     with SessionLocal() as db:
-        rows = db.scalars(select(OutboxEvent).order_by(OutboxEvent.occurred_at, OutboxEvent.id)).all()
+        rows = db.scalars(select(OutboxEvent).order_by(literal_column("outbox_event.rowid"))).all()
     return [r.name for r in rows if (r.payload or {}).get("production_id") == production_id]
 
 
@@ -249,6 +252,80 @@ def test_a_blank_title_or_part_name_is_a_422_not_a_stored_empty_string(client, o
     assert client.patch(url, json={"title": "  Hamlet  "}, headers=coordinator).json()["title"] == "Hamlet"
     created = client.post(f"{BASE}/productions", json={**base, "title": "  Macbeth "}, headers=coordinator)
     assert created.status_code == 201 and created.json()["title"] == "Macbeth"
+
+
+def test_dates_outside_a_sane_range_are_a_422_not_a_500(client, org):
+    """Review of #454: year 0001 and 9999 reached timedelta/astimezone arithmetic and raised OverflowError (a 500),
+    on create, schedule, task due dates and the calendar and list query parameters."""
+    _, coordinator = org.user(COORDINATOR)
+    _, lead = org.user(LEAD)
+    production = make_production(client, coordinator)
+    pid = production["id"]
+    base = {"title": "Hamlet", "kind": "performance"}
+
+    for bad in ("0001-01-01T00:00:00Z", "0001-01-01T00:00:00+05:00", "9999-12-31T23:59:59Z", "1999-12-31T00:00:00Z"):
+        created = client.post(
+            f"{BASE}/productions",
+            json={**base, "starts_at": bad, "ends_at": "2030-01-01T00:00:00Z"},
+            headers=coordinator,
+        )
+        assert created.status_code == 422, (bad, created.status_code)
+        scheduled = client.post(
+            f"{BASE}/productions/{pid}/schedule",
+            json={"starts_at": bad, "ends_at": "2030-01-01T00:00:00Z"},
+            headers=coordinator,
+        )
+        assert scheduled.status_code == 422, (bad, scheduled.status_code)
+        task = client.post(
+            f"{BASE}/productions/{pid}/tasks", json={"title": "Hire lights", "due_at": bad}, headers=lead
+        )
+        assert task.status_code == 422, (bad, task.status_code)
+        for path in ("/calendar", "/productions"):
+            for name in ("from", "to"):
+                r = client.get(f"{BASE}{path}", params={name: bad}, headers=coordinator)
+                assert r.status_code == 422, (path, name, bad, r.status_code)
+
+    # the edges of the range are still accepted (short runs: the 72-hour rule still applies)
+    for start, end in (
+        ("2000-01-01T00:00:00Z", "2000-01-01T06:00:00Z"),
+        ("2100-12-31T00:00:00Z", "2100-12-31T06:00:00Z"),
+    ):
+        ok = client.post(f"{BASE}/productions", json={**base, "starts_at": start, "ends_at": end}, headers=coordinator)
+        assert ok.status_code == 201, (start, ok.text)
+    assert (
+        client.get(f"{BASE}/calendar", params={"from": "2026-11-01T00:00:00Z"}, headers=coordinator).status_code == 200
+    )
+
+
+def test_the_cast_list_hides_reasons_and_notes_from_people_who_cannot_manage_roles(client, org):
+    """Review of #454: GET /roles needs only production:read, which every learner holds. The cast list is public by
+    contract; why someone declined and the casting notes are not."""
+    _, coordinator = org.user(COORDINATOR)
+    _, lead = org.user(LEAD)
+    performer_id, performer = org.user(MEMBER)
+    _, bystander = org.user(MEMBER)
+    production = make_production(client, coordinator)
+    pid = production["id"]
+    role = client.post(
+        f"{BASE}/productions/{pid}/roles",
+        json={"user_id": performer_id, "role_name": "Malvolio", "notes": "needs a fitting"},
+        headers=lead,
+    ).json()
+    client.post(
+        f"{BASE}/roles/{role['id']}/respond", json={"decision": "decline", "reason": "exams"}, headers=performer
+    )
+
+    def part(headers):
+        (row,) = client.get(f"{BASE}/productions/{pid}/roles", headers=headers).json()
+        return row
+
+    managed = part(lead)
+    assert (managed["notes"], managed["reason"]) == ("needs a fitting", "exams")
+    own = part(performer)  # the holder sees their own
+    assert (own["notes"], own["reason"]) == ("needs a fitting", "exams")
+    seen = part(bystander)  # everyone else sees who plays what, and nothing private
+    assert seen["role_name"] == "Malvolio" and seen["status"] == "declined" and seen["user_id"] == performer_id
+    assert seen["notes"] is None and seen["reason"] is None
 
 
 def test_a_patch_that_sends_nothing_changes_nothing(client, org):

@@ -61,7 +61,7 @@ paths:
   /productions/{id}/roles:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
-      summary: The cast and crew of a production. Permission productions:production:read.
+      summary: The cast and crew of a production. Permission productions:production:read. `notes` and `reason` are returned only to a caller with productions:role:manage and to the holder of that part; everyone else gets null.
       responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Role" } } } } }, "404": { $ref: "#/components/responses/NotFound" } }
     post:
       summary: Offer a part or crew job. Permission productions:role:manage. The same person and part twice is the same offer.
