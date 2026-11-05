@@ -457,6 +457,9 @@ CREATED_OK = {
         {"created_at": "1900-01-01T00:00:00+00:00"},
         {"created_at": "9999-12-31T23:59:59+14:00"},
         {"created_at": "0001-01-01T00:00:00-12:00"},
+        # Converting these to UTC leaves the calendar (OverflowError) before the range check can refuse them.
+        {"created_at": "9999-12-31T23:59:59-23:59"},
+        {"created_at": "0001-01-01T00:00:00+01:00"},
         {"created_at": "2" * 10_000},
         {"created_at": None},
     ],
@@ -482,6 +485,8 @@ def test_a_missing_field_is_ignored(tables, org, missing):
         {"id": 12345},
         {"id": "x" * 37},
         {"occurred_at": "garbage"},
+        {"occurred_at": "9999-12-31T23:59:59-23:59"},
+        {"occurred_at": "0001-01-01T00:00:00+01:00"},
     ],
 )
 def test_malformed_envelopes_are_ignored(tables, org, envelope):

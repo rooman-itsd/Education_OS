@@ -115,7 +115,12 @@ def _instant(value, name: str) -> datetime:
             raise MalformedEventError(f"{name} must be an ISO date-time") from None
     if not isinstance(value, datetime):
         raise MalformedEventError(f"{name} must be an ISO date-time")
-    value = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    try:
+        # astimezone overflows for well-formed times at the ends of the calendar (9999-12-31T23:59:59-23:59), before
+        # the range check below can refuse them; that is a malformed event, not one for the relay to retry.
+        value = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    except (OverflowError, ValueError):
+        raise MalformedEventError(f"{name} must be between 2000 and 2099") from None
     if not bt.in_range(value):
         raise MalformedEventError(f"{name} must be between 2000 and 2099")
     return value
