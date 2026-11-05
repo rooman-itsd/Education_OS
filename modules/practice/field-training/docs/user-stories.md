@@ -39,6 +39,9 @@ the contract names for its endpoint is refused with 403 and changes nothing.
 - **R8 Clean refusals.** Ids are uuids, strings and numbers are bounded, dates fall in 1900 to 9998, NUL characters
   are refused: a bad request is a 422 (a NUL in the path a 404), never a 500.
 - **R9 No dependency** on another module being enabled; no real trainee, patient, pupil or client data in tests.
+- **R10 Nobody acts on their own placement.** Assigning, deciding (approve or reject), starting, changing and completing a
+  placement answer 403 `own_placement` when the caller is its trainee, whatever other role they hold. A coordinator who
+  is also a trainee still manages everyone else's placements, and withdraws their own only before it is active.
 
 ## 1. Sites
 

@@ -100,6 +100,13 @@ def _forbidden(code: str, message: str) -> FieldTrainingError:
     return FieldTrainingError(403, code, message)
 
 
+def _not_own(actor: Actor, trainee_id: str) -> None:
+    """Nobody assigns, decides, starts, changes or completes their own placement, whatever else they hold: a user with
+    the coordinator role and the trainee role must not approve their own application."""
+    if trainee_id == actor.user_id:
+        raise _forbidden("own_placement", "you cannot act on your own placement")
+
+
 def _flush_unique(db: Session, code: str, message: str) -> None:
     """Write now, so a duplicate that slipped past the check (two requests at once) is a 409, not a 500."""
     try:
@@ -567,6 +574,7 @@ def _assigned(db: Session, actor: Actor, p: Placement) -> None:
 
 
 def assign_placement(db: Session, actor: Actor, data: dict) -> dict:
+    _not_own(actor, data["trainee_id"])
     o = _taking(db, data["opening_id"])
     start, end = data.get("starts_on") or o.starts_on, data.get("ends_on") or o.ends_on
     _check(rules.check_within, start, end, o.starts_on, o.ends_on)
@@ -629,6 +637,7 @@ def apply(db: Session, actor: Actor, opening_id: str, statement: str | None) -> 
 
 def decide(db: Session, actor: Actor, placement_id: str, data: dict) -> dict:
     p = _get(db, Placement, placement_id, "placement")
+    _not_own(actor, p.trainee_id)
     if data["decision"] == "rejected":
         reason = (data.get("reason") or "").strip()
         if len(reason) < 3:
@@ -674,6 +683,7 @@ def _started(db: Session, actor: Actor | None, p: Placement, on: date) -> None:
 
 def start_placement(db: Session, actor: Actor, placement_id: str) -> dict:
     p = _get(db, Placement, placement_id, "placement", lock=True)
+    _not_own(actor, p.trainee_id)
     _started(db, actor, p, today())
     db.commit()
     return placement_dict(db, p)
@@ -681,6 +691,7 @@ def start_placement(db: Session, actor: Actor, placement_id: str) -> dict:
 
 def update_placement(db: Session, actor: Actor, placement_id: str, data: dict) -> dict:
     p = _get(db, Placement, placement_id, "placement", lock=True)
+    _not_own(actor, p.trainee_id)
     if p.status not in rules.OPEN_PLACEMENT:
         raise _conflict("invalid_status", f"a {p.status} placement cannot be changed")
     if data.get("supervisor_id"):
@@ -704,6 +715,7 @@ def update_placement(db: Session, actor: Actor, placement_id: str, data: dict) -
 
 def complete_placement(db: Session, actor: Actor, placement_id: str, override: bool, reason: str | None) -> dict:
     p = _get(db, Placement, placement_id, "placement", lock=True)
+    _not_own(actor, p.trainee_id)
     verified = repo.minutes_by_status(db, [p.id])[p.id].get("verified", 0)
     final = repo.final_outcomes(db, [p.id]).get(p.id)
     refusal = rules.completion_refusal(p.status, final is not None, verified, p.required_minutes, override, reason)
@@ -751,12 +763,12 @@ def _withdrawn(db: Session, actor: Actor, p: Placement, reason: str) -> None:
 
 def withdraw_placement(db: Session, actor: Actor, placement_id: str, reason: str) -> dict:
     p = _get(db, Placement, placement_id, "placement", lock=True)
-    if not actor.can(PLACEMENT_MANAGE):
-        # field-training:self:apply covers the caller's own placement before it starts.
-        if p.trainee_id != actor.user_id:
-            raise _not_found("placement")
-        if p.status == "active":
-            raise _forbidden("placement_active", "an active placement is withdrawn by the coordinator")
+    own = p.trainee_id == actor.user_id
+    if not actor.can(PLACEMENT_MANAGE) and not own:
+        raise _not_found("placement")  # field-training:self:apply covers the caller's own placement only
+    if own and p.status == "active":
+        # An active placement is withdrawn by a coordinator, and not by its own trainee even if they are one.
+        raise _forbidden("placement_active", "an active placement is withdrawn by the coordinator")
     _withdrawn(db, actor, p, reason)
     db.commit()
     return placement_dict(db, p)
