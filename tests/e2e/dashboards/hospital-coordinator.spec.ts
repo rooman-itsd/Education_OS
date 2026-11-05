@@ -23,8 +23,24 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
 const TITLE = "Hospital Coordinator";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "field-training.active-placements", module: "practice/field-training", batch: "#339" },
-  { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.active-placements",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Active placements",
+    probe: "/field-training/placements?status=active&limit=1",
+    empty: "No placements under way",
+    unavailable: "Field training data is not available yet.",
+  },
+  {
+    id: "field-training.placements-open",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Open placements",
+    probe: "/field-training/openings?status=open&has_seats=true&limit=1",
+    empty: "No open placements with seats",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "facility-booking.bookings-today",
     module: "facilities/facility-booking",
