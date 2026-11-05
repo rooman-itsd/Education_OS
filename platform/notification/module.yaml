@@ -26,6 +26,9 @@ consumes_events:
   - tenancy.organisation.registered
   - tenancy.organisation.verified
   - tenancy.organisation.approved
+  - tenancy.organisation.archived       # refused, closed, or deletion scheduled
+  - tenancy.organisation.suspended      # refused or suspended
+  - tenancy.organisation.activated      # reactivated
   - tenancy.package.requested
   - tenancy.package.changed             # wired: template tenancy.package.changed
   - identity.user.created
