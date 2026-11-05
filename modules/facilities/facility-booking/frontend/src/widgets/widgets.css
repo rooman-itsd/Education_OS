@@ -1,0 +1,10 @@
+/* facility-booking dashboard widgets. Colours and spacing come from the shell's tokens (--eos-*). */
+
+/* A row's second line: resource and title, then the row's actions, which wrap instead of being cut off. */
+.eos-fb__meta { display: flex; flex-direction: column; gap: 6px; white-space: normal; }
+.eos-fb__actions { display: flex; flex-direction: column; gap: 6px; padding: 2px 3px 3px; }
+.eos-fb__buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.eos-fb__confirm { display: flex; flex-direction: column; gap: 6px; color: var(--eos-text); }
+.eos-fb__reason { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.eos-fb__reason .eos-input { height: 32px; }
+.eos-fb__error { color: var(--eos-danger); }
