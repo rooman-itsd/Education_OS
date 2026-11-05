@@ -21,3 +21,14 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   Staff dashboard (#6) can read this module's data.
 - Contract: the academy profile roles whose dashboards show this module's widgets get the grants of the module role
   the PRD names for them (follow-up to #288 from Faizan's review; part of #331).
+- Widgets `facility-booking.bookings` (coach and medical-staff dashboards) and `facility-booking.my-bookings` (ten
+  learner and performer dashboards), part of #331: bookings not yet over on the resources the viewer approves, or the
+  viewer's own, earliest first with day, time window and status in words (GET /bookings?scope=managed|mine&from=now);
+  one shared list with loading, empty and error states; status words shared with bookings-today; 13 new vitest tests.
+- Check-in and cancel on the rows of `facility-booking.bookings` and `facility-booking.my-bookings` (#421): buttons
+  only for the actions the booking's `can` lists; cancel on the managed list asks for a reason, on the viewer's own
+  list a confirm; buttons disabled while the request runs, the list reloads on success, and a failure (409: "This
+  booking can no longer be cancelled.") is said on the row in the widget's words. Client `cancelBooking` and
+  `checkInBooking` (POST /bookings/{id}/cancel, /check-in). The three widgets fetch through a `useWidgetData` hook
+  whose effect owns the AbortController; retry bumps an attempt counter (review of #395). 11 new vitest tests.
+  Whether `bookings` should also list the viewer's own bookings is still open (#421).

@@ -30,3 +30,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `events.yaml`.
 - `docs/data-model.md`, `docs/integration-points.md` and `docs/screens.md`; README backend section with the
   assumptions to revisit.
+- Frontend (#337): dashboard widgets `placement-career.openings` ("Job openings", learners, `GET /me/openings`),
+  `placement-career.openings-summary` ("Placement openings", placement staff and industry-liaison,
+  `GET /reports/openings-summary`) and `placement-career.drives` ("Upcoming drives", placement-officer,
+  `GET /reports/drives-upcoming`), with a typed client, loading, empty and error states with retry, Indian dates
+  and rupees, and vitest tests. The module is not enabled in the apps yet.

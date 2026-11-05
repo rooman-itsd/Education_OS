@@ -75,6 +75,10 @@ tests, `packages/testing`. The backend is `eos_tournament_events.api.router:rout
 `eos.event_consumers` entry point; its Alembic chain is `db/`. This module must not import code from any other
 module under `modules/`.
 
+`sports/tournament-events` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts its router under
+`/api/v1/tournament-events` behind the entitlement gate, and in `apps/frontend/config/modules.enabled.yaml`, which
+registers its widgets.
+
 ## Layout
 | Path | Purpose |
 |---|---|

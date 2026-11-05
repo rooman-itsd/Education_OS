@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # The contract types ids as format: uuid. Checked here so a bad id is a 422, never a stored row.
 Uuid = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
@@ -20,8 +20,26 @@ MAX_HOURS = 8760  # a year
 MAX_VISITS_PER_YEAR = 366
 
 
+def _has_nul(value) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, (list, tuple)):
+        return any(_has_nul(v) for v in value)
+    if isinstance(value, dict):
+        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
+    return False
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("*")
+    @classmethod
+    def _no_nul(cls, value):
+        """Postgres text cannot hold NUL characters; refused here (422) rather than failing in the database (500)."""
+        if _has_nul(value):
+            raise ValueError("text must not contain NUL characters")
+        return value
 
 
 # Fields the contract lets a PATCH set to null (`oneOf: [..., {type: "null"}]` or `type: [..., "null"]`).

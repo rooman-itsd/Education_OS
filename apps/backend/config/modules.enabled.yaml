@@ -10,6 +10,7 @@
 modules:
   - academics/academic-management
   - campus-life/hostel
+  - campus-life/transport
   - facilities/asset-management
   - facilities/facility-booking
   - facilities/inventory-equipment
@@ -21,7 +22,10 @@ modules:
   - finance-operations/procurement
   - practice/selection-process
   - practice/portfolio
+  - practice/skill-progress
   - sports/athlete-performance
+  - sports/sports-nutrition-health
+  - sports/tournament-events
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
