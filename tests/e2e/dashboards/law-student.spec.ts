@@ -46,8 +46,24 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Could not load hostel notices",
     forbidden: "Could not load hostel notices",
   },
-  { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
-  { id: "library.loans", module: "campus-life/library", batch: "#338" },
+  {
+    id: "transport.notices",
+    module: "campus-life/transport",
+    batch: "#338",
+    title: "Transport notices",
+    probe: "/transport/me/notices?limit=1",
+    empty: "No transport notices right now",
+    unavailable: "Transport data is not available yet.",
+  },
+  {
+    id: "library.loans",
+    module: "campus-life/library",
+    batch: "#338",
+    title: "Library loans",
+    probe: "/library/me/loans",
+    empty: "No books on loan",
+    unavailable: "Library data is not available yet.",
+  },
   // The law student's own widgets.
   {
     id: "selection-process.upcoming",
