@@ -1,0 +1,138 @@
+# The Adapter contract: what every adapter under integrations/ implements, whatever port it serves.
+#
+# Defined by platform/integration-hub. Each port file in this folder adds its own operations on top. An adapter copies
+# this file and the port files it implements into its own contracts/ (module-standard.md, "Moving a module to another
+# repo"), so it carries the contract it implements. The copy must stay identical; a change starts here.
+#
+# Version 1, proposed with the ports. See docs/prd.md for the reasoning.
+contract: Adapter
+version: 1
+
+# How the hub finds an adapter. Like platform/notification finds messaging-providers, by entry point and never by
+# import: the hub depends on the port, never on a vendor (integrations/README.md, "Swap rule").
+registration:
+  entry_point_group: eos.integration_adapters
+  entry_point_name: <adapter folder name>     # e.g. digilocker, video-conferencing
+  describe:
+    description: Returns the adapter's identity. Called once at start-up; the result is the adapter registry row.
+    output:
+      adapter: string                         # folder name
+      version: string                         # module.yaml version
+      ports: array                            # [{port, version}] the adapter implements, e.g. [{port: meetings, version: 1}]
+      providers: array                        # [{provider, title, ports, modes, auth, link_scope, inbound}] see below
+  provider_fields:
+    provider: string                          # stable id, e.g. zoom, teams, webex, jitsi
+    title: string
+    ports: array                              # which of the adapter's ports this provider serves
+    modes: array                              # subset of [mock, sandbox, live] the provider supports
+    auth: string                              # none | api_key | oauth2_client_credentials | oauth2_authorization_code | jwt_shared_secret | hmac_shared_secret
+    link_scope: string                        # organisation | person: who authorises (an institution admin, or each person)
+    inbound: array                            # [webhook | provider_request]; empty when the provider never calls us
+    settings_schema: object                   # JSON Schema of the non-secret connection settings
+    credential_names: array                   # names of the secrets a connection needs, e.g. [client_id, client_secret]
+    platform_credential_names: array          # secrets Rooman holds once for every organisation, read from the adapter's env
+
+# What the hub passes to every operation. Secrets are resolved from the secret store just before the call, live in
+# memory for that call only, and are never logged, returned or put on an event.
+context:
+  organisation_id: uuid
+  connection_id: uuid
+  provider: string
+  mode: string                                # mock | sandbox | live
+  settings: object                            # the connection's non-secret settings, validated against settings_schema
+  secrets: object                             # name -> value, for this call only
+  account_link: object                        # {id, person_id, provider_subject} when the operation acts for one person; else null
+  delivery_id: uuid                           # the hub's delivery-log row for this call
+  attempt: integer                            # 1 on the first try
+  idempotency_key: string                     # the caller's; adapters pass it to providers that accept one
+  deadline: datetime                          # the adapter must return before it
+
+# What every operation returns. Exactly one of output or error is set.
+result:
+  output: object                              # the operation's output, as its port defines it
+  error:
+    code: string                              # one of error_codes below; never a provider's own text
+    retryable: boolean
+    retry_after_s: integer                    # null unless the provider gave a hint
+    detail: string                            # safe for a log line: no personal data, no secret, no provider prose
+    provider_code: string                     # the provider's machine code (e.g. HTTP status, "124"), for support; may be null
+  provider_reference: string                  # the provider's id for what was created or changed, when there is one
+
+# One vocabulary for every adapter, so a consuming module handles a failure the same way whoever the provider is.
+error_codes:
+  not_configured:          { retryable: false, meaning: "No enabled connection for this port, or a required setting or secret is missing" }
+  auth_failed:             { retryable: false, meaning: "The provider refused the credentials or the token; an admin must fix the connection" }
+  consent_required:        { retryable: false, meaning: "The person has not linked their account, or revoked it" }
+  invalid_request:         { retryable: false, meaning: "The input fails the port's or the provider's validation" }
+  not_found:               { retryable: false, meaning: "The provider has no such object" }
+  conflict:                { retryable: false, meaning: "Already exists, or the state does not allow it (e.g. cancel an ended meeting)" }
+  rejected:                { retryable: false, meaning: "The provider refused it for a business reason" }
+  unsupported:             { retryable: false, meaning: "This provider or mode does not offer the operation (see capabilities)" }
+  manual_action_required:  { retryable: false, meaning: "No API path: a package was prepared and a person must complete the step on the provider's portal" }
+  throttled:               { retryable: true,  meaning: "Rate limited; retry after retry_after_s or the hub's backoff" }
+  transport_unavailable:   { retryable: true,  meaning: "Provider unreachable, timed out, or TLS failed" }
+  provider_error:          { retryable: true,  meaning: "The provider failed (5xx or equivalent)" }
+
+operations:
+  - name: capabilities
+    description: >-
+      What the provider supports in this mode, per port. Each port file lists its own capability fields. Must not
+      call the provider when the answer is static.
+    output:
+      port: string
+      capabilities: object
+
+  - name: healthcheck
+    description: >-
+      Whether the connection works with its credentials: a cheap authenticated read (token exchange, "who am I", a
+      list with limit 1). Never creates, sends or changes anything at the provider. The hub runs it on demand and on a
+      schedule, and publishes integration-hub.connection.health-changed on a transition.
+    output:
+      status: string                          # healthy | degraded | unreachable | auth_failed
+      detail: string
+      expires_at: datetime                    # when a credential or token expires, if known; drives the reminder
+
+  # Authorisation, for providers whose auth is oauth2_authorization_code. The hub owns state, PKCE verifier storage,
+  # the callback URL and the secret store; the adapter only knows the provider's URLs and parameters.
+  - name: begin_authorisation
+    description: Build the provider's authorize URL for an organisation connection or a person's account link.
+    input: { state: string, code_challenge: string, redirect_uri: string, scope_hint: array }
+    output: { authorize_url: string }
+  - name: complete_authorisation
+    description: Exchange the code. The hub writes the returned secrets to the secret store and keeps only their references.
+    input: { code: string, code_verifier: string, redirect_uri: string }
+    output: { secrets: object, provider_subject: string, granted_scopes: array, expires_at: datetime }
+  - name: refresh_authorisation
+    description: Refresh a token before it expires. Returns new secrets; the hub replaces the old ones atomically.
+    output: { secrets: object, expires_at: datetime }
+  - name: revoke_authorisation
+    description: Revoke at the provider (deregister a user, revoke a token). Called when a link or connection is removed.
+    output: { revoked: boolean }
+
+  # Inbound. The hub receives the HTTP request (contracts/openapi.yaml, /inbound/...), keeps the raw body, and asks
+  # the adapter to verify and parse it. The adapter never mounts a route of its own for a provider callback.
+  - name: verify_inbound
+    description: >-
+      Check a request really came from the provider: signature over the raw body (HMAC, JWT, shared header),
+      timestamp tolerance, and any handshake (Zoom endpoint.url_validation, Strava hub.challenge, Graph
+      validationToken, Fitbit verify code). A request that cannot be verified is rejected and never processed.
+    input: { method: string, path_suffix: string, query: object, headers: object, raw_body: bytes, connection_id: uuid }
+    output:
+      verdict: string                         # accept | reject | handshake
+      handshake_response: object              # {status, content_type, body} the provider expects, when verdict is handshake
+      reject_status: integer                  # the status the provider expects on rejection (401 by default; Fitbit wants 404)
+      dedupe_key: string                      # the provider's event id, so a redelivery is processed once
+      resolves_to: object                     # {connection_id, account_link_subject} when an app-level request names its tenant in the body
+  - name: parse_inbound
+    description: >-
+      Turn a verified provider payload into zero or more normalised notifications of the port (each port file lists
+      its own). Runs after the request was acknowledged, in a job, so it may call the provider to fetch the data a
+      ping-only webhook points at.
+    input: { headers: object, raw_body: bytes }
+    output: { notifications: array }          # [{port, kind, data}] as the port's inbound section defines
+  - name: handle_provider_request
+    description: >-
+      For providers that call us and wait for an answer (DigiLocker's Pull URI and Pull Doc requests). Synchronous:
+      the adapter answers within the provider's timeout from its own records. Logged as an inbound delivery.
+    input: { channel: string, headers: object, raw_body: bytes }
+    output: { status: integer, content_type: string, body: bytes }

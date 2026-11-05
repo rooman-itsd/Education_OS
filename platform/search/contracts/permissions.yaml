@@ -1,11 +1,50 @@
 # Permission catalogue for search. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
 module: search
-permissions: []
-#  - key: search:record:read
-#    description: ...
-#  - key: search:record:write
-#    description: ...
-roles: []
-#  - name: search-admin
-#    grants: [search:record:read, search:record:write]
+permissions:
+  - key: search:record:read
+    description: >-
+      Use search: /query, /suggest and /types. This only lets a person ask. What comes back is
+      limited, per document, by the read permission the owning module attached to it
+      (docs/prd.md, "Permission filtering"), so holding this key shows nothing the person could not
+      already open in the module itself.
+  - key: search:index:manage
+    description: >-
+      Rebuild this organisation's index for a module (POST /reindex), list its reindex jobs and see
+      its index health.
+  - key: platform:search:read
+    description: >-
+      Super admin only. Engine health across every organisation, and a reindex for any
+      organisation. Shows totals, never content.
+  - key: search:document:write
+    description: >-
+      Write documents into the index. Not held by people: the indexer acts in-process on events, so
+      only the `service` block below grants it. Declared so the key is not orphaned and so the audit
+      trail names an actor.
+
+# Each block is named with a platform role id (see platform/notification/contracts/permissions.yaml
+# for why). eos_core.config.permissions_for looks grants up by block name.
+roles:
+  - name: member
+    description: >-
+      Implicit. Every active organisation user holds it beside their assigned roles. May search; sees
+      only what their own permissions let them read.
+    grants:
+      - search:record:read
+
+  - name: org-admin
+    description: Organisation administrator. Rebuilds the organisation's index and sees its health.
+    grants:
+      - search:index:manage
+
+  - name: super-admin
+    description: Platform operator. Engine health and reindex across organisations.
+    grants:
+      - platform:search:read
+
+  - name: service
+    description: >-
+      Not a person. Gives search:document:write a holder. No profile lists this role, and
+      platform/identity is to refuse it on a user.
+    grants:
+      - search:document:write

@@ -1,0 +1,10 @@
+# Domain events published by government-portals.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. Package outcomes are published by integration-hub as port events (integration-hub.regulatory-package.prepared,
+# .submitted; integration-hub.delivery.*), so regulatory-reports and iqac-accreditation never subscribe to a portal's
+# name (integrations/README.md, "Swap rule").
+module: government-portals
+version: 1
+events: []
+consumes: []

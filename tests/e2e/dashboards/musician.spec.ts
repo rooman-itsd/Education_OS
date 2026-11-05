@@ -102,7 +102,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No upcoming selection rounds",
     unavailable: "Schedule data is not available yet.",
   },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   {
     id: "skill-progress.my-progress",
     module: "practice/skill-progress",
