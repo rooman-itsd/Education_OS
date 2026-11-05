@@ -20,7 +20,7 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Item | Contract | Implementation |
 |---|---|---|
-| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 15 operations (grading schemes, assessment schemes, exam cycles); the other 36 operations are not implemented. Migration `ex_0001` and tests exist |
+| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 24 operations (grading schemes, assessment schemes, exam cycles, papers, sessions); the other 27 operations are not implemented. Migrations `ex_0001` and `ex_0002` and tests exist |
 | examinations widgets `schedule`, `hall-tickets-issued`, `results-pending` | declared in the contract | UI merged (PR #216); their endpoints are not served, so they show "not available" |
 | examinations widgets `exam-duties`, `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
 | timetable-attendance `POST /reports/attendance-eligibility` | merged | **not implemented** (the timetable-attendance backend has timetables only) |
@@ -156,6 +156,30 @@ applied literally or left out, and none is worked around.
 | Assessment components are returned ordered by code | There is no position column; the order of the request is not kept | A decision on component order |
 | A cycle with published results | `GradingScheme.in_use` is true for a cycle at `results_published` or `closed`; nothing sets `results_published` until publication exists | The results slice |
 | Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the read models are not filled | The consumer slice |
+
+## 11. Choices and gaps of the paper and session APIs
+
+Found while serving listExamPapers, createExamPapers, getExamPaper, updateExamPaper, listExamSessions,
+scheduleExamSession, getExamSession, rescheduleExamSession and cancelExamSession. None is decided; each is applied
+literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| FR-5: a session falls within the cycle's dates | **Not enforced.** The domain's `ensure_within_cycle` needs the organisation's time zone, which has no source; guessing UTC would refuse valid local times. A test records that a session outside the cycle is accepted | Shivani, Faizan: where the organisation time zone comes from (the same gap exists in timetable-attendance) |
+| FR-5: a student in two overlapping sessions | Not implemented (needs candidates). Two sessions may overlap in time | Q1, Q2 |
+| `ExamPaper.title` and the `title` field of `updateExamPaper` | **Resolved.** Migration `ex_0002` adds a nullable `title` (String 200) to `examinations_exam_paper`: no new table, no policy change (the `ex_0001` policy covers the column), no backfill, no default. `updateExamPaper` stores and returns it, on a draft paper of a draft or scheduled cycle. The contract types `title` as a non-null string, so an untitled paper omits the field and a title can be replaced but not cleared (blank, null and over 200 characters are 400) | None |
+| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Not served: they come from `offering_ref`, which is not filled. The `department_id` filter reads `offering_ref`, so it matches nothing until it is | The consumer slice, and the architectural decision in section 7 |
+| FR-4: the course offering must exist in the local read model | Not checked: the read model is empty, which would make every create impossible. An active assessment scheme for the offering is required (422 `scheme_not_active`) | The consumer slice |
+| `ExamPaper.candidate_count` and `ExamSession.candidate_count` | The paper omits it (not required); the session serves 0 | Candidates (Q1, Q2) |
+| `ExamSession.invigilators_assigned` | Counts the session's `assigned` invigilation duties from `examinations_exam_duty`; no operation creates one yet | The duties slice |
+| A cancelled session's papers | A paper is in at most one session (unique index), so cancelling removes the links and the session is served with no papers; they are in the audit entry and the event | A decision on keeping a history of a session's papers |
+| Papers and sessions in a cycle that is past `scheduled` | Creating and editing papers, scheduling and rescheduling need a draft or scheduled cycle (FR-1, applied literally) | None |
+| Cancelling a session | **Resolved.** A scheduled session can be cancelled while its cycle is `draft`, `scheduled` or `in_progress` (an examination under way can lose a sitting); in `evaluation` or later it is refused (409 `cycle_not_cancellable`). The session must still be scheduled (409 `session_not_scheduled`) and a reason is mandatory (400). Audit and the `exam-session.cancelled` event are unchanged. Rescheduling stays limited to a draft or scheduled cycle | None |
+| Rescheduling | Only a change of time or venue publishes `exam-session.rescheduled`, as the event is defined; a change of `invigilators_required` alone is audited and publishes nothing | Shivani, if the event should cover it |
+| Listing by `date_from` and `date_to` | Days are read in UTC for the same missing time zone; a session is listed when it ends on or after `date_from` and starts on or before `date_to` | The time zone source |
+| Contract: statuses the API returns but the contract does not declare | 400 for a bad filter on `listExamPapers` and `listExamSessions`, and for a missing or blank `reason` on `cancelExamSession`. 401 is declared nowhere and 403 on none of these operations | A contract change |
+| `createExamPapers` unknown cycle, `scheduleExamSession` unknown cycle or paper | 422 (`unknown_exam_cycle`, `unknown_paper`): the contract's create and schedule declare no 404 | None |
+| The request body of `createExamPapers` | The contract names the operation `createExamPapers` (one request, several papers) | None |
 
 ## 9. Evidence limits
 
