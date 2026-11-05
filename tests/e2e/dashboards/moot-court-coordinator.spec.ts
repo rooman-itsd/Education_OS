@@ -50,7 +50,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing coming up",
     unavailable: "Production data is not available yet.",
   },
-  { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.placements-open",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Open placements",
+    probe: "/field-training/openings?status=open&has_seats=true&limit=1",
+    empty: "No open placements with seats",
+    unavailable: "Field training data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
