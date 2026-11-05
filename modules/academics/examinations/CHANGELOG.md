@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/examinations` behind the entitlement gate,
+  next to its entry in `apps/frontend/config/modules.enabled.yaml`), so the 15 configuration and exam-cycle operations
+  are served and the widgets stop answering 404 for them. Added `test_api_permissions.py`: every route is refused with 403
+  for a caller without its key (checked against the roles' real grants) and 401 without a token.
 - Configuration and exam-cycle APIs (issue #325): the 15 operations for grading schemes (list, create, get, replace,
   set default), assessment schemes (list, create, get, replace a draft, activate) and exam cycles (list, create, get,
   update, change status), with the router, the use cases, organisation-scoped queries, an audit entry per change and the

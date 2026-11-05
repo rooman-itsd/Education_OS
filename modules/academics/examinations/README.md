@@ -5,7 +5,8 @@
 **Status:** in progress (issue #325). Built: the backend domain rules and persistence foundation (exam cycles, grading
 and assessment schemes, papers, sessions, duties), the permission keys and the authentication guard, and the three
 Examination Staff widgets (their endpoints are not served yet). The API serves 15 of 51 operations: grading schemes,
-assessment schemes and exam cycles (`api/router.py`). Not built: the other 36 operations, candidates and eligibility, hall tickets,
+assessment schemes and exam cycles (`api/router.py`), mounted under `/api/v1/examinations` because the module is listed in
+`apps/backend/config/modules.enabled.yaml`. Not built: the other 36 operations, candidates and eligibility, hall tickets,
 marks, results, the event consumers, and the widgets `exam-duties`, `upcoming-assessments` and `results-summary`. Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
