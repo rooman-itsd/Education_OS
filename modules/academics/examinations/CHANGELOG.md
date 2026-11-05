@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Configuration and exam-cycle APIs (issue #325): the 15 operations for grading schemes (list, create, get, replace,
+  set default), assessment schemes (list, create, get, replace a draft, activate) and exam cycles (list, create, get,
+  update, change status), with the router, the use cases, organisation-scoped queries, an audit entry per change and the
+  two contracted events (`examinations.exam-cycle.created`, `.closed`); grading- and assessment-scheme changes publish
+  none. Fixed `ExaminationsError` failing when a domain error carried a `status` detail (cycle_not_configurable). No
+  migration: the foundation schema is unchanged. Contract gaps and deferrals: `docs/reviewer-decisions.md` section 10.
 - Backend foundation (issue #325): domain rules for exam cycles (the lifecycle of PRD section 6), grading and assessment
   schemes (weightages add up to 100 on activation, activating supersedes the previous active scheme), papers (one per
   component and cycle, marks pipeline), sessions (within the cycle's dates, a paper in one session, reschedule and cancel)
