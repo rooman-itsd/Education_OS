@@ -18,9 +18,9 @@ from ..application.errors import IncidentManagementError
 from ..domain.incidents import INCIDENT_STATUSES, SEVERITIES
 from ..domain.problems import ACTION_STATUSES, PROBLEM_STATUSES
 from . import schemas as s
-from .deps import require
+from .deps import no_nul, require
 
-router = APIRouter(tags=["incident-management"])
+router = APIRouter(tags=["incident-management"], dependencies=[Depends(no_nul)])
 
 LIMIT = Query(20, ge=1, le=100)
 SERVICE = Query(None, max_length=80)  # one affected service label (contract ServiceLabels items: maxLength 80)

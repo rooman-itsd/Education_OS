@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 MIN_YEAR, MAX_YEAR = 2000, 2100
 MAX_TEXT = 20_000  # descriptions, timeline updates, summaries and other Text columns
@@ -53,8 +53,26 @@ Text = Annotated[str, Field(max_length=MAX_TEXT)]
 LongText = Annotated[str, Field(min_length=3, max_length=MAX_TEXT)]
 
 
+def _has_nul(value) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, (list, tuple)):
+        return any(_has_nul(v) for v in value)
+    if isinstance(value, dict):
+        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
+    return False
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("*")
+    @classmethod
+    def _no_nul(cls, value):
+        """Postgres text cannot hold NUL characters; refused here (422) rather than failing in the database (500)."""
+        if _has_nul(value):
+            raise ValueError("text must not contain NUL characters")
+        return value
 
 
 # Fields the contract lets a PATCH set to null (`oneOf: [..., {type: "null"}]` or `type: [..., "null"]`).
