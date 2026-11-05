@@ -89,8 +89,9 @@ enrolment by category, year ranges). The categories and parameters follow the pu
 | setting | `naac_hei_id` | From the NAAC account |
 | secret | none | The adapter holds no credentials |
 
-Provider id `aishe`, `nirf` and `naac`, one connection each, in `live` mode from the start: there is no sandbox and
-nothing is sent, so `mock` and `sandbox` behave the same as `live` (the package is built locally).
+Provider id `aishe`, `nirf` and `naac`, one connection each. There is no sandbox and nothing is sent, so the three
+modes behave the same (the package is built locally) and the healthcheck is always healthy: a connection is created in
+`sandbox` like any other and switched to `live` with no credentials to enter, which keeps the hub's rules uniform.
 
 ### Error mapping
 
@@ -166,5 +167,6 @@ The data used to prepare a package is not kept: it belongs to the calling module
    publishes its formats?
 4. **NIRF website copy.** Generate the PDF only (proposed), or also publish it to the institution's website through
    web-portal-cms?
-5. **Live from day one.** These connections have no sandbox and send nothing; they are created in `live` mode. Agreed?
+5. **Modes that mean nothing here.** These connections have no sandbox and send nothing, yet go through the hub's
+   sandbox-then-live step like the rest (proposed), rather than a special case in the hub. Agreed?
 6. **Operator view.** Should the `governance` role also hold `government-portals:package:read`?
