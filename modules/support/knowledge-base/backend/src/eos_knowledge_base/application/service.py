@@ -186,6 +186,16 @@ def _commit(db: Session, on_conflict: KnowledgeBaseError | None = None) -> None:
         raise on_conflict from err
 
 
+def _flush(db: Session, on_conflict: KnowledgeBaseError) -> None:
+    """Flushes; a unique-constraint violation becomes `on_conflict` (409), as in _commit, for writes whose ids the rest
+    of the use case needs before the commit."""
+    try:
+        db.flush()
+    except IntegrityError as err:
+        db.rollback()
+        raise on_conflict from err
+
+
 # ---------------------------------------------------------------- serialisation (contract schemas)
 
 
@@ -407,14 +417,14 @@ def update_category(db: Session, actor: Actor, category_id: str, body: dict) -> 
 
 
 def _unique_slug(db: Session, title: str) -> str:
-    base = rules.slugify(title)
-    taken = repo.slugs_like(db, base)
-    if base not in taken:
-        return base
-    n = 2
-    while rules.with_suffix(base, n) in taken:
+    """The title's slug, or the first of slug-2, slug-3, ... not taken. Each candidate is checked itself: a long slug
+    is trimmed to make room for its suffix, so a candidate does not always start with the untrimmed slug."""
+    candidate = base = rules.slugify(title)
+    n = 1
+    while repo.slug_taken(db, candidate):
         n += 1
-    return rules.with_suffix(base, n)
+        candidate = rules.with_suffix(base, n)
+    return candidate
 
 
 def _content(body: dict) -> dict:
@@ -460,7 +470,8 @@ def create_article(db: Session, actor: Actor, body: dict) -> dict:
         created_at=clock(),
     )
     db.add(article)
-    db.flush()
+    taken = _conflict("slug_taken", "the slug is already used in the organisation", "slug")
+    _flush(db, taken)  # a concurrent create with the same slug hits the unique constraint here
     rev = Revision(
         organisation_id=actor.organisation_id,
         article_id=article.id,
@@ -473,7 +484,7 @@ def create_article(db: Session, actor: Actor, body: dict) -> dict:
     _apply(rev, content)
     db.add(rev)
     _audit(db, actor, "article.created", ARTICLE, article.id)
-    _commit(db, _conflict("slug_taken", "the slug is already used in the organisation", "slug"))
+    _commit(db, taken)
     return _detail(db, actor, article, rev)
 
 

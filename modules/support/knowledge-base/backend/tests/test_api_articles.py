@@ -181,3 +181,21 @@ def test_only_editors_review_and_publish(desk):
     desk.ok(desk.post(f"{path}/draft/submit", None, desk.author))
     assert desk.post(f"{path}/draft/return", {"comment": "Fix"}, desk.author).status_code == 403
     assert desk.get(f"{path}/revisions", desk.reader).status_code == 403
+
+
+def test_long_titles_still_get_distinct_slugs(desk):
+    """A 120-character slug is trimmed to make room for -2, -3: each candidate is checked itself."""
+    title = "Long " + "x" * 125
+    slugs = [desk.draft(title=title)["slug"] for _ in range(3)]
+    assert len(set(slugs)) == 3 and all(len(s) <= 120 for s in slugs)
+    assert slugs[1].endswith("-2") and slugs[2].endswith("-3")
+
+
+def test_a_slug_taken_by_a_concurrent_create_is_a_409(desk, monkeypatch):
+    """Two creates with the same slug at once both pass the check; the second hits the unique constraint on flush."""
+    from eos_knowledge_base.infrastructure import repository
+
+    desk.draft(slug="race-slug")
+    monkeypatch.setattr(repository, "slug_taken", lambda db, slug: False)  # the check ran before the first commit
+    second = desk.post("/articles", desk.body(slug="race-slug"), desk.author)
+    assert (second.status_code, second.json()["detail"]["code"]) == (409, "slug_taken")
