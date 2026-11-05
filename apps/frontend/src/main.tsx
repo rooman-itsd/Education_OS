@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@eos/ui-kit/styles.css";
 import { App } from "./App";
 import { PublicSite } from "../../../modules/student-lifecycle/web-portal-cms/frontend/src/index";
+import { registerServiceWorker } from "./pwa/register";
 
 // One bundle, two surfaces, chosen by path (both keep their own hash routing):
 //  - /app (and /app/…): the role-dashboard app — login, sign-up (#signup), dashboards (#/…) — unchanged.
@@ -14,6 +15,9 @@ if (path === "/public") {
   window.history.replaceState(null, "", `/${window.location.search}${window.location.hash}`);
 }
 const isApp = path === "/app" || path.startsWith("/app/");
+
+// Installable, and its pages open offline (public/sw.js); API data is never stored on the device.
+registerServiceWorker();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>{isApp ? <App /> : <PublicSite />}</StrictMode>,
