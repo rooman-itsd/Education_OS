@@ -28,3 +28,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Review fix (#504): nobody assigns, decides, starts, changes or completes their own placement (403 `own_placement`), so a
   user holding the coordinator and the trainee role cannot approve their own application; such a user cannot withdraw
   their own active placement either (403 `placement_active`, as for any trainee).
+- Review fix (#504): an explicit `null` in a request body is a 422 for every field except `AssessmentInput.score`, the only
+  one the contract types as nullable. A PATCH with `supervisor_ids: null` used to wipe the supervisors of a site or
+  opening; leaving the field out keeps them, and `[]` clears them on purpose.

@@ -83,3 +83,42 @@ def test_a_duplicate_written_past_the_check_is_a_409(prog):
             service._flush_unique(db, "duplicate_supervisor", "a supervisor is listed twice on the site")
         assert (e.value.status, e.value.code) == (409, "duplicate_supervisor")
     assert c.ok(c.get(f"/sites/{c.site['id']}", c.viewer))["supervisor_ids"] == [c.supervisor_id]
+
+
+def test_no_input_schema_accepts_an_explicit_null_except_assessment_score():
+    """Contract: only AssessmentInput.score is nullable. Every other optional field is left out to keep its value."""
+    import pytest
+    from eos_field_training.api import schemas as s
+    from pydantic import ValidationError
+
+    bodies = {
+        s.SiteIn: {"name": "x"},
+        s.OpeningIn: {
+            "site_id": "0" * 8 + "-0000-0000-0000-" + "0" * 12,
+            "title": "x",
+            "starts_on": "2026-11-02",
+            "ends_on": "2026-12-31",
+            "seats": 1,
+        },
+        s.AssignIn: {
+            "opening_id": "0" * 8 + "-0000-0000-0000-" + "0" * 12,
+            "trainee_id": "0" * 8 + "-0000-0000-0000-" + "0" * 12,
+        },
+        s.PlacementPatchIn: {},
+        s.DecisionIn: {"decision": "approved"},
+        s.CompleteIn: {},
+        s.LogEntryIn: {"date": "2026-11-03", "hours": 1, "activities": "x"},
+        s.AssessmentIn: {"stage": "mid", "outcome": "x"},
+        s.ApplyIn: {},
+    }
+    for model, base in bodies.items():
+        for name in model.model_fields:
+            if name in base:
+                continue
+            body = {**base, name: None}
+            if name in model.nullable:
+                model(**body)
+            else:
+                with pytest.raises(ValidationError):
+                    model(**body)
+    assert s.AssessmentIn.nullable == {"score"}

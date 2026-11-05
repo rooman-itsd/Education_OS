@@ -165,3 +165,35 @@ def test_supervisor_sees_openings_at_own_sites_and_trainee_sees_applications(pro
     assert ids(c.get("/openings", trainee)) == {c.opening["id"], away["id"]}
     assert ids(c.get("/openings?status=draft", trainee)) == set()
     assert c.get(f"/openings/{c.opening['id']}", trainee).status_code == 403
+
+
+def test_patch_site_with_explicit_null_is_422_and_changes_nothing(prog):
+    """The contract types no site field as nullable: a null is refused, never a silent clear (supervisor_ids: null used
+    to wipe the site's supervisors, cutting their access to every placement they supervise)."""
+    c = prog
+    path = f"/sites/{c.site['id']}"
+    before = c.ok(c.get(path, c.coordinator))
+    assert before["supervisor_ids"] == [c.supervisor_id]
+    for field in ("supervisor_ids", "kind", "address", "contact_name", "contact_email", "active"):
+        r = c.patch(path, {"name": before["name"], field: None}, c.coordinator)
+        assert r.status_code == 422, field
+        assert c.ok(c.get(path, c.coordinator)) == before, field
+    # Creating with a null is refused too.
+    assert c.post("/sites", {"name": "Null site", "supervisor_ids": None}, c.coordinator).status_code == 422
+    # Leaving the field out still keeps the stored supervisors; an empty list clears them on purpose.
+    assert c.ok(c.patch(path, {"name": "Renamed"}, c.coordinator))["supervisor_ids"] == [c.supervisor_id]
+    assert c.ok(c.patch(path, {"name": "Renamed", "supervisor_ids": []}, c.coordinator))["supervisor_ids"] == []
+
+
+def test_patch_opening_with_explicit_null_is_422_and_changes_nothing(prog):
+    c = prog
+    o = c.opening
+    path = f"/openings/{o['id']}"
+    full = {k: o[k] for k in ("site_id", "title", "starts_on", "ends_on", "seats")}
+    before = c.ok(c.get(path, c.coordinator))
+    assert before["supervisor_ids"] == [c.supervisor_id]
+    for field in ("supervisor_ids", "discipline", "required_hours", "allow_applications", "eligibility"):
+        r = c.patch(path, {**full, field: None}, c.coordinator)
+        assert r.status_code == 422, field
+        assert c.ok(c.get(path, c.coordinator)) == before, field
+    assert c.ok(c.patch(path, full, c.coordinator))["supervisor_ids"] == [c.supervisor_id]

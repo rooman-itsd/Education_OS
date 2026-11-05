@@ -5,9 +5,9 @@ database: a bad value is a 422, never a 500."""
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # The contract types every id as format: uuid. Checked here so a bad id is a 422, never a stored row.
 Uuid = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
@@ -40,6 +40,18 @@ def has_nul(value) -> bool:
 
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    # Fields the contract types as nullable. Every other optional field is "leave it out to keep the stored value":
+    # an explicit null is a 422, never a silent clear (a PATCH with supervisor_ids: null used to wipe the supervisors).
+    nullable: ClassVar[frozenset[str]] = frozenset()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_explicit_null(cls, data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if value is None and key not in cls.nullable:
+                    raise ValueError(f"{key} must not be null; leave it out to keep the stored value")
+        return data
 
     @field_validator("*")
     @classmethod
@@ -117,6 +129,8 @@ class LogEntryIn(Strict):
 
 
 class AssessmentIn(Strict):
+    nullable = frozenset({"score"})  # contract AssessmentInput.score is [number, "null"]; no other input field is
+
     stage: Literal["mid", "final"]
     outcome: str = Field(min_length=1, max_length=200)
     score: float | None = Field(default=None, ge=0, le=100)
