@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +41,19 @@ class StageInput(BaseModel):
 class Stage(StageInput):
     id: str
     process_id: str
+
+
+class SlotInput(BaseModel):
+    """A scheduled audition, jury round or review (the Upcoming widget lists these)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = Field(..., min_length=1, max_length=200)
+    starts_at: datetime
+    ends_at: datetime
+    stage_id: str | None = None
+    candidate_id: str | None = None
+    location: str | None = Field(default=None, max_length=200)
 
 
 class PanelInput(BaseModel):
