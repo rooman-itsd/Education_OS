@@ -33,10 +33,6 @@ def _id() -> sa.Column:
     return sa.Column("id", sa.String(36), primary_key=True)
 
 
-def _org() -> sa.Column:
-    return sa.Column("organisation_id", sa.String(36), nullable=True)
-
-
 def _created() -> sa.Column:
     return sa.Column("created_at", sa.DateTime(timezone=True), nullable=False)
 
@@ -55,7 +51,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_committee",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("name", sa.String(120), nullable=False),
         sa.Column("kind", sa.String(16), nullable=False),
@@ -66,7 +62,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_committee_member",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("committee_id", sa.String(36), sa.ForeignKey("grievance_committee.id"), nullable=False),
         sa.Column("person_id", sa.String(36), nullable=False),
         sa.Column("role", sa.String(16), nullable=False),
@@ -75,7 +71,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_case",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("sequence", sa.Integer, nullable=False),
         sa.Column("number", sa.String(24), nullable=False),
@@ -100,7 +96,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_proceeding",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("grievance_id", sa.String(36), sa.ForeignKey("grievance_case.id"), nullable=False),
         sa.Column("kind", sa.String(12), nullable=False),
@@ -111,7 +107,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_update",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         _created(),
         sa.Column("grievance_id", sa.String(36), sa.ForeignKey("grievance_case.id"), nullable=False),
         sa.Column("author_id", sa.String(36), nullable=False),
@@ -121,7 +117,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_decision",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("grievance_id", sa.String(36), sa.ForeignKey("grievance_case.id"), nullable=False),
         sa.Column("outcome", sa.String(16), nullable=False),
         sa.Column("findings", sa.Text, nullable=False),
@@ -132,7 +128,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_appeal",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("grievance_id", sa.String(36), sa.ForeignKey("grievance_case.id"), nullable=False),
         sa.Column("committee_id", sa.String(36), sa.ForeignKey("grievance_committee.id"), nullable=False),
         sa.Column("reason", sa.Text, nullable=False),
@@ -145,7 +141,7 @@ def upgrade() -> None:
     op.create_table(
         "grievance_audit_entry",
         _id(),
-        _org(),
+        sa.Column("organisation_id", sa.String(36), nullable=True),
         sa.Column("actor", sa.String(36), nullable=True),
         sa.Column("action", sa.String(60), nullable=False),
         sa.Column("entity", sa.String(40), nullable=False),
@@ -172,8 +168,14 @@ def upgrade() -> None:
     op.create_index("ix_grievance_appeal_committee", "grievance_appeal", ["organisation_id", "committee_id"])
     op.create_index("ix_grievance_audit_entity", "grievance_audit_entry", ["organisation_id", "entity", "entity_id"])
 
-    for table in TABLES:
-        _enable_rls(table)
+    _enable_rls("grievance_committee")
+    _enable_rls("grievance_committee_member")
+    _enable_rls("grievance_case")
+    _enable_rls("grievance_proceeding")
+    _enable_rls("grievance_update")
+    _enable_rls("grievance_decision")
+    _enable_rls("grievance_appeal")
+    _enable_rls("grievance_audit_entry")
 
 
 def downgrade() -> None:
