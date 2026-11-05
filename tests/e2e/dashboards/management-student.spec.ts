@@ -56,7 +56,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
   { id: "library.loans", module: "campus-life/library", batch: "#338" },
   // The management student's own widgets.
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
   { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
   // The learner view of openings (#424 keeps this id for learners and adds openings-summary for staff).
