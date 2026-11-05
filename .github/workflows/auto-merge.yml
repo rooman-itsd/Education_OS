@@ -77,8 +77,13 @@ jobs:
           echo "merged=$merged" >> "$GITHUB_ENV"
           echo "merged_prs=${merged_prs# }" >> "$GITHUB_ENV"
           echo "closed=${closed# }" >> "$GITHUB_ENV"
+      # main, never the default ref: on pull_request_review that is the reviewed PR's merge commit, and the next step runs
+      # tools/scripts/next-issue.py with this job's write token, so a PR could otherwise run its own copy of the script.
       - uses: actions/checkout@v4
         if: env.merged != '0'
+        with:
+          ref: main
+          persist-credentials: false
       - uses: actions/setup-python@v5
         if: env.merged != '0'
         with:
