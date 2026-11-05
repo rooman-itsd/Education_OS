@@ -43,6 +43,19 @@ class Context:
             raise AdapterError("invalid_request", "settings and secrets must be objects")
         return ctx
 
+    @classmethod
+    def coerce_inbound(cls, value: Context | dict | None) -> Context | None:
+        """The context of a callback. The hub's app-level callback (/inbound/{adapter}) passes a context whose
+        connection fields are all None (integration-hub README, "Writing an adapter"): that is no connection yet, so
+        None, and the adapter verifies with its platform credentials."""
+        if value is None:
+            return None
+        try:
+            connection_id = value.connection_id if hasattr(value, "connection_id") else value["connection_id"]
+        except (KeyError, TypeError):
+            connection_id = None
+        return cls.coerce(value) if connection_id else None
+
 
 @dataclass
 class Result:

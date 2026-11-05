@@ -703,7 +703,7 @@ class WearablesAdapter:
     def verify_inbound(self, ctx: Any | None, request: dict) -> Result:
         """Reject, handshake or accept. Never raises: whatever cannot be verified is a reject."""
         try:
-            c = Context.coerce(ctx) if ctx else None
+            c = Context.coerce_inbound(ctx)
             req = self._request(request)
             provider, _ = self._inbound_provider(c, req)
             return Result(output=provider.verify_inbound(req, self._link_of(provider.id)))
@@ -717,7 +717,7 @@ class WearablesAdapter:
 
     def parse_inbound(self, ctx: Any | None, request: dict) -> Result:
         try:
-            c = Context.coerce(ctx) if ctx else None
+            c = Context.coerce_inbound(ctx)
             req = self._request(request)
             provider, cfg = self._inbound_provider(c, req)
             notes: list[dict] = []
