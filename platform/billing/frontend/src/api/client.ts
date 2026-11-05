@@ -147,3 +147,93 @@ export function describeFailure(e: unknown, what: string): Failure {
   if (e.status === 403) return { title: "You do not have access to this.", retry: false };
   return { title: `Could not load ${what}`, detail: "Try again in a moment.", retry: true };
 }
+
+/** contract SubscriptionReport (0.2.0), as GET /admin/reports/subscriptions answers it. Money as decimal strings. */
+export interface PlanReport {
+  plan: string;
+  title: string;
+  currency: string;
+  /** Counts per status; `other` is a status outside the contract's five. */
+  subscriptions: Record<SubscriptionStatus | "other", number>;
+  total: number;
+  /** Active subscriptions comped by the super admin: in `active`, not in `monthly_recurring`. */
+  comped: number;
+  /** Active subscriptions that are not comped x the plan's monthly price, e.g. "12500.00". */
+  monthly_recurring: string;
+  /** Paid invoices issued in the last paid_window_days. */
+  paid_last_30_days: string;
+}
+export interface ExpiringTrial {
+  organisation_id: string;
+  organisation_name: string | null;
+  plan: string;
+  trial_ends_at: string;
+  /** Negative: ended, not yet made read-only by the daily expiry job. */
+  days_left: number;
+}
+export interface SubscriptionReport {
+  generated_at: string;
+  plans: PlanReport[];
+  trials_expiring: ExpiringTrial[];
+  trial_window_days: number;
+  paid_window_days: number;
+}
+
+/** The report request in flight, shared: the three Super Admin widgets read the same report when the dashboard opens. */
+let reportInFlight: Promise<SubscriptionReport> | null = null;
+
+/**
+ * GET /admin/reports/subscriptions. Permission platform:revenue:read (super admin only). Callers at the same moment
+ * share one request (it is not cancelled when one of them goes away); once it settles the next call asks again, so a
+ * retry or a later visit gets fresh numbers. A caller's signal still ends its own wait.
+ */
+export function getSubscriptionReport(signal?: AbortSignal): Promise<SubscriptionReport> {
+  reportInFlight ??= request<SubscriptionReport>("/billing/admin/reports/subscriptions").finally(() => {
+    reportInFlight = null;
+  });
+  if (!signal) return reportInFlight;
+  return new Promise<SubscriptionReport>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Aborted", "AbortError"));
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    reportInFlight!.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+/** "12500.00" -> 1250000 (paise/cents), so sums are exact; anything unparsable counts as 0. */
+export function cents(amount: string): number {
+  const n = Math.round(Number(amount) * 100);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Monthly recurring revenue summed per currency, in cents, currencies in first-seen order. */
+export function recurringByCurrency(plans: PlanReport[]): Array<{ currency: string; cents: number }> {
+  const totals = new Map<string, number>();
+  for (const p of plans) totals.set(p.currency, (totals.get(p.currency) ?? 0) + cents(p.monthly_recurring));
+  return [...totals.entries()].map(([currency, c]) => ({ currency, cents: c }));
+}
+
+/** Subscription statuses in the order the widgets list them, with their words. */
+export const SUBSCRIPTION_STATUSES: Array<{ status: SubscriptionStatus | "other"; label: string }> = [
+  { status: "trialing", label: "trialing" },
+  { status: "active", label: "active" },
+  { status: "past_due", label: "past due" },
+  { status: "read_only", label: "read-only" },
+  { status: "cancelled", label: "cancelled" },
+  { status: "other", label: "other" },
+];
+
+/** "4 trialing · 2 active · 1 read-only": only the statuses that have subscriptions. */
+export function statusBreakdown(counts: Partial<Record<SubscriptionStatus | "other", number>>): string {
+  return SUBSCRIPTION_STATUSES.filter(({ status }) => (counts[status] ?? 0) > 0)
+    .map(({ status, label }) => `${counts[status]} ${label}`)
+    .join(" · ");
+}
+
+/** "trial ended", "ends today", "ends tomorrow", "ends in 5 days". */
+export function endsIn(daysLeft: number): string {
+  if (daysLeft < 0) return "trial ended";
+  if (daysLeft === 0) return "ends today";
+  if (daysLeft === 1) return "ends tomorrow";
+  return `ends in ${daysLeft} days`;
+}

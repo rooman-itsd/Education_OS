@@ -28,3 +28,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   Postgres). Tests: every route's success and error codes, 403s, the cross-tenant leak test with `GET /me/mentoring`
   for a student id in two organisations, events, contract drift and migrations against the models. Not enabled in the
   host yet. `docs/data-model.md` and `docs/integration-points.md`; assumptions to revisit listed in the README.
+- Frontend (#337): dashboard widget `alumni.mentoring` ("My mentor") for the management student, behind
+  `alumni:self:read`, reading `GET /me/mentoring` through a typed client: the mentor with role, background, focus,
+  start date and contact links, and up to five upcoming sessions with date and time in Asia/Kolkata; empty state "No
+  mentor assigned yet" when `assignment` is null; loading and error states with retry; vitest and Testing Library
+  tests.
