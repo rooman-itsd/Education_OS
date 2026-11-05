@@ -33,21 +33,43 @@ OPERATIONS = {
 }
 
 # Statuses the API answers that the contract does not declare for the operation (listed in the PR for the owner):
-# - 400 for a malformed body or query parameter on operations that declare no 400;
-# - 409 when the course space is archived (read-only) on unit operations, which declare no 409.
-UNDECLARED = {
-    ("changeCourseSpaceStatus", 400),
-    ("changeCourseMaterialStatus", 400),
-    ("changeAssignmentStatus", 400),
-    ("changeQuizStatus", 400),
-    ("releaseGrades", 400),
-    ("moderateThread", 400),
-    ("moderatePost", 400),
-    ("listCourseSpaces", 400),
-    ("createContentUnit", 409),
-    ("updateContentUnit", 409),
-    ("scoreQuizAttempt", 409),
+# - 400 for a malformed body or query parameter, on operations that take one but declare no 400;
+# - 409 when the course space is archived (read-only), on writes that declare no 409.
+UNDECLARED_400 = {
+    "listCourseSpaces",
+    "changeCourseSpaceStatus",
+    "listCourseMaterials",
+    "changeCourseMaterialStatus",
+    "listAssignments",
+    "changeAssignmentStatus",
+    "listSubmissions",
+    "listQuizzes",
+    "changeQuizStatus",
+    "listQuizAttempts",
+    "releaseGrades",
+    "listThreads",
+    "getThread",
+    "moderateThread",
+    "moderatePost",
+    "getCourseworkActivityReport",
+    "getMyCourseMaterials",
+    "listMySubmissions",
+    "listMyQuizAttempts",
+    "listMyGrades",
 }
+UNDECLARED_409 = {
+    "createContentUnit",
+    "updateContentUnit",
+    "createCourseMaterial",
+    "updateCourseMaterial",
+    "createAssignment",
+    "createQuiz",
+    "scoreQuizAttempt",
+    "enterGrades",
+    "releaseGrades",
+    "moderatePost",
+}
+UNDECLARED = {(op, 400) for op in UNDECLARED_400} | {(op, 409) for op in UNDECLARED_409}
 
 
 def resolve(schema: dict) -> dict:
@@ -403,6 +425,67 @@ def qz_question() -> dict:
 
 def test_undeclared_statuses_are_only_the_listed_gaps():
     """Each entry is a status the API answers that the contract does not declare; this fails once the contract
-    declares it, as a reminder to drop the entry."""
+    declares it, as a reminder to drop the entry. Every operation taking a body or a query parameter answers 400 to a
+    malformed one, so those without a declared 400 are all listed."""
     for operation_id, status in UNDECLARED:
         assert str(status) not in operation(operation_id)["responses"], (operation_id, status)
+    for operation_id in OPERATIONS:
+        op = operation(operation_id)
+        takes_input = "requestBody" in op or any(
+            p.get("in") != "path" and "$ref" not in p or "Limit" in p.get("$ref", "") or "Offset" in p.get("$ref", "")
+            for p in op.get("parameters", [])
+        )
+        if takes_input and "400" not in op["responses"]:
+            assert operation_id in UNDECLARED_400, operation_id
+
+
+def test_an_archived_space_refuses_every_write_with_409(client, org):
+    c = Course(client, org)
+    space = c.space["id"]
+    unit = c.post(f"/course-spaces/{space}/units", {"title": "W"}, 201, c.teacher)
+    m = c.material()
+    x = c.assignment()
+    c.post(f"/assignments/{x['id']}/submissions", {"text": "a"}, 201, c.student)
+    qz = c.quiz(questions=[{"question_type": "essay", "prompt": "Discuss", "points": 2}])
+    t = c.post(f"/quizzes/{qz['id']}/attempts", None, 201, c.student)
+    c.post(f"/attempts/{t['id']}/submit", None, headers=c.student)
+    essay = c.get(f"/quizzes/{qz['id']}", c.teacher)["questions"][0]["id"]
+    th = c.post(f"/course-spaces/{space}/threads", {"title": "t", "body": "b"}, 201, c.student)
+    p = c.post(f"/threads/{th['id']}/posts", {"body": "p"}, 201, c.student)
+    c.post(f"/course-spaces/{space}/status", {"status": "archived"})
+    grade = {"item_type": "assignment", "item_id": x["id"], "entries": [{"student_id": c.student_id, "points": 1}]}
+    writes = {
+        "updateCourseSpace": ("PATCH", f"/course-spaces/{space}", {"title": "x"}),
+        "createContentUnit": ("POST", f"/course-spaces/{space}/units", {"title": "x"}),
+        "updateContentUnit": ("PATCH", f"/units/{unit['id']}", {"title": "x"}),
+        "createCourseMaterial": (
+            "POST",
+            f"/course-spaces/{space}/materials",
+            {"material_type": "page", "title": "x", "body": "b"},
+        ),
+        "updateCourseMaterial": ("PATCH", f"/materials/{m['id']}", {"title": "x"}),
+        "changeCourseMaterialStatus": ("POST", f"/materials/{m['id']}/status", {"status": "unpublished"}),
+        "createAssignment": (
+            "POST",
+            f"/course-spaces/{space}/assignments",
+            {"title": "x", "due_at": at(days=1), "max_points": 1, "submission_type": "text"},
+        ),
+        "updateAssignment": ("PATCH", f"/assignments/{x['id']}", {"title": "x"}),
+        "changeAssignmentStatus": ("POST", f"/assignments/{x['id']}/status", {"status": "closed"}),
+        "createQuiz": (
+            "POST",
+            f"/course-spaces/{space}/quizzes",
+            {"title": "x", "opens_at": at(), "closes_at": at(days=1), "questions": [qz_question()]},
+        ),
+        "updateQuiz": ("PATCH", f"/quizzes/{qz['id']}", {"title": "x"}),
+        "changeQuizStatus": ("POST", f"/quizzes/{qz['id']}/status", {"status": "closed"}),
+        "scoreQuizAttempt": ("PATCH", f"/attempts/{t['id']}/scores", {"scores": [{"question_id": essay, "points": 1}]}),
+        "enterGrades": ("PUT", "/grades", grade),
+        "releaseGrades": ("POST", "/grades/release", {"item_type": "assignment", "item_id": x["id"]}),
+        "moderateThread": ("POST", f"/threads/{th['id']}/moderation", {"action": "lock"}),
+        "moderatePost": ("POST", f"/posts/{p['id']}/moderation", {"action": "hide"}),
+    }
+    for operation_id, (method, path, body) in writes.items():
+        r = c.call(method, path, body, c.teacher)
+        assert r.status_code == 409 and r.json()["detail"]["code"] == "course_space_archived", (operation_id, r.text)
+        assert "409" in operation(operation_id)["responses"] or operation_id in UNDECLARED_409, operation_id
