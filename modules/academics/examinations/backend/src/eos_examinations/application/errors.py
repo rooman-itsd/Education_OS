@@ -11,7 +11,7 @@ STATUS_BY_KIND = {"invalid": 400, "not_found": 404, "conflict": 409, "unprocessa
 class ExaminationsError(Exception):
     """A refusal with an HTTP status and a contract error body."""
 
-    def __init__(self, status: int, code: str, message: str, **details: object) -> None:
+    def __init__(self, status: int, code: str, message: str, /, **details: object) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
