@@ -11,8 +11,7 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - for every widget whose module is in apps/frontend/config/modules.enabled.yaml: the panel renders by its
  *   registered title and shows its empty state, or says its data is not available while the backend is missing;
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- *   facility-booking is enabled but exports facility-booking.bookings-today, not the facility-booking.bookings the
- *   layout lists, so that widget skips until sprint batch #331;
+ *   facility-booking.bookings (upcoming bookings on the resources the user approves) is checked by its empty state;
  * - the data journeys are fixme: each needs a sports module enabled, and sports-nutrition-health learns athletes
  *   only from the athlete-performance.athlete.registered event.
  *
@@ -52,13 +51,12 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Athlete performance data is not available yet.",
   },
   {
-    // Texts of facility-booking.bookings-today, the widget the module exports today (BookingsTodayWidget.tsx).
     id: "facility-booking.bookings",
     module: "facilities/facility-booking",
     batch: "#331",
-    title: "Bookings today",
-    probe: "/facility-booking/summary",
-    empty: "No bookings today",
+    title: "Upcoming bookings",
+    probe: "/facility-booking/bookings?scope=managed&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
 ];
