@@ -108,7 +108,8 @@ def offset(cursor: str | None) -> int:
     """A cursor is the position of the next item, as this API returned it in next_cursor."""
     if cursor is None or cursor == "":
         return 0
-    if not cursor.isdigit() or len(cursor) > 9:
+    # isascii(): str.isdigit() is also true for "²", "９" and "٣", which int() rejects or the API never returns.
+    if not (cursor.isascii() and cursor.isdigit()) or len(cursor) > 9:
         raise PlacementError(400, "invalid_cursor", "invalid cursor")
     return int(cursor)
 

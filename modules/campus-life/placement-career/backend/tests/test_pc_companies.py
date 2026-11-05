@@ -115,7 +115,7 @@ def test_company_pages_follow_the_cursor(client, org):
         if cursor is None:
             break
     assert pages == 3 and len(seen) == 5 and set(seen) == ids
-    for bad in ("abc", "-1", "1.5"):
+    for bad in ("abc", "-1", "1.5", "²", "９", "٣", "1234567890"):
         assert (
             code(client.get(f"{BASE}/companies", params={"cursor": bad}, headers=org.officer), 400) == "invalid_cursor"
         )

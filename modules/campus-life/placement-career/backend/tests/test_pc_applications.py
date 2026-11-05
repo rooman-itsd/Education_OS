@@ -304,3 +304,21 @@ def test_my_lists_are_cursor_pages(client, org):
     mine = ok(client.get(f"{BASE}/me/applications", headers=org.student))["items"]
     assert [m["opening_id"] for m in mine] == [o["id"] for o in reversed(ops)]  # newest first
     assert code(client.get(f"{BASE}/me/applications", headers=org.nobody), 403) == "forbidden"
+
+
+@pytest.mark.parametrize("bad", ["²", "９", "٣"])
+@pytest.mark.parametrize(
+    ("path", "who"),
+    [
+        ("/companies", "officer"),
+        ("/drives", "officer"),
+        ("/openings", "officer"),
+        ("/applications", "officer"),
+        ("/me/openings", "student"),
+        ("/me/applications", "student"),
+    ],
+)
+def test_a_non_ascii_digit_cursor_is_refused(client, org, path, who, bad):
+    # str.isdigit() is true for these, but int() rejects "²" and the API never returns the others.
+    response = client.get(f"{BASE}{path}", params={"cursor": bad}, headers=getattr(org, who))
+    assert code(response, 400) == "invalid_cursor"
