@@ -18,3 +18,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   and `alumni.mentoring-session.rescheduled` (nine events); `required` lists on response schemas; 404 `not_found`
   on every operation that takes an id; `maxLength` on free text; `MyMentoring.assignment` typed `[object, "null"]`;
   "upcoming" defined; `limit` on an assignment's sessions; tenancy rules for `student_id` in the PRD data model.
+- Frontend (#337): dashboard widget `alumni.mentoring` ("My mentor") for the management student, behind
+  `alumni:self:read`, reading `GET /me/mentoring` through a typed client: the mentor with role, background, focus,
+  start date and contact links, and up to five upcoming sessions with date and time in Asia/Kolkata; empty state "No
+  mentor assigned yet" when `assignment` is null; loading and error states with retry; vitest and Testing Library
+  tests.
