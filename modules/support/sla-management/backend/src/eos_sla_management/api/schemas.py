@@ -8,7 +8,7 @@ import datetime as dt
 import re
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 from ..domain.business_time import MAX_TARGET_MINUTES, MAX_ZONE_NAME
 from ..infrastructure.config import LEVELS_CAP
@@ -28,8 +28,26 @@ MAX_HOLIDAYS = 1000
 MAX_PEOPLE_PER_LEVEL = 50
 
 
+def _has_nul(value) -> bool:
+    if isinstance(value, str):
+        return "\x00" in value
+    if isinstance(value, (list, tuple)):
+        return any(_has_nul(v) for v in value)
+    if isinstance(value, dict):
+        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
+    return False
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("*")
+    @classmethod
+    def _no_nul(cls, value):
+        """Postgres text cannot hold NUL characters; refused here (422) rather than failing in the database (500)."""
+        if _has_nul(value):
+            raise ValueError("text must not contain NUL characters")
+        return value
 
 
 # Fields the contract lets a PATCH set to null (`type: [..., "null"]`).

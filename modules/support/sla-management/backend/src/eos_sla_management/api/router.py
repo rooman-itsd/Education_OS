@@ -17,9 +17,9 @@ from ..domain.clocks import KINDS, STATES
 from ..domain.policies import PRIORITIES
 from ..infrastructure.config import BREACH_LIST_RANGE
 from . import schemas as s
-from .deps import require
+from .deps import no_nul, require
 
-router = APIRouter(tags=["sla-management"])
+router = APIRouter(tags=["sla-management"], dependencies=[Depends(no_nul)])
 
 LIMIT = Query(20, ge=1, le=100)
 READ = require(perm.CLOCK_READ)
