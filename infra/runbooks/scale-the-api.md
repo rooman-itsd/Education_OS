@@ -46,10 +46,12 @@ Write the old and new sizes in the team channel so the next person knows.
 Today the API starts one `uvicorn` process (`infra/docker/api.Dockerfile`). Starting more is a change to the
 repository, not something to edit on the host (auto-deploy resets the checkout to `main`), and it should wait for
 two things, because several processes mean several sets of database connections:
-- the **connection pooler** (PgBouncer, #96), and
+- the **connection pooler** switched on (PgBouncer, #96: built, off by default; `../docker/README.md`, "Connection
+  pooler", says how), so many processes share a bounded number of Postgres connections; and
 - a **load test with the numbers** (#152), so the worker count is chosen from a measurement.
 
-This runbook is updated with the exact change when those land. Until then, scale up (section 2) and keep one process.
+This runbook is updated with the exact change when the load test lands. Until then, scale up (section 2) and keep one
+process.
 
 ## The database
 
@@ -57,6 +59,26 @@ This runbook is updated with the exact change when those land. Until then, scale
   `$C exec -T db psql -U eos -d eos -c "SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1"`.
 - Do not change Postgres settings by hand on production. A change that helps goes through a pull request, so staging
   gets it first.
+
+### Is a slow query using an index under row-level security?
+
+Every table with `organisation_id` has an index that starts with it (`apps/backend/tests/test_organisation_indexes.py`
+checks this on every pull request), so a query of one organisation should use it. Check a slow query as the API sees it:
+as `eos_app`, inside one organisation, with `EXPLAIN ANALYZE`. Take the organisation's id from the slow `request` log
+line; the query is an example, put the slow one in its place:
+
+```
+$C exec -T db psql -U eos -d eos
+SET ROLE eos_app;
+BEGIN;
+SELECT set_config('app.organisation_id', '<organisation id>', true);
+EXPLAIN ANALYZE SELECT * FROM helpdesk_ticket WHERE status = 'open' ORDER BY created_at DESC LIMIT 20;
+ROLLBACK;
+```
+
+`Index Scan` or `Bitmap Index Scan` on an `organisation_id` index is what you want. `Seq Scan` on a big table means a
+missing index for that filter: report it to the module's owner with the plan. On a small table a `Seq Scan` is normal:
+Postgres reads a few pages faster than it would use an index.
 
 ## After scaling
 

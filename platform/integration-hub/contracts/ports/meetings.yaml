@@ -1,0 +1,133 @@
+# The Meetings port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). Called through packages/sdk, never against a provider.
+port: Meetings
+id: meetings
+version: 1
+defined_by: integration-hub
+implemented_by: [video-conferencing]
+consumers: [lms, timetable-attendance, selection-process, alumni]   # proposed; lms LQ8 decides lms or timetable-attendance owns live classes
+
+purpose: >-
+  Create, change and cancel an online meeting for a scheduled class, interview or session; give each participant
+  the right join link; and report back what happened: started, ended, who attended for how long, and recordings.
+  The schedule stays in the calling module. The meeting is only the room.
+
+vocabulary:
+  participant_role: [host, co_host, attendee]
+  meeting_status: [scheduled, started, ended, cancelled]
+
+operations:
+  - name: create_meeting
+    mode: sync                                # the caller needs the join link at once to show it
+    description: >-
+      Create a meeting room for one occurrence. meeting_key is the caller's idempotency key (e.g. "<class_session_id>"):
+      creating the same key twice returns the first meeting.
+    input:
+      meeting_key: string
+      title: string
+      starts_at: datetime
+      duration_minutes: integer
+      timezone: string                        # IANA, e.g. Asia/Kolkata
+      host: { person_id: uuid, email: string, provider_user_id: string }   # provider_user_id from the connection's host mapping, when known
+      co_hosts: array                         # [{person_id, email}]
+      options:
+        waiting_room: boolean
+        record: string                        # none | cloud | local
+        join_before_host: boolean
+        authenticated_join_only: boolean      # only signed-in users of the institution's tenant
+        auto_admit_domain: string             # optional
+    output:
+      meeting_id: uuid                        # the hub's id
+      provider_meeting_id: string
+      join_url: string                        # attendee link; safe to show to enrolled participants
+      host_join_url: string                   # host link; shown to hosts only. Some providers have none (same link, role set at join)
+      passcode: string                        # null when the provider has none
+      dial_in: array                          # optional
+    errors: [not_configured, auth_failed, invalid_request, conflict, throttled, transport_unavailable, provider_error]
+
+  - name: update_meeting
+    mode: sync
+    description: Change time, duration, title, host or options. Join links stay the same where the provider allows it; the output says if they changed.
+    input: { meeting_key: string, title: string, starts_at: datetime, duration_minutes: integer, host: object, options: object }
+    output: { meeting_id: uuid, join_url: string, host_join_url: string, links_changed: boolean }
+    errors: [not_configured, auth_failed, not_found, conflict, invalid_request, throttled, transport_unavailable, provider_error]
+
+  - name: cancel_meeting
+    mode: sync
+    description: Cancel a meeting that has not started. A meeting that is live or ended answers conflict.
+    input: { meeting_key: string, reason: string }
+    output: { meeting_id: uuid, status: string }
+    errors: [not_configured, auth_failed, not_found, conflict, throttled, transport_unavailable, provider_error]
+
+  - name: join_link
+    mode: sync
+    description: >-
+      A join link for one person and role. For providers whose access is a signed token (Jitsi JWT, BigBlueButton
+      join checksum) the link is minted here, short-lived, and never stored. For the rest it returns the stored link.
+    input: { meeting_key: string, person_id: uuid, display_name: string, email: string, role: string }
+    output: { url: string, expires_at: datetime }
+    errors: [not_configured, not_found, conflict, invalid_request]
+
+  - name: get_meeting
+    mode: sync
+    input: { meeting_key: string }
+    output: { meeting_id: uuid, status: string, started_at: datetime, ended_at: datetime, provider_meeting_id: string }
+    errors: [not_found, auth_failed, transport_unavailable, provider_error]
+
+  - name: fetch_attendance
+    mode: async
+    description: >-
+      The attendance report once the meeting ended: one row per participant with joins, leaves and total seconds.
+      Participants are matched to person ids by email, or by the identity the join link carried; the unmatched are
+      returned with display name only. Published as integration-hub.meeting-attendance.received.
+    input: { meeting_key: string }
+    output:
+      meeting_id: uuid
+      participants: array                     # [{person_id (null if unmatched), display_name, email, role,
+                                              #   total_seconds, intervals: [{joined_at, left_at}]}]
+      complete: boolean                       # false when the provider may still add rows (report not final)
+    errors: [not_configured, auth_failed, not_found, unsupported, throttled, transport_unavailable, provider_error]
+
+  - name: list_recordings
+    mode: sync
+    input: { meeting_key: string }
+    output: { items: array }                  # [{provider_recording_id, kind (video|audio|transcript|chat), started_at, ended_at, bytes, expires_at}]
+    errors: [not_configured, auth_failed, not_found, unsupported, throttled, transport_unavailable, provider_error]
+
+  - name: import_recording
+    mode: async
+    description: >-
+      Copy one recording into platform/documents so it outlives the provider's retention and is governed by the
+      institution's own access rules. Large; runs in a job and streams. Only when the caller asks: recordings are
+      personal data of everyone on them.
+    input: { meeting_key: string, provider_recording_id: string }
+    output: { document_id: uuid, bytes: integer, sha256: string }
+    errors: [not_configured, auth_failed, not_found, unsupported, throttled, transport_unavailable, provider_error]
+
+capabilities:
+  scheduled_meetings: boolean                 # false for providers that only have rooms (Jitsi): the schedule is ours alone
+  host_specific_link: boolean
+  waiting_room: boolean
+  cloud_recording: boolean
+  attendance_report: boolean
+  realtime_participant_events: boolean        # participant joined/left arrive as they happen
+  max_participants: integer
+  max_duration_minutes: integer
+  create_limit_per_host_per_day: integer      # Zoom: 100 create/update calls per host user per day; 0 when unknown
+
+# Normalised notifications the hub publishes as events (contracts/events.yaml).
+inbound:
+  - kind: meeting_started
+    data: { meeting_key: string, started_at: datetime }
+  - kind: meeting_ended
+    data: { meeting_key: string, ended_at: datetime }
+  - kind: participant_joined
+    data: { meeting_key: string, person_id: uuid, joined_at: datetime }
+  - kind: participant_left
+    data: { meeting_key: string, person_id: uuid, left_at: datetime }
+  - kind: attendance_ready                    # the hub then runs fetch_attendance itself
+    data: { meeting_key: string }
+  - kind: recording_ready
+    data: { meeting_key: string, provider_recording_id: string, kind: string }
