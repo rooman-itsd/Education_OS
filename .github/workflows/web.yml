@@ -8,6 +8,8 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # started by auto-merge.yml after it merges (its merges do not trigger push workflows)
+  workflow_dispatch:
   # GitHub's merge queue tests queued PRs together before merging them (docs/team/RULES.md)
   merge_group:
 
@@ -43,7 +45,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: build
     runs-on: ubuntu-latest
     env:
