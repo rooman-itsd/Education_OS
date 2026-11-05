@@ -1,0 +1,9 @@
+# Domain events published by external-university-portals.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. Exchanges are announced by integration-hub as integration-hub.inter-institution-record.exchanged and the
+# delivery events, so a consumer never subscribes to a partner protocol's name (integrations/README.md, "Swap rule").
+module: external-university-portals
+version: 1
+events: []
+consumes: []

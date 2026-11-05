@@ -1,0 +1,22 @@
+# Permission catalogue for wearables. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Athletes link and unlink their own accounts with integration-hub:self:link. Reading the data is done by
+# athlete-performance and sports-nutrition-health under their own permissions, through the wearable-data port. This
+# catalogue covers only the device alerts the coach's dashboard shows (widget wearables.alerts on the coach layout):
+# statuses and dates, never readings.
+module: wearables
+permissions:
+  - key: wearables:alert:read
+    description: See which athletes' device links are expired, revoked, failing or silent; no health data.
+roles:
+  # coach is an academy role (sports-college); named here because its layout shows wearables.alerts and no module role
+  # it holds grants a wearables key (module-standard.md, "Permission catalogues").
+  - name: coach
+    description: Sees device alerts for athletes, filtered to the squad by the widget.
+    grants:
+      - wearables:alert:read
+  - name: org-admin
+    description: Support view of device link problems.
+    grants:
+      - wearables:alert:read

@@ -20,7 +20,7 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Item | Contract | Implementation |
 |---|---|---|
-| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **not implemented**: no backend, migrations or tests |
+| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 15 operations (grading schemes, assessment schemes, exam cycles); the other 36 operations are not implemented. Migration `ex_0001` and tests exist |
 | examinations widgets `schedule`, `hall-tickets-issued`, `results-pending` | declared in the contract | UI merged (PR #216); their endpoints are not served, so they show "not available" |
 | examinations widgets `exam-duties`, `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
 | timetable-attendance `POST /reports/attendance-eligibility` | merged | **not implemented** (the timetable-attendance backend has timetables only) |
@@ -136,6 +136,26 @@ Found while building the domain rules and tables. None is decided; each is isola
 | Department-scoped keys (`*-department`) | No department is read or assumed; `Actor` has no department | Faizan (Q13) |
 | `offering_ref` | The table follows the PRD's columns, strictly (NOT NULL). It is not written yet; the consumer slice may need to relax it, as timetable-attendance's `offering_ref` had to be, because events arrive unordered and `offering.updated` carries no new values | The consumer slice, and the architectural decision in section 7 |
 | The identity of `staff_id` on duties | Stored as a plain external id (PRD 5.8); no identity lookup or mapping | Faizan (Q11) |
+
+## 10. Choices and gaps of the configuration and exam-cycle APIs
+
+Found while serving the 15 operations of grading schemes, assessment schemes and exam cycles. None is decided; each is
+applied literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| 401 and 403 are not declared (none declares a 401; a 403 only on the three assessment-scheme writes) | The API answers 401 and 403 as `api/deps.py` does. `test_api_contract.py` records the gap and fails when the contract changes | A contract change (Shivani, with Faizan where other modules use the contract) |
+| Statuses the API returns that the contract does not declare | 400 for a bad filter value on `listExamCycles` and `listAssessmentSchemes`, and for a bad `status` value on `changeExamCycleStatus`; 400 `unknown_grading_scheme` on `updateExamCycle` (which declares no 422) | A contract change |
+| A cycle's grading scheme when the request names none and the organisation has no default | 422 `no_grading_scheme`, nothing is chosen. The task text put this rule on assessment schemes, which take no grading scheme; it is applied where the scheme is chosen, on `createExamCycle` | Shivani, to confirm the reading |
+| Whether a cycle `code` is unique | No uniqueness: no constraint, no 409 | Shivani: a uniqueness rule (per period? per organisation?) |
+| Grading-band coverage of 0 to 100 | Each band is validated; coverage is not enforced (see section 8) | Shivani: the inclusive-boundary rule |
+| Locked marks block replacing an assessment scheme (FR-2) | **Not protected yet.** `ensure_editable` is called with `has_locked_marks=False` inline: no marks tables exist and the request is never trusted for it, so only its superseded check is effective. Only a draft can be replaced, so active and superseded schemes are never changed | Persistence-backed validation, deferred until marks management exists |
+| Department scope of `assessment-scheme:write-department` | A holder of `write-department` or `write-all` may write any scheme; no department is read | Faizan (Q13) |
+| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required and `offering_ref` is not filled | The consumer slice |
+| `weightage_percent` is `exclusiveMinimum: 0` in the contract | Enforced by the use case (400); the domain still accepts 0 | None |
+| Assessment components are returned ordered by code | There is no position column; the order of the request is not kept | A decision on component order |
+| A cycle with published results | `GradingScheme.in_use` is true for a cycle at `results_published` or `closed`; nothing sets `results_published` until publication exists | The results slice |
+| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the read models are not filled | The consumer slice |
 
 ## 9. Evidence limits
 

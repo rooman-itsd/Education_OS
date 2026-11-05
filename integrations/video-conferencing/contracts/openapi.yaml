@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: video-conferencing API
+  version: 0.2.0
+  description: >-
+    Zoom, Microsoft Teams, Webex and self-hosted Jitsi adapter. See docs/prd.md. Modules never call this API: they use
+    the meetings port (contracts/ports/meetings.yaml) through packages/sdk, and integration-hub routes the call here.
+
+
+    Exposed over HTTP: (1) the provider callbacks, received by integration-hub at its /inbound routes and verified and
+    parsed by this adapter (documented here so the vendor payloads and their verification are reviewed in one place);
+    (2) a read-only operator view of meetings created through the port, for support.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor.
+servers:
+  - url: /api/v1/video-conferencing
+
+paths:
+  /zoom-app-events:
+    servers:
+      - url: /api/v1/integration-hub/inbound/video-conferencing
+    post:
+      summary: >-
+        Zoom Marketplace app events for every institution that authorised Rooman's app (app-level URL; the account is
+        named by payload.account_id). Verified by x-zm-signature = "v0=" + hex(HMAC-SHA256(secret token,
+        "v0:{x-zm-request-timestamp}:{raw body}")) with VIDEO_CONFERENCING_ZOOM_WEBHOOK_SECRET_TOKEN and a 300 s
+        timestamp tolerance. The endpoint.url_validation event is answered with {plainToken, encryptedToken} within 3 s.
+        Events used: meeting.started, meeting.ended, meeting.participant_joined, meeting.participant_left,
+        recording.completed, meeting.deleted. Served at the hub's POST /inbound/video-conferencing; the path here is
+        only a label.
+      operationId: zoomAppEvents
+      security: []
+      parameters:
+        - { name: x-zm-signature, in: header, required: true, schema: { type: string } }
+        - { name: x-zm-request-timestamp, in: header, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ZoomEvent" } } } }
+      responses:
+        "200": { description: "Acknowledged; or the url_validation answer", content: { application/json: { schema: { type: object, properties: { plainToken: { type: string }, encryptedToken: { type: string } } } } } }
+        "401": { description: Signature or timestamp invalid }
+
+  /connection-events:
+    servers:
+      - url: /api/v1/integration-hub/inbound/video-conferencing/{connection_key}
+        variables: { connection_key: { default: "-" } }
+    post:
+      summary: >-
+        Connection-level callbacks; the connection's provider decides the verification. Zoom (an institution's own
+        app): as above with the connection's webhook_secret_token. Microsoft Graph change notifications: a
+        ?validationToken=... request is answered 200 text/plain with the decoded token within 10 s; every notification
+        must carry the subscription's clientState (a per-subscription secret) and is acknowledged 202 within 3 s;
+        lifecycle notifications (reauthorizationRequired, subscriptionRemoved, missed) renew or recreate the
+        subscription. Webex: X-Webex-Signature (HMAC-SHA256) when present, else X-Spark-Signature (HMAC-SHA1) over the
+        raw body with the connection's webhook secret; header names compared case-insensitively.
+      operationId: connectionEvents
+      security: []
+      parameters:
+        - { name: validationToken, in: query, schema: { type: string }, description: Graph subscription validation only }
+      requestBody: { required: false, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      responses:
+        "200": { description: "Acknowledged (Zoom, Webex), or Graph validation answered as text/plain" }
+        "202": { description: Acknowledged (Graph) }
+        "401": { description: Signature or clientState invalid }
+
+  /meetings:
+    get:
+      summary: >-
+        Meetings created through the port, newest first: meeting key, calling module, provider, status, scheduled and
+        actual times, whether attendance and recordings arrived. No join links, passcodes or participants.
+        Permission video-conferencing:meeting:read.
+      operationId: listMeetings
+      parameters:
+        - { name: provider, in: query, schema: { type: string, enum: [zoom, teams, webex, jitsi] } }
+        - { name: status, in: query, schema: { type: string, enum: [scheduled, started, ended, cancelled] } }
+        - { name: caller_module, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MeetingPage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    ZoomEvent:
+      type: object
+      required: [event]
+      properties:
+        event: { type: string, examples: ["meeting.ended", "endpoint.url_validation"] }
+        event_ts: { type: integer }
+        payload:
+          type: object
+          properties:
+            account_id: { type: string }
+            plainToken: { type: string }
+            object: { type: object, additionalProperties: true }
+    Meeting:
+      type: object
+      required: [meeting_key, provider, status, starts_at]
+      properties:
+        meeting_key: { type: string }
+        caller_module: { type: string }
+        provider: { type: string, enum: [zoom, teams, webex, jitsi] }
+        provider_meeting_id: { type: [string, "null"] }
+        status: { type: string, enum: [scheduled, started, ended, cancelled] }
+        starts_at: { type: string, format: date-time }
+        duration_minutes: { type: integer }
+        started_at: { type: [string, "null"], format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        attendance_received: { type: boolean }
+        recordings: { type: integer }
+    MeetingPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Meeting" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }

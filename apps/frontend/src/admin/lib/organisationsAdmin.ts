@@ -19,6 +19,8 @@ export interface AdminOrganisation {
   created_at: string | null;
   plan?: string | null;
   trial_ends_at?: string | null;
+  /** Set when a super admin asked for the organisation to be deleted: it is purged after this date. */
+  delete_after?: string | null;
 }
 
 /** GET /tenancy/admin/organisations/{id} (OrganisationDetail). `admin_email` is in the contract but
@@ -66,5 +68,28 @@ export const rejectOrganisation = (id: string, reason: string): Promise<AdminOrg
   return api<AdminOrganisation>(`/tenancy/admin/organisations/${encodeURIComponent(id)}/status`, {
     method: 'PUT',
     json: { status: 'archived', reason: r }
+  });
+};
+
+/** The statuses the Organisations screen filters by, in tenancy's order (domain/models.py STATUSES). */
+export const ORGANISATION_STATUSES = ['pending_verification', 'pending_approval', 'active', 'suspended', 'archived'] as const;
+
+/** Every organisation, newest first (GET /tenancy/admin/organisations, platform:organisations:read). The list is
+ *  filtered on the page: it is one call, and the API takes one status per call. */
+export const listOrganisations = (): Promise<AdminOrganisation[]> =>
+  api<AdminOrganisation[]>('/tenancy/admin/organisations');
+
+/** Suspends an active organisation or switches a suspended one back on (PUT /status, platform:organisations:manage).
+ *  The API records the reason in the audit trail and the organisation's admins may see it, so it is required. */
+export const setOrganisationStatus = (
+  id: string,
+  status: 'active' | 'suspended',
+  reason: string
+): Promise<AdminOrganisation> => {
+  const r = reason.trim();
+  if (!r) return Promise.reject(new Error('A reason is required.'));
+  return api<AdminOrganisation>(`/tenancy/admin/organisations/${encodeURIComponent(id)}/status`, {
+    method: 'PUT',
+    json: { status, reason: r }
   });
 };
