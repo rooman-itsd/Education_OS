@@ -1,6 +1,6 @@
 # Launch checklist: v1.0
 
-Issue #149, batch #313. Target Tuesday 25 November 2026; v1.0 goes live when every box below is ticked, decided by
+Issue #149, batch #313. Target Thursday 12 November 2026; v1.0 goes live when every box below is ticked, decided by
 Faizan with Srujan and recorded in [ADR-0007](../architecture/adr/0007-go-live-v1.md) (5 November 2026).
 A box is ticked only with evidence (a link, a
 command output pasted in the issue, or a screenshot).

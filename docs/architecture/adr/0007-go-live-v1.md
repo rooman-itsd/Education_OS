@@ -30,6 +30,6 @@ Record at decision time:
 ## Consequences
 - Production changes only through tags from go-live; until then `main` keeps deploying to staging.
 - Tier 2 is not deferred to v1.1: every batch stays on the v1.0 board until it is closed.
-- Target date 25 November 2026 (lead, 5 November): the whole application, including search (#87), the six
+- Target date 12 November 2026 (lead, 5 November): the whole application, including search (#87), the six
   integrations against sandboxes (#141 to #146) and the DPDP pass (#148). Only the external penetration test
   (#147) is scheduled after launch.
