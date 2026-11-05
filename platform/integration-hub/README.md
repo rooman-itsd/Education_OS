@@ -2,26 +2,39 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** planned
+**Status:** contracts proposed (v0.2.0); not built
 
-Adapter registry, data exchange (XML / JSON / CSV), webhooks, retries.
+The one place Education OS meets outside systems. Modules call a **port**; the hub runs the call on the organisation's
+enabled **connection** for that port; an **adapter** in `integrations/` speaks to the provider. No module talks to a
+vendor, so changing provider is configuration, not code (`integrations/README.md`, "Swap rule").
 
 ## Scope
-_Owner fills in: what this module is responsible for, and what it explicitly is not._
+- Ports, one per kind of integration: [`contracts/ports/`](contracts/ports/) (certificate-issuance, academic-records,
+  regulatory-submission, meetings, wearable-data, inter-institution-records), plus the contract every adapter
+  implements ([`adapter.yaml`](contracts/ports/adapter.yaml)).
+- Connections per organisation: settings, credentials in a secret store (never the database), mock, sandbox and live.
+- OAuth for organisations and for people linking their own accounts.
+- Provider callbacks: signature verification, handshakes, deduplication, acknowledge first.
+- Delivery log, retries with backoff, dead letters; health checks.
+
+Not: provider protocols (the adapters), the decision to issue, schedule or file (the modules), email and SMS
+(`platform/notification` and `messaging-providers`), payments (`payment-sbiepay`). See [docs/prd.md](docs/prd.md).
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
 - Events: [contracts/events.yaml](contracts/events.yaml)
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
+- Ports: [contracts/ports/](contracts/ports/), called through `packages/sdk` (`integrations.invoke`)
 
 ## Dependencies
-See `module.yaml`. This module must not import code from any other module under `modules/`.
+See `module.yaml`. This module must not import code from any other module under `modules/` or `integrations/`;
+adapters are found by the `eos.integration_adapters` entry point.
 
 ## Layout
 | Path | Purpose |
 |---|---|
 | `docs/` | PRD, user stories, data model, screen list |
-| `contracts/` | OpenAPI, event schemas, permission catalogue |
+| `contracts/` | OpenAPI, event schemas, permission catalogue, ports |
 | `backend/` | Domain, application, infrastructure, API layers + unit tests |
 | `frontend/` | Pages, components, API client + tests |
 | `mobile/` | Mobile screens (optional) |

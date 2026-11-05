@@ -1,0 +1,10 @@
+# Domain events published by nad.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. Submission outcomes are published by integration-hub as port events
+# (integration-hub.academic-record.submission-changed, integration-hub.delivery.*), normalised so a consumer never
+# subscribes to a depository's name (integrations/README.md, "Swap rule").
+module: nad
+version: 1
+events: []
+consumes: []

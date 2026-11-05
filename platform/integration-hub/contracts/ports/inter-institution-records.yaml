@@ -1,0 +1,88 @@
+# The InterInstitutionRecords port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). Called through packages/sdk, never against a partner.
+#
+# Most exchanges between institutions are files: a transcript PDF, a credit statement, a spreadsheet of results sent
+# by email or uploaded to the partner's portal. Open standards exist for some partners (EMREX ELMO XML, Europass
+# Digital Credentials, Erasmus Without Paper), so the port carries records in one normalised shape and the adapter
+# writes and reads each partner's format. In Indian credit transfer the bank of record is the Academic Bank of
+# Credits, reached through the AcademicRecords port, not this one.
+port: InterInstitutionRecords
+id: inter-institution-records
+version: 1
+defined_by: integration-hub
+implemented_by: [external-university-portals]
+consumers: [examinations, enrolment-registration, student-information, admissions]
+
+purpose: >-
+  Send a learner's records (transcript of records, credits, mobility) to a partner institution in the partner's
+  format, and read records a partner sent back (an exchange semester's results, an incoming transfer student's
+  transcript) into one shape for a person to review and accept. Accepting them is the consuming module's decision.
+
+vocabulary:
+  format: [pdf, csv, elmo_xml, edc_jsonld]
+  channel: [download, email, partner_portal, api]
+  exchange_status: [prepared, sent, manual_action_required, delivered_manually, received, parsed, rejected]
+
+# The normalised record. Close to the European Learning Model / ELMO so the XML and JSON-LD writers are mappings.
+transcript:
+  learner: { person_id: uuid, name: string, date_of_birth: date, apaar_id: string, partner_student_id: string, email: string }
+  issuer: { institution_name: string, institution_code: string, country: string }
+  programme: { code: string, name: string, level: string, eqf_level: integer }
+  entries: array                              # [{course_code, title, credits, credit_system (indian_credit | ects | other),
+                                              #   grade, grade_scheme, grade_point, term, started_on, completed_on, status (passed | failed | in_progress)}]
+  totals: { credits_earned: number, cgpa: number }
+  issued_on: date
+
+operations:
+  - name: export_records
+    mode: async
+    description: >-
+      Write a transcript in a partner's format and keep the file in platform/documents. For pdf the caller passes the
+      signed PDF it already rendered; this adapter does not design certificates.
+    input: { exchange_key: string, partner_id: string, format: string, transcript: object, document_id: uuid }
+    output: { exchange_id: uuid, document_id: uuid, format: string, sha256: string }
+    errors: [not_configured, invalid_request, unsupported]
+
+  - name: send_records
+    mode: async
+    description: >-
+      Deliver an exported record over the partner's channel. download and partner_portal answer manual_action_required
+      with the file and steps; email sends it through platform/notification to the partner's registered address;
+      api sends it over the partner's protocol where the connection supports one.
+    input: { exchange_id: uuid, message: string }
+    output: { exchange_id: uuid, status: string, channel: string, provider_reference: string }
+    errors: [not_configured, auth_failed, manual_action_required, rejected, throttled, transport_unavailable, provider_error]
+
+  - name: record_manual_delivery
+    mode: sync
+    description: A person sent or uploaded the file themselves; record when, by whom and the partner's reference.
+    input: { exchange_id: uuid, delivered_on: date, delivered_by: uuid, partner_reference: string }
+    output: { exchange_id: uuid, status: string }
+    errors: [not_found, conflict]
+
+  - name: import_records
+    mode: async
+    description: >-
+      Read a file a partner sent (uploaded to platform/documents by the consuming module) in a known format and return
+      the normalised transcript with every line it could not map. Nothing is accepted here.
+    input: { exchange_key: string, partner_id: string, format: string, document_id: uuid }
+    output: { exchange_id: uuid, transcript: object, unmapped: array, integrity: string }   # integrity: verified | unsigned | failed
+    errors: [not_configured, invalid_request, unsupported]
+
+  - name: list_partners
+    mode: sync
+    description: Partner institutions configured for this organisation, with the formats and channels each accepts.
+    output: { items: array }                  # [{partner_id, name, country, formats, channels, grade_conversion}]
+    errors: []
+
+capabilities:
+  formats_out: array
+  formats_in: array
+  channels: array
+  signed_exports: boolean                     # elmo_xml and edc_jsonld carry the institution's seal
+
+inbound:
+  - kind: records_received                    # a partner sent records over an api channel
+    data: { partner_id: string, exchange_id: uuid, format: string }

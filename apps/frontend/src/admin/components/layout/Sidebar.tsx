@@ -14,6 +14,7 @@ import {
   BookOpen,
   Trophy,
   Building2,
+  CreditCard,
   Wallet,
   Home,
   Scale,
@@ -25,6 +26,7 @@ import { SUITES, moduleHref } from '../../data/architecture';
 import { MODULE_ICONS } from '../../data/moduleIcons';
 import { isLive, useEntitlementView, type EntitlementView } from '../../data/entitlement';
 import { useOrganisation } from '../../lib/organisation';
+import { useAuth } from '../../lib/auth';
 import { EduMark, Wordmark } from '../ui/Wordmark';
 
 interface SidebarProps {
@@ -46,6 +48,8 @@ interface NavItem {
   live?: boolean;
   /** Icon colour class; the icon keeps it whether or not the row is active. */
   color?: string;
+  /** Shown only to a super admin (platform-wide screens; the API refuses everyone else anyway). */
+  superAdminOnly?: boolean;
 }
 
 interface Suite {
@@ -105,7 +109,9 @@ const ADMIN_ITEMS: NavItem[] = [
   { name: 'Roles & Permissions', path: '/roles', icon: ShieldCheck, live: true },
   { name: 'Role Dashboards', path: '/dashboards', icon: LayoutGrid, live: true },
   { name: 'Module Registry', path: '/modules', icon: Blocks, live: true },
-  { name: 'Audit Log', path: '/audit-logs', icon: History, live: true }
+  { name: 'Audit Log', path: '/audit-logs', icon: History, live: true },
+  { name: 'Organisations', path: '/organisations', icon: Building2, live: true, superAdminOnly: true },
+  { name: 'Subscriptions', path: '/subscriptions', icon: CreditCard, live: true, superAdminOnly: true }
 ];
 
 const buildSuites = (view: EntitlementView): Suite[] =>
@@ -211,7 +217,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse, m
   const location = useLocation();
   const view = useEntitlementView();
   const org = useOrganisation();
+  const { session, preview } = useAuth();
   const suites = buildSuites(view);
+  // Platform-wide screens for a super admin; preview mode shows them too, with samples.
+  const adminItems = ADMIN_ITEMS.filter((i) => !i.superAdminOnly || preview || Boolean(session?.me.is_super_admin));
 
   // The highlighted row is the parent of the current route. Its suite opens itself;
   // every other suite stays folded until clicked.
@@ -355,7 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggleCollapse, m
           </div>
 
           <GroupLabel collapsed={collapsed}>Administration</GroupLabel>
-          <div className="space-y-0.5 eos-nav-in" style={{ animationDelay: '420ms' }}>{ADMIN_ITEMS.map(topLink)}</div>
+          <div className="space-y-0.5 eos-nav-in" style={{ animationDelay: '420ms' }}>{adminItems.map(topLink)}</div>
         </nav>
 
         {/* Institutional footer */}

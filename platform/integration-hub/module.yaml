@@ -4,14 +4,17 @@ name: integration-hub
 kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Adapter registry, data exchange (XML / JSON / CSV), webhooks, retries."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+version: 0.2.0
+status: in-progress       # planned | in-progress | stable | deprecated
+description: "Ports to outside systems, the adapter registry, connections, credentials, provider callbacks, retries."
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
+# event-bus: port and connection events. scheduler: health checks, token refresh, retries, retention.
+# documents: files a port carries (certificates, packages, recordings) are referenced by document id.
+# notification: tells org admins when a connection fails or a delivery is dead-lettered.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, event-bus, scheduler, documents, notification]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -19,6 +22,15 @@ exposes:
   api: contracts/openapi.yaml
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
+  # The ports adapters implement and modules call through packages/sdk. Each adapter keeps a copy.
+  ports:
+    - contracts/ports/adapter.yaml
+    - contracts/ports/certificate-issuance.yaml
+    - contracts/ports/academic-records.yaml
+    - contracts/ports/regulatory-submission.yaml
+    - contracts/ports/meetings.yaml
+    - contracts/ports/wearable-data.yaml
+    - contracts/ports/inter-institution-records.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
 consumes_events: []

@@ -1,0 +1,12 @@
+# Domain events published by wearables.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. New data is announced by integration-hub as integration-hub.wearable-data.received (ids and dates only, never
+# readings), and link changes as integration-hub.account-link.connected / .revoked, so athlete-performance never
+# subscribes to a device maker's name (integrations/README.md, "Swap rule").
+module: wearables
+version: 1
+events: []
+# integration-hub.account-link.revoked (port wearable-data): delete every record collected under the link.
+consumes:
+  - integration-hub.account-link.revoked
