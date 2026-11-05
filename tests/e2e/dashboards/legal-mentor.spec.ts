@@ -54,7 +54,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Judging tasks are not available yet.",
   },
   { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
-  { id: "productions.in-preparation", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.in-preparation",
+    module: "practice/productions",
+    batch: "#318",
+    title: "In preparation",
+    probe: "/productions/in-preparation",
+    empty: "Nothing in preparation",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 

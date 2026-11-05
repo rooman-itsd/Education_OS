@@ -32,8 +32,24 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No open calls right now",
     unavailable: "Open calls are not available yet.",
   },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
