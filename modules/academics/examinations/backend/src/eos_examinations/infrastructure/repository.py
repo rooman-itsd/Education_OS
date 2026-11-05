@@ -150,3 +150,33 @@ def count(db: Session, model) -> int:
 
 def cycle(db: Session, exam_cycle_id: str) -> ExamCycleRow | None:
     return get(db, ExamCycleRow, exam_cycle_id)
+
+
+# ---------------------------------------------------------------- listings for the configuration and exam-cycle use cases
+
+PUBLISHED_CYCLE_STATUSES = ("results_published", "closed")  # a cycle whose results were published (PRD section 6)
+
+
+def page(db: Session, query: Select, order: list, limit: int, offset: int) -> tuple[list, int]:
+    """One page of an already-scoped query, ordered, and the total before paging."""
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    rows = list(db.scalars(query.order_by(*order).limit(limit).offset(offset)))
+    return rows, total
+
+
+def grading_schemes_in_use(db: Session) -> set[str]:
+    """Ids of the grading schemes a cycle with published results uses (FR-3: those cannot change)."""
+    query = scoped(
+        db,
+        select(ExamCycleRow.grading_scheme_id).where(ExamCycleRow.status.in_(PUBLISHED_CYCLE_STATUSES)).distinct(),
+        ExamCycleRow,
+    )
+    return set(db.scalars(query))
+
+
+def grading_scheme_in_use(db: Session, grading_scheme_id: str) -> bool:
+    return grading_scheme_id in grading_schemes_in_use(db)
+
+
+def grading_schemes(db: Session) -> list[GradingSchemeRow]:
+    return list(db.scalars(q(db, GradingSchemeRow).order_by(GradingSchemeRow.name, GradingSchemeRow.id)))
