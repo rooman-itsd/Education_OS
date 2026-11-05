@@ -31,3 +31,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Review fix (#504): an explicit `null` in a request body is a 422 for every field except `AssessmentInput.score`, the only
   one the contract types as nullable. A PATCH with `supervisor_ids: null` used to wipe the supervisors of a site or
   opening; leaving the field out keeps them, and `[]` clears them on purpose.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/field-training`) and
+  `apps/frontend/config/modules.enabled.yaml` (its five widgets on the trainee, supervisor and coordinator dashboards)
+  (#339).
