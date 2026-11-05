@@ -12,6 +12,7 @@
 modules:
   - academics/academic-management
   - academics/examinations
+  - campus-life/alumni
   - campus-life/hostel
   - campus-life/transport
   - facilities/asset-management
