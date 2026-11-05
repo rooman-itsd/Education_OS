@@ -71,6 +71,11 @@ class Actor:
     roles: list[str] = field(default_factory=list)
     permissions: set[str] = field(default_factory=set)
 
+    def __post_init__(self) -> None:
+        # Ids are compared in lowercase everywhere (see api.schemas.LowerId), the caller's own included.
+        self.user_id = self.user_id.lower()
+        self.organisation_id = self.organisation_id.lower()
+
     def can(self, permission: str) -> bool:
         return permission in self.permissions
 
