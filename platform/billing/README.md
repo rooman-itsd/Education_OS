@@ -49,5 +49,14 @@ a trial is listed without a name.
 | `billing.plan-and-trial`, `billing.usage-vs-limits`, `billing.invoices` | Organisation Admin | `billing:subscription:read` |
 | `billing.trials-expiring`, `billing.revenue-by-plan`, `billing.subscriptions-by-plan` | Super Admin | `platform:revenue:read` |
 
+## GST invoices
+An invoice is written when a paid plan is activated, as a snapshot (`application/service.py::_tax_fields`; the rules
+are pure functions in `domain/gst.py`). The supplier is the platform: `BILLING_SUPPLIER_GSTIN`, `_NAME`, `_ADDRESS`
+in `config/env.example`. The recipient is the organisation's billing profile (`GET/PUT /billing-profile`); its GSTIN
+is optional. Tax is CGST + SGST when the place of supply equals the supplier's state, IGST otherwise; the taxable
+value is the plan price times the months in the cycle (prices are exclusive of GST). Numbers are
+`EOS/26-27/000001`: per financial year (1 April to 31 March, Indian time), gapless, within the 16 characters GST
+allows. Invoices from before this are not tax invoices and keep empty GST fields.
+
 ## Porting this module to another repo
 Follow [docs/architecture/module-standard.md](../../docs/architecture/module-standard.md#portability-checklist).

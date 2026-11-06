@@ -27,3 +27,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   now also a partial unique index); an issue locks the member; a cursor we never handed out starts from the top;
   the consumer scopes by the event envelope's organisation and ignores a non-string reference; the loans widget
   says "not available yet", "sign in again" or "no access" as the other widgets do.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/library`) and
+  `apps/frontend/config/modules.enabled.yaml` (the `library.loans` widget on the Student dashboard) (#338).

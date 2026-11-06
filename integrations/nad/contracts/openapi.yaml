@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: nad API
+  version: 0.2.0
+  description: >-
+    National Academic Depository (NAD) and Academic Bank of Credits (ABC) adapter. See docs/prd.md. Modules never call
+    this API: they use the academic-records port (contracts/ports/academic-records.yaml) through packages/sdk, and
+    integration-hub routes the call here. Neither depository calls back, so there are no inbound channels. What is
+    exposed is a read-only operator view of submissions: what was lodged or prepared for upload, its status and its
+    files.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor; 404 not_found.
+servers:
+  - url: /api/v1/nad
+
+paths:
+  /submissions:
+    get:
+      summary: >-
+        Award and credit submissions, newest first, with status, row counts and channel (api or manual upload). No
+        learner rows. Permission nad:submission:read.
+      operationId: listSubmissions
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [awards, award_corrections, credits] } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/SubmissionStatus" } }
+        - { name: session, in: query, schema: { type: string, examples: ["2025-26"] } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SubmissionPage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /submissions/{id}:
+    get:
+      summary: >-
+        One submission: status, the upload files (document ids) and steps when it is a manual upload, the portal
+        reference once recorded, and row errors by row number and code (never the learner's data). Permission
+        nad:submission:read.
+      operationId: getSubmission
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SubmissionDetail" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: not_found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    SubmissionStatus:
+      type: string
+      enum: [prepared, submitted, accepted, partially_accepted, rejected, manual_action_required, uploaded_manually]
+    Submission:
+      type: object
+      required: [id, kind, depository, status, rows, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [awards, award_corrections, credits] }
+        depository: { type: string, enum: [nad, abc] }
+        channel: { type: string, enum: [api, manual_upload] }
+        award_kind: { type: [string, "null"] }
+        programme_code: { type: [string, "null"] }
+        session: { type: string }
+        term: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/SubmissionStatus" }
+        rows: { type: integer }
+        accepted_rows: { type: [integer, "null"] }
+        rejected_rows: { type: [integer, "null"] }
+        caller_reference: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SubmissionDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Submission" }
+        - type: object
+          properties:
+            upload_files: { type: array, items: { type: object, properties: { document_id: { type: string, format: uuid }, filename: { type: string }, rows: { type: integer } } } }
+            steps: { type: array, items: { type: string } }
+            portal_reference: { type: [string, "null"] }
+            uploaded_on: { type: [string, "null"], format: date }
+            uploaded_by: { type: [string, "null"], format: uuid }
+            row_errors: { type: array, items: { type: object, properties: { row: { type: integer }, field: { type: string }, code: { type: string } } } }
+    SubmissionPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Submission" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }

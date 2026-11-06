@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from eos_api_gateway import GatewaySettings, RateLimit, SecurityHeaders
 from eos_core import oidc
 from eos_core.db import SessionLocal, init_db
+from eos_core.http_errors import install_error_handlers
 from eos_core.settings import settings
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,6 +62,7 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
     routers = {e.name: r for e in entries if (r := router_for(e)) is not None}
     mounted = sorted(e.name for e in entries if e.kind != "platform")
     app = FastAPI(title="Education OS API", version="0.1.0", lifespan=lifespan)
+    install_error_handlers(app)
     # Middleware, innermost first (Starlette wraps each around the previous): the entitlement gate, then the
     # rate limiter (a refused request costs no database query), then CORS (so a browser may read a 429), then
     # the security headers on every response, the refusals included. platform/api-gateway/README.md has the

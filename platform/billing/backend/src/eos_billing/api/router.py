@@ -25,6 +25,13 @@ class Upgrade(BaseModel):
     billing_cycle: str = "monthly"
 
 
+class ProfileBody(BaseModel):
+    legal_name: str
+    gstin: str | None = None
+    address: str = ""
+    state_code: str | None = None
+
+
 class PlanBody(BaseModel):
     id: str
     title: str
@@ -79,6 +86,28 @@ def invoices(
 ):
     """Invoices of the caller's organisation, newest first (one per paid period)."""
     return service.list_invoices(db, p.organisation_id)
+
+
+@router.get("/billing-profile")
+def billing_profile(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
+    """Who the caller's invoices are addressed to (the GST recipient)."""
+    profile = service.get_profile(db, p.organisation_id)
+    if not profile:
+        raise HTTPException(404, "no billing profile")
+    return profile.to_dict()
+
+
+@router.put("/billing-profile")
+def put_billing_profile(
+    body: ProfileBody, p: Principal = Depends(require("billing:subscription:manage")), db: Session = Depends(get_db)
+):
+    """Set the recipient of future invoices: legal name, optional GSTIN (validated), address and state."""
+    try:
+        return service.save_profile(db, organisation_id=p.organisation_id, **body.model_dump()).to_dict()
+    except BillingError as e:
+        raise _err(e) from e
 
 
 @router.post("/subscription/upgrade", status_code=201)

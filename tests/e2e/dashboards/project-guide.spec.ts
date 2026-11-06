@@ -47,8 +47,24 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The project guide's own widgets.
-  { id: "projects.to-review", module: "practice/projects", batch: "#339" },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     // Texts of the widget in PR #456 (feat/skill-progress/due-and-cohort-widgets), not merged yet.
     id: "skill-progress.assessments-due",
@@ -60,7 +76,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Skill progress data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.trainees-to-assess",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Trainees to assess",
+    probe: "/field-training/me/trainees?limit=1",
+    empty: "Nothing to assess right now",
+    unavailable: "Field training data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 

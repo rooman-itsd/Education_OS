@@ -5,8 +5,8 @@ title: "Support Staff (Helpdesk)"
 module_roles:
   - sla-management-viewer
   - incident-management-responder
-  - knowledge-base-viewer
-  - amc-vendor-support-viewer
+  - knowledge-base-author          # write and submit articles (knowledge-base default for support-staff)
+  - amc-vendor-support-coordinator # raise and track vendor calls (amc-vendor-support default for support-staff)
 widgets:
   - helpdesk.open-by-priority
   - sla-management.breaches

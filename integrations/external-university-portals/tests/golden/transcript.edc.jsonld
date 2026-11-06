@@ -1,0 +1,384 @@
+{
+  "@context": [
+    "https://www.w3.org/2018/credentials/v1",
+    "http://data.europa.eu/snb/model/context/edc-ap"
+  ],
+  "id": "urn:credential:9a692734-4c35-58a2-808d-c62d3e2ad822",
+  "type": [
+    "VerifiableCredential",
+    "EuropeanDigitalCredential"
+  ],
+  "credentialProfiles": [
+    {
+      "id": "http://data.europa.eu/snb/credential/e34929035b",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://data.europa.eu/snb/credential/25831c2",
+        "type": "ConceptScheme"
+      },
+      "prefLabel": {
+        "en": "Generic"
+      }
+    }
+  ],
+  "displayParameter": {
+    "id": "urn:epass:displayParameter:1",
+    "type": "DisplayParameter",
+    "title": {
+      "en": "Transcript of records: B.Sc. Computer Science"
+    },
+    "language": [
+      {
+        "id": "http://publications.europa.eu/resource/authority/language/ENG",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/language",
+          "type": "ConceptScheme"
+        },
+        "notation": "language",
+        "prefLabel": {
+          "en": "English"
+        }
+      }
+    ],
+    "primaryLanguage": {
+      "id": "http://publications.europa.eu/resource/authority/language/ENG",
+      "type": "Concept",
+      "inScheme": {
+        "id": "http://publications.europa.eu/resource/authority/language",
+        "type": "ConceptScheme"
+      },
+      "notation": "language",
+      "prefLabel": {
+        "en": "English"
+      }
+    },
+    "individualDisplay": [
+      {
+        "id": "urn:epass:individualDisplay:1",
+        "type": "IndividualDisplay",
+        "language": {
+          "id": "http://publications.europa.eu/resource/authority/language/ENG",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/language",
+            "type": "ConceptScheme"
+          },
+          "notation": "language",
+          "prefLabel": {
+            "en": "English"
+          }
+        },
+        "displayDetail": [
+          {
+            "id": "urn:epass:displayDetail:1",
+            "type": "DisplayDetail",
+            "page": 1,
+            "image": {
+              "id": "urn:epass:mediaObject:1",
+              "type": "MediaObject",
+              "content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+              "contentEncoding": {
+                "id": "http://data.europa.eu/snb/encoding/6146cde7dd",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://data.europa.eu/snb/encoding/25831c2",
+                  "type": "ConceptScheme"
+                },
+                "prefLabel": {
+                  "en": "base64"
+                }
+              },
+              "contentType": {
+                "id": "http://publications.europa.eu/resource/authority/file-type/PNG",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "http://publications.europa.eu/resource/authority/file-type",
+                  "type": "ConceptScheme"
+                },
+                "notation": "file-type",
+                "prefLabel": {
+                  "en": "PNG"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "credentialSchema": [
+    {
+      "id": "http://data.europa.eu/snb/model/ap/edc-generic-full",
+      "type": "ShaclValidator2017"
+    }
+  ],
+  "credentialSubject": {
+    "id": "urn:epass:person:1",
+    "type": "Person",
+    "givenName": {
+      "en": "Asha"
+    },
+    "familyName": {
+      "en": "Nair"
+    },
+    "fullName": {
+      "en": "Asha Nair"
+    },
+    "dateOfBirth": "2003-04-12T00:00:00Z",
+    "identifier": [
+      {
+        "id": "urn:epass:identifier:1",
+        "type": "Identifier",
+        "notation": "STU-2024-0042",
+        "schemeName": "partnerStudentId"
+      },
+      {
+        "id": "urn:epass:identifier:2",
+        "type": "Identifier",
+        "notation": "123456789012",
+        "schemeName": "apaar"
+      }
+    ],
+    "contactPoint": {
+      "id": "urn:epass:contactPoint:1",
+      "type": "ContactPoint",
+      "emailAddress": {
+        "id": "mailto:asha.nair@example.edu",
+        "type": "Mailbox"
+      }
+    },
+    "hasClaim": [
+      {
+        "id": "urn:epass:learningAchievement:1",
+        "type": "LearningAchievement",
+        "title": {
+          "en": "Programming Fundamentals"
+        },
+        "awardedBy": {
+          "id": "urn:epass:awardingProcess:1",
+          "type": "AwardingProcess",
+          "awardingBody": [
+            {
+              "id": "urn:epass:org:1"
+            }
+          ],
+          "awardingDate": "2024-12-10T00:00:00Z"
+        },
+        "specifiedBy": {
+          "id": "urn:epass:learningAchievementSpec:1",
+          "type": "LearningAchievementSpecification",
+          "title": {
+            "en": "Programming Fundamentals"
+          },
+          "identifier": [
+            {
+              "id": "urn:epass:identifier:101",
+              "type": "Identifier",
+              "notation": "CS101",
+              "schemeName": "courseCode"
+            }
+          ],
+          "creditPoint": [
+            {
+              "id": "urn:epass:creditPoint:1",
+              "type": "CreditPoint",
+              "framework": {
+                "id": "urn:eos:education-credit:indian_credit",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "urn:eos:education-credit",
+                  "type": "ConceptScheme"
+                },
+                "prefLabel": {
+                  "en": "Indian credit system (UGC)"
+                }
+              },
+              "point": "4"
+            }
+          ]
+        },
+        "provenBy": [
+          {
+            "id": "urn:epass:learningAssessment:1",
+            "type": "LearningAssessment",
+            "title": {
+              "en": "Programming Fundamentals"
+            },
+            "grade": {
+              "id": "urn:epass:note:1",
+              "type": "Note",
+              "noteLiteral": {
+                "en": "A"
+              }
+            },
+            "awardedBy": {
+              "id": "urn:epass:awardingProcess:1a",
+              "type": "AwardingProcess",
+              "awardingBody": [
+                {
+                  "id": "urn:epass:org:1"
+                }
+              ],
+              "awardingDate": "2024-12-10T00:00:00Z"
+            },
+            "specifiedBy": {
+              "id": "urn:epass:learningAssessmentSpec:1",
+              "type": "LearningAssessmentSpecification",
+              "title": {
+                "en": "Programming Fundamentals"
+              },
+              "gradingScheme": {
+                "id": "urn:epass:gradingScheme:1",
+                "type": "GradingScheme",
+                "title": {
+                  "en": "10-point"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": "urn:epass:learningAchievement:2",
+        "type": "LearningAchievement",
+        "title": {
+          "en": "Discrete Mathematics"
+        },
+        "awardedBy": {
+          "id": "urn:epass:awardingProcess:2",
+          "type": "AwardingProcess",
+          "awardingBody": [
+            {
+              "id": "urn:epass:org:1"
+            }
+          ],
+          "awardingDate": "2024-12-10T00:00:00Z"
+        },
+        "specifiedBy": {
+          "id": "urn:epass:learningAchievementSpec:2",
+          "type": "LearningAchievementSpecification",
+          "title": {
+            "en": "Discrete Mathematics"
+          },
+          "identifier": [
+            {
+              "id": "urn:epass:identifier:102",
+              "type": "Identifier",
+              "notation": "MA102",
+              "schemeName": "courseCode"
+            }
+          ],
+          "creditPoint": [
+            {
+              "id": "urn:epass:creditPoint:2",
+              "type": "CreditPoint",
+              "framework": {
+                "id": "urn:eos:education-credit:indian_credit",
+                "type": "Concept",
+                "inScheme": {
+                  "id": "urn:eos:education-credit",
+                  "type": "ConceptScheme"
+                },
+                "prefLabel": {
+                  "en": "Indian credit system (UGC)"
+                }
+              },
+              "point": "3.5"
+            }
+          ]
+        },
+        "provenBy": [
+          {
+            "id": "urn:epass:learningAssessment:2",
+            "type": "LearningAssessment",
+            "title": {
+              "en": "Discrete Mathematics"
+            },
+            "grade": {
+              "id": "urn:epass:note:2",
+              "type": "Note",
+              "noteLiteral": {
+                "en": "B+"
+              }
+            },
+            "awardedBy": {
+              "id": "urn:epass:awardingProcess:2a",
+              "type": "AwardingProcess",
+              "awardingBody": [
+                {
+                  "id": "urn:epass:org:1"
+                }
+              ],
+              "awardingDate": "2024-12-10T00:00:00Z"
+            },
+            "specifiedBy": {
+              "id": "urn:epass:learningAssessmentSpec:2",
+              "type": "LearningAssessmentSpecification",
+              "title": {
+                "en": "Discrete Mathematics"
+              },
+              "gradingScheme": {
+                "id": "urn:epass:gradingScheme:2",
+                "type": "GradingScheme",
+                "title": {
+                  "en": "10-point"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "issuer": {
+    "id": "urn:epass:org:1",
+    "type": "Organisation",
+    "legalName": {
+      "en": "Sample Institute of Higher Education"
+    },
+    "location": {
+      "id": "urn:epass:location:1",
+      "type": "Location",
+      "address": {
+        "id": "urn:epass:address:1",
+        "type": "Address",
+        "countryCode": {
+          "id": "http://publications.europa.eu/resource/authority/country/IND",
+          "type": "Concept",
+          "inScheme": {
+            "id": "http://publications.europa.eu/resource/authority/country",
+            "type": "ConceptScheme"
+          },
+          "notation": "country",
+          "prefLabel": {
+            "en": "IN"
+          }
+        }
+      }
+    },
+    "registration": {
+      "id": "urn:epass:legalIdentifier:1",
+      "type": "LegalIdentifier",
+      "spatial": {
+        "id": "http://publications.europa.eu/resource/authority/country/IND",
+        "type": "Concept",
+        "inScheme": {
+          "id": "http://publications.europa.eu/resource/authority/country",
+          "type": "ConceptScheme"
+        },
+        "notation": "country",
+        "prefLabel": {
+          "en": "IN"
+        }
+      },
+      "notation": "C-12345"
+    },
+    "homepage": {
+      "id": "urn:epass:webResource:1",
+      "type": "WebResource",
+      "contentURL": "https://www.example.edu"
+    }
+  },
+  "validFrom": "2026-11-05T12:00:00Z"
+}

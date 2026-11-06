@@ -82,7 +82,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Skill progress data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "productions.my-roles", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.my-roles",
+    module: "practice/productions",
+    batch: "#318",
+    title: "My parts",
+    probe: "/productions/my-roles",
+    empty: "No parts yet",
+    unavailable: "Production data is not available yet.",
+  },
   {
     // Texts of UpcomingWidget.tsx in PR #414 (feat/selection-process/module-build), not merged yet.
     id: "selection-process.upcoming",
