@@ -18,9 +18,13 @@ from ..application import access as k
 from ..application import service as svc
 from ..application.access import Actor
 from ..application.errors import TimetableAttendanceError
+from . import classes_attendance
 from .deps import require
 
 router = APIRouter(tags=["timetable-attendance"])
+# Scheduled classes, attendance sessions and records, reports and the /me widget reads (api/classes_attendance.py). Its
+# routes join this router as they are (no prefix, no extra dependency), so the host and the tests see one flat router.
+router.routes.extend(classes_attendance.router.routes)
 
 LIMIT = Query(50, ge=1, le=200)
 OFFSET = Query(0, ge=0)
