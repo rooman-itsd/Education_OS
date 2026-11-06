@@ -39,7 +39,16 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Fee data is not available yet.",
   },
   { id: "reporting.attendance-and-results-by-department", module: "platform/reporting", batch: "#317" },
-  { id: "grievance.open", module: "governance/grievance", batch: "#343" },
+  {
+    id: "grievance.open",
+    module: "governance/grievance",
+    batch: "#343",
+    title: "Open grievances",
+    probe: "/grievance/stats/open",
+    empty: "No open cases",
+    unavailable: "Grievance data is not available yet.",
+  },
+
   { id: "regulatory-reports.compliance-calendar", module: "governance/regulatory-reports", batch: "#343" },
   {
     id: "productions.upcoming",

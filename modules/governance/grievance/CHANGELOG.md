@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/grievance`) and
+  `apps/frontend/config/modules.enabled.yaml` (`grievance.open-by-committee` on the Governance dashboard and
+  `grievance.open` on the Management dashboard).
 - Module scaffolded.
 - Contracts proposed: committees; complaint intake on three tracks; acknowledgement, inquiry, proceedings, updates,
   decision, transfer, withdrawal and SGRC appeals; committee-scoped access to case content; `GET /stats/open-by-committee`
