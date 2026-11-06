@@ -30,7 +30,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No open calls right now",
     unavailable: "Open calls are not available yet.",
   },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "budget-grants.budget-vs-spend",
     module: "finance-operations/budget-grants",

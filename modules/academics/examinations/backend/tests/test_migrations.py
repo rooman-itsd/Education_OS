@@ -31,10 +31,52 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_has_one_revision_named_ex_0001():
+def test_the_chain_is_ex_0001_then_ex_0002_with_one_head():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["ex_0001"]
+    assert script.get_heads() == ["ex_0002"]
+    assert script.get_revision("ex_0002").down_revision == "ex_0001"
     assert script.get_revision("ex_0001").down_revision is None
+
+
+def test_ex_0002_adds_only_a_nullable_title_to_papers_and_downgrades_cleanly():
+    cfg, engine = _upgraded()
+    with engine.connect() as conn:
+        columns = {c["name"]: c for c in inspect(conn).get_columns(f"{PREFIX}exam_paper")}
+        assert columns["title"]["nullable"] and columns["title"]["default"] is None
+        assert "organisation_id" in columns
+        uniques = {u["name"] for u in inspect(conn).get_unique_constraints(f"{PREFIX}exam_paper")}
+        assert "uq_examinations_paper_component" in uniques  # the batch rebuild keeps the constraints
+    command.downgrade(cfg, "ex_0001")
+    with engine.connect() as conn:
+        columns = {c["name"] for c in inspect(conn).get_columns(f"{PREFIX}exam_paper")}
+        assert "title" not in columns and "organisation_id" in columns
+        assert f"{PREFIX}exam_cycle" in inspect(conn).get_table_names()  # nothing else went with it
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert "title" in {c["name"] for c in inspect(conn).get_columns(f"{PREFIX}exam_paper")}
+
+
+def test_ex_0002_keeps_existing_papers_untitled_and_intact():
+    from sqlalchemy import text
+
+    cfg = _config(f"sqlite:///{tempfile.mkdtemp()}/upgrade.db")
+    command.upgrade(cfg, "ex_0001")
+    url = cfg.cmd_opts.x[0].removeprefix("url=")
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        ids = ["a" * 36, "b" * 36, "c" * 36, "d" * 36, "e" * 36, "f" * 36, "g" * 36]
+        conn.execute(text("PRAGMA foreign_keys=OFF"))
+        conn.execute(
+            text(
+                "INSERT INTO examinations_exam_paper (id, organisation_id, created_at, exam_cycle_id, course_offering_id, "
+                "assessment_component_id, max_marks, status) VALUES (:i, :o, '2026-11-05 00:00:00', :c, :f, :k, 100, 'draft')"
+            ),
+            {"i": ids[0], "o": ids[1], "c": ids[2], "f": ids[3], "k": ids[4]},
+        )
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT id, organisation_id, status, title FROM examinations_exam_paper")).one()
+        assert tuple(row) == (ids[0], ids[1], "draft", None)
 
 
 def test_upgrade_matches_models_and_downgrade_removes_tables():
@@ -128,4 +170,7 @@ def test_postgres_migration_enables_forced_rls_on_every_table():
         assert f"ALTER TABLE {table.name} FORCE ROW LEVEL SECURITY;" in sql, table.name
         assert f"CREATE POLICY tenant_isolation ON {table.name}" in sql, table.name
     assert sql.count("CREATE POLICY tenant_isolation") == len(TABLES)
+    assert (
+        "ALTER TABLE examinations_exam_paper ADD COLUMN title VARCHAR(200)" in sql
+    )  # nullable: no NOT NULL, no default
     assert "WHERE is_default" in sql and "WHERE status = 'active'" in sql  # the partial indexes exist on Postgres too

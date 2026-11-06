@@ -1,0 +1,7 @@
+{"dailies": [{"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "sd0001", "calendarDate": "2026-11-04", "startTimeInSeconds": 1793750400, "durationInSeconds": 86400,
+   "steps": 12000, "distanceInMeters": 9100.5, "activeKilocalories": 610, "restingHeartRateInBeatsPerMinute": 51, "averageHeartRateInBeatsPerMinute": 64,
+   "maxHeartRateInBeatsPerMinute": 172, "activeTimeInSeconds": 4200, "averageStressLevel": 31}],
+ "sleeps": [{"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "sl0001", "calendarDate": "2026-11-04", "startTimeInSeconds": 1793726400, "durationInSeconds": 27900,
+   "deepSleepDurationInSeconds": 5400, "lightSleepDurationInSeconds": 14400, "remSleepInSeconds": 6300, "awakeDurationInSeconds": 1800, "overallSleepScore": {"value": 82, "qualifierKey": "GOOD"}}],
+ "hrv": [{"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "hv0001", "calendarDate": "2026-11-04", "lastNightAvg": 63}],
+ "bodyComps": [{"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "bc0001", "measurementTimeInSeconds": 1793736000, "weightInGrams": 71450, "bodyFatInPercent": 14.3}]}

@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Searchable for platform/search: `contracts/searchable.yaml` (type `course`; `course.created` and `course.updated` upsert, `course.archived` deletes) and a document provider on the `eos.search_documents` entry point. Indexes title, code, description, status and credits of active courses.
 - Frontend: `academic-management.faculty-load` widget (Department Admin dashboard, `size: 2x2`, permission
   `academic-management:faculty-load:read`) over `GET /faculty-load`: each faculty member's weekly contact hours in the
   active term against the configured maximum, over-load first, with loading, empty, "no active term" (404

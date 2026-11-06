@@ -164,6 +164,7 @@ class ExamPaperRow(Base, TenantMixin, TimestampMixin):
     assessment_component_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}assessment_component.id"))
     max_marks: Mapped[Decimal] = mapped_column(MARKS)
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)  # ex_0002; set by updateExamPaper
     status: Mapped[str] = mapped_column(String(20))
 
 

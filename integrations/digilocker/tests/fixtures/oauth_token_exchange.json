@@ -1,0 +1,32 @@
+{
+  "code_challenge": "CrlVwe1WSHWuTQYh3iczmx3aS-faRx6C92k9_hNxl4A",
+  "request": {
+    "method": "POST",
+    "path": "/public/oauth2/1/token",
+    "form": {
+      "grant_type": "authorization_code",
+      "code": "auth-code-fixture",
+      "client_id": "REQ-APP-001",
+      "client_secret": "requester-secret-fixture",
+      "redirect_uri": "https://eos.example.com/api/v1/integration-hub/oauth/callback/digilocker",
+      "code_verifier": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "access_token": "access-token-fixture",
+      "expires_in": 3600,
+      "token_type": "Bearer",
+      "scope": "",
+      "refresh_token": "refresh-token-fixture",
+      "digilockerid": "dl-holder-0001",
+      "name": "Asha Rao",
+      "dob": "01012004",
+      "gender": "F",
+      "eaadhaar": "Y",
+      "new_account": "N",
+      "reference_key": "ref-fixture-1"
+    }
+  }
+}
