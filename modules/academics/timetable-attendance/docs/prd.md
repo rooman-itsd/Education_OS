@@ -239,7 +239,7 @@ copies, not foreign keys. `department_id`, `instructor_id` and `student_id` are 
 | Needs | From | How | Status |
 |---|---|---|---|
 | Academic periods, course offerings (course code, title, department), sections, instructor assignments (instructor id) | academic-management | Consume its events into the read models in section 8; validate IDs on timetable create and update | Event names **PENDING CONFIRMATION FROM OWNER** |
-| Which students are allocated to which section, and from when | enrolment-registration | Consume its events into `section_member` | Event names **PENDING CONFIRMATION FROM OWNER** |
+| Which students are allocated to which section, and from when | enrolment-registration | Consume its events into `section_member` | Consumed: `course-registration.confirmed`, `course-registration.withdrawn`, `section-allocation.changed` (Q2) |
 | Student display name | student-information or enrolment-registration | Cached on `section_member` from the allocation event if it carries it | Pending; see Q3 |
 | Permission checks, current user | platform/identity | `packages/sdk` | Available |
 | Audit trail | platform/audit | `packages/sdk` | Available |
@@ -279,7 +279,7 @@ The names below describe what is needed. They are **not** event names.
 | Course offering created / updated / status changed (with course code, title, department) | academic-management | PENDING CONFIRMATION FROM OWNER |
 | Section created / updated / closed | academic-management | PENDING CONFIRMATION FROM OWNER |
 | Instructor assignment created / ended (with instructor id, offering, optional section) | academic-management | PENDING CONFIRMATION FROM OWNER |
-| Student allocated to a section / moved / withdrawn (with effective date) | enrolment-registration | PENDING CONFIRMATION FROM OWNER |
+| Student allocated to a section / moved / withdrawn (with effective date) | enrolment-registration | `enrolment-registration.course-registration.confirmed`, `.course-registration.withdrawn`, `.section-allocation.changed` (published in its contract) |
 
 academic-management's draft contract (branch `contract/academic-management/prd-and-contracts`,
 not merged) proposes names for its events. They become authoritative only when that PR merges.
@@ -316,7 +316,7 @@ Modules check permission keys, never roles (ARCHITECTURE.md, Security), so a wid
 | # | Question | Who decides |
 |---|---|---|
 | Q1 | Exact academic-management event names and payloads for academic period, course offering, section and instructor assignment | Shivani (academic-management PR) |
-| Q2 | Exact enrolment-registration event names and payloads for student-section allocation, including the effective date | Praveen |
+| Q2 | **Answered by enrolment-registration's published contract** (`course-registration.confirmed`/`.withdrawn`, `section-allocation.changed` with `effective_on`); the mapping to `section_member` is in docs/reviewer-decisions.md section E, for Praveen to confirm | Praveen |
 | Q3 | Which identifier `student_id` is: the student-information record id or the identity user id; and whether the allocation event carries the display name | Praveen, Faizan |
 | Q4 | Rooms: keep a free-text `location_label`, or reference a `facility-booking` resource and book it on publish | Ashritha, Faizan |
 | Q5 | Shortage threshold, marking window and correction window: organisation settings (where?) or env defaults only | Faizan |

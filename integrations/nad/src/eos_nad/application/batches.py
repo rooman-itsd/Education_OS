@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import date
+from datetime import date, datetime
 
 from eos_core.db import scoped
 from sqlalchemy import delete, select
@@ -124,18 +124,27 @@ def _replay(db: Session, existing: Submission, digest: str, kind: str) -> dict |
 
 
 def _reject(
-    db: Session, ctx: Context, sub: Submission | None, fields: dict, errors: list[RowError], bad: int, total: int
+    db: Session,
+    ctx: Context,
+    sub: Submission | None,
+    fields: dict,
+    errors: list[RowError],
+    bad: int,
+    total: int,
+    now: datetime,
 ) -> dict:
     """Record a refused batch (row errors only) so a retry of the same batch answers the same."""
-    sub = _store(db, ctx, sub, {**fields, "status": "rejected", "rows": total, "accepted_rows": 0, "rejected_rows": bad,
+    sub = _store(db, ctx, sub, now, {**fields, "status": "rejected", "rows": total, "accepted_rows": 0, "rejected_rows": bad,
                                 "row_errors": [e.to_dict() for e in errors], "steps": []})  # fmt: skip
     db.commit()
     return _output(sub, [])
 
 
-def _store(db: Session, ctx: Context, sub: Submission | None, fields: dict) -> Submission:
+def _store(db: Session, ctx: Context, sub: Submission | None, now: datetime, fields: dict) -> Submission:
+    """A new submission is stamped with the runtime clock, the same clock record_manual_upload checks
+    uploaded_on against, so "prepared on" and "today" never come from two different clocks."""
     if sub is None:
-        sub = Submission(organisation_id=str(ctx.organisation_id), **fields)
+        sub = Submission(organisation_id=str(ctx.organisation_id), created_at=now, **fields)
         db.add(sub)
     else:
         for key, value in fields.items():
@@ -239,6 +248,7 @@ def publish_awards(
                 sorted(errors, key=lambda e: (e.row, e.field)),
                 len(bad.bad_rows),
                 len(inp.records),
+                rt.clock(),
             ), (existing.id if existing else None)
         columns = AWARD_COLUMNS[version]
         rows = [
@@ -267,7 +277,7 @@ def publish_awards(
                     render(columns, rows[a:b]),
                 )
             )
-        sub = _store(db, ctx, existing, {**fields, "status": "manual_action_required", "rows": len(rows), "accepted_rows": None, "rejected_rows": None,
+        sub = _store(db, ctx, existing, rt.clock(), {**fields, "status": "manual_action_required", "rows": len(rows), "accepted_rows": None, "rejected_rows": None,
                                          "row_errors": [], "steps": _steps("nad", template.template_code, len(parts))})  # fmt: skip
         _write_files(rt, ctx, db, sub, parts, version)
         for _, rec in still_good:
@@ -336,7 +346,7 @@ def publish_credits(rt: Runtime, ctx: Context, inp: PublishCreditsInput) -> tupl
         good, bad = validate_credits(inp.records, today=rt.clock().date())
         if bad.count:
             errors = sorted(bad.errors, key=lambda e: (e.row, e.field))
-            return _reject(db, ctx, existing, fields, errors, len(bad.bad_rows), len(inp.records)), (
+            return _reject(db, ctx, existing, fields, errors, len(bad.bad_rows), len(inp.records), rt.clock()), (
                 existing.id if existing else None
             )
         per_record = [
@@ -352,7 +362,7 @@ def publish_credits(rt: Runtime, ctx: Context, inp: PublishCreditsInput) -> tupl
                     render(CREDIT_COLUMNS[version], rows),
                 )
             )
-        sub = _store(db, ctx, existing, {**fields, "status": "manual_action_required", "rows": len(good), "accepted_rows": None, "rejected_rows": None,
+        sub = _store(db, ctx, existing, rt.clock(), {**fields, "status": "manual_action_required", "rows": len(good), "accepted_rows": None, "rejected_rows": None,
                                          "row_errors": [], "steps": _steps("abc", "", len(parts))})  # fmt: skip
         _write_files(rt, ctx, db, sub, parts, version)
         db.commit()
