@@ -1,0 +1,20 @@
+# What platform/search may index from this module (platform/search/docs/prd.md, decision 1).
+# Articles: the title, body and slug of the published revision, its category and a published flag. Two audiences: the
+# provider returns `read_any_of: [knowledge-base:article:read-internal]` for a staff-only article, so only staff find it.
+# Drafts, archived articles, revision history, feedback, view counts and reader or author ids are never indexed.
+module: knowledge-base
+types:
+  - name: article
+    label: Articles
+    url: /support/knowledge-base/{id}
+    triggers:
+      - { event: knowledge-base.article.published, action: upsert, id_field: article_id }
+      - { event: knowledge-base.article.archived,  action: delete, id_field: article_id }
+    fields:
+      title:       { kind: text, analyzer: english, boost: 3, role: title }
+      body:        { kind: text, analyzer: english, snippet: true }
+      slug:        { kind: keyword, display: true }
+      category_id: { kind: keyword, filterable: true }
+      published:   { kind: boolean, filterable: true }
+    read_permissions:
+      any_of: [knowledge-base:article:read, knowledge-base:article:read-internal]
