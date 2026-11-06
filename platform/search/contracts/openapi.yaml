@@ -2,9 +2,477 @@ openapi: 3.1.0
 info:
   title: search API
   version: 0.1.0
-  description: "Global search indexing and query (Elasticsearch-class engine)."
+  description: >-
+    Global and per-module search over what Education OS modules choose to make searchable.
+    Modules declare searchable types (docs/prd.md); this service indexes them from the events on
+    the bus and answers queries. Every query is filtered by the caller's organisation AND by the
+    permissions the caller holds, before anything is scored, counted or suggested, so a title the
+    caller may not read never appears in a hit, a facet count, a total or a suggestion.
+    Indexing is not an HTTP operation: modules never post documents here.
 servers:
   - url: /api/v1/search
-paths: {}
+
+paths:
+  /query:
+    get:
+      summary: Global search
+      description: >-
+        Searches every type the caller may read, in the caller's organisation only. Results are
+        ranked by relevance, ties broken by the document id, so a cursor is stable. The response
+        carries one facet per type with the number of hits the caller may see, so the client can
+        draw type tabs. The organisation is never a parameter: it comes from the caller's session,
+        and an organisation_id in the query string is a 422.
+      operationId: searchAll
+      parameters:
+        - $ref: "#/components/parameters/Q"
+        - name: types
+          in: query
+          description: >-
+            Restrict to these types, as `<module>.<type>` keys from GET /types, comma separated
+            (at most 20). Unknown or not-visible types are ignored, not an error, so a client built
+            against a richer deployment keeps working.
+          schema: { type: string, maxLength: 1000 }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of hits, with facets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
+  /modules/{module}/query:
+    get:
+      summary: Search inside one module
+      description: >-
+        Same as GET /query, narrowed to one module's types. Used by a module's own search box, so
+        the module's screens do not need to know about the other modules. A module the organisation
+        is not entitled to, or that has no searchable types, is a 404, never an empty page.
+      operationId: searchModule
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,63}$" }
+        - $ref: "#/components/parameters/Q"
+        - name: types
+          in: query
+          description: Types within the module, as `<module>.<type>`, comma separated (at most 20).
+          schema: { type: string, maxLength: 1000 }
+        - name: filters
+          in: query
+          description: >-
+            Exact-match filters on fields the module declared `filterable`, as `field:value`
+            pairs, comma separated, at most 10. A field that is not declared filterable is a 422.
+          schema: { type: string, maxLength: 1000 }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of hits, with facets
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SearchResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
+  /suggest:
+    get:
+      summary: Suggestions while typing
+      description: >-
+        Up to 10 title completions for a prefix of 2 to 50 characters, from the same filtered set
+        as /query, so a suggestion never reveals a title the caller could not open. Not paginated.
+        Aimed at 100 ms or less; the client should debounce.
+      operationId: suggest
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 50 }
+        - name: types
+          in: query
+          schema: { type: string, maxLength: 1000 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10, default: 5 }
+      responses:
+        "200":
+          description: Suggestions, best first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestions]
+                properties:
+                  suggestions:
+                    type: array
+                    maxItems: 10
+                    items: { $ref: "#/components/schemas/Suggestion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "503": { $ref: "#/components/responses/EngineUnavailable" }
+
+  /types:
+    get:
+      summary: Searchable types the caller may use
+      description: >-
+        The types registered by the installed modules that this organisation is entitled to and
+        in which the caller holds at least one read permission. Drives the type tabs and the
+        filter controls. Declares labels, never field contents.
+      operationId: listTypes
+      responses:
+        "200":
+          description: Types
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/SearchableType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /reindex:
+    post:
+      summary: Rebuild an organisation's index for a module
+      description: >-
+        Rebuilds the documents of one organisation, for one module or for one of its types, from
+        the module's own provider (never from its tables). Used for backfill when a module first
+        opts in, after a mapping change, and to repair drift. Returns at once with a job; the
+        rebuild runs in the background into a new versioned index and an alias swap makes it live,
+        so queries never see a half-built index. One run per organisation, module and type at a
+        time: a second request while one is queued or running is a 409 that names the running job.
+        The organisation is the caller's; only a super admin may name another, and only through
+        organisation_id in the body.
+      operationId: startReindex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReindexRequest" }
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReindexJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: A rebuild for the same organisation, module and type is already queued or running
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/Invalid" }
+    get:
+      summary: List reindex jobs
+      description: The caller's organisation, most recent first.
+      operationId: listReindexJobs
+      parameters:
+        - name: module
+          in: query
+          schema: { type: string, pattern: "^[a-z][a-z0-9-]{1,63}$" }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/JobStatus" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: One page of jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReindexJob" }
+                  next_cursor: { type: [string, "null"] }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /reindex/{job_id}:
+    get:
+      summary: One reindex job
+      operationId: getReindexJob
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReindexJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /health:
+    get:
+      summary: Index state of the caller's organisation
+      description: >-
+        Documents per type, when the newest document was indexed, and how far behind the event
+        stream the indexer is. Counts are for the caller's organisation only.
+      operationId: getIndexHealth
+      responses:
+        "200":
+          description: Current state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IndexHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /platform/health:
+    get:
+      summary: Engine health across every organisation
+      description: >-
+        Super admin only. Cluster status, index and shard counts, indexer lag and the number of
+        failed or dead-lettered documents. Powers monitoring and the Super Admin dashboard. No
+        organisation's content or document count is returned, only totals.
+      operationId: getPlatformHealth
+      responses:
+        "200":
+          description: Current state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
-  schemas: {}
+  parameters:
+    Q:
+      name: q
+      in: query
+      required: true
+      description: >-
+        What to look for, 1 to 200 characters after trimming. Treated as plain text, never as
+        query syntax: operators, wildcards, field names and quotes have no special meaning.
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    Cursor:
+      name: cursor
+      in: query
+      description: >-
+        Opaque, from the previous page's next_cursor. Signed and bound to the caller, the query and
+        the filters it came from, and valid for 5 minutes; a cursor used by someone else, with
+        another q or after it expired is a 422. There is no page number or offset.
+      schema: { type: string, maxLength: 2000 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+
+  schemas:
+    SearchResult:
+      type: object
+      required: [items, facets, total, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/Hit" }
+        facets:
+          type: array
+          description: One entry per visible type that has at least one hit; counts are over the whole result set, not the page.
+          items: { $ref: "#/components/schemas/Facet" }
+        total:
+          type: integer
+          description: Hits the caller may see, up to 10000; a larger result set reports 10000 and total_is_lower_bound true.
+        total_is_lower_bound: { type: boolean, default: false }
+        next_cursor: { type: [string, "null"], description: "null on the last page" }
+
+    Hit:
+      type: object
+      required: [type, id, title, score]
+      properties:
+        type: { type: string, description: "`<module>.<type>`, for example knowledge-base.article", examples: ["knowledge-base.article"] }
+        id: { type: string, description: "The source record's id in its module" }
+        title: { type: string, maxLength: 300 }
+        snippet:
+          type: [string, "null"]
+          maxLength: 300
+          description: >-
+            A fragment of a field the module marked `snippet`, with matches wrapped in the two
+            characters U+E000 and U+E001 instead of HTML, so a client cannot be handed markup.
+        url:
+          type: string
+          description: Route in the web app that opens the record. Built from the module's declared template and the id.
+        fields:
+          type: object
+          description: >-
+            The `display` fields the module declared (for example status, code, department), as
+            strings. Never the full record; a person's contact details are not display fields.
+          additionalProperties: { type: string }
+        score: { type: number }
+
+    Facet:
+      type: object
+      required: [type, label, count]
+      properties:
+        type: { type: string }
+        label: { type: string }
+        count: { type: integer }
+
+    Suggestion:
+      type: object
+      required: [type, id, text]
+      properties:
+        type: { type: string }
+        id: { type: string }
+        text: { type: string, maxLength: 300 }
+
+    SearchableType:
+      type: object
+      required: [type, module, label, filterable]
+      properties:
+        type: { type: string, examples: ["academic-management.course"] }
+        module: { type: string }
+        label: { type: string, description: "Plural label from the profile vocabulary, for example Courses" }
+        filterable:
+          type: array
+          description: Fields usable in `filters` on the per-module endpoint.
+          items: { type: string }
+
+    ReindexRequest:
+      type: object
+      required: [module]
+      additionalProperties: false
+      properties:
+        module: { type: string, pattern: "^[a-z][a-z0-9-]{1,63}$" }
+        type:
+          type: [string, "null"]
+          description: "`<module>.<type>`; null means every searchable type of the module"
+        organisation_id:
+          type: [string, "null"]
+          format: uuid
+          description: Super admin only; any other caller sending it, even their own, is a 403. Null means the caller's organisation.
+
+    JobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+
+    ReindexJob:
+      type: object
+      required: [id, module, status, requested_at]
+      properties:
+        id: { type: string, format: uuid }
+        module: { type: string }
+        type: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/JobStatus" }
+        requested_by: { type: [string, "null"], format: uuid }
+        requested_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        documents_indexed: { type: integer }
+        documents_failed: { type: integer }
+        error: { type: [string, "null"], description: "One sentence, no document content" }
+
+    IndexHealth:
+      type: object
+      required: [status, types, lag_seconds]
+      properties:
+        status: { type: string, enum: [ok, degraded, unavailable] }
+        lag_seconds:
+          type: [integer, "null"]
+          description: Age of the oldest event this organisation has waiting to be indexed; null when none is waiting.
+        types:
+          type: array
+          items:
+            type: object
+            required: [type, documents]
+            properties:
+              type: { type: string }
+              documents: { type: integer }
+              last_indexed_at: { type: [string, "null"], format: date-time }
+              last_reindex_at: { type: [string, "null"], format: date-time }
+
+    PlatformHealth:
+      type: object
+      required: [status, cluster_status, indices, lag_seconds, dead_lettered]
+      properties:
+        status: { type: string, enum: [ok, degraded, unavailable] }
+        cluster_status: { type: string, enum: [green, yellow, red, unknown] }
+        indices: { type: integer }
+        shards: { type: integer }
+        lag_seconds: { type: [integer, "null"] }
+        dead_lettered: { type: integer, description: "Documents that failed every retry and wait for a reindex" }
+
+    Error:
+      type: object
+      description: >-
+        An application-level refusal raised by this module; `detail` is one sentence. Never contains
+        a query, a title or any document content.
+      required: [detail]
+      properties:
+        detail: { type: string }
+
+    ValidationIssue:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items: { type: [string, integer] }
+        msg: { type: string }
+        type: { type: string }
+
+    ValidationError:
+      type: object
+      description: >-
+        The framework's request-validation response; `detail` is a list here, which is why it does
+        not share a schema with Error.
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationIssue" }
+
+  responses:
+    Unauthorized:
+      description: No valid session
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Missing permission
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: No such module, type or job in this organisation. A record that exists but the caller may not read is never a 404 here, because search returns no record by id.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Invalid:
+      description: >-
+        Either this module's refusal (bad or foreign cursor, filter on a field not declared
+        filterable, organisation_id in a query) or the framework's validation response.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/Error"
+              - $ref: "#/components/schemas/ValidationError"
+    EngineUnavailable:
+      description: The search engine is down or timed out. The body is an Error; the page is never partial or served from another tenant's cache. Callers should show "search is unavailable", not "no results".
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

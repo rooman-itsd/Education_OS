@@ -1,0 +1,5 @@
+{"id": "MSpkYzE3NjcyNS01MTA1LTQyZjQtYjRjZS00ZDE5YzRiYTVjNzEqMCoqMTk6bWVldGluZ19ZMkV5.example", "creationDateTime": "2026-11-05T05:00:00Z",
+ "startDateTime": "2026-11-09T04:30:00Z", "endDateTime": "2026-11-09T05:15:00Z", "subject": "Physics XI A: Optics",
+ "joinWebUrl": "https://teams.example/l/meetup-join/19%3ameeting_Y2Ey%40thread.v2/0?context=%7b%7d",
+ "joinMeetingIdSettings": {"isPasscodeRequired": true, "joinMeetingId": "412 345 678 90", "passcode": "aB3dE5"},
+ "audioConferencing": {"conferenceId": "512345678", "tollNumber": "+91 80 1234 5678"}}

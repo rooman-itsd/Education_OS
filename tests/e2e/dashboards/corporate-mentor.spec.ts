@@ -14,9 +14,8 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  *   state, or says its data is not available while the backend is missing (the mentor holds the faculty role's
  *   permissions through `extends`, and selection-process-panelist's through the layout's `module_roles`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it
- *   (timetable-attendance and examinations' exam-duties #325, lms #326, projects and field-training #339,
- *   productions #318). examinations is enabled but does not export examinations.exam-duties yet, so that widget
- *   skips too;
+ *   (timetable-attendance #325, lms #326, projects and field-training #339, productions #318);
+ *   examinations is enabled and exports examinations.exam-duties, so that widget is checked like the others;
  * - data journeys, each once its widget has shipped and its API answers the corporate-mentor role: a course the
  *   organisation admin assigns the mentor to teach in the active term shows in academic-management.course-roster.
  *   selection-process.to-judge's journey is fixme (see below), and so are those of the modules not built yet.
@@ -32,8 +31,24 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
@@ -47,9 +62,35 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
   },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
+  },
   // The corporate mentor's own widgets.
-  { id: "projects.to-review", module: "practice/projects", batch: "#339" },
-  { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "field-training.trainees-to-assess",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Trainees to assess",
+    probe: "/field-training/me/trainees?limit=1",
+    empty: "Nothing to assess right now",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     id: "selection-process.to-judge",
     module: "practice/selection-process",
@@ -59,7 +100,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No candidates awaiting review",
     unavailable: "Judging tasks are not available yet.",
   },
-  { id: "productions.in-preparation", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.in-preparation",
+    module: "practice/productions",
+    batch: "#318",
+    title: "In preparation",
+    probe: "/productions/in-preparation",
+    empty: "Nothing in preparation",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;

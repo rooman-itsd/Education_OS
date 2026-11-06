@@ -1,0 +1,20 @@
+{
+  "form_code": "naac.iiqa",
+  "period": "cycle-2026",
+  "data": {
+    "institute": {
+      "name": "Sample Institute of Higher Education",
+      "naac_hei_id": "HEI-KL-0457",
+      "aishe_code": "C-12345",
+      "year_of_establishment": 1998
+    },
+    "programmes_offered": 18,
+    "students_enrolled": 3650,
+    "full_time_teachers": 210,
+    "previous_cycle": {
+      "cycle": 2,
+      "valid_until": "2027-03-31"
+    }
+  },
+  "evidence": []
+}

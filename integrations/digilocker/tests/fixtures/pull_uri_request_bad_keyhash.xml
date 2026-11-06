@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PullURIRequest xmlns:ns2="http://tempuri.org/" ver="1.0" ts="2026-11-05T10:00:00+05:30" txn="TXN-0004" orgId="in.ac.example" format="both" keyhash="0000000000000000000000000000000000000000000000000000000000000000">
+  <DocDetails>
+    <DocType>DGCER</DocType>
+    <DigiLockerId>dl-holder-0001</DigiLockerId>
+    <UID>999999990019</UID>
+    <FullName>Asha Rao</FullName>
+    <DOB>01012004</DOB>
+    <roll_number>RN-2026-0042</roll_number>
+    <year>2026</year>
+  </DocDetails>
+</PullURIRequest>

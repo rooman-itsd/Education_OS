@@ -24,8 +24,24 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
 const TITLE = "Ensemble / Orchestra Director";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "productions.in-preparation", module: "practice/productions", batch: "#318" },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.in-preparation",
+    module: "practice/productions",
+    batch: "#318",
+    title: "In preparation",
+    probe: "/productions/in-preparation",
+    empty: "Nothing in preparation",
+    unavailable: "Production data is not available yet.",
+  },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
   {
     // Texts of OpenCallsWidget.tsx in PR #414 (feat/selection-process/module-build).
     id: "selection-process.open-calls",

@@ -1,9 +1,141 @@
 # Domain events published by integration-hub.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it, except organisation_id,
+# which every payload on main still carries (the grievance and alumni convention; docs/prd.md open question 9).
+#
+# Two kinds of event:
+# - the hub's own (connections, account links, deliveries), for operators and for the calling module to learn the
+#   outcome of an async port operation;
+# - port events, normalised from what any adapter reported. A consuming module subscribes to these by port, never to
+#   an adapter's name, so swapping or adding a provider changes no subscription (integrations/README.md, "Swap rule").
+#
+# Payloads carry identifiers, keys and statuses only. Never a credential, a token, a document, a health reading, a
+# name or an email address.
 module: integration-hub
 version: 1
-events: []
-#  - name: integration-hub.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+events:
+  # --- Connections ---------------------------------------------------------------------------------------------
+  - name: integration-hub.connection.created
+    version: 1
+    description: An organisation created a connection (disabled, in mock or sandbox mode).
+    payload: { organisation_id: uuid, connection_id: uuid, adapter: string, provider: string, port: string, mode: string }
+  - name: integration-hub.connection.updated
+    version: 1
+    description: Display name or non-secret settings changed. Lists the setting names only.
+    payload: { organisation_id: uuid, connection_id: uuid, changed_settings: "[string]" }
+  - name: integration-hub.connection.authorised
+    version: 1
+    description: An admin completed the provider's OAuth for an organisation-scope connection.
+    payload: { organisation_id: uuid, connection_id: uuid, provider: string, granted_scopes: "[string]" }
+  - name: integration-hub.connection.credentials-rotated
+    version: 1
+    description: A credential was set, rotated or removed. Name and fingerprint only.
+    payload: { organisation_id: uuid, connection_id: uuid, name: string, fingerprint: "string?", removed: boolean }
+  - name: integration-hub.connection.mode-changed
+    version: 1
+    description: A connection moved between mock, sandbox and live. Going live is the moment real people's data reaches the provider.
+    payload: { organisation_id: uuid, connection_id: uuid, port: string, provider: string, from_mode: string, to_mode: string }
+  - name: integration-hub.connection.enabled
+    version: 1
+    description: The port now routes the organisation's calls to this connection.
+    payload: { organisation_id: uuid, connection_id: uuid, port: string, provider: string, mode: string }
+  - name: integration-hub.connection.disabled
+    version: 1
+    description: The connection stopped serving its port, by an admin or because a required credential was removed.
+    payload: { organisation_id: uuid, connection_id: uuid, port: string, provider: string, reason: string }
+  - name: integration-hub.connection.health-changed
+    version: 1
+    description: >-
+      A healthcheck result differs from the previous one. Raised once per transition, not per check, so it is usable
+      as an alert. notification tells the organisation's admins on unreachable and auth_failed.
+    payload: { organisation_id: uuid, connection_id: uuid, port: string, provider: string, from_status: string, to_status: string, expires_at: "datetime?" }
+
+  # --- Account links (one person's own account at a provider) -------------------------------------------------
+  - name: integration-hub.account-link.connected
+    version: 1
+    description: A person linked their own account (a device, a document wallet).
+    payload: { organisation_id: uuid, account_link_id: uuid, person_id: uuid, port: string, provider: string }
+  - name: integration-hub.account-link.revoked
+    version: 1
+    description: >-
+      A link ended: the person disconnected, an admin revoked it, the provider reported the person withdrew consent,
+      or the token could not be refreshed. The adapter deletes the data collected under it.
+    payload: { organisation_id: uuid, account_link_id: uuid, person_id: uuid, port: string, provider: string, cause: string }
+
+  # --- Deliveries (outcome of async port operations) ----------------------------------------------------------
+  - name: integration-hub.delivery.succeeded
+    version: 1
+    description: An async port operation succeeded. The calling module matches it by caller_module and caller_reference.
+    payload: { organisation_id: uuid, delivery_id: uuid, port: string, operation: string, caller_module: string, caller_reference: string, provider_reference: "string?" }
+  - name: integration-hub.delivery.failed
+    version: 1
+    description: >-
+      An async port operation failed for good: a non-retryable error, or retries exhausted (then dead-lettered and
+      retryable by hand from the delivery log).
+    payload: { organisation_id: uuid, delivery_id: uuid, port: string, operation: string, caller_module: string, caller_reference: string, error_code: string, dead_lettered: boolean }
+  - name: integration-hub.delivery.manual-action-required
+    version: 1
+    description: >-
+      The operation cannot be done by API (no API, or not yet approved): a package was prepared and a person must
+      finish it on the provider's portal. The caller shows the files and the steps from the operation's output.
+    payload: { organisation_id: uuid, delivery_id: uuid, port: string, operation: string, caller_module: string, caller_reference: string }
+
+  # --- Port: certificate-issuance ------------------------------------------------------------------------------
+  - name: integration-hub.certificate.issued
+    version: 1
+    description: A document is in the holder's wallet, or available for them to pull.
+    payload: { organisation_id: uuid, issuance_key: string, person_id: uuid, doc_kind: string, status: string, provider: string }
+  - name: integration-hub.certificate.withdrawn
+    version: 1
+    payload: { organisation_id: uuid, issuance_key: string, person_id: uuid, doc_kind: string, provider: string }
+  - name: integration-hub.certificate.pulled
+    version: 1
+    description: The holder pulled the document through the wallet. For the issuing module's records and the audit trail.
+    payload: { organisation_id: uuid, issuance_key: string, person_id: uuid, provider: string, pulled_at: datetime }
+
+  # --- Port: academic-records ----------------------------------------------------------------------------------
+  - name: integration-hub.academic-record.submission-changed
+    version: 1
+    description: An award or credit submission moved status (submitted, accepted, partially accepted, rejected, uploaded by hand).
+    payload: { organisation_id: uuid, submission_id: uuid, caller_reference: string, kind: string, status: string, accepted_rows: "integer?", rejected_rows: "integer?" }
+
+  # --- Port: regulatory-submission -----------------------------------------------------------------------------
+  - name: integration-hub.regulatory-package.prepared
+    version: 1
+    description: A submission package is ready (or invalid, with issues). regulatory-reports and iqac-accreditation show its files and checklist.
+    payload: { organisation_id: uuid, package_id: uuid, package_key: string, form_code: string, period: string, status: string }
+  - name: integration-hub.regulatory-package.submitted
+    version: 1
+    description: A package was filed, by API or recorded by hand with the portal's reference.
+    payload: { organisation_id: uuid, package_id: uuid, package_key: string, form_code: string, period: string, channel: string, submitted_on: date }
+
+  # --- Port: meetings -----------------------------------------------------------------------------------------
+  - name: integration-hub.meeting.started
+    version: 1
+    payload: { organisation_id: uuid, meeting_key: string, caller_module: string, provider: string, started_at: datetime }
+  - name: integration-hub.meeting.ended
+    version: 1
+    payload: { organisation_id: uuid, meeting_key: string, caller_module: string, provider: string, ended_at: datetime }
+  - name: integration-hub.meeting-attendance.received
+    version: 1
+    description: >-
+      The attendance report for an ended meeting. Person ids and seconds only; unmatched participants are counted,
+      not named. timetable-attendance may mark attendance from it.
+    payload: { organisation_id: uuid, meeting_key: string, caller_module: string, complete: boolean, participants: "{ person_id: uuid, role: string, total_seconds: integer, first_joined_at: datetime, last_left_at: datetime }[]", unmatched_count: integer }
+  - name: integration-hub.meeting-recording.available
+    version: 1
+    payload: { organisation_id: uuid, meeting_key: string, caller_module: string, provider_recording_id: string, kind: string }
+
+  # --- Port: wearable-data ------------------------------------------------------------------------------------
+  - name: integration-hub.wearable-data.received
+    version: 1
+    description: New or changed records were stored for one athlete. No readings in the payload; consumers read them through the port.
+    payload: { organisation_id: uuid, account_link_id: uuid, person_id: uuid, provider: string, data_types: "[string]", from: date, to: date }
+
+  # --- Port: inter-institution-records ------------------------------------------------------------------------
+  - name: integration-hub.inter-institution-record.exchanged
+    version: 1
+    description: Records were sent to, or received from, a partner institution.
+    payload: { organisation_id: uuid, exchange_id: uuid, exchange_key: string, partner_id: string, direction: string, format: string, status: string }
+
+consumes: []

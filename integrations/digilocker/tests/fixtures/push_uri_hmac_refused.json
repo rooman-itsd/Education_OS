@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/public/account/1/pushuri",
+    "form": {
+      "clientid": "PUSH-APP-001",
+      "digilockerid": "dl-holder-0001",
+      "uri": "in.ac.example-DGCER-DEG-2026-0001",
+      "doctype": "DGCER",
+      "description": "B.Sc. Physics degree",
+      "docid": "DEG-2026-0001",
+      "issuedate": "05112026",
+      "validfrom": "",
+      "validto": "",
+      "action": "A",
+      "ts": "1793853000",
+      "hmac": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "response": {
+    "status": 401,
+    "body": {
+      "error": "invalid_hmac"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{"id": "report-1", "totalParticipantCount": 3, "meetingStartDateTime": "2026-11-09T04:30:00Z", "meetingEndDateTime": "2026-11-09T05:15:00Z",
+ "attendanceRecords": [
+  {"emailAddress": "teacher@college.example.com", "totalAttendanceInSeconds": 2700, "role": "Organizer", "identity": {"displayName": "Meera Iyer"},
+   "attendanceIntervals": [{"joinDateTime": "2026-11-09T04:30:00Z", "leaveDateTime": "2026-11-09T05:15:00Z", "durationInSeconds": 2700}]},
+  {"emailAddress": "anita.rao@college.example.com", "totalAttendanceInSeconds": 2520, "role": "Attendee", "identity": {"displayName": "Anita Rao"},
+   "attendanceIntervals": [{"joinDateTime": "2026-11-09T04:31:00Z", "leaveDateTime": "2026-11-09T04:50:00Z", "durationInSeconds": 1140}, {"joinDateTime": "2026-11-09T04:52:00Z", "leaveDateTime": "2026-11-09T05:15:00Z", "durationInSeconds": 1380}]},
+  {"emailAddress": "", "totalAttendanceInSeconds": 600, "role": "Attendee", "identity": {"displayName": "Unknown caller"},
+   "attendanceIntervals": [{"joinDateTime": "2026-11-09T04:40:00Z", "leaveDateTime": "2026-11-09T04:50:00Z", "durationInSeconds": 600}]}]}

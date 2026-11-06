@@ -1,9 +1,59 @@
 # Domain events published by search.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Envelope: see platform/event-bus/contracts/events.yaml. Payloads below never repeat it.
+# Search publishes only about its own operations. Document changes are NOT announced: the source
+# module already published the fact, and search follows it.
 module: search
 version: 1
-events: []
-#  - name: search.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+
+events:
+  - name: search.reindex.completed
+    version: 1
+    description: >-
+      A rebuild for one organisation, module and type finished and its new index is live. Lets an
+      operator or a test wait for a backfill. documents_failed above zero means those documents were
+      skipped and are in the dead-letter count of GET /platform/health.
+    payload:
+      job_id: uuid
+      module: string
+      type: string|null          # null: every type of the module
+      documents_indexed: integer
+      documents_failed: integer
+      duration_seconds: integer
+
+  - name: search.reindex.failed
+    version: 1
+    description: >-
+      A rebuild stopped before the alias swap. The previous index is still live and unchanged, so
+      search keeps working on the old documents.
+    payload:
+      job_id: uuid
+      module: string
+      type: string|null
+      error: string              # one sentence, no document content
+
+  - name: search.organisation.purged
+    version: 1
+    description: >-
+      Every document of an organisation was removed from the engine after tenancy.organisation.purged.
+      Published so the purge can be proven complete in the retention evidence. The envelope's
+      organisation_id is null because the tenant no longer exists.
+    payload:
+      organisation_id: uuid
+      documents_deleted: integer
+      purged_at: date-time
+
+# Events this service reacts to. Search does not list every module's events here: a module opts in
+# by declaring searchable types (docs/prd.md, "Opting in"), and the indexer subscribes to the trigger
+# events those declarations name. This list is the platform events it always needs, plus the events
+# of the first modules to opt in (module.yaml consumes_events repeats the same names).
+consumes:
+  - tenancy.organisation.purged                # delete every document of the organisation
+  - tenancy.entitlement.changed                # a module switched off stops appearing in results at once
+  - student-information.person.created
+  - student-information.person.updated
+  - student-information.person.status-changed
+  - academic-management.course.created
+  - academic-management.course.updated
+  - academic-management.course.archived
+  - knowledge-base.article.published
+  - knowledge-base.article.archived

@@ -1,0 +1,5 @@
+﻿partner_student_id,learner_name,date_of_birth,programme_code,programme_name,Module,Module title,ECTS,credit_system,grade,grade_scheme,grade_point,term,started_on,completed_on,Result
+STU-2024-0042,Asha Nair,2003-04-12,BSC-CS,B.Sc. Computer Science,CS101,Programming Fundamentals,4,indian_credit,A,10-point,9,"Semester 1, 2024",2024-07-15,2024-12-10,passed
+STU-2024-0042,Asha Nair,2003-04-12,BSC-CS,B.Sc. Computer Science,MA102,Discrete Mathematics,3.5,indian_credit,B+,10-point,8,"Semester 1, 2024",2024-07-15,2024-12-10,passed
+STU-2024-0042,Asha Nair,2003-04-12,BSC-CS,B.Sc. Computer Science,PH103,Physics for Computing,3,indian_credit,F,10-point,0,"Semester 1, 2024",,,failed
+STU-2024-0042,Asha Nair,2003-04-12,BSC-CS,B.Sc. Computer Science,CS201,Data Structures,4,indian_credit,,,,"Semester 3, 2025",,,in_progress

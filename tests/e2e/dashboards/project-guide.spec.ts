@@ -31,8 +31,24 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
@@ -46,9 +62,35 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
   },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
+  },
   // The project guide's own widgets.
-  { id: "projects.to-review", module: "practice/projects", batch: "#339" },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     // Texts of the widget in PR #456 (feat/skill-progress/due-and-cohort-widgets), not merged yet.
     id: "skill-progress.assessments-due",
@@ -60,7 +102,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Skill progress data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.trainees-to-assess",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Trainees to assess",
+    probe: "/field-training/me/trainees?limit=1",
+    empty: "Nothing to assess right now",
+    unavailable: "Field training data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 

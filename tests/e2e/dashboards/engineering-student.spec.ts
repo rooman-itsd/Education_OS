@@ -31,7 +31,16 @@ const WIDGETS: LayoutWidget[] = [
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
-  { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.course-materials",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Course materials",
+    probe: "/lms/me/course-materials?limit=1",
+    empty: "No new course materials",
+    unavailable: "Course data is not available yet.",
+  },
+
   {
     id: "fees-accounts.fee-dues",
     module: "finance-operations/fees-accounts",
@@ -72,8 +81,24 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The engineering student's own widgets.
-  { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
-  { id: "projects.milestones-due", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.my-projects",
+    module: "practice/projects",
+    batch: "#339",
+    title: "My projects",
+    probe: "/projects/me/projects",
+    empty: "You are not on a project yet",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "projects.milestones-due",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Milestones due",
+    probe: "/projects/me/milestones?within_days=14",
+    empty: "Nothing due in the next two weeks",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     // Texts of MyBookingsWidget.tsx and UpcomingBookings.tsx.
     id: "facility-booking.my-bookings",
@@ -84,7 +109,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
-  { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.my-placement",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "My placement",
+    probe: "/field-training/me/placements",
+    empty: "No placement yet",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     // Texts of UpcomingWidget.tsx in PR #454 (feat/productions/module), not merged yet.
     id: "productions.upcoming",
