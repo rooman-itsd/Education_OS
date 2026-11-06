@@ -14,9 +14,8 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  *   state, or says its data is not available while the backend is missing (the mentor holds the faculty role's
  *   permissions through `extends`, and selection-process-panelist's through the layout's `module_roles`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it
- *   (timetable-attendance and examinations' exam-duties #325, lms #326, projects and field-training #339,
- *   productions #318). examinations is enabled but does not export examinations.exam-duties yet, so that widget
- *   skips too;
+ *   (timetable-attendance #325, lms #326, projects and field-training #339, productions #318);
+ *   examinations is enabled and exports examinations.exam-duties, so that widget is checked like the others;
  * - data journeys, each once its widget has shipped and its API answers the corporate-mentor role: a course the
  *   organisation admin assigns the mentor to teach in the active term shows in academic-management.course-roster.
  *   selection-process.to-judge's journey is fixme (see below), and so are those of the modules not built yet.
@@ -41,8 +40,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing waiting to be graded",
     unavailable: "Course data is not available yet.",
   },
-
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
