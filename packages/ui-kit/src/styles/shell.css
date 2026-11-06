@@ -82,16 +82,22 @@
   border-right: 1px solid var(--eos-sidebar-border);
   color: var(--eos-sidebar-text);
   transform: translateX(-100%);
+  /* Off-canvas and closed: not focusable and not read out (visibility flips after the slide). */
+  visibility: hidden;
   transition:
     width var(--eos-normal) ease-in-out,
-    transform var(--eos-normal) ease-in-out;
+    transform var(--eos-normal) ease-in-out,
+    visibility 0s linear var(--eos-normal);
 }
 .eos-sidebar--open {
   transform: translateX(0);
+  visibility: visible;
+  transition-delay: 0s;
 }
 @media (min-width: 1024px) {
   .eos-sidebar {
     transform: none;
+    visibility: visible;
   }
   .eos-sidebar--collapsed {
     width: var(--eos-sidebar-collapsed);

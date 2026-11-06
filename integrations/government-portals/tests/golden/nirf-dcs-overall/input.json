@@ -1,0 +1,42 @@
+{
+  "form_code": "nirf.dcs.overall",
+  "period": "2026",
+  "data": {
+    "institute": {
+      "name": "Sample Institute of Higher Education",
+      "nirf_institute_id": "NIRF-IR-E-C-12345",
+      "year_of_establishment": 1998
+    },
+    "tlr": {
+      "sanctioned_intake": 1200,
+      "total_enrolment": 3650,
+      "full_time_faculty": 210,
+      "faculty_with_phd_pct": 64.5,
+      "faculty_experience_years_avg": 9.2,
+      "expenditure_lakh": 4125.75
+    },
+    "rpp": {
+      "publications": 312,
+      "citations": 2870,
+      "patents_published": 14,
+      "patents_granted": 3,
+      "sponsored_research_lakh": 380.5,
+      "consultancy_lakh": 42
+    },
+    "go": {
+      "graduating_students": 880,
+      "placed_students": 610,
+      "higher_studies_students": 140,
+      "median_salary_lakh": 5.4,
+      "phd_awarded": 11
+    },
+    "oi": {
+      "women_students_pct": 48.2,
+      "women_faculty_pct": 41,
+      "outside_state_students_pct": 22.5,
+      "economically_backward_students_pct": 17.3,
+      "differently_abled_students": 9
+    }
+  },
+  "evidence": []
+}

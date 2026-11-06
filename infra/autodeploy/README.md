@@ -38,8 +38,8 @@ GitHub credential; the repo is public.
 
 Check: `journalctl -t eos-api-autodeploy` inside the container, `systemctl list-timers eos-api*`,
 and `curl -s https://educationos.futureacad.ae/api/v1/health`. Rollback: revert the commit on `main`;
-the next check deploys it. A failed migration is logged and the API is still restarted on the new
-code, so fix forward quickly or revert.
+the next check deploys it. A failed migration is logged (`migrations failed at <sha>; API not restarted,
+staying on <sha>`): the API stays on the previous version and the next check tries again, so fix forward or revert.
 
 ## Environments
 

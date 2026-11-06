@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..application import service
+from ..application.reports import subscription_report
 from ..application.service import BillingError
 
 router = APIRouter(tags=["billing"])
@@ -21,6 +22,13 @@ def _err(e: BillingError):
 class Upgrade(BaseModel):
     plan: str
     billing_cycle: str = "monthly"
+
+
+class ProfileBody(BaseModel):
+    legal_name: str
+    gstin: str | None = None
+    address: str = ""
+    state_code: str | None = None
 
 
 class PlanBody(BaseModel):
@@ -70,6 +78,28 @@ def invoices(
     return service.list_invoices(db, p.organisation_id)
 
 
+@router.get("/billing-profile")
+def billing_profile(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
+    """Who the caller's invoices are addressed to (the GST recipient)."""
+    profile = service.get_profile(db, p.organisation_id)
+    if not profile:
+        raise HTTPException(404, "no billing profile")
+    return profile.to_dict()
+
+
+@router.put("/billing-profile")
+def put_billing_profile(
+    body: ProfileBody, p: Principal = Depends(require("billing:subscription:manage")), db: Session = Depends(get_db)
+):
+    """Set the recipient of future invoices: legal name, optional GSTIN (validated), address and state."""
+    try:
+        return service.save_profile(db, organisation_id=p.organisation_id, **body.model_dump()).to_dict()
+    except BillingError as e:
+        raise _err(e) from e
+
+
 @router.post("/subscription/upgrade", status_code=201)
 def upgrade(
     body: Upgrade, p: Principal = Depends(require("billing:subscription:manage")), db: Session = Depends(get_db)
@@ -97,6 +127,13 @@ def payment_webhook(body: dict, db: Session = Depends(get_db)):
         service.confirm_payment(db, reference=body.get("reference", ""))
     except BillingError as e:
         raise _err(e) from e
+
+
+@router.get("/admin/reports/subscriptions")
+def admin_subscription_report(p: Principal = Depends(require("platform:revenue:read")), db: Session = Depends(get_db)):
+    """Super admin: subscriptions per plan and status, monthly recurring revenue, paid in the last 30 days, and
+    trials ending in the next 14 days (application/reports.py)."""
+    return subscription_report(db)
 
 
 @router.get("/admin/plans")

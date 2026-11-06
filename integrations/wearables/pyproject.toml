@@ -1,0 +1,36 @@
+[project]
+name = "eos-wearables"
+version = "0.3.0"
+description = "Education OS integration: Garmin, Polar, Fitbit (Google Health API) and Strava adapter for the wearable-data port."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "sqlalchemy>=2",
+  "alembic>=1.13",
+  "httpx>=0.27",
+  "pydantic>=2",
+  "eos-core",
+]
+
+# How integration-hub finds this adapter WITHOUT importing it (contracts/ports/adapter.yaml, "registration"): the
+# entry-point name is the adapter's folder name; the object is a factory returning the adapter, whose describe()
+# is the registry row. Needs an install (`pip install -e .`) before the entry point is discoverable.
+[project.entry-points."eos.integration_adapters"]
+wearables = "eos_wearables.application.adapter:get_adapter"
+
+# The event bus finds the handler of integration-hub.account-link.revoked here (module.yaml consumes_events).
+[project.entry-points."eos.event_consumers"]
+wearables = "eos_wearables.application.consumers:CONSUMERS"
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pyyaml", "eos-testing"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

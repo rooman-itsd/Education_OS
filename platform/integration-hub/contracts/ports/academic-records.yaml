@@ -1,0 +1,115 @@
+# The AcademicRecords port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). Called through packages/sdk, never against a provider.
+port: AcademicRecords
+id: academic-records
+version: 1
+defined_by: integration-hub
+implemented_by: [nad]
+consumers: [examinations, student-information, enrolment-registration]   # proposed; examinations Q12 decides the result fields
+
+purpose: >-
+  Lodge structured academic records with the national depositories: awards (degree, diploma, marksheet, grade card)
+  with the National Academic Depository, earned credits with the Academic Bank of Credits, each keyed by the
+  learner's APAAR / ABC id; and check that a learner's APAAR / ABC id is real. Where the depository has no API open to
+  the institution, the adapter prepares the depository's own upload file and a person uploads it; the port says so
+  (manual_action_required) instead of pretending it was sent.
+
+vocabulary:
+  award_kind: [degree, provisional_degree, diploma, certificate, marksheet, grade_card, consolidated_marksheet]
+  record_status: [prepared, submitted, accepted, partially_accepted, rejected, manual_action_required, uploaded_manually]
+
+learner:                                      # used by every operation below
+  person_id: uuid
+  apaar_id: string                            # 12 digits; the ABC id is the same number for higher education
+  enrolment_number: string                    # the institution's registration or roll number
+  name: string
+  date_of_birth: date
+  gender: string                              # M | F | T
+  mother_name: string                         # optional; some depository templates ask for it
+  father_name: string                         # optional
+
+operations:
+  - name: verify_learner_id
+    mode: sync
+    description: >-
+      Check an APAAR / ABC id exists and matches the learner's name and date of birth. Where no verification API is
+      available to the institution the answer is unverifiable, never a guess.
+    input: { learner: object }
+    output:
+      status: string                          # verified | mismatch | not_found | unverifiable
+      mismatched_fields: array                # e.g. [date_of_birth]; never the depository's value
+    errors: [not_configured, auth_failed, invalid_request, throttled, transport_unavailable, provider_error]
+
+  - name: publish_awards
+    mode: async
+    description: >-
+      Lodge a batch of awards for one programme and session. Validates every row first and refuses the whole batch
+      with row errors when any row is invalid. With an API, sends it; without one, returns manual_action_required with
+      the depository's upload file (CSV) in platform/documents and the steps to upload it.
+    input:
+      batch_key: string                       # caller's idempotency key, e.g. "<exam_cycle_id>:<programme_id>:degree"
+      award_kind: string
+      template_code: string                   # the depository's certificate template, from the connection's settings
+      programme: { code: string, name: string, level: string, duration_terms: integer, mode_of_study: string }
+      session: string                         # e.g. "2025-26"; examination month and year where the template needs it
+      records: array                          # [{learner, award_number, result: {cgpa, percentage, division, result_status},
+                                              #   courses: [{code, title, credits, grade, grade_point, max_marks, marks}],
+                                              #   term, issued_on, document_id (optional PDF of the award)}]
+    output:
+      submission_id: uuid
+      status: string                          # submitted | manual_action_required
+      upload_files: array                     # [{document_id, filename, rows}] when manual
+      steps: array                            # human steps for the manual path
+      row_errors: array                       # [{row, field, code}] when invalid; status is then rejected
+    errors: [not_configured, auth_failed, invalid_request, throttled, transport_unavailable, provider_error]
+
+  - name: correct_awards
+    mode: async
+    description: >-
+      Lodge corrections for awards already lodged (a revised result). Same shape as publish_awards; each record names
+      the award_number it corrects. The depository's own correction flag is set by the adapter.
+    input: { batch_key: string, award_kind: string, template_code: string, programme: object, session: string, records: array, reason: string }
+    output: { submission_id: uuid, status: string, upload_files: array, steps: array, row_errors: array }
+    errors: [not_configured, auth_failed, invalid_request, not_found, throttled, transport_unavailable, provider_error]
+
+  - name: publish_credits
+    mode: async
+    description: >-
+      Lodge credits earned in a term with the credit bank, per learner and course. Credits come from published,
+      final results only.
+    input:
+      batch_key: string
+      session: string
+      term: string
+      records: array                          # [{learner, programme_code, courses: [{code, title, credits_earned, grade, grade_point, completed_on}]}]
+    output: { submission_id: uuid, status: string, upload_files: array, steps: array, row_errors: array }
+    errors: [not_configured, auth_failed, invalid_request, throttled, transport_unavailable, provider_error]
+
+  - name: record_manual_upload
+    mode: sync
+    description: >-
+      A person uploaded a prepared file on the depository's portal: record when, by whom, the portal's reference and,
+      optionally, its acknowledgement as a document. Moves the submission to uploaded_manually.
+    input: { submission_id: uuid, uploaded_on: date, uploaded_by: uuid, portal_reference: string, acknowledgement_document_id: uuid }
+    output: { submission_id: uuid, status: string }
+    errors: [not_found, conflict]
+
+  - name: get_submission
+    mode: sync
+    description: Status of a submission and, where the depository reports it, per-row outcomes.
+    input: { submission_id: uuid }
+    output: { submission_id: uuid, status: string, accepted_rows: integer, rejected_rows: array, updated_at: datetime }
+    errors: [not_found, auth_failed, transport_unavailable, provider_error]
+
+capabilities:
+  awards_api: boolean                         # false: publish_awards returns manual_action_required with a CSV
+  credits_api: boolean
+  learner_id_verification: boolean
+  status_polling: boolean                     # get_submission asks the depository rather than reporting local state
+  max_rows_per_batch: integer
+
+inbound:
+  - kind: submission_status_changed           # from polling or a provider callback, when one exists
+    data: { submission_id: uuid, status: string, accepted_rows: integer, rejected_rows: integer }

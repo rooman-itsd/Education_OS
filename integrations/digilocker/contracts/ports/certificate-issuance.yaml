@@ -1,0 +1,112 @@
+# The CertificateIssuance port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). A module calls it through packages/sdk:
+#   sdk.integrations.invoke(port="certificate-issuance", operation="issue", input={...}, idempotency_key=...)
+# and never knows which provider answers.
+port: CertificateIssuance
+id: certificate-issuance
+version: 1
+defined_by: integration-hub
+implemented_by: [digilocker]
+consumers: [examinations, student-information, admissions]   # proposed; examinations Q7 decides who owns certificates
+
+purpose: >-
+  Put a document the institution issued (degree, marksheet, transcript, migration certificate) into the holder's
+  national document wallet; keep it current (replace, withdraw); answer the wallet when the holder asks for a
+  document on demand; and, with a person's consent, fetch or verify a document someone else issued to them.
+
+vocabulary:
+  doc_kind: [degree, provisional_degree, diploma, marksheet, grade_card, transcript, migration_certificate,
+             transfer_certificate, bonafide_certificate, character_certificate, other]
+
+operations:
+  - name: issue
+    mode: async                               # returns a delivery id; the outcome arrives as integration-hub.certificate.issued or .issue-failed
+    description: >-
+      Make one issued document available in the holder's wallet. The provider decides how: pushed straight to the
+      holder's account when it can be found, otherwise registered so the holder can pull it later with search_keys.
+      issuance_key makes it idempotent: issuing the same key again with the same document changes nothing.
+    input:
+      issuance_key: string                    # caller's stable id, e.g. "<result_id>:marksheet"; unique per organisation
+      doc_kind: string                        # from vocabulary
+      provider_doc_type: string               # optional; the provider's code when the connection maps doc_kind to more than one
+      document_id: uuid                       # the final, signed PDF in platform/documents
+      document_sha256: string                 # hex; the adapter refuses a file whose hash differs
+      document_number: string                 # number printed on the document; unique per organisation and doc_kind
+      issued_on: date
+      valid_from: date                        # optional
+      valid_to: date                          # optional; null means it does not expire
+      title: string                           # shown in the wallet, e.g. "B.Sc. Physics, Semester 4 marksheet"
+      holder:
+        person_id: uuid
+        name: string                          # as printed on the document
+        date_of_birth: date                   # optional; used to match the wallet account
+        gender: string                        # optional; M | F | T as the provider expects
+        mobile: string                        # optional, E.164; used once to find the wallet account and never stored
+        wallet_account_id: string             # optional; known from an earlier account link
+        search_keys: object                   # what the holder types in the wallet to pull this, e.g. {roll_number, year}
+      data: object                            # optional structured fields for the provider's machine-readable copy (marks, CGPA, programme)
+    output:
+      issuance_id: uuid
+      status: string                          # pushed | available_for_pull | pending_holder_account
+      provider_uri: string                    # e.g. <issuer id>-<DOCTYPE>-<document id>; null until known
+    errors: [not_configured, auth_failed, invalid_request, conflict, rejected, throttled, transport_unavailable, provider_error]
+
+  - name: replace
+    mode: async
+    description: >-
+      Replace an issued document with a corrected one (a revised result). Same issuance_key, new document_id and
+      sha256. The wallet copy is updated in place where the provider allows it, otherwise withdrawn and issued again.
+    input: { issuance_key: string, document_id: uuid, document_sha256: string, reason: string, data: object }
+    output: { issuance_id: uuid, status: string, provider_uri: string }
+    errors: [not_configured, auth_failed, not_found, invalid_request, rejected, throttled, transport_unavailable, provider_error]
+
+  - name: withdraw
+    mode: async
+    description: Remove the document from the holder's wallet (cancelled degree, issued in error). The pull lookup stops returning it.
+    input: { issuance_key: string, reason: string }
+    output: { issuance_id: uuid, status: string }  # withdrawn
+    errors: [not_configured, auth_failed, not_found, rejected, throttled, transport_unavailable, provider_error]
+
+  - name: get_issuance
+    mode: sync
+    description: The current state of one issuance as the adapter knows it, without calling the provider.
+    input: { issuance_key: string }
+    output: { issuance_id: uuid, status: string, provider_uri: string, issued_at: datetime, last_pulled_at: datetime }
+    errors: [not_found]
+
+  - name: fetch_holder_document
+    mode: sync
+    description: >-
+      With the person's consent (an account link they authorised, for this purpose), fetch a document another issuer
+      put in their wallet, e.g. an applicant's Class XII marksheet, and store it in platform/documents. The provider's
+      integrity check (e.g. DigiLocker's HMAC over the file) is verified before the file is kept.
+    input:
+      account_link_id: uuid
+      provider_uri: string                    # from list_holder_documents, or
+      lookup: object                          # {issuer_id, doc_type, search parameters} for providers that pull on demand
+      purpose: string                         # admission_verification | record_verification; shown to the person at consent
+    output: { document_id: uuid, sha256: string, issuer: string, doc_type: string, integrity_verified: boolean }
+    errors: [not_configured, consent_required, not_found, invalid_request, throttled, transport_unavailable, provider_error]
+
+  - name: list_holder_documents
+    mode: sync
+    description: With the person's consent, list what is issued to them in the wallet (names, issuers, URIs; no files).
+    input: { account_link_id: uuid }
+    output: { items: array }                  # [{provider_uri, issuer, doc_type, title, issued_on}]
+    errors: [not_configured, consent_required, throttled, transport_unavailable, provider_error]
+
+capabilities:
+  push_to_holder: boolean                     # can put a document straight into a holder's account
+  pull_on_demand: boolean                     # holders can pull documents by search_keys; needs provider_request inbound
+  replace_in_place: boolean
+  holder_consent_fetch: boolean               # fetch_holder_document and list_holder_documents work
+  doc_types: array                            # [{doc_kind, provider_doc_type}] mapped for this connection
+  max_document_bytes: integer
+
+# Normalised notifications the hub publishes as events (contracts/events.yaml). Adapters produce them from provider
+# callbacks or from their own operations.
+inbound:
+  - kind: document_pulled                     # the holder pulled a document through the wallet
+    data: { issuance_key: string, provider_uri: string, pulled_at: datetime }

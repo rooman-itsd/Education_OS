@@ -1,11 +1,121 @@
 # Permission catalogue for productions. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+# Each academy profile maps its performer, lead and coordinating roles to the module roles below.
 module: productions
-permissions: []
-#  - key: productions:record:read
-#    description: ...
-#  - key: productions:record:write
-#    description: ...
-roles: []
-#  - name: productions-admin
-#    grants: [productions:record:read, productions:record:write]
+permissions:
+  - key: productions:production:read
+    description: See the organisation's productions, their schedule, venue and cast list.
+  - key: productions:production:manage
+    description: Create and edit productions, schedule them, mark them complete and cancel them.
+  - key: productions:role:read-own
+    description: See the parts and crew jobs the caller holds themselves.
+  - key: productions:role:manage
+    description: "Cast and crew a production: offer a part, and withdraw an assignment."
+  - key: productions:role:respond
+    description: Accept or decline an invitation to a part the caller was offered themselves.
+  - key: productions:task:read
+    description: See a production's preparation tasks and what is still outstanding.
+  - key: productions:task:manage
+    description: Add preparation tasks to a production and mark them done.
+roles:
+  - name: productions-member
+    description: Performers and crew. See the organisation's productions and answer their own invitations.
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: productions-lead
+    description: Directors, choreographers and mentors. Cast a production and run its preparation.
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: productions-coordinator
+    description: Production and stage managers and the coordinating offices. Run the whole calendar.
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  # Academy profile roles whose dashboards show this module's widgets (platform/identity/config/dashboards). The
+  # role-reach test in #369 found 34 placements on 29 layouts answering 403, because nothing was granted here.
+  # A token carries the profile role, not the productions-* roles above, so each one is granted by hand, with the
+  # grants of the module role its widgets need: my-roles and upcoming need member, in-preparation needs lead,
+  # calendar needs coordinator. A role on two of those lists gets the wider of the two.
+  - name: actor
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: artist
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: dancer
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: designer
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: engineering-student
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: filmmaker
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: hospitality-trainee
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: law-student
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: management
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: management-student
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: musician
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: research-lead
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: research-scholar
+    description: "Profile role, performer and learner roles: see what is on and answer their own invitations (my-roles, upcoming). Same grants as productions-member."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond]
+  - name: chef-instructor
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: choreographer
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: corporate-mentor
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: director
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: legal-mentor
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: production-supervisor
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: studio-instructor
+    description: "Profile role, lead and mentor roles: cast a production and run its preparation (in-preparation). Same grants as productions-lead."
+    grants: [productions:production:read, productions:role:read-own, productions:role:respond, productions:role:manage, productions:task:read, productions:task:manage]
+  - name: ensemble-director
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: exhibition-manager
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: industry-coordinator
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: industry-liaison
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: moot-court-coordinator
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: placement-officer
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: production-manager
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: research-office
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]
+  - name: stage-manager
+    description: "Profile role, coordinating roles: runs the calendar and the preparation behind it (calendar). Same grants as productions-coordinator."
+    grants: [productions:production:manage, productions:production:read, productions:role:manage, productions:role:read-own, productions:role:respond, productions:task:manage, productions:task:read]

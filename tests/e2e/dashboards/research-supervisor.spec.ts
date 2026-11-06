@@ -41,8 +41,24 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The supervisor's own widgets.
-  { id: "projects.to-review", module: "practice/projects", batch: "#339" },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "selection-process.to-judge",
     module: "practice/selection-process",

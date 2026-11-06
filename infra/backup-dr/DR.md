@@ -5,8 +5,10 @@ failed, it was deleted, or it cannot be trusted. This rebuilds it on a **new con
 the newest database backup, and is run as a **timed drill** every quarter so the steps and the time are known
 before they are needed.
 
-**Objective** (to be agreed with the lead, #151): back in service within **1 hour** (RTO), losing at most the
-changes since the last nightly backup, **24 hours** (RPO).
+**Objective** (agreed with the lead on 3 Nov 2026, #345): back in service within **2 hours** (RTO), losing at most
+the changes since the last nightly backup, **24 hours** (RPO). A nightly dump cannot do better than 24 hours;
+point-in-time recovery, which would, is planned for v1.1. A drill is timed against the 2 hours: its **Total** in the
+drill log must stay under it, and a drill that does not is an incident like a failed restore.
 
 ## Before you need it
 
@@ -14,7 +16,7 @@ Without these the rebuild cannot start. Check them at every drill.
 
 | Needed | Where it is | Check |
 |---|---|---|
-| A recent backup **off the lost host** | `EOS_BACKUP_OFFSITE` (README, "Second location"), else Proxmox's container backup (vzdump) | `ls` the destination: a dump from last night |
+| A recent backup **off the lost host** | `EOS_BACKUP_OFFSITE` (README, "Second location"): a different physical machine over SSH, never a container on the same Proxmox host, since one disk failure would take both. Until it is set, Proxmox's nightly container backup (vzdump) to a second storage is the fallback | `ls` the destination: a dump from last night |
 | **How a new host reaches that backup** | in the password manager with `.env.api`: the `EOS_BACKUP_OFFSITE` value (a mounted folder, or `user@host:/path`) and who can add a key at the destination. The setting lives in `/etc/eos/db-backup.env` and the destination trusts **the old host's** SSH key, both lost with the host | the destination's admin is reachable, and knows the procedure in step 3 |
 | `.env.api` (the secrets) | a copy in the team's password manager, kept by the lead. Not in git, not in the backups | the copy's `EOS_JWT_SECRET` matches the host's |
 | Proxmox access | root SSH (`root@<proxmox-ip>`) or the web console's Shell, to create the container and copy files | `pveversion` |
@@ -146,6 +148,9 @@ no second copy of the data stays around, unless it is about to become another en
 times below, and open an issue for every step that went wrong.
 
 ## Drill log
+
+A drill restores from the **offsite copy** onto a throwaway container the lead creates, and destroys it afterwards (step 7).
+The Total must stay under the 2-hour RTO.
 
 | Date | Who | Backup used | 1 deploy | 3 copy | 4 restore | 5 checks | Total | Notes |
 |---|---|---|---|---|---|---|---|---|

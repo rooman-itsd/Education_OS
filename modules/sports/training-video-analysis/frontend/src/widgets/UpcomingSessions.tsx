@@ -44,7 +44,7 @@ function UpcomingSessions({ label, summary, empty }: { label: string; summary: s
   );
 }
 
-const COACH_EMPTY = { title: "No sessions scheduled", body: "Training sessions you schedule appear here, earliest first." };
+const COACH_EMPTY = { title: "No sessions scheduled", body: "Training sessions scheduled in your organisation appear here, earliest first." };
 const ATHLETE_EMPTY = { title: "No training sessions scheduled", body: "Sessions your coach schedules for you appear here." };
 
 /**

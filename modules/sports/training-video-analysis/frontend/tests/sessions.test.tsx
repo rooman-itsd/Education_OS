@@ -51,6 +51,12 @@ describe("session-plan and training-schedule declarations", () => {
     expect(w.size).toBe(size);
     expect(w.component).toBe(component);
   });
+
+  it("does not tell a coach the organisation's sessions are their own (GET /sessions narrows only an athlete)", () => {
+    const subtitle = (id: string) => widgets.find((x) => x.id === id)!.subtitle;
+    expect(subtitle("training-video-analysis.session-plan")).toBe("Coming training sessions in your organisation");
+    expect(subtitle("training-video-analysis.training-schedule")).toBe("Your coming training sessions");
+  });
 });
 
 describe("upcoming sessions", () => {
@@ -84,6 +90,7 @@ describe("upcoming sessions", () => {
     stubApi({ status: 200, body: page([]) });
     const coach = render(<SessionPlan role="coach" />);
     expect(await screen.findByText("No sessions scheduled")).toBeTruthy();
+    expect(screen.getByText(/scheduled in your organisation/)).toBeTruthy();
     coach.unmount();
     render(<TrainingSchedule role="athlete" />);
     expect(await screen.findByText("No training sessions scheduled")).toBeTruthy();

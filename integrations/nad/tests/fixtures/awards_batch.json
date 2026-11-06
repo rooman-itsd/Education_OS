@@ -1,0 +1,63 @@
+{
+  "batch_key": "cycle-2026-11:prog-bsc-phy:degree",
+  "award_kind": "degree",
+  "template_code": "DEG-UG-01",
+  "programme": {
+    "code": "BSC-PHY",
+    "name": "B.Sc. Physics",
+    "level": "undergraduate",
+    "duration_terms": 6,
+    "mode_of_study": "full_time"
+  },
+  "session": "2025-26",
+  "records": [
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0001",
+        "apaar_id": "123456789012",
+        "enrolment_number": "EN-2023-0001",
+        "name": "Asha Rao",
+        "date_of_birth": "2004-01-01",
+        "gender": "F",
+        "mother_name": "Sunita Rao",
+        "father_name": "Mohan Rao"
+      },
+      "award_number": "DEG-2026-0001",
+      "result": {"cgpa": 8.4, "percentage": 84, "division": "First Class with Distinction", "result_status": "pass"},
+      "courses": [
+        {"code": "PHY101", "title": "Mechanics", "credits": 4, "grade": "A", "grade_point": 9, "max_marks": 100, "marks": 88},
+        {"code": "PHY102", "title": "Optics, Waves and Sound", "credits": 4, "grade": "B+", "grade_point": 8, "max_marks": 100, "marks": 74.5}
+      ],
+      "term": "6",
+      "issued_on": "2026-10-30"
+    },
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0002",
+        "apaar_id": "223456789012",
+        "enrolment_number": "EN-2023-0002",
+        "name": "Ravi \"RK\" Kumar",
+        "date_of_birth": "2003-12-31",
+        "gender": "M"
+      },
+      "award_number": "DEG-2026-0002",
+      "result": {"cgpa": 7.05, "division": "First Class", "result_status": "pass"},
+      "courses": [],
+      "issued_on": "2026-10-30"
+    },
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0003",
+        "apaar_id": "323456789012",
+        "enrolment_number": "EN-2023-0003",
+        "name": "=SUM(A1) Müller",
+        "date_of_birth": "2004-02-29",
+        "gender": "T"
+      },
+      "award_number": "DEG-2026-0003",
+      "result": {"percentage": 61.5, "result_status": "Pass"},
+      "courses": [],
+      "issued_on": "2026-11-02"
+    }
+  ]
+}

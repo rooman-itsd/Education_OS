@@ -175,6 +175,30 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: Candidate already has a final outcome }
 
+  /processes/{id}/slots:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      summary: >
+        Schedule a slot (an audition, jury round or review) on a process, optionally for one stage and one
+        candidate of that process. Permission selection-process:process:manage.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SlotInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/Slot" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { description: "invalid_slot: the slot ends before it starts, or the stage or candidate is not on this process", content: { application/json: { schema: { $ref: "#/components/schemas/ValidationError" } } } }
+
+  /slots/upcoming:
+    get:
+      summary: >
+        Scheduled slots from now on, soonest first. A candidate sees their own; a panelist sees those of their
+        processes; managers see all. Permission selection-process:process:read and selection-process:candidate:read.
+      parameters:
+        - { name: candidate_id, in: query, schema: { type: string, format: uuid } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Slot" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -236,6 +260,25 @@ components:
           properties:
             id: { type: string, format: uuid }
             process_id: { type: string, format: uuid }
+
+    SlotInput:
+      type: object
+      required: [title, starts_at, ends_at]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        stage_id: { type: string, format: uuid, nullable: true }
+        candidate_id: { type: string, format: uuid, nullable: true }
+        location: { type: string, maxLength: 200, nullable: true }
+    Slot:
+      allOf:
+        - $ref: "#/components/schemas/SlotInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            process_id: { type: string, format: uuid }
+            status: { type: string }
 
     ProcessInput:
       type: object
@@ -351,5 +394,5 @@ components:
     ValidationError:
       type: object
       properties:
-        code: { type: string, enum: [duplicate_stage_sequence] }
+        code: { type: string, enum: [duplicate_stage_sequence, invalid_slot] }
         message: { type: string }

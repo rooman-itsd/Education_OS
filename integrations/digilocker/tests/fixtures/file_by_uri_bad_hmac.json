@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/public/oauth2/1/file/in.gov.cbse-HSCER-2019-1234567",
+    "authorization": "Bearer access-token-fixture"
+  },
+  "response": {
+    "status": 200,
+    "content": "%PDF-1.4 class XII marksheet fixture",
+    "headers": {
+      "content-type": "application/pdf",
+      "hmac": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    }
+  }
+}

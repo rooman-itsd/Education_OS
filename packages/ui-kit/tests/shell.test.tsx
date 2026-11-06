@@ -80,4 +80,34 @@ describe("AppShell", () => {
     expect(screen.getByRole("dialog", { name: "Search" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Learning \(LMS\)/ })).toBeTruthy();
   });
+
+  it("starts with a skip link to the main content, and the breadcrumb marks the current page", () => {
+    render(<Shell />);
+    const skip = screen.getByRole("link", { name: "Skip to main content" });
+    fireEvent.click(skip);
+    expect(document.activeElement).toBe(screen.getByRole("main"));
+    expect(screen.getByText("Dashboard", { selector: ".eos-breadcrumb__current" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("closes the account menu with Escape and gives focus back to its button", () => {
+    render(<Shell />);
+    const button = screen.getByRole("button", { name: /Kavya Menon/ });
+    fireEvent.click(button);
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Sign out" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("marks the search dialog modal and the menu button with whether the navigation is open", () => {
+    render(<Shell />);
+    const menu = screen.getByRole("button", { name: "Navigation menu" });
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(menu);
+    expect(menu.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "Search" }).getAttribute("aria-modal")).toBe("true");
+  });
 });
