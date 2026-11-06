@@ -71,11 +71,15 @@ def test_top_articles_by_views_and_by_helpful_share(desk, clock, monkeypatch):
     assert desk.get("/stats/top-articles", desk.reader).status_code == 403
 
 
-def test_support_staff_reads_articles_and_statistics_through_their_layout(client, org, clock):
-    """support-staff.yaml lists knowledge-base-viewer in module_roles, so the widget works with a real profile role."""
+def test_support_staff_writes_articles_and_reads_statistics_through_their_layout(client, org, clock):
+    """support-staff.yaml lists knowledge-base-author in module_roles (the module's default for the profile role), so
+    the widget works and support staff write articles, but publishing and categories stay with the editor."""
     d = Desk(client, org)
     a = d.published()
     _, staff = org.user("support-staff")
     assert d.ok(d.get(f"/articles/{a['id']}", staff))["id"] == a["id"]
     assert d.get("/stats/top-articles", staff).status_code == 200
-    assert d.post("/articles", d.body(), staff).status_code == 403  # viewer: no write yet
+    draft = d.post("/articles", d.body(), staff)
+    assert draft.status_code == 201  # author: article:write
+    assert d.post(f"/articles/{draft.json()['id']}/publish", {}, staff).status_code == 403  # publishing is the editor's
+    assert d.post("/categories", {"name": "Network"}, staff).status_code == 403  # so are categories
