@@ -44,6 +44,24 @@ class Context:
     idempotency_key: str | None = None
     deadline: Any = None
 
+    @classmethod
+    def of(cls, value: Any) -> Context | None:
+        """The hub's context as this adapter's own. The hub passes its own object, which reads as attributes and as
+        a mapping (integration-hub README, "Writing an adapter"), never this class: take the fields from either.
+        None when it is neither, or has no organisation."""
+        if isinstance(value, cls):
+            return value
+        if hasattr(value, "keys") and hasattr(value, "__getitem__"):
+            fields = {k: value[k] for k in value.keys() if k in cls.__dataclass_fields__}
+        else:
+            fields = {k: getattr(value, k) for k in cls.__dataclass_fields__ if hasattr(value, k)}
+        if "organisation_id" not in fields:
+            return None
+        try:
+            return cls(**fields)
+        except TypeError:
+            return None
+
 
 @dataclass(frozen=True)
 class PortError:
