@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/sla-management`) and
+  `apps/frontend/config/modules.enabled.yaml` (`sla-management.breaches` on the Support Staff, Organisation Admin and Management
+  dashboards that list it).
 - Module scaffolded.
 - Contracts proposed: business-hours calendars, SLA policies with escalation levels, response and resolution
   clocks per helpdesk ticket, `GET /tickets/{ticket_id}` for helpdesk screens, `GET /stats/breaches` behind the
