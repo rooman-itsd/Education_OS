@@ -78,18 +78,23 @@ def transport():
 
 
 @pytest.fixture
-def adapter(transport, clock):
+def adapter(transport, clock, monkeypatch):
     from eos_wearables.api import router as router_module
     from eos_wearables.application.adapter import WearablesAdapter
 
-    router_module.clock = clock
+    monkeypatch.setattr(router_module, "clock", clock)  # restored after the test
     return WearablesAdapter(client_factory=transport.factory(), clock=clock)
 
 
 @pytest.fixture
-def client():
-    """The alerts API alone, as module-standard rule 6 asks: no host and no other module."""
+def client(clock, monkeypatch):
+    """The alerts API alone, as module-standard rule 6 asks: no host and no other module. It reads the same fixed
+    clock as the test data (wear_support.NOW), so an alert's age never depends on today's date or on which test
+    ran before."""
+    from eos_wearables.api import router as router_module
     from eos_wearables.api.router import router
+
+    monkeypatch.setattr(router_module, "clock", clock)
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from wear_support import PREFIX
