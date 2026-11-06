@@ -11,6 +11,7 @@ dependencies = [
   "alembic>=1.13",
   "pyyaml>=6",
   "cryptography>=42",
+  "PyJWT>=2.8",
   "eos-core",
   "eos-identity",
   "eos-audit",

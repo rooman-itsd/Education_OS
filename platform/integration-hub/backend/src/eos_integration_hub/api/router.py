@@ -10,9 +10,11 @@ from __future__ import annotations
 import functools
 from datetime import datetime
 
+import jwt
 from eos_core.db import get_db
+from eos_core.security import decode_token
 from eos_identity.api.deps import Principal, current_principal, require
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -70,6 +72,19 @@ _mode_guard.permission = access.CONNECTION_MANAGE  # type: ignore[attr-defined] 
 
 def _items(items: list) -> dict:
     return {"items": items}
+
+
+def _bind_browser(response: Response, binding: authorisation.BrowserBinding) -> None:
+    """The cookie that ties a pending authorisation to this browser (application/authorisation.py)."""
+    response.set_cookie(
+        binding.name,
+        binding.value,
+        max_age=binding.max_age,
+        path=binding.path,
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 # ------------------------------------------------------------------ ports and adapters
@@ -171,11 +186,14 @@ def delete_credential(
 @_errors
 def authorise_connection(
     id: Id,
+    response: Response,
     body: schemas.AuthoriseIn | None = None,
     p: Principal = Depends(_org(access.CONNECTION_MANAGE)),
     db: Session = Depends(get_db),
 ):
-    return authorisation.authorise_connection(db, _actor(p), id, body.return_url if body else None)
+    out, binding = authorisation.authorise_connection(db, _actor(p), id, body.return_url if body else None)
+    _bind_browser(response, binding)
+    return out
 
 
 @router.post("/connections/{id}/mode")
@@ -219,18 +237,45 @@ def run_health(id: Id, _p: Principal = Depends(_org(access.CONNECTION_READ)), db
 # ------------------------------------------------------------------ OAuth callback (public)
 
 
+def _caller_of(authorization: str | None) -> str | None:
+    """The person a callback is authenticated as: None without a token, "" when the token does not verify."""
+    if not authorization:
+        return None
+    if not authorization.lower().startswith("bearer "):
+        return ""
+    try:
+        sub = decode_token(authorization.split(" ", 1)[1]).get("sub")
+    except jwt.PyJWTError:
+        return ""
+    return sub if isinstance(sub, str) else ""
+
+
 @router.get("/oauth/callback/{adapter}", status_code=302, response_class=RedirectResponse)
 @_errors
 def oauth_callback(
     adapter: str,
+    request: Request,
     state: str = Query(max_length=512),
     code: str | None = Query(default=None, max_length=4096),
     error: str | None = Query(default=None, max_length=512),
+    authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
     if not NAME_RE.match(adapter):
         raise HubError(401, "state_invalid", "unknown or expired state")
-    return RedirectResponse(authorisation.callback(db, adapter, code, state, error), status_code=302)
+    cookie = authorisation.binding_cookie_name(state)
+    url = authorisation.callback(
+        db,
+        adapter,
+        code,
+        state,
+        error,
+        binding=request.cookies.get(cookie),
+        caller_id=_caller_of(authorization),
+    )
+    response = RedirectResponse(url, status_code=302)
+    response.delete_cookie(cookie, path=authorisation.binding_cookie_path(), secure=True, httponly=True, samesite="lax")
+    return response
 
 
 # ------------------------------------------------------------------ account links
@@ -245,11 +290,16 @@ def my_account_links(p: Principal = Depends(_org(access.SELF_LINK)), db: Session
 @router.post("/me/account-links", status_code=201)
 @_errors
 def create_my_account_link(
-    body: schemas.AccountLinkIn, p: Principal = Depends(_org(access.SELF_LINK)), db: Session = Depends(get_db)
+    body: schemas.AccountLinkIn,
+    response: Response,
+    p: Principal = Depends(_org(access.SELF_LINK)),
+    db: Session = Depends(get_db),
 ):
     if not NAME_RE.match(body.provider):
         raise HubError(409, "provider_not_offered", "provider is not offered")
-    return authorisation.start_link(db, _actor(p), body.model_dump())
+    out, binding = authorisation.start_link(db, _actor(p), body.model_dump())
+    _bind_browser(response, binding)
+    return out
 
 
 @router.delete("/me/account-links/{id}", status_code=204)

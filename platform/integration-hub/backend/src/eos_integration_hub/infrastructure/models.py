@@ -100,8 +100,10 @@ class AccountLink(Base, TenantMixin):
 
 
 class OAuthState(Base, TenantMixin):
-    """A pending authorisation: single use, bound to the organisation, the connection or link and the person, expiring
-    after INTEGRATION_HUB_OAUTH_STATE_TTL_S. Only the state's hash is kept; the PKCE verifier is encrypted."""
+    """A pending authorisation: single use, bound to the organisation, the connection or link, the person and the
+    browser that started it, expiring after INTEGRATION_HUB_OAUTH_STATE_TTL_S. Only the state's hash is kept, and only
+    the hash of the browser's binding nonce (the nonce itself is in an HttpOnly cookie); the PKCE verifier is
+    encrypted."""
 
     __tablename__ = f"{PREFIX}oauth_state"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -110,6 +112,7 @@ class OAuthState(Base, TenantMixin):
     connection_id: Mapped[str] = mapped_column(String(36))
     account_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     person_id: Mapped[str] = mapped_column(String(36))
+    browser_binding_hash: Mapped[str] = mapped_column(String(64))
     code_verifier_encrypted: Mapped[bytes] = mapped_column(LargeBinary)
     return_url: Mapped[str] = mapped_column(String(2048))
     expires_at: Mapped[datetime] = _ts(nullable=False)

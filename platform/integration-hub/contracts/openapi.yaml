@@ -129,8 +129,9 @@ paths:
       summary: >-
         Start the provider's OAuth authorisation for an organisation-scope connection (an institution's Zoom, Webex or
         Microsoft 365 tenant). Returns the provider's authorize URL; the admin approves there and the provider returns
-        to GET /oauth/callback/{adapter}. State is single use, bound to this connection and the caller, and expires in
-        INTEGRATION_HUB_OAUTH_STATE_TTL_S. Permission integration-hub:connection:manage.
+        to GET /oauth/callback/{adapter}. State is single use, bound to this connection, the caller and this browser
+        (the response sets the binding cookie the callback requires, so call it same-origin or with credentials), and
+        expires in INTEGRATION_HUB_OAUTH_STATE_TTL_S. Permission integration-hub:connection:manage.
       operationId: authoriseConnection
       parameters: [{ $ref: "#/components/parameters/Id" }]
       requestBody: { content: { application/json: { schema: { type: object, properties: { return_url: { type: string, format: uri } } } } } }
@@ -212,7 +213,10 @@ paths:
     get:
       summary: >-
         The provider returns the browser here after an organisation admin or a person approved access. Public by
-        necessity. The state must be one this hub issued, unexpired and unused; the code is exchanged with the stored
+        necessity. The state must be one this hub issued, unexpired and unused, and the browser must present the
+        binding cookie (eos_ih_oauth_*, HttpOnly, Secure, SameSite=Lax) that starting the flow set; a request that
+        carries a token must be the person who started it. Otherwise 401 state_invalid, and the state is spent without
+        exchanging the code. The code is exchanged with the stored
         PKCE verifier, the tokens go to the secret store, and the browser is redirected to the return_url given at the
         start (on a host in INTEGRATION_HUB_ALLOWED_RETURN_HOSTS) with ?status=connected or ?status=failed&code=<error code>.
         Publishes integration-hub.connection.authorised or integration-hub.account-link.connected.

@@ -115,6 +115,7 @@ def upgrade() -> None:
         sa.Column("connection_id", sa.String(36), nullable=False),
         sa.Column("account_link_id", sa.String(36), nullable=True),
         sa.Column("person_id", sa.String(36), nullable=False),
+        sa.Column("browser_binding_hash", sa.String(64), nullable=False),
         sa.Column("code_verifier_encrypted", sa.LargeBinary, nullable=False),
         sa.Column("return_url", sa.String(2048), nullable=False),
         _ts("expires_at", nullable=False),

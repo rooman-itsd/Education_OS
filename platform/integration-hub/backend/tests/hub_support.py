@@ -114,6 +114,16 @@ def enabled_cert(client, org: Org, **fields) -> dict:
     return r.json()
 
 
+def binding_of(r) -> dict:
+    """The browser-binding cookie that starting an authorisation set, as the Cookie header that same browser sends to
+    the callback. The test client never sends it by itself: the cookie is Secure and the client speaks http."""
+    for raw in r.headers.get_list("set-cookie"):
+        name, _, rest = raw.partition("=")
+        if name.startswith("eos_ih_oauth_"):
+            return {"cookie": f"{name}={rest.split(';', 1)[0]}"}
+    raise AssertionError(f"no browser-binding cookie in {r.headers.get_list('set-cookie')}")
+
+
 def authorised_meet(client, org: Org, adapter) -> dict:
     """A fakemeet connection authorised through the OAuth callback and enabled."""
     c = create(client, org, provider="fakemeet", port="meetings", settings={"account_id": "acc-1"})
@@ -125,7 +135,10 @@ def authorised_meet(client, org: Org, adapter) -> dict:
     assert r.status_code == 200, r.text
     state = parse_qs(urlsplit(r.json()["authorize_url"]).query)["state"][0]
     r = client.get(
-        f"{BASE}/oauth/callback/fake-adapter", params={"state": state, "code": "good-code"}, follow_redirects=False
+        f"{BASE}/oauth/callback/fake-adapter",
+        params={"state": state, "code": "good-code"},
+        headers=binding_of(r),
+        follow_redirects=False,
     )
     assert r.status_code == 302 and "status=connected" in r.headers["location"], r.headers
     r = client.post(f"{BASE}/connections/{c['id']}/enable", headers=org.admin)
@@ -162,6 +175,7 @@ def link_account(client, org, who="member", subject=None, adapter=None):
     r = client.get(
         f"{BASE}/oauth/callback/fake-adapter",
         params={"state": state_of(start["authorize_url"]), "code": "good-code"},
+        headers=binding_of(r),
         follow_redirects=False,
     )
     assert r.headers["location"].endswith("status=connected"), r.headers

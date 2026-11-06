@@ -5,15 +5,23 @@ adapter only knows the provider's URLs and parameters (adapter.yaml begin/comple
 `state` is a random single-use value. Only its SHA-256 is stored, with the PKCE verifier encrypted, bound to the
 organisation, the connection or link and the person, and expiring after INTEGRATION_HUB_OAUTH_STATE_TTL_S. The browser
 is sent back only to a host in INTEGRATION_HUB_ALLOWED_RETURN_HOSTS. Nobody links an account for someone else: a link is
-always the caller's own."""
+always the caller's own.
+
+The state is also bound to the browser that started the flow. Starting it sets a short-lived cookie (HttpOnly, Secure,
+SameSite=Lax, path the callback's, named after the state) holding a random nonce whose SHA-256 is stored with the
+state; the callback is refused unless the browser presents that nonce, and, when the callback carries a token, unless
+it is the same person's. So an authorize_url sent to someone else cannot land their tokens on the sender's link or
+connection: their browser has no nonce, and the state is spent without exchanging the code."""
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import secrets as pysecrets
+from dataclasses import dataclass
 from datetime import timedelta
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from eos_core.db import scoped
 from eos_core.tenant import organisation_scope, platform_scope
@@ -23,7 +31,7 @@ from sqlalchemy.orm import Session
 from ..domain import rules
 from ..domain.errors import HubError, not_found
 from ..domain.vocabulary import CREDENTIAL_NAME_RE, MAX_SUBJECT, MAX_URL
-from ..infrastructure.config import HubConfig
+from ..infrastructure.config import API_PREFIX, HubConfig
 from ..infrastructure.models import AccountLink, Connection, OAuthState
 from ..infrastructure.registry import AdapterInfo, ProviderInfo, call, get_registry
 from ..infrastructure.secrets import SecretStoreError, get_cipher, ref_for
@@ -48,6 +56,30 @@ from .common import (
 log = logging.getLogger("eos.integration_hub")
 
 LINK_TOKENS = "tokens"  # one secret per link: the provider's tokens as a JSON object
+BINDING_COOKIE_PREFIX = "eos_ih_oauth_"
+MAX_BINDING = 200
+
+
+@dataclass(frozen=True)
+class BrowserBinding:
+    """The cookie that binds a pending authorisation to the browser that started it. The API layer sets it with
+    HttpOnly, Secure and SameSite=Lax (the provider's redirect back is a top-level GET, which Lax lets through)."""
+
+    name: str
+    value: str
+    max_age: int
+    path: str
+
+
+def binding_cookie_name(state: str) -> str:
+    """One cookie per pending state, so two authorisations started in one browser do not overwrite each other."""
+    return BINDING_COOKIE_PREFIX + rules.sha256_hex(state)[:16]
+
+
+def binding_cookie_path(config: HubConfig | None = None) -> str:
+    """The callback's path as the browser sees it on the public base URL; the cookie is sent nowhere else."""
+    config = config or HubConfig.from_env()
+    return urlsplit(config.public_url("/oauth/callback")).path or f"{API_PREFIX}/oauth/callback"
 
 
 def link_dict(link: AccountLink) -> dict:
@@ -90,7 +122,7 @@ def _begin(
     link: AccountLink | None,
     person_id: str,
     return_url: str,
-) -> dict:
+) -> tuple[dict, BrowserBinding]:
     config = HubConfig.from_env()
     state = pysecrets.token_urlsafe(32)
     verifier = pysecrets.token_urlsafe(64)  # 86 characters, within RFC 7636's 43 to 128
@@ -118,6 +150,12 @@ def _begin(
         raise HubError(502, "provider_error", "the adapter returned no usable authorize_url")
     state_hash = rules.sha256_hex(state)
     expires_at = clock() + timedelta(seconds=config.oauth_state_ttl_s)
+    binding = BrowserBinding(
+        name=binding_cookie_name(state),
+        value=pysecrets.token_urlsafe(32),
+        max_age=config.oauth_state_ttl_s,
+        path=binding_cookie_path(config),
+    )
     db.add(
         OAuthState(
             organisation_id=c.organisation_id,
@@ -126,13 +164,14 @@ def _begin(
             connection_id=c.id,
             account_link_id=link.id if link else None,
             person_id=person_id,
+            browser_binding_hash=rules.sha256_hex(binding.value),
             code_verifier_encrypted=cipher.encrypt(verifier.encode(), state_hash),
             return_url=return_url,
             expires_at=expires_at,
             created_at=clock(),
         )
     )
-    return {"authorize_url": authorize_url, "expires_at": iso(expires_at)}
+    return {"authorize_url": authorize_url, "expires_at": iso(expires_at)}, binding
 
 
 def _authorisable(c: Connection, scope: str) -> tuple[AdapterInfo, ProviderInfo]:
@@ -144,20 +183,24 @@ def _authorisable(c: Connection, scope: str) -> tuple[AdapterInfo, ProviderInfo]
     return info, provider
 
 
-def authorise_connection(db: Session, actor: Actor, connection_id: str, return_url: str | None) -> dict:
+def authorise_connection(
+    db: Session, actor: Actor, connection_id: str, return_url: str | None
+) -> tuple[dict, BrowserBinding]:
+    """The response body and the browser-binding cookie the API layer must set on it."""
     c = get_connection(db, connection_id)
     info, _provider = _authorisable(c, "organisation")
     url = _return_url(HubConfig.from_env(), return_url)
-    out = _begin(db, info, c, link=None, person_id=actor.user_id, return_url=url)
+    out, binding = _begin(db, info, c, link=None, person_id=actor.user_id, return_url=url)
     record(db, c.organisation_id, actor.user_id, "connection.authorisation-started", "connection", c.id)
     db.commit()
-    return out
+    return out, binding
 
 
 # ------------------------------------------------------------------ account links
 
 
-def start_link(db: Session, actor: Actor, body: dict) -> dict:
+def start_link(db: Session, actor: Actor, body: dict) -> tuple[dict, BrowserBinding]:
+    """The response body and the browser-binding cookie the API layer must set on it."""
     c = db.scalar(
         scoped(db, select(Connection), Connection).where(
             Connection.port == body["port"], Connection.provider == body["provider"], Connection.enabled.is_(True)
@@ -186,9 +229,9 @@ def start_link(db: Session, actor: Actor, body: dict) -> dict:
         db.add(link)
     link.purpose = (body.get("purpose") or "").strip() or None
     db.flush()
-    out = _begin(db, info, c, link=link, person_id=actor.user_id, return_url=url)
+    out, binding = _begin(db, info, c, link=link, person_id=actor.user_id, return_url=url)
     db.commit()
-    return {"account_link": link_dict(link), "authorize_url": out["authorize_url"]}
+    return {"account_link": link_dict(link), "authorize_url": out["authorize_url"]}, binding
 
 
 def my_links(db: Session, actor: Actor) -> list[dict]:
@@ -300,9 +343,28 @@ def _bounded_secrets(value) -> dict[str, str] | None:
     return out
 
 
-def callback(db: Session, adapter: str, code: str | None, state: str | None, error: str | None) -> str:
+def _same_browser(row: OAuthState, binding: str | None) -> bool:
+    if not isinstance(binding, str) or not binding or len(binding) > MAX_BINDING:
+        return False
+    return hmac.compare_digest(rules.sha256_hex(binding), row.browser_binding_hash or "")
+
+
+def callback(
+    db: Session,
+    adapter: str,
+    code: str | None,
+    state: str | None,
+    error: str | None,
+    *,
+    binding: str | None,
+    caller_id: str | None = None,
+) -> str:
     """The provider sent the browser back. Returns the URL to redirect to; raises 401 state_invalid when the state is
-    not one this hub issued, unexpired and unused (then nobody is redirected anywhere)."""
+    not one this hub issued, unexpired and unused (then nobody is redirected anywhere).
+
+    `binding` is the nonce from the browser's binding cookie; `caller_id` the person the request is authenticated as,
+    when it carries a token (None when it does not, "" when the token did not verify). A state presented by another
+    browser, or by another person, is refused and spent: the code is never exchanged."""
     if not state or len(state) > 200:
         raise HubError(401, "state_invalid", "unknown or expired state")
     with platform_scope():
@@ -312,6 +374,18 @@ def callback(db: Session, adapter: str, code: str | None, state: str | None, err
             db.rollback()
             raise HubError(401, "state_invalid", "unknown or expired state")
         row.used_at = now  # single use, whatever happens next
+        if not _same_browser(row, binding) or (caller_id is not None and caller_id != row.person_id):
+            record(
+                db,
+                row.organisation_id,
+                None,
+                "authorisation.failed",
+                "connection",
+                row.connection_id,
+                after={"code": "session_mismatch"},
+            )
+            db.commit()
+            raise HubError(401, "state_invalid", "unknown or expired state")
         snapshot = {
             "organisation_id": row.organisation_id,
             "connection_id": row.connection_id,
