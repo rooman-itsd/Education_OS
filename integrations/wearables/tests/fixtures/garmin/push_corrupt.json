@@ -1,0 +1,4 @@
+{"dailies": [{"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "bad1", "calendarDate": "2026-11-04", "steps": -5, "distanceInMeters": "NaN", "activeKilocalories": 1e999,
+   "restingHeartRateInBeatsPerMinute": true, "averageHeartRateInBeatsPerMinute": 99999999, "maxHeartRateInBeatsPerMinute": "x", "activeTimeInSeconds": null, "averageStressLevel": 40},
+  {"userId": "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90", "summaryId": "bad2", "calendarDate": "never"},
+  "not an object", {"summaryId": "no user"}]}

@@ -31,6 +31,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Review fix (#504): an explicit `null` in a request body is a 422 for every field except `AssessmentInput.score`, the only
   one the contract types as nullable. A PATCH with `supervisor_ids: null` used to wipe the supervisors of a site or
   opening; leaving the field out keeps them, and `[]` clears them on purpose.
+- Review fix (#504, found by Madhumita): ids are one id whatever their case. The UUID pattern accepted capitals and ids were
+  stored and compared as sent, so a coordinator who is also a trainee could assign and start their own placement by
+  sending their own id in capitals (201, then 200), and `supervisor_ids` `[x, X]` passed the uniqueness check. Ids in bodies,
+  paths and filters, and the token's `sub` and `org`, are now lowercased before use; the guard and every lookup compare
+  lowercase ids.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/field-training`) and
   `apps/frontend/config/modules.enabled.yaml` (its five widgets on the trainee, supervisor and coordinator dashboards)
   (#339).

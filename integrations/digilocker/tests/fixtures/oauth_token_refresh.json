@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/public/oauth2/1/token",
+    "form": {
+      "grant_type": "refresh_token",
+      "refresh_token": "refresh-token-fixture",
+      "client_id": "REQ-APP-001",
+      "client_secret": "requester-secret-fixture"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "access_token": "access-token-fixture-2",
+      "expires_in": 3600,
+      "token_type": "Bearer",
+      "scope": "",
+      "refresh_token": "refresh-token-fixture-2",
+      "digilockerid": "dl-holder-0001",
+      "name": "Asha Rao",
+      "dob": "01012004",
+      "gender": "F",
+      "eaadhaar": "Y",
+      "new_account": "N",
+      "reference_key": "ref-fixture-1"
+    }
+  }
+}

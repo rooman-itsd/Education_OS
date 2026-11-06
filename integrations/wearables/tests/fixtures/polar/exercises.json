@@ -1,0 +1,5 @@
+[{"id": "aQlC83", "upload_time": "2026-11-04T08:30:00Z", "polar_user": "https://www.polaraccesslink.com/v3/users/475", "device": "Polar Vantage V2",
+  "start_time": "2026-11-04T06:00:00", "start_time_utc_offset": 330, "duration": "PT45M12S", "calories": 530, "distance": 8500.5, "sport": "RUNNING",
+  "heart_rate": {"average": 152, "maximum": 181}, "training_load": 118.5,
+  "heart_rate_zones": [{"index": 2, "lower-limit": 120, "upper-limit": 140, "in-zone": "PT10M"}, {"index": 1, "lower-limit": 100, "upper-limit": 120, "in-zone": "PT5M30S"}, {"index": 3, "lower-limit": 140, "upper-limit": 160, "in-zone": "PT20M"}]},
+ {"id": "old001", "start_time": "2026-09-01T06:00:00", "duration": "PT30M", "sport": "WALKING"}]

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PullURIRequest ver="1.0" ts="2026-11-05T10:00:00+05:30" txn="TXN-0006" orgId="in.ac.example" format="both" keyhash="5a5caf72c71493b8f91647ead89bdaa57b8c35f900600c940acd2becd4fdb09e">
+  <DocDetails><DocType>DGCER</DocType><FullName>ASHA  RAO</FullName><DOB>01-01-2004</DOB><UDF1>RN-2026-0042</UDF1><UDF2>2026</UDF2></DocDetails>
+</PullURIRequest>

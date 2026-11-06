@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { OPENING, REQUIRED_HOURS, seedPlacement, SITE } from "./field-training-data";
 import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -14,7 +15,11 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (field-training #339 and regulatory-reports #343 (governance is not enabled yet)). Entries whose module is already merged carry that widget's texts, so the journey starts checking them the
  *   day the module is enabled;
- * - no data journeys yet: facility-booking.bookings-today lists bookings of the resources the viewer approves (see clinical-supervisor.spec.ts), and the other widgets wait for their module.
+ * - data journey: the coordinator records a site and an opening with two seats, assigns and starts a medical student's
+ *   placement (whose entry the clinical supervisor verifies); it shows in `field-training.active-placements` with the
+ *   verified hours and the opening in `field-training.placements-open` with one seat left. It skips until field-training
+ *   is enabled. No data journey for facility-booking.bookings-today, which lists bookings of the resources the viewer
+ *   approves (see clinical-supervisor.spec.ts), or for regulatory-reports, which waits for its module.
  *
  * facilities and practice are not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves
  * the organisation to Standard first. Loading states are covered by the modules' unit tests, not here.
@@ -53,16 +58,25 @@ const WIDGETS: LayoutWidget[] = [
   { id: "regulatory-reports.due", module: "governance/regulatory-reports", batch: "#343" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
+let admin: DashboardUser;
 let user: DashboardUser;
+/** The clinical supervisor named on the site and opening, and the medical student placed there. */
+let supervisor: DashboardUser;
+let trainee: DashboardUser;
 /** Per shipped widget id: what its GET answered the hospital coordinator. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "medical-college", role: "hospital-coordinator" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "medical-college" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "hospital-coordinator");
+  supervisor = await addUser(request, admin, "clinical-supervisor");
+  trainee = await addUser(request, admin, "medical-student");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -96,4 +110,30 @@ test.describe("hospital-coordinator widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with field-training data", () => {
+  test("field-training.active-placements and placements-open show the placement the coordinator starts and the opening's free seat", async ({ page, request }) => {
+    for (const id of ["field-training.active-placements", "field-training.placements-open"]) {
+      test.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test.skip(!ready(id), `the field-training API answered ${status[id]} to the hospital-coordinator role`);
+    }
+    // Site, opening (two seats, 40 required hours), assignment and start are the coordinator's own (field-training-coordinator);
+    // the trainee logs today's hours and the supervisor named on the opening verifies them.
+    await seedPlacement(request, { coordinator: user, supervisor, trainee }, { start: true, log: true, verify: true });
+    await signIn(page, user);
+
+    const active = widget(page, "Active placements");
+    await expect(active.getByText("No placements under way")).toHaveCount(0);
+    // No identity lookup gives the module the trainee's name yet, so the row is titled "Trainee".
+    const row = active.getByRole("list", { name: "Active placements" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(row).toContainText(SITE);
+    await expect(row).toContainText(`4 of ${REQUIRED_HOURS} h`);
+
+    const open = widget(page, "Open placements");
+    await expect(open.getByText("No open placements with seats")).toHaveCount(0);
+    const opening = open.getByRole("list", { name: "Open placements" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(opening).toContainText(SITE);
+    await expect(opening).toContainText("1 seat left");
+  });
 });

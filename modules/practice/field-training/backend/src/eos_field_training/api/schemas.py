@@ -10,7 +10,14 @@ from typing import Annotated, ClassVar, Literal
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # The contract types every id as format: uuid. Checked here so a bad id is a 422, never a stored row.
-Uuid = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")]
+# Ids are stored and compared in lowercase: "ABC..." and "abc..." are one id, so a guard such as "not your own
+# placement" cannot be sidestepped by changing the case of the id.
+LowerId = Annotated[str, AfterValidator(str.lower)]
+Uuid = Annotated[
+    str,
+    Field(pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"),
+    AfterValidator(str.lower),
+]
 # Hours in steps of 0.25 (contract component Hours). A requirement is bounded well above any real one.
 RequiredHours = Annotated[float, Field(ge=0, le=10000, multiple_of=0.25)]
 EntryHours = Annotated[float, Field(gt=0, le=24, multiple_of=0.25)]

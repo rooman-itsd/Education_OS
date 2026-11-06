@@ -1,0 +1,38 @@
+{
+  "form_code": "naac.dvv-response",
+  "period": "cycle-2026",
+  "data": {
+    "institute": {
+      "name": "Sample Institute of Higher Education",
+      "naac_hei_id": "HEI-KL-0457",
+      "aishe_code": "C-12345",
+      "year_of_establishment": 1998
+    },
+    "queries": [
+      {
+        "query_id": "DVV-0017",
+        "metric": "1.1.1",
+        "clarification": "The minutes of the Board of Studies are attached; the revision covered 14 programmes."
+      },
+      {
+        "query_id": "DVV-0018",
+        "metric": "2.6.3",
+        "clarification": "The pass percentage is computed from the university result gazette, attached."
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "metric": "1.1.1",
+      "title": "Board of Studies minutes 2025",
+      "filename": "bos-minutes.pdf",
+      "content": "Board of Studies minutes (sample)"
+    },
+    {
+      "metric": "2.6.3",
+      "title": "Pass percentage statement",
+      "filename": "pass.xlsx",
+      "content": "metric,value\n2.6.3,91.4\n"
+    }
+  ]
+}

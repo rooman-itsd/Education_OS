@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Paper and session APIs (issue #325): listExamPapers, createExamPapers, getExamPaper, updateExamPaper, listExamSessions,
+  scheduleExamSession, getExamSession, rescheduleExamSession and cancelExamSession, with an audit entry per change and the
+  three contracted events `examinations.exam-session.scheduled`, `.rescheduled` and `.cancelled` (papers publish none).
+  Scheduling moves the papers to `scheduled`; cancelling returns them to `draft` and frees them, and is allowed while
+  the cycle is draft, scheduled or in progress. Migration `ex_0002` adds the nullable `title` of a paper, which
+  `updateExamPaper` stores and returns. Not enforced, and recorded in `docs/reviewer-decisions.md` section 11: the
+  session-within-cycle rule (no organisation time zone) and candidate clashes.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/examinations` behind the entitlement gate,
   next to its entry in `apps/frontend/config/modules.enabled.yaml`), so the 15 configuration and exam-cycle operations
   are served and the widgets stop answering 404 for them. Added `test_api_permissions.py`: every route is refused with 403

@@ -24,3 +24,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Widgets `projects.my-projects`, `projects.milestones-due`, `projects.to-review` and `projects.active`, built on
   `@eos/ui-kit`, with tests; their error states say why a load failed (`describeFailure`) and offer a retry only where
   one can help.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/projects`) and
+  `apps/frontend/config/modules.enabled.yaml` (its four widgets on the student, guide and coordinator dashboards) (#339).

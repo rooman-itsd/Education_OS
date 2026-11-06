@@ -1,10 +1,19 @@
 # Domain events published by government-portals.
 # Envelope: see platform/event-bus/contracts/events.yaml.
 #
-# None. Package outcomes are published by integration-hub as port events (integration-hub.regulatory-package.prepared,
-# .submitted; integration-hub.delivery.*), so regulatory-reports and iqac-accreditation never subscribe to a portal's
-# name (integrations/README.md, "Swap rule").
+# Package outcomes that other modules react to are published by integration-hub as port events
+# (integration-hub.regulatory-package.prepared, .submitted; integration-hub.delivery.*), so regulatory-reports and
+# iqac-accreditation never subscribe to a portal's name (integrations/README.md, "Swap rule").
+#
+# The two events below are this adapter's own record of a state change, written to the outbox in the same transaction
+# as the change. They are the audit trail (platform/audit consumes them) and are not for business consumers.
 module: government-portals
 version: 1
-events: []
+events:
+  - name: government-portals.package.prepared
+    description: A submission package was prepared, or found invalid, for a form and period. A previous live package for the same package_key is superseded in the same transaction.
+    payload: { organisation_id: uuid, package_id: uuid, package_key: string, form_code: string, period: string, status: string, superseded_package_id: uuid }
+  - name: government-portals.package.filed
+    description: A person recorded that the package was filed on the portal, with the portal's reference.
+    payload: { organisation_id: uuid, package_id: uuid, form_code: string, period: string, status: string, portal_reference: string, submitted_on: date, submitted_by: uuid }
 consumes: []

@@ -1,4 +1,4 @@
-"""The 15 configuration and exam-cycle operations against contracts/openapi.yaml: the routes and their permissions are the
+"""The configuration, exam-cycle, paper and session operations (24) against contracts/openapi.yaml: the routes and their permissions are the
 contract's, and every response body has the fields, types and enums the contract declares, no more and no fewer."""
 
 import uuid
@@ -17,7 +17,10 @@ from conftest import (  # noqa: E402
     make_assessment,
     make_cycle,
     make_grading,
+    make_papers,
+    make_session,
     ok,
+    session_body,
     uid,
 )
 from eos_examinations.api.router import router  # noqa: E402
@@ -52,6 +55,15 @@ IMPLEMENTED = {
     "getExamCycle": ("get", "/exam-cycles/{exam_cycle_id}"),
     "updateExamCycle": ("patch", "/exam-cycles/{exam_cycle_id}"),
     "changeExamCycleStatus": ("post", "/exam-cycles/{exam_cycle_id}/status"),
+    "listExamPapers": ("get", "/papers"),
+    "createExamPapers": ("post", "/papers"),
+    "getExamPaper": ("get", "/papers/{exam_paper_id}"),
+    "updateExamPaper": ("patch", "/papers/{exam_paper_id}"),
+    "listExamSessions": ("get", "/sessions"),
+    "scheduleExamSession": ("post", "/sessions"),
+    "getExamSession": ("get", "/sessions/{exam_session_id}"),
+    "rescheduleExamSession": ("patch", "/sessions/{exam_session_id}"),
+    "cancelExamSession": ("post", "/sessions/{exam_session_id}/cancel"),
 }
 WIDENED = {  # the contract's descriptions: write-all widens write-department
     "createAssessmentScheme",
@@ -292,6 +304,118 @@ def test_the_contract_gaps_this_batch_records():
         declared = set(operation(operation_id)["responses"])
         assert "401" not in declared, operation_id
         assert ("403" in declared) == (operation_id in WIDENED), operation_id
-    for operation_id in ("listExamCycles", "listAssessmentSchemes", "changeExamCycleStatus"):
+    # papers and sessions: a bad filter on both listings, and a missing reason on cancelExamSession, answer 400 where
+    # the contract declares none; an unknown cycle or paper on create and schedule is the declared 422.
+    for operation_id in (
+        "listExamCycles",
+        "listAssessmentSchemes",
+        "changeExamCycleStatus",
+        "listExamPapers",
+        "listExamSessions",
+        "cancelExamSession",
+    ):
         assert "400" not in operation(operation_id)["responses"], operation_id
     assert "422" not in operation("updateExamCycle")["responses"]  # an unknown grading scheme there is a 400
+
+
+def test_paper_and_session_bodies_and_statuses_match_the_contract(client, org, h):
+    g = make_grading(client, h)["id"]
+    ok(client.post(f"{BASE}/grading-schemes/{g}/set-default", headers=h))
+    cycle = make_cycle(client, h)["id"]
+    offering = uid()
+    papers = make_papers(client, h, cycle, offering, duration_minutes=90)
+    created = client.post(
+        f"{BASE}/papers",
+        json={"exam_cycle_id": cycle, "course_offering_id": uid(), "component_codes": ["END"]},
+        headers=h,
+    )
+    assert created.status_code == 422  # no active scheme: declared
+    for paper in papers:
+        check(paper, SCHEMAS["ExamPaper"])
+    check(
+        {"items": papers},
+        operation("createExamPapers")["responses"]["201"]["content"]["application/json"]["schema"],
+    )
+    p = papers[0]["id"]
+    check(ok(client.get(f"{BASE}/papers/{p}", headers=h)), body_schema("getExamPaper", 200))
+    check(ok(client.get(f"{BASE}/papers", headers=h)), body_schema("listExamPapers", 200))
+    check(
+        ok(client.patch(f"{BASE}/papers/{p}", json={"duration_minutes": 120, "title": "Paper I"}, headers=h)),
+        body_schema("updateExamPaper", 200),
+    )
+    session = client.post(f"{BASE}/sessions", json=session_body(cycle, [x["id"] for x in papers]), headers=h)
+    assert session.status_code == 201
+    check(session.json(), body_schema("scheduleExamSession", 201))
+    sid = session.json()["id"]
+    check(ok(client.get(f"{BASE}/sessions/{sid}", headers=h)), body_schema("getExamSession", 200))
+    check(ok(client.get(f"{BASE}/sessions", headers=h)), body_schema("listExamSessions", 200))
+    check(
+        ok(client.patch(f"{BASE}/sessions/{sid}", json={"venue_label": None, "invigilators_required": 3}, headers=h)),
+        body_schema("rescheduleExamSession", 200),
+    )
+    cancelled = ok(client.post(f"{BASE}/sessions/{sid}/cancel", json={"reason": "flood"}, headers=h))
+    check(cancelled, body_schema("cancelExamSession", 200))
+    assert (cancelled["status"], cancelled["cancel_reason"]) == ("cancelled", "flood")
+
+
+def test_paper_and_session_errors_are_declared_and_shaped(client, org, h):
+    g = make_grading(client, h)["id"]
+    cycle = make_cycle(client, h, g)["id"]
+    papers = make_papers(client, h, cycle)
+    ids = [x["id"] for x in papers]
+    session = make_session(client, h, cycle, ids[:1])["id"]
+    missing = uid()
+    calls = {
+        "createExamPapers": [
+            (400, client.post(f"{BASE}/papers", json={}, headers=h)),
+            (
+                409,
+                client.post(
+                    f"{BASE}/papers",
+                    json={
+                        "exam_cycle_id": cycle,
+                        "course_offering_id": papers[0]["course_offering_id"],
+                        "component_codes": ["END"],
+                    },
+                    headers=h,
+                ),
+            ),
+            (
+                422,
+                client.post(
+                    f"{BASE}/papers",
+                    json={"exam_cycle_id": missing, "course_offering_id": uid(), "component_codes": ["END"]},
+                    headers=h,
+                ),
+            ),
+        ],
+        "getExamPaper": [(404, client.get(f"{BASE}/papers/{missing}", headers=h))],
+        "updateExamPaper": [
+            (400, client.patch(f"{BASE}/papers/{ids[1]}", json={"duration_minutes": 0}, headers=h)),
+            (404, client.patch(f"{BASE}/papers/{missing}", json={"duration_minutes": 5}, headers=h)),
+            (409, client.patch(f"{BASE}/papers/{ids[0]}", json={"duration_minutes": 5}, headers=h)),
+        ],
+        "scheduleExamSession": [
+            (400, client.post(f"{BASE}/sessions", json={}, headers=h)),
+            (409, client.post(f"{BASE}/sessions", json=session_body(cycle, ids[:1]), headers=h)),
+            (422, client.post(f"{BASE}/sessions", json=session_body(cycle, [missing]), headers=h)),
+        ],
+        "getExamSession": [(404, client.get(f"{BASE}/sessions/{missing}", headers=h))],
+        "rescheduleExamSession": [
+            (400, client.patch(f"{BASE}/sessions/{session}", json={"ends_at": "2000-01-01T00:00:00+00:00"}, headers=h)),
+            (404, client.patch(f"{BASE}/sessions/{missing}", json={"venue_label": "x"}, headers=h)),
+        ],
+        "cancelExamSession": [(404, client.post(f"{BASE}/sessions/{missing}/cancel", json={"reason": "x"}, headers=h))],
+    }
+    ok(client.post(f"{BASE}/sessions/{session}/cancel", json={"reason": "x"}, headers=h))
+    calls["rescheduleExamSession"].append(
+        (409, client.patch(f"{BASE}/sessions/{session}", json={"venue_label": "y"}, headers=h))
+    )
+    calls["cancelExamSession"].append(
+        (409, client.post(f"{BASE}/sessions/{session}/cancel", json={"reason": "x"}, headers=h))
+    )
+    for operation_id, results in calls.items():
+        for status, response in results:
+            assert response.status_code == status, (operation_id, status, response.text)
+            assert str(status) in operation(operation_id)["responses"], (operation_id, status)
+            check(response.json()["detail"], SCHEMAS["ErrorResponse"], operation_id)

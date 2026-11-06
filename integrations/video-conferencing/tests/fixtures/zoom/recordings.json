@@ -1,0 +1,4 @@
+{"id": 85746065432, "uuid": "kXyZ12abcdEFgh==", "download_access_token": "dl-token", "recording_files": [
+ {"id": "rec-video-1", "status": "completed", "file_type": "MP4", "file_size": 20, "recording_start": "2026-11-09T04:30:10Z", "recording_end": "2026-11-09T05:15:00Z", "download_url": "https://us06web.zoom.us/rec/download/abc"},
+ {"id": "rec-chat-1", "status": "completed", "file_type": "CHAT", "file_size": 120, "recording_start": "2026-11-09T04:30:10Z", "recording_end": "2026-11-09T05:15:00Z", "download_url": "https://us06web.zoom.us/rec/download/chat"},
+ {"id": "rec-processing", "status": "processing", "file_type": "M4A", "file_size": 0}]}
