@@ -173,7 +173,8 @@ students need them on the dashboard, that is a separate LMS widget with its own 
 not part of this module.
 
 Implementation status: the three Examination Staff widgets are merged (PR #216) and call
-endpoints that this module does not serve yet. `exam-duties`, `upcoming-assessments` and
+endpoints that this module does not serve yet. `exam-duties` is built (frontend only; its endpoint
+`GET /me/duties` is served by the exam duty APIs). `upcoming-assessments` and
 `results-summary` are not built.
 
 ## 8. Functional requirements

@@ -65,7 +65,7 @@ const WIDGETS: LayoutWidget[] = [
   {
     id: "reporting.department-reports",
     module: "platform/reporting",
-    batch: "#317 (enablement waits on ingestion, PR #452)",
+    batch: "#317",
     title: "Department Reports",
     probe: "/reporting/widgets/department-reports",
     empty: "No department reports",

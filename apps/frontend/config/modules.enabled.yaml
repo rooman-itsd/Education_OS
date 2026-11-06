@@ -13,6 +13,7 @@ modules:
   - academics/academic-management
   - academics/examinations
   - academics/timetable-attendance
+  - academics/lms
   - campus-life/hostel
   - campus-life/library
   - campus-life/transport
@@ -48,6 +49,7 @@ platform:
   - tenancy
   - identity
   - audit
+  - reporting
   - workflow
 integrations:
   - payment-sbiepay

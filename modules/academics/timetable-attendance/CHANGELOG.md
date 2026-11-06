@@ -3,6 +3,20 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Publish and unpublish (issue #325): `POST /timetables/{id}/publish` and `/unpublish`, key `timetable:publish`. Publishing
+  takes a draft or unpublished timetable to `published` and raises its version by one; it is refused with 409 when the
+  timetable is already published, when a blocking conflict remains (the response lists them in `details.conflicts`,
+  including conflicts with the other published timetables of the period), or when its academic period is not a known
+  term (`unknown_term`, from the `term_ref` the `term.created` consumer fills). Unpublishing takes a published
+  timetable to `unpublished`, keeps the version, and cancels the timetable's future scheduled classes that have no
+  attendance session, each with its own audit entry and `scheduled-class.cancelled` event, and records the optional
+  `reason`. Both publish `timetable.published` / `timetable.unpublished` and write an audit entry in the same
+  transaction. **Limit, by decision:** publishing does not generate classes yet, so the contract's "generates
+  scheduled classes" is not met and `scheduled_class_count` is 0; `POST /timetables/{id}/generate-classes` is not
+  served either, because turning a slot's wall-clock times into instants needs the organisation's time zone and no
+  source for it exists (`docs/reviewer-decisions.md`, section 10). The tests that unpublish classes seed them
+  directly, and the slots use assignment rows written directly, because the faculty-assignment consumer is not built.
+  No migration, contract or enablement change.
 - Event consumers (issue #325, part 3), registered under `eos.event_consumers` and listed in `module.yaml`:
   academic-management `term.created` into the new `term_ref` (a term's dates), `offering.created` and
   `offering.status-changed` into `offering_ref`, `section.created` and `section.updated` into `section_ref`. Migration

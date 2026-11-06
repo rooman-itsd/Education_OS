@@ -22,7 +22,8 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 |---|---|---|
 | examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 28 operations (grading schemes, assessment schemes, exam cycles, papers, sessions, duties); the other 23 operations are not implemented. Migrations `ex_0001` to `ex_0003` and tests exist |
 | examinations widgets `schedule`, `hall-tickets-issued`, `results-pending` | declared in the contract | UI merged (PR #216); their endpoints are not served, so they show "not available" |
-| examinations widgets `exam-duties`, `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
+| examinations widget `exam-duties` | declared in the contract | UI built (frontend only); `GET /me/duties` is served by the exam duty APIs (section 12) |
+| examinations widgets `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
 | timetable-attendance `POST /reports/attendance-eligibility` | merged | **not implemented** (the timetable-attendance backend has timetables only) |
 | fees-accounts `GET /dues` and key `fees-accounts:dues:read` | merged (PR #243) | served by the fees-accounts backend; **not called** from examinations |
 | academic-management events (`term.*`, `course.*`, `offering.*`, `faculty-assignment.*`, `curriculum.published`) | merged (PR #168) | published by academic-management; **not consumed** by examinations (`consumes_events: []`) |
