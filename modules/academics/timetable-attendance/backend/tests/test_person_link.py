@@ -78,7 +78,9 @@ def registered(room: Classroom, name: str = "Deepa Iyer") -> str:
 
 
 def test_the_published_payload_carries_the_fields_the_handler_reads():
-    contract = Path(__file__).resolve().parents[5] / "modules/student-lifecycle/student-information/contracts/events.yaml"
+    contract = (
+        Path(__file__).resolve().parents[5] / "modules/student-lifecycle/student-information/contracts/events.yaml"
+    )
     if not contract.exists():
         pytest.skip("the student-information contract is not in this checkout")
     events = {e["name"]: e for e in yaml.safe_load(contract.read_text(encoding="utf-8"))["events"]}
