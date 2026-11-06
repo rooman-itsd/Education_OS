@@ -24,7 +24,15 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
 const TITLE = "Exhibition & Gallery Manager";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
   {
     id: "productions.upcoming",
     module: "practice/productions",
