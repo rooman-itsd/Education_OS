@@ -4,7 +4,7 @@ Issue #325 · Reviewer: @praveen-rooman · Raised by: Shivani
 
 This page has four parts: the decisions the reviewer has confirmed, what is still unresolved, the design choices the
 code has made that nobody has reviewed, and the original nine points as submitted with PR #459 (sections 1 to 9, which
-describe the code as it was then). The contracts (`contracts/*.yaml`) have not been changed by any of this work.
+describe the code as it was then); section 10 records the publication work. The contracts (`contracts/*.yaml`) have not been changed by any of this work.
 Times are UTC.
 
 ## A. Confirmed by the reviewer
@@ -17,7 +17,7 @@ where he approved the PR and asked for these to be recorded. "Contract change" m
 | Point | Confirmed decision | Status in the code |
 |---|---|---|
 | Percentage with no counted class (section 1) | `null`, plus the `no_eligible_classes` flag | Domain already returns `None`. **Contract change** (nullable `percentage`) not made yet |
-| Date range for generating classes (section 2) | Keep a `term_ref`; generate inside the term, narrowed by each slot's effective dates; refuse to publish if the term is unknown. `academic-management.term.created` carries `starts_on` and `ends_on` | `term_ref` and its `term.created` consumer exist (this PR). Generation and publish are not built |
+| Date range for generating classes (section 2) | Keep a `term_ref`; generate inside the term, narrowed by each slot's effective dates; refuse to publish if the term is unknown. `academic-management.term.created` carries `starts_on` and `ends_on` | `term_ref` and its `term.created` consumer exist. Publish refuses an unknown term (section 10). Generation is not built |
 | Cancelling a class with an open session (section 3) | Mark the session cancelled; do not run close (which would make unmarked students absent). Cancelled classes never count | Not built. The contract's session status has only `open` and `closed`, so a cancelled status is a **contract change** |
 | Read models (section 4) | The events exist. `offering_ref`, `section_ref`, `assignment_ref` come from academic-management `offering.*`, `section.*` and `faculty-assignment.created/ended`; `section_member` from enrolment-registration `course-registration.confirmed/withdrawn` and `section-allocation.changed` (`effective_on`). Copy enrolment-registration's `consumers.py` and register it under `eos.event_consumers` | Partly built (this PR): `term_ref`, `offering_ref`, `section_ref`. See B for what is not |
 | Department scope | Waiting on Faizan (Q9). Until then the `*-department` keys grant nothing | Nothing enforces a department. No department claim is read |
@@ -201,3 +201,32 @@ Contract check run on the three files: 31 operations, unique operation ids, ever
 Other choices made in the domain, also unreviewed: a slot's section must belong to its offering and its assignment
 must match both; a conflict pair inside one timetable is reported once with the lower slot id first; location labels
 compare ignoring case and spacing; a correction to the same status is a 400.
+
+## 10. Publish and unpublish (implemented), class generation (not built)
+
+Implemented in the publication PR (issue #325), from the reviewed rules and the contract:
+
+- **Publish** (`POST /timetables/{id}/publish`): refused with 409 when the timetable is already published
+  (`already_published`), when a blocking conflict remains (`blocking_conflicts`, with `details.conflicts` listing them, as
+  the contract says "409 and the conflict list"), or when the academic period is not a known term (`unknown_term`).
+  The unknown-term refusal is 409 because that is the contract's declared status for publish; the contract declares no
+  422 for it. Success raises the version by one and sets `published_at`.
+- **Unpublish** (`POST /timetables/{id}/unpublish`): only from `published` (409 `not_published`); the version stays.
+  It cancels the timetable's scheduled classes that start after now and have no attendance session (open or closed),
+  one audit entry and one `scheduled-class.cancelled` event per class; past classes, classes that already started,
+  completed or cancelled classes and ad-hoc classes of other timetables are not touched. A class starting exactly now
+  is not in the future. The optional `reason` (1 to 500 characters) is recorded as the classes' cancel reason and on
+  the audit entries.
+- Every write is audited and its event published in the same transaction as the change, and any failure rolls all of
+  it back, including a failure on the second of several class cancellations.
+
+**Not built, and why:** the contract says publishing generates the scheduled classes, and `generate-classes` is its own
+operation. Both need each slot's wall-clock times (`09:00`) as instants, "in the organisation's time zone" (contract),
+and the repository has no source for an organisation's time zone (no module setting, no platform setting, nothing in
+the PRD or in the decisions above). It was asked and the decision was to leave generation out rather than assume UTC.
+Until it is decided and built, publishing creates no class (`scheduled_class_count: 0` in the event), and unpublishing
+has classes to cancel only if they were created some other way.
+
+| Open point | Owner | Effect |
+|---|---|---|
+| The organisation's time zone: where it is stored and how the module reads it | Faizan (platform), with Shivani | `generate-classes` and the generation step of publish are not built; the contract's description of publish is not met until then |
