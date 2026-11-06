@@ -64,6 +64,10 @@ IMPLEMENTED = {
     "getExamSession": ("get", "/sessions/{exam_session_id}"),
     "rescheduleExamSession": ("patch", "/sessions/{exam_session_id}"),
     "cancelExamSession": ("post", "/sessions/{exam_session_id}/cancel"),
+    "listExamDuties": ("get", "/duties"),
+    "assignExamDuty": ("post", "/duties"),
+    "cancelExamDuty": ("post", "/duties/{exam_duty_id}/cancel"),
+    "listMyDuties": ("get", "/me/duties"),
 }
 WIDENED = {  # the contract's descriptions: write-all widens write-department
     "createAssessmentScheme",
@@ -71,6 +75,14 @@ WIDENED = {  # the contract's descriptions: write-all widens write-department
     "activateAssessmentScheme",
 }
 WRITE_ALL = "examinations:assessment-scheme:write-all"
+DUTY_READ_ALL = "examinations:duty:read-all"
+# The wider key an operation also accepts (the contract's descriptions name it): the route's keys are x-permission plus it.
+WIDENING = {
+    "createAssessmentScheme": WRITE_ALL,
+    "replaceAssessmentScheme": WRITE_ALL,
+    "activateAssessmentScheme": WRITE_ALL,
+    "listExamDuties": DUTY_READ_ALL,
+}
 
 
 def resolve(schema: dict) -> dict:
@@ -145,10 +157,12 @@ def test_every_implemented_route_is_a_contract_operation_with_its_x_permission()
     for operation_id, (method, path) in IMPLEMENTED.items():
         op = CONTRACT["paths"][path][method]
         assert op["operationId"] == operation_id
-        expected = {op["x-permission"]} | ({WRITE_ALL} if operation_id in WIDENED else set())
+        expected = {op["x-permission"]} | ({WIDENING[operation_id]} if operation_id in WIDENING else set())
         assert routes[(method, path)] == expected, operation_id
-        if operation_id in WIDENED:
-            assert WRITE_ALL in op["description"]  # the contract itself says the wider key widens the scope
+        if operation_id in WIDENING:
+            assert (
+                WIDENING[operation_id] in op["description"]
+            )  # the contract itself says the wider key widens the scope
 
 
 def test_the_servers_prefix_is_the_one_the_tests_mount():
@@ -313,8 +327,15 @@ def test_the_contract_gaps_this_batch_records():
         "listExamPapers",
         "listExamSessions",
         "cancelExamSession",
+        "listExamDuties",
+        "cancelExamDuty",
     ):
         assert "400" not in operation(operation_id)["responses"], operation_id
+    # duties: assign declares 400, 409 and 422 but no 404 (an unknown session or paper is a 422); cancel declares 404 and
+    # 409 but no 400 (a missing reason is one); /me/duties declares only 200, so its bad include_past is a 400 too
+    assert set(operation("assignExamDuty")["responses"]) == {"201", "400", "409", "422"}
+    assert set(operation("cancelExamDuty")["responses"]) == {"200", "404", "409"}
+    assert set(operation("listMyDuties")["responses"]) == {"200"}
     assert "422" not in operation("updateExamCycle")["responses"]  # an unknown grading scheme there is a 400
 
 
@@ -418,4 +439,82 @@ def test_paper_and_session_errors_are_declared_and_shaped(client, org, h):
         for status, response in results:
             assert response.status_code == status, (operation_id, status, response.text)
             assert str(status) in operation(operation_id)["responses"], (operation_id, status)
+            check(response.json()["detail"], SCHEMAS["ErrorResponse"], operation_id)
+
+
+def test_duty_bodies_and_statuses_match_the_contract(client, org, h):
+    from conftest import make_duty, make_session_for_duties
+
+    cycle, session, paper = make_session_for_duties(client, h)
+    staff = uid()
+    invigilation = client.post(
+        f"{BASE}/duties",
+        json={"staff_id": staff, "duty_type": "invigilation", "exam_session_id": session["id"]},
+        headers=h,
+    )
+    assert invigilation.status_code == 201
+    check(invigilation.json(), body_schema("assignExamDuty", 201))
+    evaluation = make_duty(client, h, staff, "evaluation", paper_id=paper["id"])
+    check(evaluation, SCHEMAS["ExamDuty"])
+    check(ok(client.get(f"{BASE}/duties", headers=h)), body_schema("listExamDuties", 200))
+    check(
+        ok(client.get(f"{BASE}/duties?staff_id={staff}&status=assigned&limit=1&offset=1", headers=h)),
+        body_schema("listExamDuties", 200),
+    )
+    _, mine = org.user("examinations-faculty", user_id=staff)
+    check(ok(client.get(f"{BASE}/me/duties", headers=mine)), body_schema("listMyDuties", 200))
+    check(ok(client.get(f"{BASE}/me/duties?include_past=true", headers=mine)), body_schema("listMyDuties", 200))
+    cancelled = ok(client.post(f"{BASE}/duties/{evaluation['id']}/cancel", json={"reason": "swapped"}, headers=h))
+    check(cancelled, body_schema("cancelExamDuty", 200))
+    assert (cancelled["status"], cancelled["cancel_reason"]) == ("cancelled", "swapped")
+
+
+def test_duty_errors_are_declared_and_shaped(client, org, h):
+    from conftest import make_duty, make_session_for_duties
+
+    cycle, session, paper = make_session_for_duties(client, h)
+    staff, missing = uid(), uid()
+    duty = make_duty(client, h, staff, "invigilation", session_id=session["id"])
+    calls = {
+        "assignExamDuty": [
+            (400, client.post(f"{BASE}/duties", json={}, headers=h)),
+            (400, client.post(f"{BASE}/duties", json={"staff_id": staff, "duty_type": "evaluation"}, headers=h)),
+            (
+                409,
+                client.post(
+                    f"{BASE}/duties",
+                    json={"staff_id": staff, "duty_type": "invigilation", "exam_session_id": session["id"]},
+                    headers=h,
+                ),
+            ),
+            (
+                422,
+                client.post(
+                    f"{BASE}/duties",
+                    json={"staff_id": staff, "duty_type": "evaluation", "exam_paper_id": missing},
+                    headers=h,
+                ),
+            ),
+            (
+                422,
+                client.post(
+                    f"{BASE}/duties",
+                    json={"staff_id": staff, "duty_type": "invigilation", "exam_session_id": missing},
+                    headers=h,
+                ),
+            ),
+        ],
+        "cancelExamDuty": [
+            (404, client.post(f"{BASE}/duties/{missing}/cancel", json={"reason": "x"}, headers=h)),
+        ],
+    }
+    ok(client.post(f"{BASE}/duties/{duty['id']}/cancel", json={"reason": "x"}, headers=h))
+    calls["cancelExamDuty"].append(
+        (409, client.post(f"{BASE}/duties/{duty['id']}/cancel", json={"reason": "x"}, headers=h))
+    )
+    for operation_id, results in calls.items():
+        for status, response in results:
+            assert response.status_code == status, (operation_id, status, response.text)
+            if status != 400 or operation_id == "assignExamDuty":
+                assert str(status) in operation(operation_id)["responses"], (operation_id, status)
             check(response.json()["detail"], SCHEMAS["ErrorResponse"], operation_id)
