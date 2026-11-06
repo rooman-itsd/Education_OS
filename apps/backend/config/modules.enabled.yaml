@@ -23,6 +23,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/regulatory-reports
   - governance/iqac-accreditation
   - practice/selection-process
   - practice/portfolio
