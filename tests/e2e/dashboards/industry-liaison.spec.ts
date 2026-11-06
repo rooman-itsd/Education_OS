@@ -23,9 +23,33 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
 const TITLE = "Industry Liaison";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "field-training.placements-open",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Open placements",
+    probe: "/field-training/openings?status=open&has_seats=true&limit=1",
+    empty: "No open placements with seats",
+    unavailable: "Field training data is not available yet.",
+  },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
   {
     // Texts of OpeningsSummary.tsx and client.ts (campus-life/placement-career, merged in #472): the staff view of
     // openings, split from the learner widget placement-career.openings.
