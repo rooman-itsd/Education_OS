@@ -42,5 +42,6 @@ platform:
   - tenancy
   - identity
   - audit
+  - reporting
 integrations:
   - payment-sbiepay

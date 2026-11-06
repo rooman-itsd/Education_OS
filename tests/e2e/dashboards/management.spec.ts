@@ -38,7 +38,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No collection targets set",
     unavailable: "Fee data is not available yet.",
   },
-  { id: "reporting.attendance-and-results-by-department", module: "platform/reporting", batch: "#317" },
+  {
+    id: "reporting.attendance-and-results-by-department",
+    module: "platform/reporting",
+    batch: "#317",
+    title: "Attendance & Results by Department",
+    probe: "/reporting/widgets/attendance-and-results",
+    empty: "No departmental metrics",
+    unavailable: "Reporting service is not available yet.",
+  },
+
   { id: "grievance.open", module: "governance/grievance", batch: "#343" },
   { id: "regulatory-reports.compliance-calendar", module: "governance/regulatory-reports", batch: "#343" },
   {
