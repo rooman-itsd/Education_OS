@@ -58,7 +58,7 @@ def test_routes_and_methods_match_openapi(openapi):
     }
 
     assert implemented_routes == contract_routes
-    assert len(contract_routes) == 12
+    assert len(contract_routes) == 13
 
 
 def test_enums_match_openapi_schemas(openapi):
@@ -138,16 +138,26 @@ def test_permission_catalogue_matches_dependency_constants(permissions):
 
 
 def test_contracted_events_catalog(events):
-    """All 5 events in contracts/events.yaml are accounted for."""
+    """All 6 events in contracts/events.yaml are accounted for."""
     contract_event_names = {e["name"] for e in events["events"]}
     expected_event_names = {
         "student-information.person.created",
         "student-information.person.updated",
         "student-information.person.status-changed",
+        "student-information.person.account-linked",
         "student-information.id-card.issued",
         "student-information.id-card.revoked",
     }
     assert contract_event_names == expected_event_names
+
+
+def test_account_linked_payload_matches_the_published_fields(events):
+    """The account-linked payload and the identity_user_id added to person.created are what the service publishes."""
+    by_name = {e["name"]: e for e in events["events"]}
+    linked = by_name["student-information.person.account-linked"]["payload"]
+    assert set(linked) == {"organisation_id", "person_id", "identity_user_id", "linked", "previous_identity_user_id"}
+    assert linked["identity_user_id"] == "uuid?" and linked["linked"] == "boolean"
+    assert by_name["student-information.person.created"]["payload"]["identity_user_id"] == "uuid?"
 
 
 def test_unresolved_email_contract_discrepancy_flagged(openapi, events):

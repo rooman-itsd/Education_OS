@@ -3,6 +3,17 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-06
+- Added `student-information.person.account-linked` (`{organisation_id, person_id, identity_user_id, linked,
+  previous_identity_user_id}`), published in the transaction of every write that sets, changes or clears a person's
+  `identity_user_id`. Modules that key data on `person_id` use it to map a student's sign-in user to their person for
+  `/me` reads. Additive: no existing payload loses a field.
+- `student-information.person.created` now also carries `identity_user_id` (null when no account is linked).
+- Added `POST /account-links/republish` (permission `student-information:person:write`): republishes the current link
+  of every linked person in the organisation, the backfill for links made before the event existed.
+- A blank `identity_user_id` is stored as no account (null), never as ''.
+- Contract versions: openapi `0.2.0`, module `0.2.0`; `events.yaml` stays at payload version 1 (additive only).
 - Searchable for platform/search: `contracts/searchable.yaml` (type `person`, triggers `person.created`, `person.updated`, `person.status-changed`) and a document provider on the `eos.search_documents` entry point. Indexes name and status only; the person's own user may read the record.
 - Backend package `eos-student-information` implemented with domain models, application service, infrastructure models, and FastAPI router.
 - Domain enums and logic: `PersonStatus` state machine, `DocumentType`, `IdCardStatus`, and collision-resistant card number generator (`IDC-{ORG4}-{YYYYMM}-{RANDOM6}`).
