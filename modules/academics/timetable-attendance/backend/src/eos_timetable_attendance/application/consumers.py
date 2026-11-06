@@ -54,9 +54,11 @@ from ..infrastructure.models import (
     TermRef,
     as_utc,
 )
+from . import auto_close
 
 log = logging.getLogger("eos.timetable_attendance")
 
+SCHEDULER_JOB_DUE = "scheduler.job.due"
 SOURCE = "academic-management"
 TERM_CREATED = f"{SOURCE}.term.created"
 OFFERING_CREATED = f"{SOURCE}.offering.created"
@@ -444,8 +446,16 @@ def on_account_linked(db: Session, event) -> str:
     return _receive(db, event, _account_linked)
 
 
+def on_job_due(db: Session, event) -> str:
+    """`scheduler.job.due` for this module's own job (FR-11); another module's job is not ours and is not recorded."""
+    if not isinstance(event.payload, dict) or event.payload.get("job") != auto_close.JOB_KEY:
+        return IGNORED
+    return _receive(db, event, auto_close.run)
+
+
 # Registered in pyproject.toml under `eos.event_consumers`; module.yaml `consumes_events` lists the same names.
 CONSUMERS = {
+    SCHEDULER_JOB_DUE: on_job_due,
     TERM_CREATED: on_term_created,
     OFFERING_CREATED: on_offering_created,
     OFFERING_STATUS_CHANGED: on_offering_status_changed,

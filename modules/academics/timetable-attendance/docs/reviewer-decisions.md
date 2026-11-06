@@ -78,7 +78,7 @@ confirmation; none is hidden behind a flag.
 | Student history | covers every period when `academic_period_id` is omitted | A history has no natural "current"; the summary keeps the active-term default |
 | Department report average | the mean of the students' percentages, students with no counted class left out | The contract names it `average_percentage` |
 
-Not built: closing sessions automatically at the deadline (FR-11) needs a job under `eos.scheduler_jobs`.
+Closing sessions automatically at the deadline (FR-11) is built as a scheduler job (section 11).
 
 ## E. Section membership from enrolment-registration (for Praveen: PRD Q2)
 
@@ -230,3 +230,22 @@ has classes to cancel only if they were created some other way.
 | Open point | Owner | Effect |
 |---|---|---|
 | The organisation's time zone: where it is stored and how the module reads it | Faizan (platform), with Shivani | `generate-classes` and the generation step of publish are not built; the contract's description of publish is not met until then |
+
+## 11. Automatic closing at the deadline (FR-11)
+
+`timetable-attendance.close-expired-sessions` (`application/auto_close.py`) closes an organisation's open sessions whose
+`marking_deadline` is before now, using the domain's `plan_close` and `is_due_for_auto_close`. It does not call
+`classes.close_session`, which is bound to an actor: it checks the instructor's or `override` permission and records the
+actor as `closed_by`, and the contract says `closed_by` is null when the system closes. So the job repeats that
+function's few state changes (absent marks, class completed, event, audit entry) with no actor; the event payload is
+tested field for field against a manual close's. If `close_session` changes, change the job with it.
+
+| Choice | Why |
+|---|---|
+| Organisation scope, no `default_cron` | Platform/scheduler seeds a default only for platform jobs; nothing in the repository or the PRD gives a cadence, so none is invented |
+| One savepoint per session; a failing session stays open and the run reports `failed` | One bad session must not hold back the rest; the next scheduled run retries it |
+| A deadline equal to now is not past | `is_due_for_auto_close` compares `now > marking_deadline` |
+
+| Open point | Owner | Effect |
+|---|---|---|
+| How often, and for which organisations, the job is scheduled | Faizan (platform/scheduler operators), with Shivani | Until a schedule exists per organisation, sessions are closed only by hand |

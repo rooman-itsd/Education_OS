@@ -11,7 +11,7 @@ owners: [shivanisinghrooman-09]  # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit, event-bus]
+  platform: [identity, audit, event-bus, scheduler]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -35,6 +35,7 @@ consumes_events:
   - enrolment-registration.course-registration.withdrawn
   - enrolment-registration.section-allocation.changed
   - student-information.person.account-linked
+  - scheduler.job.due      # its own timetable-attendance.close-expired-sessions job only (FR-11)
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
