@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Dashboard widgets (issue #325), exported from `frontend/src/widgets/index.ts` and enabled in
+  `apps/frontend/config/modules.enabled.yaml`: `today` ("Today's classes", student layouts, `GET /me/schedule`),
+  `attendance-summary` ("My attendance", student layouts, `GET /me/attendance-summary`), `today-classes` ("Teaching
+  today", faculty layouts, `GET /me/teaching-schedule`), `attendance-to-mark` ("Attendance to mark", faculty layouts,
+  `GET /me/attendance-to-mark`) and `department-attendance` ("Department attendance", department-admin,
+  `GET /reports/department-attendance`). Each has loading, empty, not-available, no-access and retry states and a
+  vitest suite (`frontend/tests`). The day widgets pass the viewer's own date. No active term (404
+  `active_term_not_found`) is the empty state, and `department_unknown` (PRD Q9) is explained in words. The dashboard
+  journeys in `tests/e2e/dashboards` name each widget's title, probe, empty and unavailable text.
 - Event consumers (issue #325, part 3), registered under `eos.event_consumers` and listed in `module.yaml`:
   academic-management `term.created` into the new `term_ref` (a term's dates), `offering.created` and
   `offering.status-changed` into `offering_ref`, `section.created` and `section.updated` into `section_ref`. Migration

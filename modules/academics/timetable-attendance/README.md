@@ -33,6 +33,20 @@ their deadline (FR-11, needs a scheduler job). Rules the code applies, and why, 
 - Opening a session snapshots the students of `section_member`, which no consumer fills yet (enrolment-registration
   events wait on the `student_id` mapping), so outside the tests a session opens with no eligible student.
 
+## Widgets
+`frontend/src/widgets/index.ts` exports the five widgets the role layouts name. Each one fetches through
+`frontend/src/api/client.ts`:
+
+| Widget | Layouts | Endpoint | Empty state |
+|---|---|---|---|
+| `timetable-attendance.today` | student and the layouts extending it | `GET /me/schedule?date=<viewer's date>` | No classes today |
+| `timetable-attendance.attendance-summary` | student and the layouts extending it | `GET /me/attendance-summary` | No attendance recorded yet (also with no active term) |
+| `timetable-attendance.today-classes` | faculty and the layouts extending it | `GET /me/teaching-schedule?date=<viewer's date>` | No classes to teach today |
+| `timetable-attendance.attendance-to-mark` | faculty and the layouts extending it | `GET /me/attendance-to-mark` | No attendance waiting to be marked |
+| `timetable-attendance.department-attendance` | department-admin | `GET /reports/department-attendance` | No department attendance yet (also with no active term) |
+
+Frontend tests: `cd modules/academics/timetable-attendance/frontend && pnpm test`.
+
 ## Event consumers
 `application/consumers.py` is registered under the `eos.event_consumers` entry point (`backend/pyproject.toml`) and
 lists its events in `module.yaml` (`consumes_events`). The event relay (`platform/event-bus`) finds the consumers of the
