@@ -31,9 +31,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_tt_0001_then_tt_0002_then_tt_0003():
+def test_the_chain_is_tt_0001_then_tt_0002_then_tt_0003_then_tt_0004():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["tt_0003"]
+    assert script.get_heads() == ["tt_0004"]
+    assert script.get_revision("tt_0004").down_revision == "tt_0003"
     assert script.get_revision("tt_0003").down_revision == "tt_0002"
     assert script.get_revision("tt_0002").down_revision == "tt_0001"
     assert script.get_revision("tt_0001").down_revision is None
@@ -78,6 +79,7 @@ def test_the_migrations_create_every_model_table_and_no_other():
         set(_revision_module("*_0001_initial.py").TABLES)
         | set(_revision_module("*_0002_term_ref_and_processed_event.py").NEW_TABLES)
         | set(_revision_module("*_0003_registration_ref.py").NEW_TABLES)
+        | set(_revision_module("*_0004_person_account.py").NEW_TABLES)
     )
     assert created == {t.name for t in TABLES}
 
@@ -113,7 +115,7 @@ def test_tt_0002_upgrades_existing_rows_and_downgrades_dropping_only_partial_one
             "VALUES ('2','o',CURRENT_TIMESTAMP,'y','open')"
         )
     command.downgrade(cfg, "tt_0001")
-    with engine.connect() as conn:  # (through tt_0003's downgrade too)
+    with engine.connect() as conn:  # (through tt_0004's and tt_0003's downgrades too)
         assert conn.exec_driver_sql("SELECT id FROM timetable_attendance_offering_ref").fetchall() == [("1",)]
         columns = {c["name"]: c for c in inspect(conn).get_columns("timetable_attendance_offering_ref")}
         assert not columns["course_code"]["nullable"] and "status_as_of" not in columns
@@ -122,7 +124,7 @@ def test_tt_0002_upgrades_existing_rows_and_downgrades_dropping_only_partial_one
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 14
+    assert len(TABLES) == 15
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name

@@ -4,6 +4,7 @@ under Postgres row-level security; a join also names the organisation on both si
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import date, datetime
 
 from sqlalchemy import Select, and_, func, or_, select
@@ -14,6 +15,7 @@ from .models import (
     AttendanceRecordRow,
     AttendanceSessionRow,
     OfferingRef,
+    PersonAccount,
     ScheduledClassRow,
     SectionMember,
     SectionRef,
@@ -24,6 +26,21 @@ from .repository import q
 
 def _first(db: Session, query: Select):
     return db.scalars(query).first()
+
+
+def _is(column, value: str | Collection[str]):
+    """column equals the id, or is one of the ids (a student's person id and user id, classes.my_student_ids)."""
+    if isinstance(value, str):
+        return column == value
+    return column.in_(sorted(value))
+
+
+def person_for_user(db: Session, user_id: str) -> str | None:
+    """The student-information person a sign-in account is linked to, if a link is known. Two persons can briefly claim
+    one account when the events arrive out of order; the later link wins."""
+    query = q(db, PersonAccount).where(PersonAccount.identity_user_id == user_id)
+    row = _first(db, query.order_by(PersonAccount.linked_as_of.desc(), PersonAccount.id))
+    return row.person_id if row is not None else None
 
 
 # ---------------------------------------------------------------- scheduled classes
@@ -172,9 +189,9 @@ def members_on(db: Session, section_id: str, day: date) -> list[SectionMember]:
     return list(db.scalars(query.order_by(SectionMember.student_id)))
 
 
-def sections_of_student_on(db: Session, student_id: str, day: date) -> set[str]:
+def sections_of_student_on(db: Session, student_id: str | Collection[str], day: date) -> set[str]:
     query = q(db, SectionMember).with_only_columns(SectionMember.section_id)
-    return set(db.scalars(query.where(SectionMember.student_id == student_id, _member_on(day, day))))
+    return set(db.scalars(query.where(_is(SectionMember.student_id, student_id), _member_on(day, day))))
 
 
 def students_in_sections_between(db: Session, section_ids: set[str], first: date | None, last: date) -> set[str]:
@@ -237,7 +254,7 @@ def attendance(
     academic_period_id: str | None = None,
     course_offering_id: str | None = None,
     offering_ids: set[str] | None = None,
-    student_id: str | None = None,
+    student_id: str | Collection[str] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[tuple[AttendanceRecordRow, AttendanceSessionRow, ScheduledClassRow]]:
@@ -269,7 +286,7 @@ def attendance(
     if offering_ids is not None:
         query = query.where(ScheduledClassRow.course_offering_id.in_(offering_ids or {""}))
     if student_id is not None:
-        query = query.where(AttendanceRecordRow.student_id == student_id)
+        query = query.where(_is(AttendanceRecordRow.student_id, student_id))
     if date_from is not None:
         query = query.where(ScheduledClassRow.class_date >= date_from)
     if date_to is not None:

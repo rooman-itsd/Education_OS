@@ -12,6 +12,8 @@ Implemented here:
 - `enrolment-registration.course-registration.confirmed` -> registration_ref, then section_member
 - `enrolment-registration.course-registration.withdrawn` -> registration_ref.withdrawn_on, then section_member
 - `enrolment-registration.section-allocation.changed`    -> registration_ref.moves, then section_member
+- `student-information.person.account-linked`            -> person_account (which person a sign-in account is; a
+  student's own `/me` reads map their user id to the `student_id` of section_member through it)
 
 Not consumed, on purpose (docs/reviewer-decisions.md):
 - `faculty-assignment.*`: storing the assignee as an instructor needs Faizan's confirmation of the identity mapping
@@ -42,7 +44,16 @@ from sqlalchemy.orm import Session
 from ..domain.errors import DomainRuleError
 from ..domain.values import require_date, require_id, require_instant, require_text
 from ..infrastructure import repository as repo
-from ..infrastructure.models import OfferingRef, ProcessedEvent, RegistrationRef, SectionMember, SectionRef, TermRef
+from ..infrastructure.models import (
+    OfferingRef,
+    PersonAccount,
+    ProcessedEvent,
+    RegistrationRef,
+    SectionMember,
+    SectionRef,
+    TermRef,
+    as_utc,
+)
 
 log = logging.getLogger("eos.timetable_attendance")
 
@@ -56,6 +67,7 @@ ENROLMENT = "enrolment-registration"
 REGISTRATION_CONFIRMED = f"{ENROLMENT}.course-registration.confirmed"
 REGISTRATION_WITHDRAWN = f"{ENROLMENT}.course-registration.withdrawn"
 SECTION_ALLOCATION_CHANGED = f"{ENROLMENT}.section-allocation.changed"
+ACCOUNT_LINKED = "student-information.person.account-linked"
 
 SUPPORTED_VERSION = 1
 APPLIED, DUPLICATE, IGNORED, STALE = "applied", "duplicate", "ignored", "stale"
@@ -374,6 +386,28 @@ def _section_allocation_changed(db: Session, org: str, p: dict, occurred_at: dat
     return APPLIED
 
 
+# ---------------------------------------------------------------- student-information -> person_account
+
+
+def _account_linked(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    """Set the person's sign-in account: the user id when linked, none when the link is cleared. One row per person,
+    replaced only by an event that occurred at or after the one that set it (a republish of the same link applies and
+    changes nothing)."""
+    person = _id(p, "person_id")
+    linked = p.get("linked")
+    if not isinstance(linked, bool):
+        raise ValueError("linked must be true or false")
+    user = _id(p, "identity_user_id") if linked else None
+    row = repo.ref_row(db, PersonAccount, PersonAccount.person_id, person, org)
+    if row is None:
+        row = PersonAccount(organisation_id=org, person_id=person)
+        db.add(row)
+    elif row.linked_as_of is not None and occurred_at < as_utc(row.linked_as_of):
+        return STALE
+    row.identity_user_id, row.linked_as_of = user, occurred_at
+    return APPLIED
+
+
 def on_term_created(db: Session, event) -> str:
     return _receive(db, event, _term_created)
 
@@ -406,6 +440,10 @@ def on_section_allocation_changed(db: Session, event) -> str:
     return _receive(db, event, _section_allocation_changed)
 
 
+def on_account_linked(db: Session, event) -> str:
+    return _receive(db, event, _account_linked)
+
+
 # Registered in pyproject.toml under `eos.event_consumers`; module.yaml `consumes_events` lists the same names.
 CONSUMERS = {
     TERM_CREATED: on_term_created,
@@ -416,4 +454,5 @@ CONSUMERS = {
     REGISTRATION_CONFIRMED: on_registration_confirmed,
     REGISTRATION_WITHDRAWN: on_registration_withdrawn,
     SECTION_ALLOCATION_CHANGED: on_section_allocation_changed,
+    ACCOUNT_LINKED: on_account_linked,
 }

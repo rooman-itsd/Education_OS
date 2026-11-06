@@ -23,7 +23,8 @@ exposes:
 # Events this module subscribes to (by name, from other modules' events.yaml). Each is handled by
 # application/consumers.py, registered under the `eos.event_consumers` entry point in backend/pyproject.toml.
 # Not consumed yet: academic-management `faculty-assignment.*` (the identity mapping of the assignee is unconfirmed);
-# see docs/reviewer-decisions.md.
+# see docs/reviewer-decisions.md. student-information `person.account-linked` fills `person_account`, through which a
+# student's own /me reads map their identity user id to the person id section_member holds.
 consumes_events:
   - academic-management.term.created
   - academic-management.offering.created
@@ -33,6 +34,7 @@ consumes_events:
   - enrolment-registration.course-registration.confirmed
   - enrolment-registration.course-registration.withdrawn
   - enrolment-registration.section-allocation.changed
+  - student-information.person.account-linked
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

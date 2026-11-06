@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- A student's own reads find them by person id (issue: students' "my" widgets empty in real use). `section_member`
+  holds enrolment-registration's `person_id`, but `/me/schedule`, `/me/attendance-summary` and `/me/attendance-history`
+  looked the caller up by identity user id. The module now consumes `student-information.person.account-linked` into
+  `person_account` (migration `tt_0004`, `organisation_id` and the forced `tenant_isolation` policy), and the three
+  reads map the caller's user id to their person id through it, falling back to the user id while no link is known.
+  The summary and history name the person id as `student_id` once linked. No contract change.
 - Publish and unpublish (issue #325): `POST /timetables/{id}/publish` and `/unpublish`, key `timetable:publish`. Publishing
   takes a draft or unpublished timetable to `published` and raises its version by one; it is refused with 409 when the
   timetable is already published, when a blocking conflict remains (the response lists them in `details.conflicts`,

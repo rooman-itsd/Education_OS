@@ -88,6 +88,7 @@ def test_the_consumers_are_exactly_the_events_of_the_manifest_and_the_entry_poin
         "enrolment-registration.course-registration.confirmed",
         "enrolment-registration.course-registration.withdrawn",
         "enrolment-registration.section-allocation.changed",
+        "student-information.person.account-linked",
     }
     project = tomllib.loads((MODULE / "backend" / "pyproject.toml").read_text(encoding="utf-8"))
     entry = project["project"]["entry-points"]["eos.event_consumers"]

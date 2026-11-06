@@ -289,6 +289,24 @@ class RegistrationRef(Base, TenantMixin, TimestampMixin):
     name_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class PersonAccount(Base, TenantMixin, TimestampMixin):
+    """Which student-information person a sign-in account is (student-information.person.account-linked). A student's
+    own reads (`/me/schedule`, `/me/attendance-*`) map the caller's identity user id to the person id that
+    `section_member.student_id` holds through it. One row per person; `identity_user_id` is null once the link is
+    cleared. `linked_as_of` is the envelope time of the event that set the row, so an older event never replaces it."""
+
+    __tablename__ = f"{PREFIX}person_account"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "person_id", name="uq_timetable_attendance_person_account"),
+        Index("ix_timetable_attendance_person_account_user", "organisation_id", "identity_user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    person_id: Mapped[str] = mapped_column(String(36))
+    identity_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    linked_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ProcessedEvent(Base, TenantMixin, TimestampMixin):
     """The envelope ids this module has already applied, per organisation: delivery is at-least-once, so a handler
     that finds its event id here does nothing (platform/event-bus/contracts/events.yaml, idempotency)."""
@@ -343,5 +361,6 @@ TABLES = [
         ProcessedEvent,
         RegistrationRef,
         AuditEntry,
+        PersonAccount,
     )
 ]
