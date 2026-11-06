@@ -2,8 +2,8 @@
 
 **Domain:** academics
 **Kind:** feature
-**Status:** in-progress (contract 0.1.0; backend, migration `lms_0001`, tests and the two dashboard widgets built; not
-enabled in `apps/*` yet)
+**Status:** in-progress (contract 0.1.0; backend, migration `lms_0001`, tests and the two dashboard widgets built; enabled in
+`apps/backend` and `apps/frontend`)
 
 Learning management: content, assignments, quizzes, discussions, grading.
 
