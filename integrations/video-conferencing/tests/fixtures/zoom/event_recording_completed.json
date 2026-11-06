@@ -1,0 +1,1 @@
+{"event": "recording.completed", "event_ts": 1794201000000, "payload": {"account_id": "Qm8kAccountId01", "object": {"id": "85746065432", "uuid": "kXyZ12abcdEFgh==", "recording_files": [{"id": "rec-video-1", "file_type": "MP4", "status": "completed"}, {"id": "rec-chat-1", "file_type": "CHAT", "status": "completed"}]}}}

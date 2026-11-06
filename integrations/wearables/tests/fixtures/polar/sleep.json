@@ -1,0 +1,2 @@
+{"nights": [{"polar_user": "https://www.polaraccesslink.com/v3/users/475", "date": "2026-11-04", "sleep_start_time": "2026-11-03T22:30:00+05:30", "sleep_end_time": "2026-11-04T06:15:00+05:30",
+  "continuity": 3.2, "light_sleep": 14400, "deep_sleep": 5400, "rem_sleep": 6300, "unrecognized_sleep_stage": 0, "sleep_score": 84, "total_interruption_duration": 1800}]}

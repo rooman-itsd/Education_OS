@@ -130,7 +130,14 @@ export function App() {
     window.location.hash = href.replace(/^#/, "");
   };
 
-  if (mode === "loading") return <main className="eos-shell__content" aria-busy="true">Loading…</main>;
+  // Each screen has its own title, so a screen reader announces where a sign-in, a sign-up or a page change landed.
+  useEffect(() => {
+    const parts = route.split("/");
+    const page = mode === "login" ? "Sign in" : mode === "signup" ? "Register your organisation" : parts[1] === "modules" && parts[3] ? moduleLabel(parts[3]) : "Dashboard";
+    document.title = `${page} · Education OS`;
+  }, [mode, route]);
+
+  if (mode === "loading") return <main className="eos-shell__content" role="status" aria-busy="true">Loading…</main>;
   if (mode === "signup") return <SignUp onDone={(slug) => { setLoginSlug(slug); setMode("login"); }} onLogin={() => setMode("login")} />;
   if (mode === "login") return <Login slug={loginSlug} onDone={async () => { setSession(await loadSession()); setMode("app"); }} onSignUp={() => setMode("signup")} />;
 

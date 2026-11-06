@@ -1,0 +1,61 @@
+"""Fixtures only. Helpers live in eup_support.py, so test files import them by a unique name rather than from
+`conftest`, which in a combined run can be another module's."""
+
+import os
+import tempfile
+from pathlib import Path
+
+os.environ.setdefault("EOS_DATABASE_URL", f"sqlite:///{tempfile.mkdtemp()}/test.db")
+os.environ.setdefault("EOS_DEV_MODE", "true")
+os.environ.setdefault("EOS_REPO_ROOT", str(Path(__file__).resolve().parents[3]))
+
+import pytest
+from eos_core.db import init_db
+from eos_external_university_portals.api.router import router
+from eos_external_university_portals.application.adapter import ExternalUniversityPortalsAdapter
+from eos_external_university_portals.domain import models  # noqa: F401  registers the tables
+from eos_external_university_portals.infrastructure.documents import MemoryCourier, MemoryDocumentStore
+from eup_support import FIXED_NOW, PREFIX, Org
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(scope="session")
+def client():
+    """The adapter alone: no other module is needed for its tests to pass (module standard)."""
+    init_db()
+    app = FastAPI()
+    app.include_router(router, prefix=PREFIX)
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def adapter_env(monkeypatch):
+    for key in ("LINK_TTL_HOURS", "MAX_IMPORT_BYTES", "RESTRICTED_COUNTRIES"):
+        monkeypatch.delenv(f"EXTERNAL_UNIVERSITY_PORTALS_{key}", raising=False)
+
+
+@pytest.fixture
+def docs():
+    return MemoryDocumentStore()
+
+
+@pytest.fixture
+def courier():
+    return MemoryCourier()
+
+
+@pytest.fixture
+def adapter(client, docs, courier):
+    return ExternalUniversityPortalsAdapter(documents=docs, courier=courier, clock=lambda: FIXED_NOW)
+
+
+@pytest.fixture
+def org():
+    return Org()
+
+
+@pytest.fixture
+def other_org():
+    return Org()

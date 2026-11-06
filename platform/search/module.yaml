@@ -5,13 +5,13 @@ kind: platform              # feature | platform | integration
 domain: platform
 tier: core          # core (platform) | common (every institution) | specialized (one field)
 version: 0.1.0
-status: planned           # planned | in-progress | stable | deprecated
-description: "Global search indexing and query (Elasticsearch-class engine)."
-owners: []                # GitHub handles. Keep in sync with CODEOWNERS.
+status: in-progress         # planned | in-progress | stable | deprecated
+description: "Global and per-module search on OpenSearch, indexed from events, filtered by organisation and by what the caller may read."
+owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
 
 # Platform services this module calls through packages/sdk. Nothing else.
 depends_on:
-  platform: [identity, audit]
+  platform: [identity, audit, event-bus]
   integrations: []
 
 # Public surface. Other modules may ONLY use these.
@@ -21,7 +21,18 @@ exposes:
   permissions: contracts/permissions.yaml
 
 # Events this module subscribes to (by name, from other modules' events.yaml).
-consumes_events: []
+consumes_events:
+  - tenancy.organisation.purged
+  - tenancy.entitlement.changed
+  # First modules to opt in (docs/prd.md). Later modules add their trigger events here as they declare types.
+  - student-information.person.created
+  - student-information.person.updated
+  - student-information.person.status-changed
+  - academic-management.course.created
+  - academic-management.course.updated
+  - academic-management.course.archived
+  - knowledge-base.article.published
+  - knowledge-base.article.archived
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

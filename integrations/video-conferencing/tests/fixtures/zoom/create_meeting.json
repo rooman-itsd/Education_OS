@@ -1,0 +1,5 @@
+{"id": 85746065432, "uuid": "kXyZ12abcdEFgh==", "host_id": "KDcuGIm1QgePTO8WbOqwIQ", "topic": "Physics XI A: Optics", "type": 2,
+ "status": "waiting", "start_time": "2026-11-09T04:30:00Z", "duration": 45, "timezone": "Asia/Kolkata",
+ "join_url": "https://zoom.example/j/85746065432?pwd=abc123", "start_url": "https://zoom.example/s/85746065432?zak=HOSTTOKEN",
+ "password": "Qw7rT2", "settings": {"waiting_room": true, "join_before_host": false,
+   "global_dial_in_numbers": [{"number": "+91 22 7120 1234", "country_name": "India", "type": "toll"}]}}

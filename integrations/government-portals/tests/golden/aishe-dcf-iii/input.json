@@ -1,0 +1,94 @@
+{
+  "form_code": "aishe.dcf-iii",
+  "period": "2025-26",
+  "data": {
+    "basic_details": {
+      "institution_name": "Sample Institute of Higher Education",
+      "aishe_code": "S-1507",
+      "institution_type": "standalone",
+      "year_of_establishment": 1998,
+      "management": "Private unaided",
+      "state": "Kerala",
+      "district": "Ernakulam"
+    },
+    "programmes": [
+      {
+        "name": "B.Sc. Computer Science",
+        "level": "ug",
+        "discipline": "Science",
+        "duration_years": 3,
+        "intake": 60,
+        "enrolment_by_gender": {
+          "male": 70,
+          "female": 95,
+          "transgender": 1
+        },
+        "enrolment_by_category": {
+          "general": 90,
+          "sc": 20,
+          "st": 6,
+          "obc": 40,
+          "ews": 8,
+          "other": 2
+        }
+      },
+      {
+        "name": "M.Com",
+        "level": "pg",
+        "discipline": "Commerce",
+        "duration_years": 2,
+        "intake": 40,
+        "enrolment_by_gender": {
+          "male": 20,
+          "female": 45,
+          "transgender": 0
+        },
+        "enrolment_by_category": {
+          "general": 30,
+          "sc": 12,
+          "st": 3,
+          "obc": 15,
+          "ews": 5,
+          "other": 0
+        }
+      }
+    ],
+    "examination_results": [
+      {
+        "programme": "B.Sc. Computer Science",
+        "appeared": 55,
+        "passed": 49
+      },
+      {
+        "programme": "M.Com",
+        "appeared": 30,
+        "passed": 30
+      }
+    ],
+    "staff": {
+      "teaching": {
+        "male": 12,
+        "female": 14,
+        "transgender": 0
+      },
+      "non_teaching": {
+        "male": 6,
+        "female": 9,
+        "transgender": 0
+      }
+    },
+    "infrastructure": {
+      "classrooms": 24,
+      "laboratories": 8,
+      "library_books": 18250,
+      "computers": 140,
+      "hostels": 2
+    },
+    "finance": {
+      "income_total": 41250000.5,
+      "expenditure_total": 39800000,
+      "salary_expenditure": 27500000
+    }
+  },
+  "evidence": []
+}

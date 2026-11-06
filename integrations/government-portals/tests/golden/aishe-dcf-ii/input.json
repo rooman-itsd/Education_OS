@@ -1,0 +1,330 @@
+{
+  "form_code": "aishe.dcf-ii",
+  "period": "2025-26",
+  "data": {
+    "basic_details": {
+      "institution_name": "Sample Institute of Higher Education",
+      "aishe_code": "C-12345",
+      "institution_type": "college",
+      "year_of_establishment": 1998,
+      "management": "Private unaided",
+      "state": "Kerala",
+      "district": "Ernakulam"
+    },
+    "programmes": [
+      {
+        "name": "B.Sc. Computer Science",
+        "level": "ug",
+        "discipline": "Science",
+        "duration_years": 3,
+        "intake": 60,
+        "enrolment_by_gender": {
+          "male": 70,
+          "female": 95,
+          "transgender": 1
+        },
+        "enrolment_by_category": {
+          "general": 90,
+          "sc": 20,
+          "st": 6,
+          "obc": 40,
+          "ews": 8,
+          "other": 2
+        }
+      },
+      {
+        "name": "M.Com",
+        "level": "pg",
+        "discipline": "Commerce",
+        "duration_years": 2,
+        "intake": 40,
+        "enrolment_by_gender": {
+          "male": 20,
+          "female": 45,
+          "transgender": 0
+        },
+        "enrolment_by_category": {
+          "general": 30,
+          "sc": 12,
+          "st": 3,
+          "obc": 15,
+          "ews": 5,
+          "other": 0
+        }
+      }
+    ],
+    "examination_results": [
+      {
+        "programme": "B.Sc. Computer Science",
+        "appeared": 55,
+        "passed": 49
+      },
+      {
+        "programme": "M.Com",
+        "appeared": 30,
+        "passed": 30
+      }
+    ],
+    "staff": {
+      "teaching": {
+        "male": 12,
+        "female": 14,
+        "transgender": 0
+      },
+      "non_teaching": {
+        "male": 6,
+        "female": 9,
+        "transgender": 0
+      }
+    },
+    "infrastructure": {
+      "classrooms": 24,
+      "laboratories": 8,
+      "library_books": 18250,
+      "computers": 140,
+      "hostels": 2
+    },
+    "finance": {
+      "income_total": 41250000.5,
+      "expenditure_total": 39800000,
+      "salary_expenditure": 27500000
+    },
+    "teachers": [
+      {
+        "name": "Teacher 00",
+        "designation": "Associate Professor",
+        "gender": "male",
+        "category": "general",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2010-06-01"
+      },
+      {
+        "name": "Teacher 01",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2011-06-01"
+      },
+      {
+        "name": "Teacher 02",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2012-06-01"
+      },
+      {
+        "name": "Teacher 03",
+        "designation": "Associate Professor",
+        "gender": "female",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2013-06-01"
+      },
+      {
+        "name": "Teacher 04",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "obc",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2014-06-01"
+      },
+      {
+        "name": "Teacher 05",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2015-06-01"
+      },
+      {
+        "name": "Teacher 06",
+        "designation": "Associate Professor",
+        "gender": "male",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2016-06-01"
+      },
+      {
+        "name": "Teacher 07",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2017-06-01"
+      },
+      {
+        "name": "Teacher 08",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "sc",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2018-06-01"
+      },
+      {
+        "name": "Teacher 09",
+        "designation": "Associate Professor",
+        "gender": "female",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2019-06-01"
+      },
+      {
+        "name": "Teacher 10",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2020-06-01"
+      },
+      {
+        "name": "Teacher 11",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2021-06-01"
+      },
+      {
+        "name": "Teacher 12",
+        "designation": "Associate Professor",
+        "gender": "male",
+        "category": "general",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2010-06-01"
+      },
+      {
+        "name": "Teacher 13",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2011-06-01"
+      },
+      {
+        "name": "Teacher 14",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2012-06-01"
+      },
+      {
+        "name": "Teacher 15",
+        "designation": "Associate Professor",
+        "gender": "female",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2013-06-01"
+      },
+      {
+        "name": "Teacher 16",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "obc",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2014-06-01"
+      },
+      {
+        "name": "Teacher 17",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2015-06-01"
+      },
+      {
+        "name": "Teacher 18",
+        "designation": "Associate Professor",
+        "gender": "male",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2016-06-01"
+      },
+      {
+        "name": "Teacher 19",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2017-06-01"
+      },
+      {
+        "name": "Teacher 20",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "sc",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2018-06-01"
+      },
+      {
+        "name": "Teacher 21",
+        "designation": "Associate Professor",
+        "gender": "female",
+        "category": "general",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2019-06-01"
+      },
+      {
+        "name": "Teacher 22",
+        "designation": "Assistant Professor",
+        "gender": "male",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2020-06-01"
+      },
+      {
+        "name": "Teacher 23",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "sc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2021-06-01"
+      },
+      {
+        "name": "Teacher 24",
+        "designation": "Associate Professor",
+        "gender": "male",
+        "category": "general",
+        "highest_qualification": "PhD",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2010-06-01"
+      },
+      {
+        "name": "Teacher 25",
+        "designation": "Assistant Professor",
+        "gender": "female",
+        "category": "obc",
+        "highest_qualification": "M.Phil",
+        "nature_of_appointment": "regular",
+        "date_of_joining": "2011-06-01"
+      }
+    ]
+  },
+  "evidence": []
+}
