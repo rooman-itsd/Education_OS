@@ -315,6 +315,23 @@ $C exec -T db psql -U eos -d eos -c "SELECT client_addr IS NOT NULL AS via_pool,
 **Switch it off:** remove `pooler` from `COMPOSE_PROFILES` and the `EOS_DB_ADDRESS` line, then
 `$C up -d api relay scheduler && $C stop pgbouncer`, and take `pgbouncer` out of `EOS_MONITOR_SERVICES`.
 
+### Integration hub (secret store)
+
+platform/integration-hub keeps provider credentials and OAuth tokens as files, each AES-256-GCM encrypted under
+`INTEGRATION_HUB_SECRET_KEK`, under `/var/lib/eos/integration-hub/secrets`. `docker-compose.api.yml` mounts the named
+volume `eos-hub-secrets` there in the `api` and `relay` services (the relay runs the hub's scheduled jobs, which call
+providers with those credentials), so a redeploy keeps them. Set the key in `.env.api` before anyone stores a
+credential: outside dev mode the hub refuses to store or read one without it (503 `secret_store_unavailable`).
+
+- The volume is not in the database or its dump by design; back it up separately from the key, or accept that
+  credentials are re-entered after a loss (the key without the volume, or the volume without the key, recovers
+  nothing).
+- Rotating the key: new key in `INTEGRATION_HUB_SECRET_KEK`, old one in `INTEGRATION_HUB_SECRET_KEK_PREVIOUS`,
+  `docker compose ... up -d`, then `docker compose ... exec api python -m eos_integration_hub.rotate_kek` (it also
+  re-encrypts the hub's encrypted database columns, and exits 1 while anything is unreadable), then empty the old key.
+- Every other `INTEGRATION_HUB_*` setting has the hub's own default in the compose file
+  (`platform/integration-hub/config/env.example` says what each does).
+
 ### Keycloak (ADR-0006)
 
 The OpenID Connect provider runs on the same Docker host as two more services in `docker-compose.api.yml`,
