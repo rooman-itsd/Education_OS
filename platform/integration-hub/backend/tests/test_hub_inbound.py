@@ -254,3 +254,25 @@ def test_webhook_secret_rotation_rotates_the_inbound_url(client, org, adapter):
         ).status_code
         == 200
     )
+
+
+def test_the_same_event_id_at_two_organisations_connections_is_processed_for_each(client, org, other_org, adapter):
+    """Dedupe is per connection: a provider's event ids are only unique within one account, so another
+    organisation's event with the same id is never swallowed as a redelivery."""
+    a = authorised_meet(client, org, adapter)
+    b = authorised_meet(client, other_org, adapter)
+    raw = _fixture("webhook_meeting_ended")
+    for c in (a, b):
+        r = client.post(
+            f"{BASE}/inbound/fake-adapter/{key_of(c)}", content=raw, headers=_signed(adapter, "meet-client-secret", raw)
+        )
+        assert r.status_code == 200
+    assert len(outbox("integration-hub.meeting.ended", org.id)) == 1
+    assert len(outbox("integration-hub.meeting.ended", other_org.id)) == 1
+    assert len(_deliveries(client, org, direction="inbound")) == 1
+    assert len(_deliveries(client, other_org, direction="inbound")) == 1
+    # and each connection still ignores its own redelivery
+    r = client.post(
+        f"{BASE}/inbound/fake-adapter/{key_of(b)}", content=raw, headers=_signed(adapter, "meet-client-secret", raw)
+    )
+    assert r.status_code == 200 and len(_deliveries(client, other_org, direction="inbound")) == 1

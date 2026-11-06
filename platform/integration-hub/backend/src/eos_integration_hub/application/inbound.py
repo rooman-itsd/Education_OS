@@ -4,7 +4,8 @@
    over bytes, not re-serialised JSON.
 2. The adapter's verify_inbound decides: accept, reject (with the status the provider expects, 401 by default) or
    handshake. A request that cannot be verified is rejected, logged as rejected_inbound, audited and never processed.
-3. A redelivery (same dedupe key) is acknowledged and ignored.
+3. A redelivery (same dedupe key for the same connection) is acknowledged and ignored. Another connection's event
+   with the same id, in another organisation, is its own event.
 4. The request is acknowledged before any processing; parse_inbound, follow-up fetches and events run afterwards
    (a background task right after the response, and the scheduled sweep as the safety net).
 5. Provider requests (a channel) are answered synchronously by handle_provider_request; the answer is not kept.
@@ -228,9 +229,9 @@ def _receive(db, config, info, connection_key, channel, method, query, headers, 
     dedupe = v.get("dedupe_key")
     dedupe = dedupe[:MAX_DEDUPE_KEY] if isinstance(dedupe, str) and dedupe else None
     if dedupe and db.scalar(
-        select(InboundReceipt.id).where(InboundReceipt.adapter == adapter, InboundReceipt.dedupe_key == dedupe)
+        select(InboundReceipt.id).where(InboundReceipt.connection_id == c.id, InboundReceipt.dedupe_key == dedupe)
     ):
-        return Answer(_ack_status(v))  # a redelivery: acknowledged and ignored
+        return Answer(_ack_status(v))  # a redelivery to this connection: acknowledged and ignored
     receipt_id = new_id()
     try:
         raw = get_cipher(config).encrypt(_pack(headers, raw_body), f"inbound:{receipt_id}")

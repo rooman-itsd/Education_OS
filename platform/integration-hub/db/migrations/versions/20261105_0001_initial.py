@@ -185,7 +185,8 @@ def upgrade() -> None:
         _ts("received_at", nullable=False),
         _ts("processed_at"),
         sa.Column("note", sa.Text, nullable=True),
-        sa.UniqueConstraint("adapter", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
+        # per connection: two organisations' connections at one provider may see the same event id
+        sa.UniqueConstraint("connection_id", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
     )
     _enable_rls("integration_hub_inbound_receipt")
 

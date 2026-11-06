@@ -184,7 +184,8 @@ class InboundReceipt(Base, TenantMixin):
 
     __tablename__ = f"{PREFIX}inbound_receipt"
     __table_args__ = (
-        UniqueConstraint("adapter", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
+        # Per connection: two organisations' connections at one provider may see the same event id.
+        UniqueConstraint("connection_id", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
         Index("ix_integration_hub_inbound_received", "received_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

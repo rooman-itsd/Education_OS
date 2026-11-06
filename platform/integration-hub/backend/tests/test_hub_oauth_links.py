@@ -335,4 +335,3 @@ def test_two_callbacks_racing_with_one_state_redeem_it_once(client, org, adapter
     assert sorted(r.status_code for r in results) == [302, 401]
     assert len([x for x in adapter.CALLS if x[0] == "complete_authorisation"]) == 1
     assert len(outbox("integration-hub.connection.authorised", org.id)) == 1
-
