@@ -36,6 +36,7 @@ in the event's organisation.
 | `enrolment-registration.course-registration.confirmed` | enrolment-registration | `member_ref` active, with section and name |
 | `enrolment-registration.course-registration.withdrawn` | enrolment-registration | `member_ref` withdrawn |
 | `enrolment-registration.section-allocation.changed` | enrolment-registration | `member_ref.section_id` |
+| `student-information.person.account-linked` | student-information | `person_account`: the learner's person id for their identity user id. Until it arrives, the user id is the learner's id |
 
 Not consumed: `offering.updated` and `course.*` carry only `changed_fields`; section events are not needed (section
 ids are kept by value); no scheduled-class events (owner decision C19).

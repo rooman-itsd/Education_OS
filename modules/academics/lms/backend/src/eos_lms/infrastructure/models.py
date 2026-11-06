@@ -288,8 +288,9 @@ class InstructorRef(Base, TenantMixin):
 
 
 class MemberRef(Base, TenantMixin):
-    """A student's course registration (enrolment-registration events). student_id is the identity user id
-    (docs/prd.md LQ6)."""
+    """A student's course registration (enrolment-registration events). student_id is the event's person_id, the
+    student-information person. A learner's own reads find it from their identity user id through PersonAccount, and
+    fall back to the user id itself while no link is known (docs/prd.md LQ6)."""
 
     __tablename__ = f"{PREFIX}member_ref"
     __table_args__ = (
@@ -306,6 +307,23 @@ class MemberRef(Base, TenantMixin):
     student_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(10))
     status_as_of: Mapped[datetime | None] = _ts(nullable=True)
+
+
+class PersonAccount(Base, TenantMixin):
+    """Which student-information person a sign-in account is (student-information.person.account-linked). One row per
+    person; identity_user_id is null once the link is cleared. linked_as_of is the envelope occurred_at of the event
+    that set the row, so an older event never replaces a newer link."""
+
+    __tablename__ = f"{PREFIX}person_account"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "person_id", name="uq_lms_person_account"),
+        Index("ix_lms_person_account_user", "organisation_id", "identity_user_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    person_id: Mapped[str] = mapped_column(String(36))
+    identity_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    linked_as_of: Mapped[datetime | None] = _ts(nullable=True)
 
 
 class ProcessedEvent(Base, TenantMixin):
@@ -352,5 +370,6 @@ MODELS = (
     MemberRef,
     ProcessedEvent,
     AuditEntry,
+    PersonAccount,
 )
 TABLES = [m.__table__ for m in MODELS]
