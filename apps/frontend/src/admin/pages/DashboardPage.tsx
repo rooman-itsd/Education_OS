@@ -29,6 +29,7 @@ import { StatGrid, PageHeader, BTN_PRIMARY, BTN_SECONDARY } from '../components/
 import { HistogramPanel, BreakdownPanel, ActionSummaryPanel, UpcomingPanel, ActivityPanel, PanelLink, activityToneForRole } from '../components/ui/panels';
 import { ENROLLMENT_TREND, ADMISSIONS_FUNNEL, FUNNEL_COLORS, MOCK_AUDIT_LOGS } from '../data/mockData';
 import { OrganisationApprovalQueue } from '../components/organisations/OrganisationApprovalQueue';
+import { actorLabel, listAuditRecords, type AuditRecord } from '../lib/auditAdmin';
 
 const ENROLLMENT_SERIES = [
   { key: 'academics', name: 'Academic' },
@@ -69,6 +70,16 @@ const Up: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const getGreeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening');
 
+/** The activity row's time: the clock time for today, else the day ("6 Nov"), in the viewer's time zone. */
+export function activityTime(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '–';
+  return d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 export const DashboardPage: React.FC = () => {
   const org = useOrganisation();
   const { session, preview, signOut } = useAuth();
@@ -82,6 +93,21 @@ export const DashboardPage: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   const [showMore, setShowMore] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  // Recent Activity: the five newest audit records (GET /audit/records, as the Audit page reads them: the
+  // organisation's own trail for an organisation admin, the platform's actions for a super admin). Preview keeps samples.
+  const [activity, setActivity] = useState<{ records: AuditRecord[] | null; failed: boolean }>({ records: null, failed: false });
+
+  useEffect(() => {
+    if (preview || !session) return;
+    let live = true;
+    setActivity({ records: null, failed: false });
+    listAuditRecords()
+      .then((page) => live && setActivity({ records: page.items.slice(0, 5), failed: false }))
+      .catch(() => live && setActivity({ records: null, failed: true }));
+    return () => {
+      live = false;
+    };
+  }, [preview, session, refreshKey]);
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -317,17 +343,32 @@ export const DashboardPage: React.FC = () => {
         <UpcomingPanel items={upcoming} className="eos-lift" />
       </div>
 
-      <ActivityPanel
-        items={MOCK_AUDIT_LOGS.slice(0, 5).map((l) => ({
-          id: l.id,
-          time: l.timestamp,
-          title: l.action,
-          meta: `${l.user} · ${roleTitle(l.role)}`,
-          status: l.status,
-          tone: activityToneForRole(l.role)
-        }))}
-        action={<PanelLink onClick={() => navigate('/audit-logs')}>View all</PanelLink>}
-      />
+      {preview ? (
+        <ActivityPanel
+          items={MOCK_AUDIT_LOGS.slice(0, 5).map((l) => ({
+            id: l.id,
+            time: l.timestamp,
+            title: l.action,
+            meta: `${l.user} · ${roleTitle(l.role)}`,
+            status: l.status,
+            tone: activityToneForRole(l.role)
+          }))}
+          action={<PanelLink onClick={() => navigate('/audit-logs')}>View all</PanelLink>}
+        />
+      ) : (
+        <ActivityPanel
+          sample={false}
+          subtitle={superAdmin ? 'Platform actions: approvals, impersonation, cross-organisation reads' : 'The newest changes in your organisation'}
+          items={(activity.records ?? []).map((r) => ({
+            id: r.id,
+            time: activityTime(r.occurred_at),
+            title: r.summary || r.action,
+            meta: `${actorLabel(r)} · ${r.module}`
+          }))}
+          emptyText={activity.records === null ? (activity.failed ? 'Recent activity is not available right now.' : 'Loading recent activity…') : 'No activity yet.'}
+          action={<PanelLink onClick={() => navigate('/audit-logs')}>View all</PanelLink>}
+        />
+      )}
     </div>
   );
 };
