@@ -4,6 +4,7 @@ role: research-lead
 title: "Research Lead"
 module_roles:
   - projects-coordinator
+  - projects-guide
   - field-training-viewer
 widgets:
   - projects.active

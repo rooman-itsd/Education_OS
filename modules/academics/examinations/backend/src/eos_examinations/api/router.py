@@ -11,7 +11,7 @@ getGradingScheme, replaceGradingScheme, setDefaultGradingScheme, listAssessmentS
 getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExamCycles, createExamCycle, getExamCycle,
 updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
 getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
-cancelExamSession."""
+cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..application import access as k
+from ..application import duties as dty
 from ..application import schedule as sch
 from ..application import service as svc
 from ..application.access import Actor
@@ -264,3 +265,58 @@ def cancel_exam_session(
     db: Session = Depends(get_db),
 ):
     return _run(sch.cancel_exam_session, db, a, exam_session_id, body)
+
+
+# ---------------------------------------------------------------- duties
+
+
+@router.get("/duties")
+def list_exam_duties(
+    exam_cycle_id: str | None = None,
+    staff_id: str | None = None,
+    duty_type: str | None = None,
+    exam_session_id: str | None = None,
+    exam_paper_id: str | None = None,
+    status: str | None = None,
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    a: Actor = Depends(require(k.DUTY_READ_DEPARTMENT, k.DUTY_READ_ALL)),
+    db: Session = Depends(get_db),
+):
+    return _run(
+        dty.list_exam_duties,
+        db,
+        a,
+        exam_cycle_id,
+        staff_id,
+        duty_type,
+        exam_session_id,
+        exam_paper_id,
+        status,
+        limit,
+        offset,
+    )
+
+
+@router.post("/duties", status_code=201)
+def assign_exam_duty(body: dict = Body(...), a: Actor = Depends(require(k.DUTY_ASSIGN)), db: Session = Depends(get_db)):
+    return _run(dty.assign_exam_duty, db, a, body)
+
+
+@router.post("/duties/{exam_duty_id}/cancel")
+def cancel_exam_duty(
+    exam_duty_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.DUTY_ASSIGN)),
+    db: Session = Depends(get_db),
+):
+    return _run(dty.cancel_exam_duty, db, a, exam_duty_id, body)
+
+
+@router.get("/me/duties")
+def list_my_duties(
+    include_past: str | None = None,
+    a: Actor = Depends(require(k.DUTY_READ_OWN)),
+    db: Session = Depends(get_db),
+):
+    return _run(dty.list_my_duties, db, a, include_past)

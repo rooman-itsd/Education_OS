@@ -7,7 +7,7 @@ module_roles:
   - sports-nutrition-health-athlete
   - tournament-events-athlete
 widgets:
-  - athlete-performance.training-schedule
+  - training-video-analysis.training-schedule
   - athlete-performance.performance-trend
   - sports-nutrition-health.nutrition-plan
   - tournament-events.upcoming

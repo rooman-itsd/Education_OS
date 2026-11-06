@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/iqac-accreditation`) and
+  `apps/frontend/config/modules.enabled.yaml` (`iqac-accreditation.action-items` on the Governance dashboard).
 - Module scaffolded.
 - Contracts proposed: frameworks and metrics, cycles, metric assignments and responses with link or reference evidence,
   review, action items; `GET /stats/action-items` behind the Governance widget `iqac-accreditation.action-items`; two

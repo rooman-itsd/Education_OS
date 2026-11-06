@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Searchable for platform/search: `contracts/searchable.yaml` (type `article`; `article.published` upserts, `article.archived` deletes) and a document provider on the `eos.search_documents` entry point. Indexes the title, body, slug and category of published articles; staff-only articles are readable only with `knowledge-base:article:read-internal`. Drafts and archived articles are never indexed.
 - Module scaffolded.
 - Contracts proposed: categories; articles of type article, FAQ and how-to with `everyone` and `staff` audiences;
   drafts and revisions with history and rollback; review, publish, archive and restore; browse and search
