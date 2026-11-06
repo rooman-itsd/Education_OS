@@ -20,10 +20,10 @@ def tenants(monkeypatch):
     seen = []
     real = registry._run
 
-    def run(fn, args, timeout_s):
+    def run(fn, args, timeout_s, kwargs=None):
         ctx = args[0]
         seen.append((getattr(fn, "__name__", "?"), ctx.organisation_id, get_current_organisation(), is_bypass()))
-        return real(fn, args, timeout_s)
+        return real(fn, args, timeout_s, kwargs)
 
     monkeypatch.setattr(registry, "_run", run)
     return seen

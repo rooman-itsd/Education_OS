@@ -4,10 +4,13 @@ Adapters are found on the `eos.integration_adapters` entry-point group (contract
 and never imported by name: the hub depends on the port, never on a vendor (integrations/README.md, "Swap rule").
 
 Calling convention (README, "Writing an adapter"). The entry point loads an adapter object, or a zero-argument
-factory (a class or a function) that returns one. The adapter has `describe()` and one method per operation of
-adapter.yaml and of each port it implements, named exactly as the contract names it, called as
-`method(context, input)` (or `method(context)` when it takes no input). An adapter may instead offer one dispatcher,
-`invoke(context, operation, input)`, for its port operations; `context.port` says which port. Every call returns a
+factory (a class or a function) that returns one. The adapter has `describe()` and, for each operation of
+adapter.yaml and of each port it implements, either
+- a method named exactly as the contract names it, called as `method(context, input)`, as `method(context)` when it
+  takes no input, or as `method(context, **input)` when it takes the input's fields as keyword arguments; or
+- one dispatcher, `invoke`, called for every operation it has no method for: `invoke(context, operation, input)`, or
+  `invoke(operation, context, input)` when its first parameter is named `operation`. `context.port` says which port.
+`context` is a mapping (and reads as attributes too), so an adapter may validate it as a dict. Every call returns a
 result as adapter.yaml defines it: a mapping (or an object) with `output`, or `error` {code, retry_after_s, detail,
 provider_code}, and optionally `provider_reference`. A bare mapping without either key is taken as the output.
 
@@ -21,7 +24,7 @@ import inspect
 import logging
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
@@ -230,9 +233,10 @@ def reset_cache() -> None:
 
 
 @dataclass
-class AdapterContext:
-    """What the hub passes to every operation (adapter.yaml, "context"). Reads as attributes or as a mapping. The
-    secrets are resolved just before the call, live for that call only and are kept out of repr()."""
+class AdapterContext(Mapping):
+    """What the hub passes to every operation (adapter.yaml, "context"). Reads as attributes, and is a Mapping of the
+    same fields, so `dict(ctx)` and a pydantic model's validation take it as is. The secrets are resolved just before
+    the call, live for that call only and are kept out of repr()."""
 
     organisation_id: str | None
     connection_id: str | None
@@ -253,11 +257,13 @@ class AdapterContext:
             raise KeyError(key)
         return getattr(self, key)
 
-    def get(self, key: str, default=None):
-        return getattr(self, key, default) if key in self.__dataclass_fields__ else default
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.__dataclass_fields__)
 
-    def keys(self):
-        return self.__dataclass_fields__.keys()
+    def __len__(self) -> int:
+        return len(self.__dataclass_fields__)
+
+    __hash__ = None  # mutable, compared by value
 
 
 @dataclass
@@ -323,28 +329,50 @@ def _method(impl, name: str):
     return fn if callable(fn) else None
 
 
-def _takes_input(fn) -> bool:
+def _params(fn) -> list[inspect.Parameter] | None:
     try:
-        params = [
-            p
-            for p in inspect.signature(fn).parameters.values()
-            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD, p.VAR_POSITIONAL)
-        ]
+        return list(inspect.signature(fn).parameters.values())
     except (TypeError, ValueError):
-        return True
-    return len(params) >= 2 or any(p.kind == p.VAR_POSITIONAL for p in params)
+        return None
+
+
+def _method_args(fn, ctx: AdapterContext, payload: dict) -> tuple[tuple, dict] | None:
+    """How to call `fn` for one operation: (ctx, input), (ctx,), or (ctx, **input) for a method that takes the
+    input's fields as keyword arguments. None when the input does not fit its keyword parameters."""
+    params = _params(fn)
+    if params is None:
+        return (ctx, payload), {}
+    positional = [p for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    if len(positional) >= 2 or any(p.kind == p.VAR_POSITIONAL for p in params):
+        return (ctx, payload), {}
+    keywords = [p for p in params if p.kind == p.KEYWORD_ONLY]
+    var_keyword = any(p.kind == p.VAR_KEYWORD for p in params)
+    if not keywords and not var_keyword:
+        return (ctx,), {}
+    if not var_keyword and any(k not in {p.name for p in keywords} for k in payload):
+        return None  # a field the operation does not take
+    missing = [p.name for p in keywords if p.default is p.empty and p.name not in payload]
+    if missing or not all(isinstance(k, str) for k in payload):
+        return None
+    return (ctx,), dict(payload)
+
+
+def _dispatcher_args(fn, operation: str, ctx: AdapterContext, payload: dict) -> tuple:
+    params = _params(fn) or []
+    if params and params[0].name == "operation":
+        return (operation, ctx, payload)
+    return (ctx, operation, payload)
 
 
 def has_operation(info: AdapterInfo, name: str, *, port_operation: bool = False) -> bool:
-    if port_operation and _method(info.impl, "invoke"):
-        return True
-    return _method(info.impl, name) is not None
+    return _method(info.impl, name) is not None or _method(info.impl, "invoke") is not None
 
 
-def _run(fn, args: tuple, timeout_s: float | None):
+def _run(fn, args: tuple, timeout_s: float | None, kwargs: dict | None = None):
+    kwargs = kwargs or {}
     if timeout_s is None:
-        return fn(*args)
-    return _POOL.submit(fn, *args).result(timeout=timeout_s)
+        return fn(*args, **kwargs)
+    return _POOL.submit(fn, *args, **kwargs).result(timeout=timeout_s)
 
 
 def call(
@@ -356,19 +384,24 @@ def call(
     timeout_s: float | None,
     port_operation: bool = False,
 ) -> Outcome:
-    """Call one operation and return a normalised Outcome. Never raises for anything the adapter does."""
+    """Call one operation and return a normalised Outcome. Never raises for anything the adapter does. The adapter's
+    method of that name is called when it has one, else its `invoke` dispatcher (`port_operation` is kept for the
+    callers' readability; both kinds of operation are found the same way)."""
     payload = payload or {}
     started = time.monotonic()
-    dispatcher = _method(info.impl, "invoke") if port_operation else None
-    fn = dispatcher or _method(info.impl, operation)
-    if fn is None:
-        return Outcome.failure("unsupported", f"adapter {info.adapter} does not offer {operation}")
-    if dispatcher is not None:
-        args: tuple = (ctx, operation, payload)
+    fn = _method(info.impl, operation)
+    kwargs: dict = {}
+    if fn is not None:
+        how = _method_args(fn, ctx, payload)
+        if how is None:
+            return Outcome.failure("invalid_request", f"the input does not fit {operation}")
+        args, kwargs = how
+    elif (dispatcher := _method(info.impl, "invoke")) is not None:
+        fn, args = dispatcher, _dispatcher_args(dispatcher, operation, ctx, payload)
     else:
-        args = (ctx, payload) if _takes_input(fn) else (ctx,)
+        return Outcome.failure("unsupported", f"adapter {info.adapter} does not offer {operation}")
     try:
-        raw = _run(fn, args, timeout_s)
+        raw = _run(fn, args, timeout_s, kwargs)
     except FutureTimeout:
         out = Outcome.failure("transport_unavailable", f"{operation} did not answer in time")
     except Exception as e:  # noqa: BLE001 - an adapter must never take the hub down; its text may hold data

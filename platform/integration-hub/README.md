@@ -83,9 +83,13 @@ and one request, no release. A mock connection may be enabled without credential
   names (`DIGILOCKER_CLIENT_SECRET`) or short ones prefixed with the adapter name (`client_secret` ->
   `DIGILOCKER_CLIENT_SECRET`); the super admin sees which are missing.
 - Every operation of adapter.yaml and of the ports is a method named as the contract names it, called as
-  `method(context, input)` or `method(context)` when it takes none. For port operations an adapter may instead offer
-  one dispatcher, `invoke(context, operation, input)`; `context.port` says which port.
-- `context` reads as attributes or as a mapping: `organisation_id`, `connection_id`, `provider`, `mode`, `settings`,
+  `method(context, input)`, `method(context)` when it takes none, or `method(context, **input)` when it takes the
+  input's fields as keyword arguments (a field it does not take, or a required one missing, is `invalid_request`).
+  An adapter may instead offer one dispatcher, `invoke`, which the hub calls for every operation it has no method
+  for: `invoke(context, operation, input)`, or `invoke(operation, context, input)` when its first parameter is named
+  `operation`; `context.port` says which port.
+- `context` is a mapping of these fields that also reads as attributes (so `dict(context)` or a pydantic model's
+  `model_validate(context)` takes it as is); it is the hub's own object, never the adapter's class: `organisation_id`, `connection_id`, `provider`, `mode`, `settings`,
   `secrets` (name -> value, for this call only), `account_link` (`{id, person_id, provider_subject}` or None),
   `delivery_id`, `attempt`, `idempotency_key`, `deadline`, `port`, `operation`. For an app-level callback
   (`/inbound/{adapter}`) the connection fields are None: verify with the adapter's platform credentials.
