@@ -28,6 +28,15 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   mismatched instructor assignment. The domain gains `plan_cancel_session`. No migration: the tables existed. Not
   built: automatic closing at the deadline (FR-11, needs a scheduler job) and class generation (time zone). Choices
   are listed in `docs/reviewer-decisions.md` section D.
+- Section membership from enrolment-registration (issue #325, answers PRD Q2 from its published contract): consumers of
+  `course-registration.confirmed`, `course-registration.withdrawn` and `section-allocation.changed`, registered with the
+  others and listed in `module.yaml`. Each event adds a fact to the new `registration_ref` (migration `tt_0003`, with
+  `organisation_id` and the forced `tenant_isolation` policy, and `section_member.registration_id`), and the
+  registration's `section_member` rows are rebuilt from those facts: in the confirmed section from the date of
+  `confirmed_at`, moved the day before `effective_on`, ended on the date of `withdrawn_at`. Idempotent on the envelope
+  id, order-independent, a repeated fact changes nothing, the latest name wins by `occurred_at`, and an event is applied
+  only in its own organisation. `person_id` is stored as `student_id`. Opening an attendance session now snapshots
+  real students.
 - Dashboard widgets (issue #325), exported from `frontend/src/widgets/index.ts` and enabled in
   `apps/frontend/config/modules.enabled.yaml`: `today` ("Today's classes", student layouts, `GET /me/schedule`),
   `attendance-summary` ("My attendance", student layouts, `GET /me/attendance-summary`), `today-classes` ("Teaching

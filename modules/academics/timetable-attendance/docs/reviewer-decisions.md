@@ -31,7 +31,7 @@ where he approved the PR and asked for these to be recorded. "Contract change" m
 | Open point | Owner | Effect on the code |
 |---|---|---|
 | Whether `faculty_id` (the person on `academic-management.faculty-assignment.*`) may be stored as the instructor (`instructor_id`). The rename is proposed in academic-management's PR #168; no record of Faizan's confirmation was found in the sources inspected | Faizan | **The `faculty-assignment.created` and `.ended` consumers are not implemented**, so `assignment_ref` is never filled by an event and a slot cannot name an instructor assignment outside tests |
-| Whether `student_id` is the `person_id` carried by the enrolment events (Praveen proposed it and asked for Faizan's confirmation under Q3) | Faizan | **The enrolment-registration consumers are not implemented**, so `section_member` is never filled |
+| Whether `student_id` is the `person_id` carried by the enrolment events (Praveen proposed it and asked for Faizan's confirmation under Q3) | Faizan | **Built on that assumption** at the lead's request (section E). enrolment-registration's `docs/integration-points.md` records `person_id` (the student-information Person id, agreed on issue #100) as the answer to Q3. Open still: `/me` reads the caller's identity user id as the `student_id`, so a student whose user id is not their person id sees nothing there |
 | How `offering.updated` and `course.*` are applied: they carry only `changed_fields`, not the new values | Shivani, with Faizan | Not consumed. A change to an offering's course code or title after creation is not reflected |
 | How a department is known (Q9) | Faizan | See A |
 
@@ -78,8 +78,27 @@ confirmation; none is hidden behind a flag.
 | Student history | covers every period when `academic_period_id` is omitted | A history has no natural "current"; the summary keeps the active-term default |
 | Department report average | the mean of the students' percentages, students with no counted class left out | The contract names it `average_percentage` |
 
-Not built: closing sessions automatically at the deadline (FR-11) needs a job under `eos.scheduler_jobs`, and the
-session snapshot is empty outside the tests until the enrolment-registration consumers exist (section B).
+Not built: closing sessions automatically at the deadline (FR-11) needs a job under `eos.scheduler_jobs`.
+
+## E. Section membership from enrolment-registration (for Praveen: PRD Q2)
+
+PRD Q2 (the enrolment-registration events for section allocation, with an effective date) is answered by that module's
+published `contracts/events.yaml`, which lists timetable-attendance as a consumer of all three. The consumers are built
+on it; please confirm the mapping:
+
+| Event | Effect on `section_member` |
+|---|---|
+| `course-registration.confirmed` | in `section_id` from the date of `confirmed_at` (read in the offset it carries) |
+| `section-allocation.changed` | `from_section_id` ends the day before `effective_on`; `to_section_id` starts on it |
+| `course-registration.withdrawn` | every membership of the registration ends on the date of `withdrawn_at` (inclusive) |
+
+Each event adds a fact to `registration_ref` (one row per `registration_id`), and the registration's memberships are
+rebuilt from all of its facts, so arrival order does not matter. A move received before its confirmation opens the new
+section at once; the confirmation adds the first section later. A repeated fact (a second confirmation or withdrawal,
+the same move twice) changes nothing, and the latest `student_name` wins by envelope `occurred_at`. A registration
+always has the same `person_id` and offering; an event naming others is refused. The confirmation's `section_id` is
+trusted over a move's `from_section_id`.
+
 
 ## Original submission (PR #459)
 
