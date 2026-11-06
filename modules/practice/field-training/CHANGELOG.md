@@ -39,3 +39,10 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/field-training`) and
   `apps/frontend/config/modules.enabled.yaml` (its five widgets on the trainee, supervisor and coordinator dashboards)
   (#339).
+- Review fix (#504, found by Madhumita): two requests for the same trainee on different openings could both pass the
+  overlap check, because the row locks on the openings do not cover it. Every overlap check now first takes a Postgres
+  transaction lock on the trainee (`pg_advisory_xact_lock`, the last lock a request takes, so it cannot deadlock);
+  SQLite needs none.
+- Contract: `openapi.yaml` lists the refusal codes `own_placement`, `placement_active`, `invalid_supervisor`,
+  `duplicate_supervisor` and `overlapping_placement` with their statuses and operations.
+- The backend declares `pydantic` and `PyJWT`, which it imports directly.

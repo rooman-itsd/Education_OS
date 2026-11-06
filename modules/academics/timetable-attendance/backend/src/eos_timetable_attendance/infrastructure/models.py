@@ -6,8 +6,9 @@ instructor_assignment_id (academic-management), department_id, instructor_id and
 strings.
 
 The `*_ref` tables and `section_member` are local read models of other modules' facts (PRD section 8). They are
-refreshed only from consumed events, which are not wired yet (PRD section 11, open questions Q1 and Q2); nothing in this
-module writes them otherwise."""
+refreshed only from consumed events (application/consumers.py): academic-management's term, offering and section events
+and enrolment-registration's registration events. `assignment_ref` has no consumer yet (the faculty-assignment identity
+mapping is unconfirmed). Nothing in this module writes them otherwise."""
 
 from __future__ import annotations
 
@@ -249,6 +250,7 @@ class SectionMember(Base, TenantMixin, TimestampMixin):
             "organisation_id", "section_id", "student_id", "allocated_from", name="uq_timetable_attendance_member"
         ),
         Index("ix_timetable_attendance_member_student", "organisation_id", "student_id"),
+        Index("ix_timetable_attendance_member_registration", "organisation_id", "registration_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -257,6 +259,34 @@ class SectionMember(Base, TenantMixin, TimestampMixin):
     student_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     allocated_from: Mapped[date] = mapped_column(Date)
     allocated_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The enrolment-registration registration this membership comes from (application/consumers.py rebuilds a
+    # registration's rows from its events); NULL for a row written some other way.
+    registration_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class RegistrationRef(Base, TenantMixin, TimestampMixin):
+    """Read model of one enrolment-registration course registration: the facts its events carried, from which the
+    registration's `section_member` rows are rebuilt (application/consumers.py). Events arrive unordered, so every
+    fact is optional until its event arrives: `confirmed_on` and `section_id` from `course-registration.confirmed`,
+    `withdrawn_on` from `course-registration.withdrawn`, and one entry of `moves` ({from, to, on}) per
+    `section-allocation.changed`. `student_id` is the events' `person_id` (PRD Q3, as enrolment-registration's
+    integration points record). `name_as_of` is the envelope time of the event that set `student_name`."""
+
+    __tablename__ = f"{PREFIX}registration_ref"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "registration_id", name="uq_timetable_attendance_registration_ref"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    registration_id: Mapped[str] = mapped_column(String(36))
+    student_id: Mapped[str] = mapped_column(String(36))
+    course_offering_id: Mapped[str] = mapped_column(String(36))
+    section_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    confirmed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    withdrawn_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    moves: Mapped[list] = mapped_column(JSON, default=list)
+    student_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    name_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ProcessedEvent(Base, TenantMixin, TimestampMixin):
@@ -311,6 +341,7 @@ TABLES = [
         SectionMember,
         TermRef,
         ProcessedEvent,
+        RegistrationRef,
         AuditEntry,
     )
 ]

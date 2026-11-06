@@ -41,3 +41,20 @@
 }
 .eos-exam__stages li[data-pending] { border-color: var(--eos-warning); background: var(--eos-warning-tint); }
 .eos-exam__stage-label { color: var(--eos-muted); font-size: 12px; }
+
+/* examinations.exam-duties */
+.eos-exam__duty {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--eos-border);
+}
+.eos-exam__duty:last-child { border-bottom: 0; }
+.eos-exam__duty .eos-exam__what strong { overflow-wrap: anywhere; }
+.eos-exam__status { font-size: 12px; color: var(--eos-muted); }
+.eos-exam__status[data-status="cancelled"] { color: var(--eos-danger); }
+@media (max-width: 600px) {
+  .eos-exam__duty { grid-template-columns: minmax(0, 1fr); }
+}

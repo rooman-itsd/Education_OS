@@ -129,5 +129,125 @@ def test_one_audit_client_token_records_once_even_when_replayed(org):
 
 
 def test_every_mutating_use_case_is_transactional():
-    for name in ("create_timetable", "update_timetable", "replace_slots"):
+    for name in ("create_timetable", "update_timetable", "replace_slots", "publish_timetable", "unpublish_timetable"):
         assert getattr(service, name).__wrapped__, name  # functools.wraps(transactional)
+
+
+# ---------------------------------------------------------------- publishing (classes are seeded rows: see
+# test_api_publication.py for why)
+
+
+def published(client, org, h):
+    """A published timetable of a known term with two future classes."""
+    from conftest import deliver, term_created
+    from eos_timetable_attendance.application.consumers import TERM_CREATED
+    from test_api_publication import seed_class, when
+
+    ids = org.academic()
+    deliver(org.id, TERM_CREATED, term_created(ids["period"]))
+    t = make_timetable(client, h, ids["period"], slots=[slot(ids)])
+    ok(client.post(f"{BASE}/timetables/{t['id']}/publish", headers=h))
+    classes = [seed_class(org, t["id"], ids, when(days=7)), seed_class(org, t["id"], ids, when(days=14))]
+    return t, ids, classes
+
+
+def state(org, timetable_id: str) -> tuple:
+    from test_api_publication import class_states, stored
+
+    return (
+        stored(org, timetable_id),
+        class_states(org),
+        len(audit_entries(org.id)),
+        len(outbox("timetable-attendance.timetable.published", org.id)),
+        len(outbox("timetable-attendance.timetable.unpublished", org.id)),
+        len(outbox("timetable-attendance.scheduled-class.cancelled", org.id)),
+    )
+
+
+def draft_ready(client, org, h):
+    from conftest import deliver, term_created
+    from eos_timetable_attendance.application.consumers import TERM_CREATED
+
+    ids = org.academic()
+    deliver(org.id, TERM_CREATED, term_created(ids["period"]))
+    return make_timetable(client, h, ids["period"], slots=[slot(ids)])
+
+
+@pytest.mark.parametrize("failing", ["_audit", "_publish"])
+def test_a_failing_publication_leaves_the_timetable_a_draft_with_no_audit_or_event(client, org, monkeypatch, failing):
+    _, h = org.user(ADMIN)
+    t = draft_ready(client, org, h)
+    before = state(org, t["id"])
+
+    def fail(*args, **kwargs):
+        raise InjectedError(f"{failing} down")
+
+    monkeypatch.setattr(service, failing, fail)
+    with session_for(org) as db, pytest.raises(InjectedError):
+        service.publish_timetable(db, actor(org), t["id"])
+    monkeypatch.undo()
+    assert state(org, t["id"]) == before
+    assert before[0] == ("draft", 0)
+
+
+def test_a_failing_commit_leaves_the_publication_unrecorded(client, org, monkeypatch):
+    _, h = org.user(ADMIN)
+    t = draft_ready(client, org, h)
+    before = state(org, t["id"])
+    with session_for(org) as db:
+        monkeypatch.setattr(db, "commit", lambda: (_ for _ in ()).throw(InjectedError("commit failed")))
+        with pytest.raises(InjectedError):
+            service.publish_timetable(db, actor(org), t["id"])
+    assert state(org, t["id"]) == before
+
+
+def test_a_failure_on_the_second_class_undoes_the_first_cancellation_and_the_unpublication(client, org, monkeypatch):
+    """The timetable's status, every cancelled class, their audit entries and their events stand or fall together."""
+    _, h = org.user(ADMIN)
+    t, _, _ = published(client, org, h)
+    before = state(org, t["id"])
+    real = service._audit
+    calls = {"classes": 0}
+
+    def fail_on_the_second_class(db, actor_, action, entity_type, *args, **kwargs):
+        if action == "scheduled-class.cancelled":
+            calls["classes"] += 1
+            if calls["classes"] == 2:
+                raise InjectedError("audit store down")
+        return real(db, actor_, action, entity_type, *args, **kwargs)
+
+    monkeypatch.setattr(service, "_audit", fail_on_the_second_class)
+    with session_for(org) as db, pytest.raises(InjectedError):
+        service.unpublish_timetable(db, actor(org), t["id"], {"reason": "re-plan"})
+    monkeypatch.undo()
+    assert calls["classes"] == 2
+    after = state(org, t["id"])
+    assert after == before
+    assert before[0] == ("published", 1) and all(s == ("scheduled", None) for s in before[1].values())
+
+
+@pytest.mark.parametrize("failing", ["_audit", "_publish"])
+def test_a_failing_unpublication_keeps_it_published_with_its_classes(client, org, monkeypatch, failing):
+    _, h = org.user(ADMIN)
+    t, _, _ = published(client, org, h)
+    before = state(org, t["id"])
+
+    def fail(*args, **kwargs):
+        raise InjectedError(f"{failing} down")
+
+    monkeypatch.setattr(service, failing, fail)
+    with session_for(org) as db, pytest.raises(InjectedError):
+        service.unpublish_timetable(db, actor(org), t["id"], None)
+    monkeypatch.undo()
+    assert state(org, t["id"]) == before
+
+
+def test_a_failing_commit_leaves_the_unpublication_unrecorded(client, org, monkeypatch):
+    _, h = org.user(ADMIN)
+    t, _, _ = published(client, org, h)
+    before = state(org, t["id"])
+    with session_for(org) as db:
+        monkeypatch.setattr(db, "commit", lambda: (_ for _ in ()).throw(InjectedError("commit failed")))
+        with pytest.raises(InjectedError):
+            service.unpublish_timetable(db, actor(org), t["id"], {})
+    assert state(org, t["id"]) == before
