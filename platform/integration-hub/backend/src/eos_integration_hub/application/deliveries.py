@@ -18,6 +18,7 @@ from datetime import timedelta
 from eos_core.db import SessionLocal, scoped
 from eos_core.tenant import get_current_organisation, organisation_scope, platform_scope
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..domain import port_events, rules
@@ -229,6 +230,15 @@ def enqueue(
     return d
 
 
+def _by_key(db: Session, caller_module: str, idempotency_key: str) -> Delivery | None:
+    """The delivery holding this key for this module in the current organisation (at most one: unique index)."""
+    return db.scalar(
+        scoped(db, select(Delivery), Delivery).where(
+            Delivery.caller_module == caller_module, Delivery.idempotency_key == idempotency_key
+        )
+    )
+
+
 def invoke(
     *,
     port: str,
@@ -247,7 +257,8 @@ def invoke(
     {code, retryable, retry_after_s, detail} with a code from contracts/ports/adapter.yaml. Never raises for a business
     failure: a module handles not_configured the same way whoever the provider is. The same idempotency key within
     INTEGRATION_HUB_IDEMPOTENCY_WINDOW_DAYS returns the first delivery (replayed: true, output null) and never calls the
-    provider again."""
+    provider again. The key is unique per organisation and calling module in the table, so two calls racing with one
+    key insert one delivery: the loser gets the winner's, replayed."""
     org = organisation_id or get_current_organisation()
     if not org:
         return _error("invalid_request", "no organisation: call within the request's tenant or pass organisation_id")
@@ -274,19 +285,13 @@ def invoke(
     config = HubConfig.from_env()
     with organisation_scope(org), SessionLocal() as db:
         window = clock() - timedelta(days=config.idempotency_window_days)
-        first = db.scalar(
-            scoped(db, select(Delivery), Delivery)
-            .where(
-                Delivery.direction == "outbound",
-                Delivery.caller_module == caller_module,
-                Delivery.idempotency_key == idempotency_key,
-                Delivery.created_at >= window,
-            )
-            .order_by(Delivery.created_at)
-            .limit(1)
-        )
+        first = _by_key(db, caller_module, idempotency_key)
         if first is not None:
-            return _summary(first, replayed=True)
+            if aware(first.created_at) >= window:
+                return _summary(first, replayed=True)
+            # Past the window the key is free again: the old delivery keeps its log row, without the key.
+            first.idempotency_key = None
+            db.flush()
         q = scoped(db, select(Connection), Connection).where(Connection.port == port, Connection.enabled.is_(True))
         if provider:
             q = q.where(Connection.provider == provider)
@@ -321,6 +326,13 @@ def invoke(
         except SecretStoreError:
             db.rollback()
             return _error("not_configured", "the secret store is not available")
+        except IntegrityError:
+            # The unique key: another invoke with the same key inserted first. Its delivery is the answer.
+            db.rollback()
+            first = _by_key(db, caller_module, idempotency_key)
+            if first is None:
+                return _error("transport_unavailable", "the delivery could not be recorded; try again")
+            return _summary(first, replayed=True)
         db.commit()
         if not sync:
             return _summary(d)

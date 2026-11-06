@@ -397,3 +397,41 @@ def test_sweep_leaves_rows_of_a_missing_adapter_failed_not_crashed(client, org, 
     assert row.last_error_code == "not_configured"
     assert row.status == "failed"
     assert row.next_attempt_at is None or row.next_attempt_at > (row.created_at - timedelta(days=1))
+
+
+def test_the_idempotency_key_is_unique_in_the_table():
+    [ix] = [i for i in Delivery.__table__.indexes if i.name == "ix_integration_hub_delivery_idempotency"]
+    assert ix.unique and [c.name for c in ix.columns] == ["organisation_id", "caller_module", "idempotency_key"]
+
+
+def test_two_invokes_racing_with_one_key_insert_one_delivery(client, org, adapter, monkeypatch):
+    """Both calls find no delivery for the key before either inserts: the unique index lets one insert, and the
+    other answers with the winner's delivery, replayed, without calling the provider."""
+    import threading
+
+    enabled_cert(client, org)
+    barrier = threading.Barrier(2)
+    real = deliveries.enqueue
+
+    def enqueue_after_both_checked(*a, **kw):
+        try:
+            barrier.wait(timeout=2)
+        except threading.BrokenBarrierError:
+            pass
+        return real(*a, **kw)
+
+    monkeypatch.setattr(deliveries, "enqueue", enqueue_after_both_checked)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(_issue(org, key="race-1"))) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    monkeypatch.setattr(deliveries, "enqueue", real)
+    assert len(results) == 2 and len({r["delivery_id"] for r in results}) == 1, results
+    assert sorted(r["replayed"] for r in results) == [False, True]
+    _sweep()
+    assert len([x for x in adapter.CALLS if x[0] == "issue"]) == 1
+    with SessionLocal() as db, platform_scope():
+        rows = db.query(Delivery).filter(Delivery.organisation_id == org.id, Delivery.idempotency_key == "exam:race-1")
+        assert rows.count() == 1

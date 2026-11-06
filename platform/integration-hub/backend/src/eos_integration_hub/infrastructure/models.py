@@ -133,7 +133,14 @@ class Delivery(Base, TenantMixin):
     __table_args__ = (
         Index("ix_integration_hub_delivery_listing", "organisation_id", "created_at"),
         Index("ix_integration_hub_delivery_due", "status", "next_attempt_at"),
-        Index("ix_integration_hub_delivery_idempotency", "organisation_id", "caller_module", "idempotency_key"),
+        # One delivery per key and calling module: two racing invokes cannot both insert (application/deliveries.py).
+        Index(
+            "ix_integration_hub_delivery_idempotency",
+            "organisation_id",
+            "caller_module",
+            "idempotency_key",
+            unique=True,
+        ),
         Index("ix_integration_hub_delivery_subject", "organisation_id", "port", "subject_key"),
         Index("ix_integration_hub_delivery_object", "organisation_id", "port", "object_id"),
     )

@@ -220,10 +220,12 @@ def upgrade() -> None:
         "ix_integration_hub_delivery_listing", "integration_hub_delivery", ["organisation_id", "created_at"]
     )
     op.create_index("ix_integration_hub_delivery_due", "integration_hub_delivery", ["status", "next_attempt_at"])
+    # unique: invoke inserts and, on a conflict, returns the delivery that won (no check-then-insert race)
     op.create_index(
         "ix_integration_hub_delivery_idempotency",
         "integration_hub_delivery",
         ["organisation_id", "caller_module", "idempotency_key"],
+        unique=True,
     )
     op.create_index(
         "ix_integration_hub_delivery_subject", "integration_hub_delivery", ["organisation_id", "port", "subject_key"]

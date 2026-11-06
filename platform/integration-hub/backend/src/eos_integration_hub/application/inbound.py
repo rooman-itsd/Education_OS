@@ -590,16 +590,20 @@ def _follow_up(db: Session, c: Connection, d: Delivery, port: str, kind: str, da
                 Delivery.idempotency_key == f"integration-hub:attendance:{key}",
             )
         ):
-            deliveries.enqueue(
-                db,
-                c,
-                operation="fetch_attendance",
-                payload={"meeting_key": key},
-                sync=False,
-                caller_module=known.get("caller_module") or "integration-hub",
-                caller_reference=known.get("caller_reference"),
-                idempotency_key=f"integration-hub:attendance:{key}",
-            )
+            try:
+                with db.begin_nested():  # a concurrent callback for the same meeting may have queued it first
+                    deliveries.enqueue(
+                        db,
+                        c,
+                        operation="fetch_attendance",
+                        payload={"meeting_key": key},
+                        sync=False,
+                        caller_module=known.get("caller_module") or "integration-hub",
+                        caller_reference=known.get("caller_reference"),
+                        idempotency_key=f"integration-hub:attendance:{key}",
+                    )
+            except IntegrityError:
+                pass
     elif port == "wearable-data" and kind == "data_available":
         link = _link_by_subject(db, c, data)
         if link is not None:
