@@ -30,3 +30,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Frontend: widgets `session-plan` (Coach) and `training-schedule` (Athlete), moved here from athlete-performance, which has
   no plans or sessions: the coming scheduled sessions, earliest first, from `GET /sessions` (#330). The coach and athlete
   layouts and journeys name the new ids.
+- Frontend: the coach's `session-plan` no longer calls the organisation's sessions "your" sessions: `GET /sessions`
+  narrows only an athlete, so a coach sees every coach's sessions.

@@ -29,7 +29,8 @@ export const widgets: DashboardWidget[] = [
     permission: "training-video-analysis:session:read",
     kind: "list",
     size: "2x1",
-    subtitle: "Your coming training sessions",
+    // Staff see every session in the organisation (GET /sessions narrows only an athlete), not only their own.
+    subtitle: "Coming training sessions in your organisation",
     component: SessionPlan,
   },
   {
