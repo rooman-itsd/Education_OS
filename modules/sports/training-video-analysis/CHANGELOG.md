@@ -25,3 +25,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Config: `TRAINING_VIDEO_ANALYSIS_TIMEZONE`.
 - Tests: domain, API, athlete self-scope, consumers, cross-tenant leak, migration and contract-drift tests.
 - API: `GET /videos?annotated=false` lists videos with no annotation yet (waiting for review); `true` the reviewed ones.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/training-video-analysis`) and
+  `apps/frontend/config/modules.enabled.yaml`, which registers its widget `reviews-pending` (#330).

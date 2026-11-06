@@ -32,6 +32,7 @@ modules:
   - sports/athlete-performance
   - sports/sports-nutrition-health
   - sports/tournament-events
+  - sports/training-video-analysis
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
