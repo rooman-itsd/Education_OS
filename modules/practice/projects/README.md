@@ -2,7 +2,7 @@
 
 **Domain:** practice
 **Kind:** feature
-**Status:** in-progress (contract 0.1.0; backend, migrations, tests and four widgets built; not yet listed in the apps)
+**Status:** in-progress (contract 0.1.0; backend, migrations, tests and four widgets built; enabled in `apps/backend` and `apps/frontend`)
 
 Projects with milestones, teams and reviews: capstone, film, live business, research, artwork.
 
@@ -43,8 +43,9 @@ What it needs from the host repo:
 - `packages/ui-kit` for the widgets. No platform service is called directly yet: events go to the outbox, submission
   files are uploaded through platform/documents and only their ids are stored here, and the daily job
   (`backend/src/eos_projects/application/jobs.py`, `run_daily`: overdue milestones) waits for `platform/scheduler`.
-- The API router is `eos_projects.api.router:router`, mounted under `/api/v1/projects` by the module loader from
-  `apps/backend/config/modules.enabled.yaml`. The widgets are registered from `apps/frontend/config/modules.enabled.yaml`.
+- The API router is `eos_projects.api.router:router`. `practice/projects` is listed in
+  `apps/backend/config/modules.enabled.yaml`, which mounts it under `/api/v1/projects` behind the entitlement gate, and
+  in `apps/frontend/config/modules.enabled.yaml`, which registers its four widgets on the dashboards.
 
 ## Run the checks
 ```

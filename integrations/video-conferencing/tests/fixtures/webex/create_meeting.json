@@ -1,0 +1,4 @@
+{"id": "a8e3f2c0d1b24c6e9f7a5b3c1d2e4f60", "meetingNumber": "2551 234 5678", "title": "Physics XI A: Optics", "meetingType": "scheduledMeeting",
+ "state": "scheduled", "start": "2026-11-09T04:30:00Z", "end": "2026-11-09T05:15:00Z", "timezone": "Asia/Kolkata", "password": "pW4rD9",
+ "webLink": "https://college.webex.example/college/j.php?MTID=m123", "hostKey": "123456", "hostEmail": "teacher@college.example.com",
+ "telephony": {"accessCode": "2551 234 5678"}}

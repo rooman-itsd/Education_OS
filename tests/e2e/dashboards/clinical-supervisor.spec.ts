@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { OPENING, REQUIRED_HOURS, seedPlacement, SITE } from "./field-training-data";
 import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -14,7 +15,11 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (field-training #339, and the inherited timetable-attendance, lms and examinations ones). Entries whose module is already merged carry that widget's texts, so the journey starts checking them the
  *   day the module is enabled;
- * - no data journeys yet: facility-booking.bookings-today lists bookings of the resources the viewer approves, which needs the supervisor set as a resource's approver (facility-staff.spec.ts covers the widget with a booking); the field-training and skill-progress ones wait for their data.
+ * - data journey: a medical student the hospital coordinator places and starts, whose log entry waits for the supervisor,
+ *   shows in `field-training.trainees-to-assess` ("1 entry to verify"), and the opening with a seat left in
+ *   `field-training.placements-open`; it skips until field-training is enabled. No data journey for
+ *   facility-booking.bookings-today, which lists bookings of the resources the viewer approves and needs the supervisor
+ *   set as a resource's approver (facility-staff.spec.ts covers the widget with a booking), or for skill-progress.
  *
  * facilities and practice are not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves
  * the organisation to Standard first. Loading states are covered by the modules' unit tests, not here.
@@ -81,16 +86,25 @@ const WIDGETS: LayoutWidget[] = [
   },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
+let admin: DashboardUser;
 let user: DashboardUser;
+/** The hospital coordinator who sets up the placement, and the medical student on it. */
+let coordinator: DashboardUser;
+let trainee: DashboardUser;
 /** Per shipped widget id: what its GET answered the clinical supervisor. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "medical-college", role: "clinical-supervisor" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "medical-college" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "clinical-supervisor");
+  coordinator = await addUser(request, admin, "hospital-coordinator");
+  trainee = await addUser(request, admin, "medical-student");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -124,4 +138,30 @@ test.describe("clinical-supervisor widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with field-training data", () => {
+  test("field-training.trainees-to-assess and placements-open show a trainee with an entry to verify and the opening's free seat", async ({ page, request }) => {
+    for (const id of ["field-training.trainees-to-assess", "field-training.placements-open"]) {
+      test.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test.skip(!ready(id), `the field-training API answered ${status[id]} to the clinical-supervisor role`);
+    }
+    // The coordinator places the medical student on an opening with two seats and starts it; the student logs today's
+    // hours and the entry waits for the supervisor named on the site and the opening (the clinical supervisor).
+    await seedPlacement(request, { coordinator, supervisor: user, trainee }, { start: true, log: true });
+    await signIn(page, user);
+
+    const toAssess = widget(page, "Trainees to assess");
+    await expect(toAssess.getByText("Nothing to assess right now")).toHaveCount(0);
+    // No identity lookup gives the module the trainee's name yet, so the row is titled "Trainee".
+    const row = toAssess.getByRole("list", { name: "Trainees to assess" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(row).toContainText(SITE);
+    await expect(row).toContainText("1 entry to verify");
+
+    const open = widget(page, "Open placements");
+    await expect(open.getByText("No open placements with seats")).toHaveCount(0);
+    const opening = open.getByRole("list", { name: "Open placements" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(opening).toContainText(SITE);
+    await expect(opening).toContainText("1 seat left"); // two seats, one taken by the placement
+  });
 });

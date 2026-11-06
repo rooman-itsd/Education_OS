@@ -1,0 +1,74 @@
+{
+  "learner": {
+    "person_id": "11111111-2222-4333-8444-555555555555",
+    "name": "Asha Nair",
+    "date_of_birth": "2003-04-12",
+    "apaar_id": "123456789012",
+    "partner_student_id": "STU-2024-0042",
+    "email": "asha.nair@example.edu"
+  },
+  "issuer": {
+    "institution_name": "Sample Institute of Higher Education",
+    "institution_code": "C-12345",
+    "country": "IN",
+    "url": "https://www.example.edu"
+  },
+  "programme": {
+    "code": "BSC-CS",
+    "name": "B.Sc. Computer Science",
+    "level": "bachelor",
+    "eqf_level": 6
+  },
+  "entries": [
+    {
+      "course_code": "CS101",
+      "title": "Programming Fundamentals",
+      "credits": 4,
+      "credit_system": "indian_credit",
+      "grade": "A",
+      "grade_scheme": "10-point",
+      "grade_point": 9,
+      "term": "Semester 1, 2024",
+      "started_on": "2024-07-15",
+      "completed_on": "2024-12-10",
+      "status": "passed"
+    },
+    {
+      "course_code": "MA102",
+      "title": "Discrete Mathematics",
+      "credits": 3.5,
+      "credit_system": "indian_credit",
+      "grade": "B+",
+      "grade_scheme": "10-point",
+      "grade_point": 8,
+      "term": "Semester 1, 2024",
+      "started_on": "2024-07-15",
+      "completed_on": "2024-12-10",
+      "status": "passed"
+    },
+    {
+      "course_code": "PH103",
+      "title": "Physics for Computing",
+      "credits": 3,
+      "credit_system": "indian_credit",
+      "grade": "F",
+      "grade_scheme": "10-point",
+      "grade_point": 0,
+      "term": "Semester 1, 2024",
+      "status": "failed"
+    },
+    {
+      "course_code": "CS201",
+      "title": "Data Structures",
+      "credits": 4,
+      "credit_system": "indian_credit",
+      "term": "Semester 3, 2025",
+      "status": "in_progress"
+    }
+  ],
+  "totals": {
+    "credits_earned": 7.5,
+    "cgpa": 8.5
+  },
+  "issued_on": "2025-11-01"
+}

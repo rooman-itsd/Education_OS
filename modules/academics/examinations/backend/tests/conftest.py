@@ -175,3 +175,39 @@ if eos_core is not None:
             return [
                 r.name for r in db.scalars(select(OutboxEvent).where(OutboxEvent.organisation_id == organisation_id))
             ]
+
+    DEFAULT_STARTS = "2026-11-25T09:00:00+00:00"
+    DEFAULT_ENDS = "2026-11-25T12:00:00+00:00"
+
+    def make_papers(client, headers, cycle_id: str, offering_id: str | None = None, codes=("INT", "END"), **over):
+        """Papers for an offering in a cycle, through the API: the offering gets an active scheme with an INT component
+        (40) and an END component (60) first, unless `offering_id` already has one. Returns the created papers."""
+        offering = offering_id or uid()
+        have = ok(client.get(f"{BASE}/assessment-schemes?course_offering_id={offering}&status=active", headers=headers))
+        if not have["total"]:
+            scheme = make_assessment(client, headers, offering, [component("INT", 40), component("END", 60)])
+            ok(client.post(f"{BASE}/assessment-schemes/{scheme['id']}/activate", headers=headers))
+        body = {"exam_cycle_id": cycle_id, "course_offering_id": offering, "component_codes": list(codes), **over}
+        return ok(client.post(f"{BASE}/papers", json=body, headers=headers), 201)["items"]
+
+    def session_body(cycle_id: str, paper_ids: list[str], **over) -> dict:
+        body = {
+            "exam_cycle_id": cycle_id,
+            "starts_at": DEFAULT_STARTS,
+            "ends_at": DEFAULT_ENDS,
+            "exam_paper_ids": paper_ids,
+            "venue_label": "Hall A",
+            "invigilators_required": 2,
+        }
+        return {**body, **over}
+
+    def make_session(client, headers, cycle_id: str, paper_ids: list[str], **over) -> dict:
+        return ok(client.post(f"{BASE}/sessions", json=session_body(cycle_id, paper_ids, **over), headers=headers), 201)
+
+    def set_row(organisation_id: str, model, row_id: str, **values) -> None:
+        """Put a row in a state no operation of this slice reaches (published results, marks entry, completed)."""
+        with session_for(organisation_id) as db:
+            row = db.get(model, row_id)
+            for key, value in values.items():
+                setattr(row, key, value)
+            db.commit()

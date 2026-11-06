@@ -68,6 +68,8 @@ CONFLICTS = {
     "default_grading_scheme": ("default_changed", "another request changed the default grading scheme; try again"),
     "active_assessment_scheme": ("active_scheme_changed", "another request changed the active scheme; try again"),
     "assessment_scheme_version": ("version_taken", "another request created a scheme version; try again"),
+    "paper_in_session": ("paper_already_scheduled", "another request scheduled a paper of this session; try again"),
+    "paper_component": ("paper_exists", "another request created a paper for a component; try again"),
 }
 
 
@@ -132,6 +134,7 @@ def _audit(
     *,
     before: dict | None = None,
     after: dict | None = None,
+    reason: str | None = None,
 ) -> AuditEntry:
     """One audit record per state change, in the same transaction, shaped like platform/audit's NewRecord. `before`
     and `after` hold the changed fields only. The row is flushed first so a new one has its id."""
@@ -146,6 +149,7 @@ def _audit(
         summary=_summary(entity_type, row, action),
         before=None if before is None else _value(before),
         after=None if after is None else _value(after),
+        reason=reason,
         occurred_at=clock(),
     )
     db.add(entry)

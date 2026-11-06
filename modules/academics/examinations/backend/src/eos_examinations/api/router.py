@@ -9,7 +9,9 @@ malformed body is the contract's 400 with a code, not FastAPI's 422.
 This batch serves the configuration and exam-cycle operations: listGradingSchemes, createGradingScheme,
 getGradingScheme, replaceGradingScheme, setDefaultGradingScheme, listAssessmentSchemes, createAssessmentScheme,
 getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExamCycles, createExamCycle, getExamCycle,
-updateExamCycle and changeExamCycleStatus."""
+updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
+getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
+cancelExamSession."""
 
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..application import access as k
+from ..application import schedule as sch
 from ..application import service as svc
 from ..application.access import Actor
 from ..application.errors import ExaminationsError
@@ -170,3 +173,94 @@ def set_default_grading_scheme(
     grading_scheme_id: str, a: Actor = Depends(require(k.GRADING_SCHEME_MANAGE)), db: Session = Depends(get_db)
 ):
     return _run(svc.set_default_grading_scheme, db, a, grading_scheme_id)
+
+
+# ---------------------------------------------------------------- papers
+
+
+@router.get("/papers")
+def list_exam_papers(
+    exam_cycle_id: str | None = None,
+    course_offering_id: str | None = None,
+    department_id: str | None = None,
+    status: str | None = None,
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    _: Actor = Depends(require(k.PAPER_READ)),
+    db: Session = Depends(get_db),
+):
+    return _run(sch.list_exam_papers, db, exam_cycle_id, course_offering_id, department_id, status, limit, offset)
+
+
+@router.post("/papers", status_code=201)
+def create_exam_papers(
+    body: dict = Body(...), a: Actor = Depends(require(k.PAPER_MANAGE)), db: Session = Depends(get_db)
+):
+    return _run(sch.create_exam_papers, db, a, body)
+
+
+@router.get("/papers/{exam_paper_id}")
+def get_exam_paper(exam_paper_id: str, _: Actor = Depends(require(k.PAPER_READ)), db: Session = Depends(get_db)):
+    return _run(sch.get_exam_paper, db, exam_paper_id)
+
+
+@router.patch("/papers/{exam_paper_id}")
+def update_exam_paper(
+    exam_paper_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.PAPER_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    return _run(sch.update_exam_paper, db, a, exam_paper_id, body)
+
+
+# ---------------------------------------------------------------- sessions
+
+
+@router.get("/sessions")
+def list_exam_sessions(
+    exam_cycle_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    course_offering_id: str | None = None,
+    status: str | None = None,
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    _: Actor = Depends(require(k.SESSION_READ)),
+    db: Session = Depends(get_db),
+):
+    return _run(
+        sch.list_exam_sessions, db, exam_cycle_id, date_from, date_to, course_offering_id, status, limit, offset
+    )
+
+
+@router.post("/sessions", status_code=201)
+def schedule_exam_session(
+    body: dict = Body(...), a: Actor = Depends(require(k.SESSION_MANAGE)), db: Session = Depends(get_db)
+):
+    return _run(sch.schedule_exam_session, db, a, body)
+
+
+@router.get("/sessions/{exam_session_id}")
+def get_exam_session(exam_session_id: str, _: Actor = Depends(require(k.SESSION_READ)), db: Session = Depends(get_db)):
+    return _run(sch.get_exam_session, db, exam_session_id)
+
+
+@router.patch("/sessions/{exam_session_id}")
+def reschedule_exam_session(
+    exam_session_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.SESSION_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    return _run(sch.reschedule_exam_session, db, a, exam_session_id, body)
+
+
+@router.post("/sessions/{exam_session_id}/cancel")
+def cancel_exam_session(
+    exam_session_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.SESSION_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    return _run(sch.cancel_exam_session, db, a, exam_session_id, body)

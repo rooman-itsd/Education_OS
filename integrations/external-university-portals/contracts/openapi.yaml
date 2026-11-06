@@ -56,6 +56,7 @@ components:
       required: [id, partner_id, direction, format, status, created_at]
       properties:
         id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
         exchange_key: { type: string }
         partner_id: { type: string }
         partner_name: { type: string }

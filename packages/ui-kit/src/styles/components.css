@@ -17,11 +17,11 @@
   overflow: hidden;
 }
 .eos-btn--primary {
-  background: var(--eos-primary);
+  background: var(--eos-primary-strong);
   color: #fff;
 }
 .eos-btn--primary:hover {
-  background: var(--eos-primary-hover);
+  background: var(--eos-primary-strong-hover);
 }
 .eos-btn--secondary {
   background: var(--eos-surface);
@@ -378,7 +378,7 @@
 .eos-segmented__option:hover {
   color: var(--eos-text);
 }
-.eos-segmented__option[aria-selected="true"] {
+.eos-segmented__option[aria-pressed="true"] {
   background: var(--eos-surface);
   color: var(--eos-text);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);

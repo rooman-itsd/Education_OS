@@ -1,0 +1,27 @@
+﻿parameter,field,value
+Institute,name,Sample Institute of Higher Education
+Institute,nirf institute id,NIRF-IR-E-C-12345
+Institute,year of establishment,1998
+"Teaching, Learning and Resources",sanctioned intake,1200
+"Teaching, Learning and Resources",total enrolment,3650
+"Teaching, Learning and Resources",full time faculty,210
+"Teaching, Learning and Resources",faculty with phd pct,64.5
+"Teaching, Learning and Resources",faculty experience years avg,9.2
+"Teaching, Learning and Resources",expenditure lakh,4125.75
+Research and Professional Practice,publications,312
+Research and Professional Practice,citations,2870
+Research and Professional Practice,patents published,14
+Research and Professional Practice,patents granted,3
+Research and Professional Practice,sponsored research lakh,380.5
+Research and Professional Practice,consultancy lakh,42
+Graduation Outcomes,graduating students,880
+Graduation Outcomes,placed students,610
+Graduation Outcomes,higher studies students,140
+Graduation Outcomes,median salary lakh,5.4
+Graduation Outcomes,phd awarded,11
+Outreach and Inclusivity,women students pct,48.2
+Outreach and Inclusivity,women faculty pct,41
+Outreach and Inclusivity,outside state students pct,22.5
+Outreach and Inclusivity,economically backward students pct,17.3
+Outreach and Inclusivity,differently abled students,9
+Perception,collected by NIRF from its own surveys,nothing to key
