@@ -45,7 +45,15 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The choreographer's own widgets.
-  { id: "productions.in-preparation", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.in-preparation",
+    module: "practice/productions",
+    batch: "#318",
+    title: "In preparation",
+    probe: "/productions/in-preparation",
+    empty: "Nothing in preparation",
+    unavailable: "Production data is not available yet.",
+  },
   {
     // Texts of ToJudgeWidget.tsx in PR #414 (feat/selection-process/module-build), not merged yet. The widget's first
     // GET lists the open processes; it then asks each for the candidates the panelist judges.

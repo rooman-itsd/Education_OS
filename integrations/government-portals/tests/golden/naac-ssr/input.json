@@ -1,0 +1,74 @@
+{
+  "form_code": "naac.ssr",
+  "period": "cycle-2026",
+  "data": {
+    "institute": {
+      "name": "Sample Institute of Higher Education",
+      "naac_hei_id": "HEI-KL-0457",
+      "aishe_code": "C-12345",
+      "year_of_establishment": 1998
+    },
+    "criteria": [
+      {
+        "criterion": 1,
+        "metrics": [
+          {
+            "metric": "1.1.1",
+            "kind": "qualitative",
+            "value": "The curriculum is revised every three years with industry and alumni input."
+          },
+          {
+            "metric": "1.2.1",
+            "kind": "quantitative",
+            "value": 6
+          }
+        ]
+      },
+      {
+        "criterion": 2,
+        "metrics": [
+          {
+            "metric": "2.1.1",
+            "kind": "quantitative",
+            "value": 1180
+          },
+          {
+            "metric": "2.6.3",
+            "kind": "quantitative",
+            "value": 91.4
+          }
+        ]
+      },
+      {
+        "criterion": 3,
+        "metrics": [
+          {
+            "metric": "3.3.1",
+            "kind": "quantitative",
+            "value": 87
+          }
+        ]
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "metric": "1.1.1",
+      "title": "Board of Studies minutes 2025",
+      "filename": "bos-minutes.pdf",
+      "content": "Board of Studies minutes (sample)"
+    },
+    {
+      "metric": "1.1.1",
+      "title": "Curriculum revision notice",
+      "filename": "notice.pdf",
+      "content": "Notice (sample)"
+    },
+    {
+      "metric": "2.6.3",
+      "title": "Pass percentage statement",
+      "filename": "pass.xlsx",
+      "content": "metric,value\n2.6.3,91.4\n"
+    }
+  ]
+}

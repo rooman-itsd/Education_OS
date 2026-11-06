@@ -1,0 +1,34 @@
+{
+  "batch_key": "cycle-2026-11:term-5:credits",
+  "session": "2025-26",
+  "term": "5",
+  "records": [
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0001",
+        "apaar_id": "123456789012",
+        "enrolment_number": "EN-2023-0001",
+        "name": "Asha Rao",
+        "date_of_birth": "2004-01-01"
+      },
+      "programme_code": "BSC-PHY",
+      "courses": [
+        {"code": "PHY301", "title": "Quantum Mechanics", "credits_earned": 4, "grade": "A", "grade_point": 9, "completed_on": "2026-10-20"},
+        {"code": "PHY302", "title": "Thermal Physics, Part I", "credits_earned": 3.5, "grade": "B", "grade_point": 7.5, "completed_on": "2026-10-21"}
+      ]
+    },
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0002",
+        "apaar_id": "223456789012",
+        "enrolment_number": "EN-2023-0002",
+        "name": "Ravi Kumar",
+        "date_of_birth": "2003-12-31"
+      },
+      "programme_code": "BSC-PHY",
+      "courses": [
+        {"code": "PHY301", "title": "Quantum Mechanics", "credits_earned": 4, "grade": "C", "grade_point": 6, "completed_on": "2026-10-20"}
+      ]
+    }
+  ]
+}

@@ -4,6 +4,11 @@ All notable changes to `eos-core`. Follows Keep a Changelog, semver per package.
 
 ## Unreleased
 
+### Fixed
+- A request body or query with `NaN`, `Infinity`, `-Infinity`, `1e999` or a lone surrogate answers 422, not 500.
+  `eos_core.http_errors.install_error_handlers(app)` (called by `create_app`) quotes such an input back as text in
+  the usual `detail`; every other validation error is unchanged. Modules need no workaround.
+
 ### Added
 - `module_roles` on a dashboard layout: `load_role_parents()` returns them as additional parents of the layout's
   role (after `extends`), so `expand_roles` and `permissions_for` grant them. Transitive, cycle-safe, and the

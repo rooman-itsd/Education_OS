@@ -1,0 +1,6 @@
+[{"id": 9876543210, "name": "Morning Run", "sport_type": "Run", "type": "Run", "start_date": "2026-11-04T01:00:00Z", "elapsed_time": 2900, "moving_time": 2700,
+  "distance": 8123.4, "total_elevation_gain": 40.0, "average_heartrate": 151.4, "max_heartrate": 179.0, "has_heartrate": true, "suffer_score": 61, "kilojoules": null,
+  "athlete": {"id": 12345678}},
+ {"id": 9876543211, "name": "Evening Ride", "sport_type": "Ride", "type": "Ride", "start_date": "2026-11-04T12:00:00Z", "elapsed_time": 3700, "moving_time": 3600,
+  "distance": 25000.0, "average_heartrate": 140.0, "max_heartrate": 170.0, "kilojoules": 750.0, "athlete": {"id": 12345678}},
+ {"id": 9876543212, "name": "Broken", "sport_type": "Run", "start_date": "not a date", "moving_time": 10, "athlete": {"id": 12345678}}]

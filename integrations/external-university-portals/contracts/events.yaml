@@ -1,0 +1,28 @@
+# Domain events published by external-university-portals.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# Exchanges are announced to other modules by integration-hub as integration-hub.inter-institution-record.exchanged and
+# the delivery events, so a consumer never subscribes to a partner protocol's name (integrations/README.md, "Swap rule").
+#
+# The events below are this adapter's own record of a state change, written to the outbox in the same transaction as the
+# change. They are the audit trail (platform/audit consumes them) and are not for business consumers. They carry ids and
+# statuses, never transcript content.
+module: external-university-portals
+version: 1
+events:
+  - name: external-university-portals.exchange.exported
+    description: A transcript was written in a partner's format (or a signed PDF was registered) and kept as a document.
+    payload: { organisation_id: uuid, exchange_id: uuid, partner_id: string, direction: string, format: string, channel: string, status: string }
+  - name: external-university-portals.exchange.sent
+    description: An exported record was emailed to the partner as a time-limited download link.
+    payload: { organisation_id: uuid, exchange_id: uuid, partner_id: string, direction: string, format: string, channel: string, status: string, reference: string }
+  - name: external-university-portals.exchange.delivered
+    description: A person recorded that they sent or uploaded the file themselves, with the partner's reference.
+    payload: { organisation_id: uuid, exchange_id: uuid, partner_id: string, direction: string, format: string, channel: string, status: string, delivered_on: date, partner_reference: string }
+  - name: external-university-portals.exchange.imported
+    description: A partner's file was read into the normalised shape. Nothing is accepted; the consuming module's reviewer decides.
+    payload: { organisation_id: uuid, exchange_id: uuid, partner_id: string, direction: string, format: string, channel: string, status: string, integrity: string, unmapped_count: integer }
+  - name: external-university-portals.exchange.rejected
+    description: A partner's file could not be read at all (not the format it claimed, malformed, or hostile).
+    payload: { organisation_id: uuid, exchange_id: uuid, partner_id: string, direction: string, format: string, channel: string, status: string, integrity: string, unmapped_count: integer }
+consumes: []

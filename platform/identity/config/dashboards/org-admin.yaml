@@ -1,6 +1,13 @@
 # Dashboard layout for the Organisation Admin role (ADR-0005). Exists in every organisation.
 role: org-admin
 title: "Organisation Admin"
+# The support modules' defaults for org-admin (each module's contracts/permissions.yaml): set up and publish what
+# the Support Staff dashboard shows. Grants only; the Organisation Admin dashboard shows none of their widgets.
+module_roles:
+  - amc-vendor-support-contract-manager
+  - knowledge-base-editor
+  - incident-management-viewer
+  - sla-management-admin
 widgets:
   - billing.plan-and-trial
   - billing.usage-vs-limits
