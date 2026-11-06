@@ -1,0 +1,1 @@
+{"event": "meeting.participant_joined", "event_ts": 1794198100000, "payload": {"account_id": "Qm8kAccountId01", "object": {"id": "85746065432", "uuid": "kXyZ12abcdEFgh==", "participant": {"user_name": "Anita Rao", "email": "anita.rao@college.example.com", "join_time": "2026-11-09T04:31:00Z"}}}}

@@ -1,0 +1,1 @@
+{"access_token": "zoom-access-1", "token_type": "bearer", "refresh_token": "zoom-refresh-1", "expires_in": 3599, "scope": "meeting:write meeting:read recording:read"}

@@ -4,7 +4,7 @@ name: video-conferencing
 kind: integration              # feature | platform | integration
 domain: integrations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.2.0
+version: 0.3.0
 status: in-progress       # planned | in-progress | stable | deprecated
 description: "Zoom, Microsoft Teams, Webex and self-hosted Jitsi adapter for online classes and meetings."
 owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.
