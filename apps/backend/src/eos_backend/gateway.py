@@ -11,6 +11,7 @@ from eos_core.entitlement import PLATFORM_MODULES, module_entitled
 from eos_core.security import decode_token
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 PREFIX = "/api/v1/"
@@ -40,11 +41,7 @@ class EntitlementGate(BaseHTTPMiddleware):
             return JSONResponse({"detail": "feature modules need an organisation user"}, status_code=403)
         from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
 
-        db = SessionLocal()
-        try:
-            ent = tenancy.entitlement(db, org)
-        finally:
-            db.close()
+        ent = await run_in_threadpool(_entitlement, tenancy, org)
         if ent["status"] != "active":
             return JSONResponse(
                 {"detail": f"organisation is {ent['status']}", "code": "organisation_inactive"}, status_code=403
@@ -64,3 +61,12 @@ class EntitlementGate(BaseHTTPMiddleware):
                 status_code=403,
             )
         return await call_next(request)
+
+
+def _entitlement(tenancy, org: str) -> dict:
+    """Off the event loop: a blocking pool checkout here would stall every request, /health included."""
+    db = SessionLocal()
+    try:
+        return tenancy.entitlement(db, org)
+    finally:
+        db.close()
