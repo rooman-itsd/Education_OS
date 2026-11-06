@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: timetable-attendance API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Timetable generation, class scheduling, attendance capture and reports.
     Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
@@ -422,6 +422,12 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "422":
+          description: The instructor assignment is not known, has ended, or is not for the class's course offering and section
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /scheduled-classes/{scheduled_class_id}/cancel:
     parameters:
@@ -723,7 +729,12 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: |
+            `academic_period_id` was not given and no term is active (code `active_term_not_found`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /reports/students/{student_id}/attendance-history:
     parameters:
@@ -805,7 +816,21 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
         "403":
-          $ref: "#/components/responses/Forbidden"
+          description: |
+            The caller lacks the permission, or holds report:read-department without report:read-all while the
+            caller's department cannot be known (code `department_unknown`, docs/prd.md Q9).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: |
+            `academic_period_id` was not given and no term is active (code `active_term_not_found`). The widget shows
+            its empty state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /reports/attendance-eligibility:
     post:
@@ -940,6 +965,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StudentAttendanceSummary"
+        "404":
+          description: |
+            `academic_period_id` was not given and no term is active (code `active_term_not_found`). The widget shows
+            its empty state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /me/attendance-history:
     get:
@@ -1087,7 +1120,8 @@ components:
       enum: [scheduled, cancelled, completed]
     AttendanceSessionStatus:
       type: string
-      enum: [open, closed]
+      description: cancelled when the class was cancelled while the session was open; its records are never counted
+      enum: [open, closed, cancelled]
     AttendanceStatus:
       type: string
       enum: [present, absent, late, excused]
@@ -1600,9 +1634,10 @@ components:
         excused:
           type: integer
         percentage:
-          type: number
+          type: [number, "null"]
           minimum: 0
           maximum: 100
+          description: Null when no class was counted (every one excused)
         below_threshold:
           type: boolean
     StudentAttendanceSummary:
@@ -1618,7 +1653,8 @@ components:
         threshold_percent:
           type: number
         overall_percentage:
-          type: number
+          type: [number, "null"]
+          description: Null when no class was counted
         items:
           type: array
           items:
@@ -1675,7 +1711,8 @@ components:
         threshold_percent:
           type: number
         overall_percentage:
-          type: number
+          type: [number, "null"]
+          description: Null when no class was counted
         items:
           type: array
           description: One row per course offering and section
@@ -1701,7 +1738,8 @@ components:
               classes_held:
                 type: integer
               average_percentage:
-                type: number
+                type: [number, "null"]
+                description: The mean of the students' percentages; null when no student had a counted class
               students_below_threshold:
                 type: integer
               students:

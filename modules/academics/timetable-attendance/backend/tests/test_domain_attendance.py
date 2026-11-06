@@ -299,3 +299,22 @@ def test_correcting_to_the_same_status_or_an_unknown_one_is_invalid():
         ).field
         == "scope"
     )
+
+
+def test_cancelling_an_open_session_keeps_it_unclosed_and_blocks_everything_after():
+    from eos_timetable_attendance.domain.attendance import SESSION_CANCELLED, plan_cancel_session
+
+    cls = klass()
+    cancelled = plan_cancel_session(session(cls))
+    assert (cancelled.status, cancelled.closed_at, cancelled.closed_by) == (SESSION_CANCELLED, None, None)
+    assert code(ensure_can_mark, cancelled, STARTS).code == "session_cancelled"
+    assert code(plan_close, cancelled, [], {}, now=ENDS, closed_by=uid()).code == "session_cancelled"
+    err = code(
+        plan_correction, cancelled, "absent", "present", "late bus", None, scope=INSTRUCTOR, now=ENDS, policy=POLICY
+    )
+    assert (err.code, err.kind) == ("session_cancelled", "conflict")
+    assert (
+        code(ensure_can_open, klass(id=cls.id, status=CANCELLED), cancelled, STARTS, POLICY).code == "class_cancelled"
+    )
+    assert code(plan_cancel_session, cancelled).code == "session_not_open"
+    assert code(plan_cancel_session, closed_session()).code == "session_not_open"

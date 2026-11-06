@@ -6,9 +6,11 @@ module_roles:
   - lms-instructor
   - timetable-attendance-faculty
   - examinations-faculty
+  - facility-booking-user           # book a resource and see their own bookings (my-bookings, #421)
 widgets:
   - timetable-attendance.today-classes
   - timetable-attendance.attendance-to-mark
   - lms.assignments-to-grade
   - examinations.exam-duties
   - academic-management.course-roster
+  - facility-booking.my-bookings     # the instructor's own bookings; shown to layouts whose role may book (#421)
