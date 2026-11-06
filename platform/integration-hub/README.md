@@ -46,9 +46,11 @@ Before the first connection is created on a server:
 4. Install the adapters; each has its own `config/env.example` for its platform credentials.
 
 Rotating the key: set the new key in `INTEGRATION_HUB_SECRET_KEK` and the old one in
-`INTEGRATION_HUB_SECRET_KEK_PREVIOUS`, run
-`python -c "from eos_integration_hub.infrastructure.secrets import get_store; print(get_store().rotate_kek())"` once
-in the API's environment (it prints how many secrets it re-encrypted), then empty the previous key.
+`INTEGRATION_HUB_SECRET_KEK_PREVIOUS`, restart, run `python -m eos_integration_hub.rotate_kek` once in the API's
+environment, then empty the previous key. It re-encrypts the secret store's files and the encrypted columns (async
+delivery inputs, raw callbacks, PKCE verifiers), prints the counts and exits 1 if anything is `unreadable` (encrypted
+under neither key): keep the previous key until it prints `"unreadable": 0`. It only rewrites what is not yet under
+the current key, so it can be run again.
 
 Development: `EOS_DEV_MODE=true` uses a key derived from `EOS_JWT_SECRET` when no KEK is set, and
 `INTEGRATION_HUB_SECRET_BACKEND=env` reads secrets from `INTEGRATION_HUB_SECRET__<ORG>__<CONNECTION>__<NAME>`

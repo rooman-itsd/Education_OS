@@ -7,7 +7,8 @@ One small interface (`put`, `get`, `delete`, `rotate_kek`) and two backends, cho
 - `file` (default): one file per secret under INTEGRATION_HUB_SECRET_DIR, mode 0600 in 0700 directories, each value
   AES-256-GCM encrypted (`cryptography`) under INTEGRATION_HUB_SECRET_KEK, with the reference as associated data so a
   file copied to another name does not decrypt. INTEGRATION_HUB_SECRET_KEK_PREVIOUS still decrypts while a key is
-  rotated; `rotate_kek()` re-encrypts every file under the current key.
+  rotated; `rotate_kek()` re-encrypts every file under the current key (application/keys.py also re-encrypts the
+  database columns encrypted with the same key; `python -m eos_integration_hub.rotate_kek` runs both).
 - `env` (read only, development): values from environment variables named after the reference.
 
 The same key encrypts the hub's other sensitive blobs (an async delivery's input kept for retries, a raw inbound body,
