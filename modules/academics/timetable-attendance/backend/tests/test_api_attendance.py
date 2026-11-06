@@ -334,3 +334,20 @@ def test_my_schedule_lists_the_classes_of_the_callers_sections(client, org):
     _, nobody = org.user(STUDENT)
     assert ok(client.get(f"{BASE}/me/schedule", headers=nobody)) == {"date": "2026-11-03", "items": []}
     assert client.get(f"{BASE}/me/schedule", headers=room.faculty).status_code == 403
+
+
+def test_two_opens_racing_return_the_session_the_first_one_made(client, room, monkeypatch):
+    from eos_timetable_attendance.infrastructure import attendance_repository as ar
+
+    c = room.new_class()
+    first = room.open(c["id"])
+    real = ar.session_of_class
+    calls = []
+
+    def blind_once(db, class_id, **kw):  # the second request read before the first committed
+        calls.append(class_id)
+        return None if len(calls) == 1 else real(db, class_id, **kw)
+
+    monkeypatch.setattr(ar, "session_of_class", blind_once)
+    assert room.open(c["id"], status=200) == first
+    assert len(outbox("timetable-attendance.attendance-session.opened", room.org.id)) == 1

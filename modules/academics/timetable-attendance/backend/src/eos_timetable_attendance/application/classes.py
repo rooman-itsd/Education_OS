@@ -572,12 +572,13 @@ def open_session(db: Session, a: Actor, class_id: str) -> tuple[dict, bool]:
         opened_by=a.user_id,
         marking_deadline=at.marking_window(cls, policy).closes_at,
     )
+    db.add(session)
     try:
-        with db.begin_nested():
-            db.add(session)
+        db.flush()  # the first write of this transaction, so a whole rollback loses nothing else
     except IntegrityError as err:  # another request opened it first
         if not repo.is_session_conflict(err):
             raise
+        db.rollback()
         return session_body(db, ar.session_of_class(db, row.id)), False
     members = ar.members_on(db, row.section_id, row.class_date)
     db.add_all(
