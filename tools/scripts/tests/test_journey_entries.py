@@ -24,19 +24,8 @@ TEXTS = ("title", "probe", "empty", "unavailable")
 # Bare on main when this test was added (6 Nov 2026), each with the pull request that gives it its texts. Fixing one
 # never fails this test; adding one does. Remove a line once its entry has texts (the list only shrinks).
 WAITING = {
-    # lms: #571
-    **{(s, "lms.course-materials"): "#571" for s in (
-        "actor", "athlete", "dancer", "engineering-student", "filmmaker", "hospitality-trainee", "law-student",
-        "management-student", "medical-student", "musician", "research-scholar", "student")},
-    **{(s, "lms.assignments-to-grade"): "#571" for s in (
-        "chef-instructor", "choreographer", "clinical-supervisor", "coach", "corporate-mentor", "director",
-        "legal-mentor", "music-teacher", "production-supervisor", "project-guide", "research-supervisor")},
     ("coach", "wearables.alerts"): "wearables enablement",
     ("management", "grievance.open"): "#572",
-    ("management", "reporting.attendance-and-results-by-department"): "#579",
-    ("management", "regulatory-reports.compliance-calendar"): "#589",
-    ("hospital-coordinator", "regulatory-reports.due"): "#589",
-    ("research-office", "regulatory-reports.due"): "#589",
     ("hospitality-trainee", "placement-career.openings"): "#542",
     ("management-student", "placement-career.openings"): "#542",
     ("industry-coordinator", "placement-career.openings-summary"): "#542",

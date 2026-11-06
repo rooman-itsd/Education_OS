@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Faculty dashboard widget `examinations.exam-duties` (frontend, issue #325): the caller's upcoming exam duties from
+  `GET /me/duties` (permission `examinations:duty:read-own`) with loading, empty, error and "not available" states, as
+  the Examination Staff widgets. Typed client function `listMyDuties` and `ExamDuty` types from the contract; only fields
+  the contract defines are shown. The endpoint is served by the exam duty APIs (listMyDuties, below), so the widget shows data.
 - Exam duty APIs (issue #325): listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties, with an audit entry per
   change and the two contracted events `examinations.duty.assigned` and `.cancelled`. Assigning needs a scheduled
   session or a paper, in a cycle up to `evaluation`; invigilation cannot overlap (back-to-back is fine, a cancelled session
