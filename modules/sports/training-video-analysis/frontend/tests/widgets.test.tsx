@@ -43,9 +43,8 @@ afterEach(() => {
 });
 
 describe("widget declarations", () => {
-  it("exports only reviews-pending, with a permission the coach role holds", () => {
-    expect(widgets.map((w) => w.id)).toEqual(["training-video-analysis.reviews-pending"]);
-    const w = widgets[0]!;
+  it("exports reviews-pending with a permission the coach role holds", () => {
+    const w = widgets.find((x) => x.id === "training-video-analysis.reviews-pending")!;
     expect(w.title).toBe("Videos to review");
     expect(w.permission).toBe("training-video-analysis:video:read");
     expect(w.kind).toBe("list");
@@ -53,9 +52,12 @@ describe("widget declarations", () => {
     expect(w.component).toBe(ReviewsPending);
   });
 
-  it("does not export session-plan or training-schedule (the layouts name them under athlete-performance)", () => {
-    expect(widgets.map((w) => w.id)).not.toContain("training-video-analysis.session-plan");
-    expect(widgets.map((w) => w.id)).not.toContain("training-video-analysis.training-schedule");
+  it("exports session-plan and training-schedule, which the coach and athlete layouts name", () => {
+    expect(widgets.map((w) => w.id)).toEqual([
+      "training-video-analysis.reviews-pending",
+      "training-video-analysis.session-plan",
+      "training-video-analysis.training-schedule",
+    ]);
   });
 });
 

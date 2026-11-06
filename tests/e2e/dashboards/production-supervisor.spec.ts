@@ -27,7 +27,16 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+
   { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
   {
     id: "academic-management.course-roster",
@@ -41,6 +50,16 @@ const WIDGETS: LayoutWidget[] = [
     emptyCode: "active_term_not_found",
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
+  },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
   },
   // The production supervisor's own widgets.
   {
