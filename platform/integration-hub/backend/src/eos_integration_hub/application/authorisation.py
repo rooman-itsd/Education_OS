@@ -345,6 +345,23 @@ def _bounded_secrets(value) -> dict[str, str] | None:
     return out
 
 
+def claim_state(db: Session, state_hash: str, adapter: str, now) -> int:
+    """Redeem a state in one statement; returns how many rows it claimed (1 or 0). Of two requests racing with the
+    same state exactly one updates the row: the other waits on its lock, then finds used_at set and matches nothing.
+    Single use, whatever happens next. Not committed: the caller's transaction holds the claim."""
+    return db.execute(
+        update(OAuthState)
+        .where(
+            OAuthState.state_hash == state_hash,
+            OAuthState.adapter == adapter,
+            OAuthState.used_at.is_(None),
+            OAuthState.expires_at > now,
+        )
+        .values(used_at=now)
+        .execution_options(synchronize_session=False)
+    ).rowcount
+
+
 def _same_browser(row: OAuthState, binding: str | None) -> bool:
     if not isinstance(binding, str) or not binding or len(binding) > MAX_BINDING:
         return False
@@ -372,20 +389,7 @@ def callback(
     state_hash = rules.sha256_hex(state)
     with platform_scope():
         now = clock()
-        # Redeemed in one statement: of two requests racing with the same state, exactly one updates the row (the
-        # other waits on its lock, then finds used_at set and matches nothing). Single use, whatever happens next.
-        claimed = db.execute(
-            update(OAuthState)
-            .where(
-                OAuthState.state_hash == state_hash,
-                OAuthState.adapter == adapter,
-                OAuthState.used_at.is_(None),
-                OAuthState.expires_at > now,
-            )
-            .values(used_at=now)
-            .execution_options(synchronize_session=False)
-        ).rowcount
-        if claimed != 1:
+        if claim_state(db, state_hash, adapter, now) != 1:
             db.rollback()
             raise HubError(401, "state_invalid", "unknown or expired state")
         row = db.scalar(select(OAuthState).where(OAuthState.state_hash == state_hash))
