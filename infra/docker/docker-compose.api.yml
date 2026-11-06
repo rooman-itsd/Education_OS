@@ -87,7 +87,14 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      # uvicorn reads both (api.Dockerfile passes neither flag). Workers: one process unless EOS_API_WORKERS is set;
+      # switch the pooler on first (../runbooks/scale-the-api.md, section 3). Trusted proxies: the addresses whose
+      # X-Forwarded-For and X-Forwarded-Proto the API believes, so it sees the visitor's address and https behind
+      # the public nginx (README, "Behind the public proxy"). Unset: this host only, as before.
+      WEB_CONCURRENCY: ${EOS_API_WORKERS:-1}
+      FORWARDED_ALLOW_IPS: ${EOS_FORWARDED_ALLOW_IPS:-127.0.0.1,::1}
     ports:
       - "${EOS_API_PORT:-8000}:8000"
   # Keycloak's own database (ADR-0006 decision 2): a second Postgres so the provider's schema, upgrades and
