@@ -31,9 +31,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_tt_0001_then_tt_0002():
+def test_the_chain_is_tt_0001_then_tt_0002_then_tt_0003():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["tt_0002"]
+    assert script.get_heads() == ["tt_0003"]
+    assert script.get_revision("tt_0003").down_revision == "tt_0002"
     assert script.get_revision("tt_0002").down_revision == "tt_0001"
     assert script.get_revision("tt_0001").down_revision is None
 
@@ -73,8 +74,10 @@ def _revision_module(pattern: str):
 
 
 def test_the_migrations_create_every_model_table_and_no_other():
-    created = set(_revision_module("*_0001_initial.py").TABLES) | set(
-        _revision_module("*_0002_term_ref_and_processed_event.py").NEW_TABLES
+    created = (
+        set(_revision_module("*_0001_initial.py").TABLES)
+        | set(_revision_module("*_0002_term_ref_and_processed_event.py").NEW_TABLES)
+        | set(_revision_module("*_0003_registration_ref.py").NEW_TABLES)
     )
     assert created == {t.name for t in TABLES}
 
@@ -110,7 +113,7 @@ def test_tt_0002_upgrades_existing_rows_and_downgrades_dropping_only_partial_one
             "VALUES ('2','o',CURRENT_TIMESTAMP,'y','open')"
         )
     command.downgrade(cfg, "tt_0001")
-    with engine.connect() as conn:
+    with engine.connect() as conn:  # (through tt_0003's downgrade too)
         assert conn.exec_driver_sql("SELECT id FROM timetable_attendance_offering_ref").fetchall() == [("1",)]
         columns = {c["name"]: c for c in inspect(conn).get_columns("timetable_attendance_offering_ref")}
         assert not columns["course_code"]["nullable"] and "status_as_of" not in columns
@@ -119,7 +122,7 @@ def test_tt_0002_upgrades_existing_rows_and_downgrades_dropping_only_partial_one
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 13
+    assert len(TABLES) == 14
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name
@@ -154,3 +157,28 @@ def test_postgres_migration_enables_forced_rls_on_every_table():
         assert f"ALTER TABLE {table.name} FORCE ROW LEVEL SECURITY;" in sql, table.name
         assert f"CREATE POLICY tenant_isolation ON {table.name}" in sql, table.name
     assert sql.count("CREATE POLICY tenant_isolation") == len(TABLES)
+
+
+def test_tt_0003_adds_the_registration_read_model_and_keeps_existing_members():
+    url = f"sqlite:///{tempfile.mkdtemp()}/step3.db"
+    cfg = _config(url)
+    command.upgrade(cfg, "tt_0002")
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO timetable_attendance_section_member (id, organisation_id, created_at, section_id, student_id, "
+            "allocated_from) VALUES ('1','o',CURRENT_TIMESTAMP,'s','p','2026-11-01')"
+        )
+    command.upgrade(cfg, "tt_0003")
+    with engine.begin() as conn:
+        assert "timetable_attendance_registration_ref" in inspect(conn).get_table_names()
+        assert conn.exec_driver_sql("SELECT id, registration_id FROM timetable_attendance_section_member").one() == (
+            "1",
+            None,
+        )
+    command.downgrade(cfg, "tt_0002")
+    with engine.connect() as conn:
+        assert "timetable_attendance_registration_ref" not in inspect(conn).get_table_names()
+        columns = {c["name"] for c in inspect(conn).get_columns("timetable_attendance_section_member")}
+        assert "registration_id" not in columns
+        assert conn.exec_driver_sql("SELECT id FROM timetable_attendance_section_member").fetchall() == [("1",)]

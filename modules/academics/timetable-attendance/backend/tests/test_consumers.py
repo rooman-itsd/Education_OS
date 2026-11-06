@@ -76,7 +76,7 @@ def later(minutes: int) -> datetime:
 # ---------------------------------------------------------------- registration
 
 
-def test_the_consumers_are_exactly_the_five_events_of_the_manifest_and_the_entry_point():
+def test_the_consumers_are_exactly_the_events_of_the_manifest_and_the_entry_point():
     manifest = yaml.safe_load((MODULE / "module.yaml").read_text(encoding="utf-8"))
     assert set(CONSUMERS) == set(manifest["consumes_events"])
     assert set(CONSUMERS) == {
@@ -85,6 +85,9 @@ def test_the_consumers_are_exactly_the_five_events_of_the_manifest_and_the_entry
         "academic-management.offering.status-changed",
         "academic-management.section.created",
         "academic-management.section.updated",
+        "enrolment-registration.course-registration.confirmed",
+        "enrolment-registration.course-registration.withdrawn",
+        "enrolment-registration.section-allocation.changed",
     }
     project = tomllib.loads((MODULE / "backend" / "pyproject.toml").read_text(encoding="utf-8"))
     entry = project["project"]["entry-points"]["eos.event_consumers"]
@@ -93,10 +96,9 @@ def test_the_consumers_are_exactly_the_five_events_of_the_manifest_and_the_entry
 
 
 def test_nothing_is_consumed_whose_mapping_is_unconfirmed():
-    """faculty-assignment.* needs Faizan's identity mapping, enrolment-registration.* the student_id mapping, and
-    offering.updated / course.* carry no new values; none has a handler."""
+    """faculty-assignment.* needs Faizan's identity mapping, and offering.updated / course.* carry no new values; none
+    has a handler."""
     for name in CONSUMERS:
-        assert not name.startswith("enrolment-registration.")
         assert ".faculty-assignment." not in name
         assert not name.endswith((".offering.updated", ".course.created", ".course.updated", ".course.archived"))
 

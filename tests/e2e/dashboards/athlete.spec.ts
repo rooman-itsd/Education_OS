@@ -29,7 +29,16 @@ const WIDGETS: LayoutWidget[] = [
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
-  { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.course-materials",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Course materials",
+    probe: "/lms/me/course-materials?limit=1",
+    empty: "No new course materials",
+    unavailable: "Course data is not available yet.",
+  },
+
   {
     id: "fees-accounts.fee-dues",
     module: "finance-operations/fees-accounts",
