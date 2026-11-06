@@ -34,9 +34,14 @@ export interface AuditPage {
 
 export const AUDIT_PAGE_SIZE = 50;
 
-/** One page of records, newest first. `organisationId` matters only for a super admin (see above). */
-export function listAuditRecords({ organisationId, offset = 0 }: { organisationId?: string | null; offset?: number } = {}): Promise<AuditPage> {
-  const q = new URLSearchParams({ limit: String(AUDIT_PAGE_SIZE), offset: String(offset) });
+/** One page of records, newest first. `organisationId` matters only for a super admin (see above); `limit` is at
+ * most 200 (the API's cap). */
+export function listAuditRecords({
+  organisationId,
+  offset = 0,
+  limit = AUDIT_PAGE_SIZE
+}: { organisationId?: string | null; offset?: number; limit?: number } = {}): Promise<AuditPage> {
+  const q = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (organisationId) q.set('organisation_id', organisationId);
   return api<AuditPage>(`/audit/records?${q.toString()}`);
 }

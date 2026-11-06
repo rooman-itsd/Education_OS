@@ -30,7 +30,7 @@ const WIDGETS: LayoutWidget[] = [
   {
     id: "workflow.approvals-pending",
     module: "platform/workflow",
-    batch: "#317 (enablement waits on PR #430)",
+    batch: "#317",
     title: "Approvals pending",
     probe: "/workflow/requests/pending?limit=8",
     empty: "No pending approvals",
@@ -54,7 +54,7 @@ const WIDGETS: LayoutWidget[] = [
   {
     id: "reporting.department-reports",
     module: "platform/reporting",
-    batch: "#317 (enablement waits on ingestion, PR #452)",
+    batch: "#317",
     title: "Department Reports",
     probe: "/reporting/widgets/department-reports",
     empty: "No department reports",

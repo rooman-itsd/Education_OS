@@ -17,3 +17,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   tests, cross-tenant leak test, migration test, settings test, NUL test, row-level security on Postgres (opt-in).
 - Widgets `regulatory-reports.due` (GET /stats/due) and `regulatory-reports.compliance-calendar` (GET /calendar) with
   loading, empty and error states following the widget error convention; typed API client; vitest widget tests.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/regulatory-reports`) and
+  `apps/frontend/config/modules.enabled.yaml` (`regulatory-reports.due` on the Governance, Hospital Coordinator and
+  Research Office dashboards, `regulatory-reports.compliance-calendar` on the Management dashboard). The e2e journeys of
+  those dashboards now check the widgets' titles and empty states.

@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "@eos/ui-kit";
+import { ExamDuties } from "./ExamDuties";
 import { ExamSchedule } from "./ExamSchedule";
 import { HallTicketsIssued } from "./HallTicketsIssued";
 import { ResultsPending } from "./ResultsPending";
@@ -11,7 +12,8 @@ import "./widgets.css";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's generated API client in ../api.
  *
- * Examination Staff widgets: data, endpoint and permission per the PRD, section 7 (PR #183).
+ * Data, endpoint and permission per the PRD, section 7 (PR #183): the three Examination Staff widgets, and
+ * examinations.exam-duties for the Faculty dashboard.
  */
 export const widgets: DashboardWidget[] = [
   {
@@ -37,5 +39,13 @@ export const widgets: DashboardWidget[] = [
     kind: "panel",
     size: "2x1",
     component: ResultsPending,
+  },
+  {
+    id: "examinations.exam-duties",
+    title: "My exam duties",
+    permission: "examinations:duty:read-own",
+    kind: "list",
+    size: "2x1",
+    component: ExamDuties,
   },
 ];
