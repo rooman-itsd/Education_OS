@@ -11,7 +11,7 @@ from .application.keys import rotate_kek
 
 def main() -> int:
     counts = rotate_kek()
-    print(json.dumps(counts, sort_keys=True))
+    sys.stdout.write(json.dumps(counts, sort_keys=True) + "\n")
     return 1 if counts["unreadable"] else 0
 
 
