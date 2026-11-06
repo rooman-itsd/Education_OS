@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Exam duty APIs (issue #325): listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties, with an audit entry per
+  change and the two contracted events `examinations.duty.assigned` and `.cancelled`. Assigning needs a scheduled
+  session or a paper, in a cycle up to `evaluation`; invigilation cannot overlap (back-to-back is fine, a cancelled session
+  never counts); a live duplicate is a 409, backed by migration `ex_0003` (two partial unique indexes, assigned and
+  completed duties only). `duty:read-all` lists the organisation's duties and `duty:read-department` alone gets none until
+  the caller's department is known. `staff_id` is stored without an identity lookup. Recorded in
+  `docs/reviewer-decisions.md` section 12.
 - Paper and session APIs (issue #325): listExamPapers, createExamPapers, getExamPaper, updateExamPaper, listExamSessions,
   scheduleExamSession, getExamSession, rescheduleExamSession and cancelExamSession, with an audit entry per change and the
   three contracted events `examinations.exam-session.scheduled`, `.rescheduled` and `.cancelled` (papers publish none).
