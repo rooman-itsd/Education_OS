@@ -49,6 +49,16 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
   },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
+  },
   // The supervisor's own widgets.
   {
     id: "projects.to-review",
