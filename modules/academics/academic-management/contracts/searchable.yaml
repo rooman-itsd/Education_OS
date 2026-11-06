@@ -1,0 +1,20 @@
+# What platform/search may index from this module (platform/search/docs/prd.md, decision 1).
+# A course is catalogue data, so title, code, description, status and credits are indexed. An archived course is
+# removed by its trigger and the provider returns nothing for it, so a reindex cannot bring it back.
+module: academic-management
+types:
+  - name: course
+    label: Courses
+    url: /academics/courses/{id}
+    triggers:
+      - { event: academic-management.course.created,  action: upsert, id_field: course_id }
+      - { event: academic-management.course.updated,  action: upsert, id_field: course_id }
+      - { event: academic-management.course.archived, action: delete, id_field: course_id }
+    fields:
+      title:       { kind: text, analyzer: english, boost: 3, role: title }
+      code:        { kind: text, analyzer: code, display: true }
+      description: { kind: text, analyzer: english, snippet: true }
+      status:      { kind: keyword, display: true, filterable: true }
+      credits:     { kind: number, filterable: true, display: true }
+    read_permissions:
+      any_of: [academic-management:course:read]

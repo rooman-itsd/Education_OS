@@ -8,8 +8,21 @@ dependencies = [
   "sqlalchemy>=2",
   "alembic",
   "eos-core",
-  "eos-sdk",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "pyyaml", "httpx>=0.27", "eos-testing", "psycopg[binary]>=3.1"]
+
+# The helpdesk ticket events this module consumes (module.yaml consumes_events), found by platform/event-bus.
+[project.entry-points."eos.event_consumers"]
+sla-management = "eos_sla_management.application.consumers:CONSUMERS"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
