@@ -46,6 +46,34 @@ x-app-environment: &app-environment
   MESSAGING_PROVIDERS_SMTP_TIMEOUT_S: ${MESSAGING_PROVIDERS_SMTP_TIMEOUT_S:-10}
   MESSAGING_PROVIDERS_FROM_EMAIL: ${MESSAGING_PROVIDERS_FROM_EMAIL:-no-reply@example.invalid}
   MESSAGING_PROVIDERS_FROM_NAME: ${MESSAGING_PROVIDERS_FROM_NAME:-Education OS}
+  # Integrations (platform/integration-hub, config/env.example). Outside dev mode the hub refuses to store or read a
+  # credential until INTEGRATION_HUB_SECRET_KEK is set (32 random bytes, base64; keep it out of git and backups). The
+  # secrets themselves are files in the eos-hub-secrets volume mounted by the api and relay services below.
+  INTEGRATION_HUB_PUBLIC_BASE_URL: ${INTEGRATION_HUB_PUBLIC_BASE_URL:-https://educationos.futureacad.ae}
+  INTEGRATION_HUB_ALLOWED_RETURN_HOSTS: ${INTEGRATION_HUB_ALLOWED_RETURN_HOSTS:-educationos.futureacad.ae}
+  INTEGRATION_HUB_SECRET_BACKEND: ${INTEGRATION_HUB_SECRET_BACKEND:-file}
+  INTEGRATION_HUB_SECRET_DIR: ${INTEGRATION_HUB_SECRET_DIR:-/var/lib/eos/integration-hub/secrets}
+  INTEGRATION_HUB_SECRET_KEK: ${INTEGRATION_HUB_SECRET_KEK:-}
+  INTEGRATION_HUB_SECRET_KEK_PREVIOUS: ${INTEGRATION_HUB_SECRET_KEK_PREVIOUS:-}
+  INTEGRATION_HUB_ALLOW_MOCK: ${INTEGRATION_HUB_ALLOW_MOCK:-false}
+  INTEGRATION_HUB_ADAPTERS: ${INTEGRATION_HUB_ADAPTERS:-}
+  INTEGRATION_HUB_OAUTH_STATE_TTL_S: ${INTEGRATION_HUB_OAUTH_STATE_TTL_S:-600}
+  INTEGRATION_HUB_TOKEN_REFRESH_LEAD_S: ${INTEGRATION_HUB_TOKEN_REFRESH_LEAD_S:-600}
+  INTEGRATION_HUB_INBOUND_MAX_BYTES: ${INTEGRATION_HUB_INBOUND_MAX_BYTES:-1048576}
+  INTEGRATION_HUB_PROVIDER_REQUEST_TIMEOUT_S: ${INTEGRATION_HUB_PROVIDER_REQUEST_TIMEOUT_S:-10}
+  INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS: ${INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS:-7}
+  INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN: ${INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN:-30}
+  INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS: ${INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS:-7}
+  INTEGRATION_HUB_SYNC_TIMEOUT_S: ${INTEGRATION_HUB_SYNC_TIMEOUT_S:-15}
+  INTEGRATION_HUB_IDEMPOTENCY_WINDOW_DAYS: ${INTEGRATION_HUB_IDEMPOTENCY_WINDOW_DAYS:-30}
+  INTEGRATION_HUB_RETRY_MAX_ATTEMPTS: ${INTEGRATION_HUB_RETRY_MAX_ATTEMPTS:-8}
+  INTEGRATION_HUB_RETRY_BASE_S: ${INTEGRATION_HUB_RETRY_BASE_S:-30}
+  INTEGRATION_HUB_RETRY_MAX_S: ${INTEGRATION_HUB_RETRY_MAX_S:-21600}
+  INTEGRATION_HUB_QUEUE_EXPIRY_HOURS: ${INTEGRATION_HUB_QUEUE_EXPIRY_HOURS:-72}
+  INTEGRATION_HUB_DELIVERY_PAYLOAD_RETENTION_DAYS: ${INTEGRATION_HUB_DELIVERY_PAYLOAD_RETENTION_DAYS:-30}
+  INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS: ${INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS:-400}
+  INTEGRATION_HUB_HEALTH_INTERVAL_MIN: ${INTEGRATION_HUB_HEALTH_INTERVAL_MIN:-15}
+  INTEGRATION_HUB_HEALTH_RUNS_PER_HOUR: ${INTEGRATION_HUB_HEALTH_RUNS_PER_HOUR:-12}
 
 services:
   db:
@@ -88,6 +116,10 @@ services:
       migrate:
         condition: service_completed_successfully
     environment: *app-environment
+    # integration-hub's secret store (credentials and OAuth tokens, encrypted under INTEGRATION_HUB_SECRET_KEK):
+    # a named volume, so a redeploy keeps them. Not in the database or its backups by design.
+    volumes:
+      - eos-hub-secrets:/var/lib/eos/integration-hub/secrets
     ports:
       - "${EOS_API_PORT:-8000}:8000"
   # Keycloak's own database (ADR-0006 decision 2): a second Postgres so the provider's schema, upgrades and
@@ -175,6 +207,9 @@ services:
       migrate:
         condition: service_completed_successfully
     environment: *app-environment
+    # the hub's scheduled jobs run here and call adapters with the stored credentials: same volume as the api
+    volumes:
+      - eos-hub-secrets:/var/lib/eos/integration-hub/secrets
     command: ["python", "-m", "eos_event_bus"]
     healthcheck:
       disable: true # the image's HEALTHCHECK calls the API on :8000, which this container does not serve
@@ -213,3 +248,4 @@ services:
 volumes:
   eos-pgdata:
   eos-kcdata:
+  eos-hub-secrets:
