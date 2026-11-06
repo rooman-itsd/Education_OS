@@ -1,9 +1,12 @@
 """Referrals, response, transfer, appeal, decision and closing (contract /referrals, /respond, /transfer, /appeal,
 /appeal-decision, /close), the events they publish and who may see what."""
 
+import re
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
+import yaml
 from conftest import Desk, audit, days, outbox
 
 MISSING = "00000000-0000-4000-8000-000000000000"
@@ -159,6 +162,33 @@ def test_responding_records_the_response(desk, org):
     }
     assert audit(org.id, r["id"]) == sorted(["request.recorded", "request.assigned", "request.responded"])
     assert outbox("rti.request.closed", org.id) == []  # responding does not close
+
+
+CHANNELS = yaml.safe_load(
+    (Path(__file__).resolve().parents[2] / "contracts" / "openapi.yaml").read_text(encoding="utf-8")
+)["components"]["schemas"]["Channel"]["enum"]
+
+
+@pytest.mark.parametrize("channel", CHANNELS)
+def test_every_channel_is_recorded_on_receipt_and_on_dispatch(desk, channel):
+    # online_portal is 13 characters: a 12-character column took it on SQLite and failed on Postgres (#515 review).
+    r = desk.assigned(received_via=channel)
+    assert r["received_via"] == channel
+    d = desk.respond(r["id"], dispatch_mode=channel)
+    assert d["response"]["dispatch_mode"] == channel
+    assert desk.ok(desk.get(f"/requests/{r['id']}"))["received_via"] == channel
+
+
+def test_the_channel_columns_hold_every_channel():
+    from eos_rti.infrastructure import models
+
+    longest = max(len(c) for c in CHANNELS)
+    assert models.RtiRequest.__table__.c.received_via.type.length >= longest
+    assert models.Response.__table__.c.dispatch_mode.type.length >= longest
+    migration = next((Path(__file__).resolve().parents[2] / "db" / "migrations" / "versions").glob("*_0001_*.py"))
+    for column in ("received_via", "dispatch_mode"):
+        width = re.search(rf'sa\.Column\("{column}", sa\.String\((\d+)\)', migration.read_text()).group(1)
+        assert int(width) >= longest, column
 
 
 @pytest.mark.parametrize("kind", ["partly_provided", "refused"])

@@ -57,7 +57,7 @@ def upgrade() -> None:
         _created(),
         sa.Column("seq", sa.Integer, nullable=False),
         sa.Column("number", sa.String(20), nullable=False),
-        sa.Column("received_via", sa.String(12), nullable=False),
+        sa.Column("received_via", sa.String(16), nullable=False),
         sa.Column("received_on", sa.Date, nullable=False),
         sa.Column("applicant_name", sa.String(200), nullable=False),
         sa.Column("applicant_address", sa.Text, nullable=True),
@@ -106,7 +106,7 @@ def upgrade() -> None:
         sa.Column("summary", sa.Text, nullable=False),
         sa.Column("grounds", sa.Text, nullable=True),
         sa.Column("dispatched_on", sa.Date, nullable=False),
-        sa.Column("dispatch_mode", sa.String(12), nullable=False),
+        sa.Column("dispatch_mode", sa.String(16), nullable=False),
         sa.Column("responded_by", sa.String(36), nullable=False),
         sa.UniqueConstraint("organisation_id", "request_id", name="uq_rti_response_request"),
     )

@@ -73,7 +73,7 @@ class RtiRequest(Base, TenantMixin, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     seq: Mapped[int] = mapped_column(Integer)  # 1, 2, 3 ... per organisation
     number: Mapped[str] = mapped_column(String(NUMBER_LEN))
-    received_via: Mapped[str] = mapped_column(String(12))
+    received_via: Mapped[str] = mapped_column(String(16))
     received_on: Mapped[date] = mapped_column(Date)
     applicant_name: Mapped[str] = mapped_column(String(NAME_LEN))
     applicant_address: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -130,7 +130,7 @@ class Response(Base, TenantMixin, TimestampMixin):
     summary: Mapped[str] = mapped_column(Text)
     grounds: Mapped[str | None] = mapped_column(Text, nullable=True)
     dispatched_on: Mapped[date] = mapped_column(Date)
-    dispatch_mode: Mapped[str] = mapped_column(String(12))
+    dispatch_mode: Mapped[str] = mapped_column(String(16))
     responded_by: Mapped[str] = mapped_column(String(36))
 
 
