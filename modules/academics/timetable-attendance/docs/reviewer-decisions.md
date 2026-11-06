@@ -57,6 +57,30 @@ These are decisions the code makes that no one has approved. They follow `platfo
 - **An event is applied only in its own organisation.** The handler refuses to run if the session is not scoped to the
   event's organisation, and an event with no organisation is not applied.
 
+## D. Scheduled classes, attendance and reports: choices made (not reviewed)
+
+Made by the classes-and-attendance PR (issue #325), from the contract, the PRD and section A. Each needs the reviewer's
+confirmation; none is hidden behind a flag.
+
+| Point | Choice | Why |
+|---|---|---|
+| Who "teaches" a class | `instructor_id` (from `assignment_ref`) equals the caller's user id | The faculty-assignment mapping (section B) is unconfirmed; this is the PRD's intent |
+| Who "is" a student | the caller's user id is the `student_id` of `section_member` | PRD Q3 is open; `/me/schedule` and `/me/attendance-*` need one id |
+| An ad-hoc class's date | the start's date in the offset the request gives (`09:30+05:30` is that day in India) | The organisation's time zone has no source (section 10); this uses the caller's own wall clock and assumes no zone |
+| Today, when `date` is omitted | the UTC date | Same reason; the widgets pass the viewer's date, so they are not affected |
+| The active academic period | the known term (`term_ref`) containing today; the latest-starting if several | academic-management answers 404 `active_term_not_found` the same way; the contract adds the 404 |
+| Department scope (Q9) | `report:read-department` and `attendance-record:correct-department` grant nothing more. Department and student reports need `report:read-all`; a head without it gets 403 `department_unknown` (after the period is resolved, so a new organisation sees the widget's empty state) | Section A: "Until then the `*-department` keys grant nothing" |
+| Reading sessions and records | the instructor, `report:read-all` or `override` | PRD section 12 read-scope rule, without the department step |
+| What counts in reports | closed sessions of classes not cancelled; open sessions wait; cancelled sessions never count | FR-13, FR-18 and decision A3 |
+| `override` | lifts the own-class limit and the marking window for open and mark; corrections at any time | permissions.yaml: "outside own-class and time-window limits" |
+| Rescheduling an open session's class | its marking deadline follows the new end | The deadline is the end plus the window (FR-7) |
+| Records of unmarked students | listed with `id: null` until marked, though a row exists (the snapshot) | The contract: "Null for an eligible student not yet marked" |
+| Student history | covers every period when `academic_period_id` is omitted | A history has no natural "current"; the summary keeps the active-term default |
+| Department report average | the mean of the students' percentages, students with no counted class left out | The contract names it `average_percentage` |
+
+Not built: closing sessions automatically at the deadline (FR-11) needs a job under `eos.scheduler_jobs`, and the
+session snapshot is empty outside the tests until the enrolment-registration consumers exist (section B).
+
 ## Original submission (PR #459)
 
 The nine points below are as submitted with PR #459. Where section A now records an answer, A is current.

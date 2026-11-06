@@ -14,6 +14,25 @@ Timetable generation, class scheduling, attendance capture and reports.
 ## Scope
 _Owner fills in: what this module is responsible for, and what it explicitly is not._
 
+## Classes, attendance and reports
+`api/classes_attendance.py` serves the scheduled-class, attendance-session, attendance-record, report and `/me` operations
+of `contracts/openapi.yaml` (contract 0.2.0), so the status line above is out of date for them: what is still not built is
+class generation from a timetable (it waits on the organisation's time zone) and closing open sessions automatically at
+their deadline (FR-11, needs a scheduler job). Rules the code applies, and why, are in
+[docs/reviewer-decisions.md](docs/reviewer-decisions.md) section D. In short:
+
+- Ad-hoc classes take their academic period and instructor from the read models; a class's date is its start's date in the
+  offset the request gives. Cancelling a class with an open session marks the session `cancelled` (reviewer decision).
+- Open, close, mark and correct: the class's instructor (`instructor_id` is the caller's user id), widened by
+  `attendance-session:override`. Reads of sessions and records: the instructor or `report:read-all`.
+- Reports count closed sessions of classes that are not cancelled; excused classes leave the denominator; a group with no
+  counted class has a null percentage. The academic period defaults to the known term containing today (UTC), else 404
+  `active_term_not_found`.
+- The department keys (`report:read-department`, `attendance-record:correct-department`) grant nothing beyond the
+  other keys until the caller's department can be known (PRD Q9): department and student reports need `report:read-all`.
+- Opening a session snapshots the students of `section_member`, which no consumer fills yet (enrolment-registration
+  events wait on the `student_id` mapping), so outside the tests a session opens with no eligible student.
+
 ## Event consumers
 `application/consumers.py` is registered under the `eos.event_consumers` entry point (`backend/pyproject.toml`) and
 lists its events in `module.yaml` (`consumes_events`). The event relay (`platform/event-bus`) finds the consumers of the
