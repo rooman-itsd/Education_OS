@@ -13,6 +13,10 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=8", "pyyaml"]
 
+# The FR-11 job for platform/scheduler, and the events it reacts to (platform/event-bus).
+[project.entry-points."eos.scheduler_jobs"]
+timetable-attendance = "eos_timetable_attendance.application.auto_close:JOBS"
+
 [project.entry-points."eos.event_consumers"]
 timetable-attendance = "eos_timetable_attendance.application.consumers:CONSUMERS"
 
