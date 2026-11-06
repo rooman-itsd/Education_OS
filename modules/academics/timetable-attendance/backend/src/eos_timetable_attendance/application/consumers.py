@@ -1,5 +1,6 @@
 """What timetable-attendance consumes (event-bus entry point `eos.event_consumers`): academic-management's term,
-offering and section events, kept as local read models (PRD sections 8 and 9). The relay calls each handler with its
+offering and section events and enrolment-registration's course-registration and section-allocation events, kept as
+local read models (PRD sections 8 and 9). The relay calls each handler with its
 own session, in the event's organisation, and commits afterwards (platform/event-bus/README.md).
 
 Implemented here:
@@ -8,11 +9,13 @@ Implemented here:
 - `academic-management.offering.status-changed` -> offering_ref.status
 - `academic-management.section.created`         -> section_ref (code)
 - `academic-management.section.updated`         -> section_ref.status
+- `enrolment-registration.course-registration.confirmed` -> registration_ref, then section_member
+- `enrolment-registration.course-registration.withdrawn` -> registration_ref.withdrawn_on, then section_member
+- `enrolment-registration.section-allocation.changed`    -> registration_ref.moves, then section_member
 
 Not consumed, on purpose (docs/reviewer-decisions.md):
 - `faculty-assignment.*`: storing the assignee as an instructor needs Faizan's confirmation of the identity mapping
   (`faculty_id` against `instructor_id`).
-- `enrolment-registration.*` (section members): they depend on the unconfirmed `student_id` mapping.
 - `offering.updated` and `course.*`: their payloads carry only `changed_fields`, not the new values.
 
 Delivery is at-least-once and unordered (platform/event-bus/contracts/events.yaml), so:
@@ -31,7 +34,7 @@ Delivery is at-least-once and unordered (platform/event-bus/contracts/events.yam
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from eos_core.tenant import resolve_organisation
 from sqlalchemy.orm import Session
@@ -39,7 +42,7 @@ from sqlalchemy.orm import Session
 from ..domain.errors import DomainRuleError
 from ..domain.values import require_date, require_id, require_instant, require_text
 from ..infrastructure import repository as repo
-from ..infrastructure.models import OfferingRef, ProcessedEvent, SectionRef, TermRef
+from ..infrastructure.models import OfferingRef, ProcessedEvent, RegistrationRef, SectionMember, SectionRef, TermRef
 
 log = logging.getLogger("eos.timetable_attendance")
 
@@ -49,6 +52,10 @@ OFFERING_CREATED = f"{SOURCE}.offering.created"
 OFFERING_STATUS_CHANGED = f"{SOURCE}.offering.status-changed"
 SECTION_CREATED = f"{SOURCE}.section.created"
 SECTION_UPDATED = f"{SOURCE}.section.updated"
+ENROLMENT = "enrolment-registration"
+REGISTRATION_CONFIRMED = f"{ENROLMENT}.course-registration.confirmed"
+REGISTRATION_WITHDRAWN = f"{ENROLMENT}.course-registration.withdrawn"
+SECTION_ALLOCATION_CHANGED = f"{ENROLMENT}.section-allocation.changed"
 
 SUPPORTED_VERSION = 1
 APPLIED, DUPLICATE, IGNORED, STALE = "applied", "duplicate", "ignored", "stale"
@@ -211,6 +218,162 @@ def _section_updated(db: Session, org: str, p: dict, occurred_at: datetime) -> s
     return APPLIED
 
 
+# ---------------------------------------------------------------- enrolment-registration -> section_member
+#
+# Who is in which section, and from when to when (FR-7). Each event adds one fact to the registration's
+# `registration_ref`; the registration's `section_member` rows are then rebuilt from all its facts, so the result does
+# not depend on the order the events arrive in:
+# - confirmed: in `section_id` from the date of `confirmed_at`;
+# - section-allocation.changed: out of the old section the day before `effective_on`, in `to_section_id` from it;
+# - withdrawn: every membership ends on the date of `withdrawn_at` (inclusive).
+# A fact already known is not replaced by a later copy (a second confirmation, a withdrawal twice, the same move
+# twice). `person_id` is stored as the `student_id` (PRD Q3, enrolment-registration's integration points).
+
+
+def _event_date(payload: dict, name: str) -> date:
+    """The calendar date of a date-time field, read in the offset it carries (the wall clock of the publisher)."""
+    value = payload.get(name)
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            raise ValueError(f"{name} must be a date and time") from None
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        raise ValueError(f"{name} must be a date and time with a zone")
+    return value.date()
+
+
+def _registration(db: Session, org: str, p: dict) -> RegistrationRef:
+    """The registration's read-model row, created with its student and offering on the first event that names it."""
+    registration_id, student, offering = _id(p, "registration_id"), _id(p, "person_id"), _id(p, "course_offering_id")
+    row = repo.ref_row(db, RegistrationRef, RegistrationRef.registration_id, registration_id, org)
+    if row is None:
+        row = RegistrationRef(
+            organisation_id=org,
+            registration_id=registration_id,
+            student_id=student,
+            course_offering_id=offering,
+            moves=[],
+        )
+        db.add(row)
+    elif (row.student_id, row.course_offering_id) != (student, offering):
+        raise ValueError("a registration has one student and one course offering; the event names others")
+    return row
+
+
+def _name(row: RegistrationRef, p: dict, occurred_at: datetime) -> None:
+    """The display name from the latest event that carries one (PRD Q3: the allocation events provide it)."""
+    if p.get("student_name") is None:
+        return
+    name = _text(p, "student_name", 200)
+    known = row.name_as_of
+    if known is not None and known.tzinfo is None:
+        known = known.replace(tzinfo=occurred_at.tzinfo)
+    if known is None or occurred_at >= known:
+        row.student_name, row.name_as_of = name, occurred_at
+
+
+def memberships(row: RegistrationRef) -> list[tuple[str, date, date | None]]:
+    """(section, from, to) of a registration from its facts, in time order; `to` None while it is open. Without the
+    confirmation, the first section's start is unknown, so the memberships begin at the first move."""
+    found: list[tuple[str, date, date | None]] = []
+    section, start = row.section_id, row.confirmed_on
+    for move in sorted(row.moves or [], key=lambda m: (m["on"], m["from"], m["to"])):
+        on = date.fromisoformat(move["on"])
+        if section is not None and start is not None:
+            found.append((section, start, on - timedelta(days=1)))
+        section, start = move["to"], on
+    if section is not None and start is not None:
+        found.append((section, start, None))
+    if row.withdrawn_on is not None:
+        end = row.withdrawn_on
+        found = [(s, a, end if b is None or b > end else b) for s, a, b in found if a <= end]
+    return [(s, a, b) for s, a, b in found if b is None or b >= a]
+
+
+def _rebuild(db: Session, org: str, row: RegistrationRef) -> None:
+    """Make the registration's section_member rows match its facts: rows are updated in place, added or removed. A row
+    another registration already holds for the same student, section and start date is left to that registration."""
+    db.flush()
+    wanted = {(s, a): b for s, a, b in memberships(row)}
+    existing = list(
+        db.scalars(
+            repo.q(db, SectionMember).where(
+                SectionMember.organisation_id == org, SectionMember.registration_id == row.registration_id
+            )
+        )
+    )
+    for member in existing:
+        key = (member.section_id, member.allocated_from)
+        if key in wanted:
+            member.allocated_to, member.student_name = wanted.pop(key), row.student_name
+        else:
+            db.delete(member)
+    db.flush()
+    for (section, start), end in sorted(wanted.items(), key=lambda kv: kv[0][1]):
+        taken = db.scalars(
+            repo.q(db, SectionMember).where(
+                SectionMember.organisation_id == org,
+                SectionMember.section_id == section,
+                SectionMember.student_id == row.student_id,
+                SectionMember.allocated_from == start,
+            )
+        ).first()
+        if taken is not None:
+            log.warning("timetable-attendance: a membership of another registration holds %s from %s", section, start)
+            continue
+        db.add(
+            SectionMember(
+                organisation_id=org,
+                section_id=section,
+                student_id=row.student_id,
+                student_name=row.student_name,
+                allocated_from=start,
+                allocated_to=end,
+                registration_id=row.registration_id,
+            )
+        )
+
+
+def _registration_confirmed(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    section, on = _id(p, "section_id"), _event_date(p, "confirmed_at")
+    row = _registration(db, org, p)
+    _name(row, p, occurred_at)
+    if row.confirmed_on is not None:
+        _rebuild(db, org, row)  # the name may have changed
+        return IGNORED  # a registration is confirmed once; a second confirmation changes nothing
+    row.section_id, row.confirmed_on = section, on
+    _rebuild(db, org, row)
+    return APPLIED
+
+
+def _registration_withdrawn(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    _id(p, "section_id")
+    on = _event_date(p, "withdrawn_at")
+    row = _registration(db, org, p)
+    if row.withdrawn_on is not None:
+        return IGNORED
+    row.withdrawn_on = on
+    _rebuild(db, org, row)
+    return APPLIED
+
+
+def _section_allocation_changed(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    move = {
+        "from": _id(p, "from_section_id"),
+        "to": _id(p, "to_section_id"),
+        "on": _date(p, "effective_on").isoformat(),
+    }
+    row = _registration(db, org, p)
+    _name(row, p, occurred_at)
+    if move in (row.moves or []):
+        _rebuild(db, org, row)
+        return IGNORED
+    row.moves = [*(row.moves or []), move]  # a new list, so the JSON column is seen as changed
+    _rebuild(db, org, row)
+    return APPLIED
+
+
 def on_term_created(db: Session, event) -> str:
     return _receive(db, event, _term_created)
 
@@ -231,6 +394,18 @@ def on_section_updated(db: Session, event) -> str:
     return _receive(db, event, _section_updated)
 
 
+def on_registration_confirmed(db: Session, event) -> str:
+    return _receive(db, event, _registration_confirmed)
+
+
+def on_registration_withdrawn(db: Session, event) -> str:
+    return _receive(db, event, _registration_withdrawn)
+
+
+def on_section_allocation_changed(db: Session, event) -> str:
+    return _receive(db, event, _section_allocation_changed)
+
+
 # Registered in pyproject.toml under `eos.event_consumers`; module.yaml `consumes_events` lists the same names.
 CONSUMERS = {
     TERM_CREATED: on_term_created,
@@ -238,4 +413,7 @@ CONSUMERS = {
     OFFERING_STATUS_CHANGED: on_offering_status_changed,
     SECTION_CREATED: on_section_created,
     SECTION_UPDATED: on_section_updated,
+    REGISTRATION_CONFIRMED: on_registration_confirmed,
+    REGISTRATION_WITHDRAWN: on_registration_withdrawn,
+    SECTION_ALLOCATION_CHANGED: on_section_allocation_changed,
 }

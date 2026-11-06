@@ -30,8 +30,8 @@ their deadline (FR-11, needs a scheduler job). Rules the code applies, and why, 
   `active_term_not_found`.
 - The department keys (`report:read-department`, `attendance-record:correct-department`) grant nothing beyond the
   other keys until the caller's department can be known (PRD Q9): department and student reports need `report:read-all`.
-- Opening a session snapshots the students of `section_member`, which no consumer fills yet (enrolment-registration
-  events wait on the `student_id` mapping), so outside the tests a session opens with no eligible student.
+- Opening a session snapshots the students of `section_member`, which the enrolment-registration consumers fill (see
+  Event consumers below).
 
 ## Event consumers
 `application/consumers.py` is registered under the `eos.event_consumers` entry point (`backend/pyproject.toml`) and
@@ -45,11 +45,15 @@ modules the host has enabled, so they run only when this module is enabled in `a
 | `academic-management.offering.status-changed` | `offering_ref.status` |
 | `academic-management.section.created` | `section_ref` (code) |
 | `academic-management.section.updated` | `section_ref.status` |
+| `enrolment-registration.course-registration.confirmed` | `registration_ref`; `section_member` in the section from the date of `confirmed_at` |
+| `enrolment-registration.course-registration.withdrawn` | `registration_ref.withdrawn_on`; memberships end on the date of `withdrawn_at` |
+| `enrolment-registration.section-allocation.changed` | `registration_ref.moves`; the old section ends the day before `effective_on`, the new one starts on it |
 
 Delivery is at-least-once and unordered: each handler is idempotent on the envelope id (`processed_event`), tolerates an
 event arriving before its creation, orders status changes by the envelope `occurred_at`, and applies an event only in its
-own organisation. Not consumed, pending decisions (see the decisions page): `faculty-assignment.*` (identity mapping),
-`enrolment-registration.*` (`student_id` mapping), `offering.updated` and `course.*` (no new values in the payload).
+own organisation. A registration's memberships are rebuilt from all the facts its events carried, so any arrival
+order gives the same rows. `person_id` is stored as `student_id`. Not consumed, pending decisions (see the decisions
+page): `faculty-assignment.*` (identity mapping), `offering.updated` and `course.*` (no new values in the payload).
 
 ## Tests
 Backend, from `modules/academics/timetable-attendance/backend` (a throwaway SQLite database, never a real one):
