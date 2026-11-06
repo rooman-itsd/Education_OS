@@ -275,3 +275,87 @@ def test_two_first_rca_drafts_at_the_same_time_do_not_collide(pg, monkeypatch):
             text("SELECT summary FROM incident_management_rca WHERE problem_id = :p"), {"p": problem_id}
         ).all()
     assert [r[0] for r in rows] == ["Two"]
+
+
+def _write_while_the_parent_is_being_closed(pg, parent_sql, closing_sql, write):
+    """`write(session, org, parent_id)` runs while another transaction holds the parent row, already set to a status that
+    refuses it. It must wait for that row, then be refused (409): a read that did not lock would still see the old
+    status and add its row to a record that is closing. Returns (waited, exception)."""
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+
+    engine, _ = pg
+    org, parent_id = str(uuid.uuid4()), str(uuid.uuid4())
+    with engine.begin() as c:
+        c.execute(text(parent_sql), {"id": parent_id, "org": org})
+    closing, writer = Session(engine), Session(engine)
+    for session in (closing, writer):
+        session.info["organisation_id"] = org
+    outcome: dict[str, BaseException | None] = {"error": None}
+
+    def run():
+        try:
+            write(writer, org, parent_id)
+        except BaseException as err:  # noqa: BLE001 - the test reads what the request would have answered
+            outcome["error"] = err
+
+    try:
+        closing.execute(text(closing_sql), {"id": parent_id})  # the close is flushed, its row lock held, not committed
+        waiting = threading.Thread(target=run)
+        waiting.start()
+        waiting.join(timeout=1)
+        waited = waiting.is_alive()
+        closing.commit()
+        waiting.join(timeout=10)
+        assert not waiting.is_alive()
+    finally:
+        closing.close()
+        writer.close()
+    return waited, outcome["error"]
+
+
+def test_a_timeline_update_waits_for_an_incident_being_closed_and_is_refused(pg):
+    from eos_incident_management.application import service
+    from eos_incident_management.application.access import INCIDENT_MANAGE, Actor
+
+    def write(session, org, incident_id):
+        actor = Actor(user_id=str(uuid.uuid4()), organisation_id=org, permissions={INCIDENT_MANAGE})
+        service.add_update(session, actor, incident_id, {"body": "Late note"})
+
+    waited, error = _write_while_the_parent_is_being_closed(
+        pg, INCIDENT, "UPDATE incident_management_incident SET status = 'cancelled' WHERE id = :id", write
+    )
+    assert waited, "the update should wait for the incident row"
+    assert getattr(error, "status", None) == 409, error
+    engine, _ = pg
+    from sqlalchemy import text
+
+    with engine.connect() as c:
+        assert (
+            c.execute(
+                text("SELECT count(*) FROM incident_management_timeline_update WHERE body = 'Late note'")
+            ).scalar()
+            == 0
+        )
+
+
+def test_a_corrective_action_waits_for_a_problem_being_closed_and_is_refused(pg):
+    from datetime import date, timedelta
+
+    from eos_incident_management.application import service
+    from eos_incident_management.application.access import PROBLEM_MANAGE, Actor
+
+    def write(session, org, problem_id):
+        actor = Actor(user_id=str(uuid.uuid4()), organisation_id=org, permissions={PROBLEM_MANAGE})
+        body = {
+            "description": "Replace the access point",
+            "owner_id": str(uuid.uuid4()),
+            "due_date": date.today() + timedelta(days=5),
+        }
+        service.add_action(session, actor, problem_id, body)
+
+    waited, error = _write_while_the_parent_is_being_closed(
+        pg, PROBLEM, "UPDATE incident_management_problem SET status = 'closed' WHERE id = :id", write
+    )
+    assert waited, "the action should wait for the problem row"
+    assert getattr(error, "status", None) == 409, error

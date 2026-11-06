@@ -21,3 +21,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   error convention; typed API client in `frontend/src/api/client.ts`; vitest widget tests.
 - NUL characters never reach the database: Postgres cannot store them in text, so a NUL in a request body is a 422
   and in the URL a 404 (path ids) or 422 (query parameters), instead of a 500 (`api/deps.py` `no_nul`, `Strict`).
+- Editing an incident or a problem refuses a blank description (422), as reporting and opening do: PATCH takes the
+  same three-character minimum and `description_blank` for spaces. Adding a timeline update and adding a corrective
+  action lock the incident or problem row first, as references and the status moves do, so neither can land on a
+  record that a close or cancel is committing at the same moment (409).

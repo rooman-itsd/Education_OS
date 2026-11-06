@@ -257,3 +257,15 @@ def test_responders_cannot_open_problems_but_can_link_to_one(desk):
         f"/incidents/{incident['id']}", {"problem_id": "00000000-0000-4000-8000-000000000000"}, desk.responder
     )
     assert (unknown.status_code, unknown.json()["detail"]["code"]) == (404, "not_found")
+
+
+def test_a_blank_description_is_refused_on_edit_as_on_report(desk):
+    incident = desk.incident()
+    path = f"/incidents/{incident['id']}"
+    for blank in ("", "ab", "   "):
+        assert desk.patch(path, {"description": blank}, desk.responder).status_code == 422, repr(blank)
+    refused = desk.patch(path, {"description": "      "}, desk.responder)
+    assert (refused.status_code, refused.json()["detail"]["code"]) == (422, "description_blank")
+    assert desk.ok(desk.get(path, desk.responder))["description"] == incident["description"]
+    edited = desk.ok(desk.patch(path, {"description": "Wi-Fi is down in blocks A and B"}, desk.responder))
+    assert edited["description"] == "Wi-Fi is down in blocks A and B"

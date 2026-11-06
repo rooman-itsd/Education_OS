@@ -387,6 +387,8 @@ def update_incident(db: Session, actor: Actor, incident_id: str, body: dict) -> 
     _domain(inc.check_editable, incident.status)
     if "title" in body:
         _domain(inc.check_text, body["title"], "title")
+    if "description" in body:
+        _domain(inc.check_text, body["description"], "description")
     if "started_at" in body:
         _check_started(body["started_at"], incident)
     if body.get("problem_id") is not None:
@@ -478,7 +480,7 @@ def move_incident(db: Session, actor: Actor, incident_id: str, body: dict) -> di
 def add_update(db: Session, actor: Actor, incident_id: str, body: dict) -> dict:
     """POST /incidents/{id}/updates: 409 when closed or cancelled; a body of only spaces is a 422."""
     require(actor, INCIDENT_MANAGE)
-    incident = _incident(db, incident_id)
+    incident = _incident(db, incident_id, lock=True)
     _domain(inc.check_editable, incident.status)
     _domain(inc.check_text, body["body"], "body")
     update = TimelineUpdate(
@@ -618,6 +620,8 @@ def update_problem(db: Session, actor: Actor, problem_id: str, body: dict) -> di
     _domain(prb.check_editable, problem.status)
     if "title" in body:
         _domain(inc.check_text, body["title"], "title")
+    if "description" in body:
+        _domain(inc.check_text, body["description"], "description")
     if "workaround" in body:
         if not body["workaround"].strip():
             body["workaround"] = None
@@ -782,7 +786,7 @@ def add_action(db: Session, actor: Actor, problem_id: str, body: dict) -> dict:
     does not tie actions to the RCA's status, so they can be added before it is published. Publishes
     action.assigned."""
     require(actor, PROBLEM_MANAGE)
-    problem = _problem(db, problem_id)
+    problem = _problem(db, problem_id, lock=True)
     _domain(prb.check_can_add_action, problem.status)
     _domain(inc.check_text, body["description"], "description")
     _domain(prb.check_due_date, body["due_date"], today())

@@ -153,3 +153,15 @@ def test_problem_edits_and_list_filters(desk):
     assert ids("?service=WI-FI") == [wifi["id"]]
     assert ids("?q=session") == [lms["id"]]
     assert desk.get("/problems?status=open,stuck").status_code == 422
+
+
+def test_a_blank_description_is_refused_on_edit_as_on_open(desk):
+    problem = desk.problem()
+    path = f"/problems/{problem['id']}"
+    for blank in ("", "ab", "   "):
+        assert desk.patch(path, {"description": blank}).status_code == 422, repr(blank)
+    refused = desk.patch(path, {"description": "      "})
+    assert (refused.status_code, refused.json()["detail"]["code"]) == (422, "description_blank")
+    assert desk.ok(desk.get(path))["description"] == problem["description"]
+    edited = desk.ok(desk.patch(path, {"description": "Access points drop clients under load"}))
+    assert edited["description"] == "Access points drop clients under load"

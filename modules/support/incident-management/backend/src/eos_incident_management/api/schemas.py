@@ -109,7 +109,7 @@ class IncidentInput(Strict):
 
 class IncidentUpdateInput(Strict):
     title: Title | None = None
-    description: Text | None = None
+    description: LongText | None = None
     affected_services: Labels | None = None
     severity: Severity | None = None
     started_at: Moment | None = None
@@ -137,7 +137,7 @@ class ProblemInput(Strict):
 
 class ProblemUpdateInput(Strict):
     title: Title | None = None
-    description: Text | None = None
+    description: LongText | None = None
     affected_services: Labels | None = None
     owner_id: Uuid | None = None
     workaround: Text | None = None
