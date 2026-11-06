@@ -36,8 +36,7 @@ def _issue(org, key="res-1:marksheet", **kw):
 
 
 def _sweep():
-    with SessionLocal() as db:
-        return deliveries.process_due(db)
+    return deliveries.process_due()
 
 
 def _row(delivery_id):
@@ -351,12 +350,10 @@ def test_retention_purges_inputs_raw_callbacks_and_old_rows(client, org, adapter
     r = _issue(org)
     _sweep()
     clock.advance(days=31)
-    with SessionLocal() as db:
-        deliveries.purge(db)
+    deliveries.purge()
     assert _row(r["delivery_id"]).payload_encrypted is None
     clock.advance(days=400)
-    with SessionLocal() as db:
-        deliveries.purge(db)
+    deliveries.purge()
     assert _row(r["delivery_id"]) is None
 
 

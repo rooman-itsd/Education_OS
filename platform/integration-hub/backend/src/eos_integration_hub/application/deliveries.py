@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import timedelta
 
 from eos_core.db import SessionLocal, scoped
@@ -44,12 +45,14 @@ from ..infrastructure.registry import Outcome, call, get_registry
 from ..infrastructure.secrets import SecretStoreError, get_cipher
 from .common import (
     Actor,
+    as_organisation,
     aware,
     clock,
     context_for,
     iso,
     link_secrets,
     page,
+    platform_rows,
     publish,
     record,
     resolve_secrets,
@@ -60,6 +63,9 @@ log = logging.getLogger("eos.integration_hub")
 TERMINAL = ("succeeded", "failed", "dead_lettered", "manual_action_required", "rejected_inbound")
 MAX_INPUT_BYTES = 1_048_576
 SWEEP_BATCH = 200
+# A scheduled run starts no new attempt after this long; what is left waits for the next run (one a minute), so a
+# slow provider delays its own queue, never the scheduler's next run.
+JOB_BUDGET_S = 45
 
 
 def async_timeout_s(config: HubConfig) -> int:
@@ -484,34 +490,35 @@ def _fail(db: Session, d: Delivery, code: str) -> None:
 # ------------------------------------------------------------------ the sweep (scheduled)
 
 
-def process_due(db: Session, *, limit: int = SWEEP_BATCH) -> int:
-    """Run every outbound delivery that is due and every inbound callback not yet processed. Each runs in its own
-    organisation's scope and transaction; one failing never stops the others. Returns how many were attempted."""
+def process_due(*, limit: int = SWEEP_BATCH, budget_s: float = JOB_BUDGET_S) -> int:
+    """Run every outbound delivery that is due and every inbound callback not yet processed. Only the plan (ids and
+    organisations) is read in platform scope; each delivery then runs as its own organisation, with row-level
+    security on and in a session of its own (`as_organisation`), never in the caller's session or scope. One failing
+    never stops the others, and no new attempt starts after `budget_s`. Returns how many were attempted."""
     from . import inbound  # the inbound side shares this sweep
 
     now = clock()
-    with platform_scope():
-        rows = db.execute(
-            select(Delivery.id, Delivery.organisation_id, Delivery.direction)
-            .where(
-                Delivery.status.in_(("queued", "retry_scheduled", "in_progress")),
-                Delivery.next_attempt_at.is_not(None),
-                Delivery.next_attempt_at <= now,
-            )
-            .order_by(Delivery.next_attempt_at)
-            .limit(limit)
-        ).all()
-        db.rollback()
-    done = 0
+    rows = platform_rows(
+        select(Delivery.id, Delivery.organisation_id, Delivery.direction)
+        .where(
+            Delivery.status.in_(("queued", "retry_scheduled", "in_progress")),
+            Delivery.next_attempt_at.is_not(None),
+            Delivery.next_attempt_at <= now,
+            Delivery.organisation_id.is_not(None),
+        )
+        .order_by(Delivery.next_attempt_at)
+        .limit(limit)
+    )
+    deadline = time.monotonic() + budget_s
+    done = tried = 0
     for delivery_id, org, direction in rows:
+        if tried and time.monotonic() > deadline:
+            break  # the rest waits for the next run
+        tried += 1
         try:
-            if direction == "inbound":
-                done += inbound.process(db, delivery_id)
-            else:
-                with organisation_scope(org):
-                    done += _process_outbound(db, delivery_id)
+            work = inbound.process_in_organisation if direction == "inbound" else _process_outbound
+            done += as_organisation(org, work, delivery_id)
         except Exception as e:  # noqa: BLE001 - one bad row must not stop the sweep
-            db.rollback()
             log.warning("delivery %s could not be processed: %s", delivery_id, type(e).__name__)
     return done
 
@@ -600,15 +607,16 @@ def retry(db: Session, actor: Actor, delivery_id: str) -> dict:
 # ------------------------------------------------------------------ retention (scheduled)
 
 
-def purge(db: Session) -> int:
-    """Encrypted inputs after INTEGRATION_HUB_DELIVERY_PAYLOAD_RETENTION_DAYS from the delivery's end, raw callbacks
+def purge() -> int:
+    """Retention across every organisation, in platform scope in a session of its own (never the caller's): it only
+    deletes or blanks rows past their retention, calls no adapter and publishes nothing. Encrypted inputs after INTEGRATION_HUB_DELIVERY_PAYLOAD_RETENTION_DAYS from the delivery's end, raw callbacks
     after INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS, rejected requests (their counting receipts and rejected_inbound
     log rows) after INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS, log rows after INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS, and
     spent OAuth states. Returns how many rows changed."""
     config = HubConfig.from_env()
     now = clock()
     changed = 0
-    with platform_scope():
+    with platform_scope(), SessionLocal() as db:
         changed += db.execute(
             update(Delivery)
             .where(

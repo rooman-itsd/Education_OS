@@ -3,14 +3,17 @@ cursor pages, rendering, and building an adapter context with the connection's s
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from eos_audit.application import service as audit
 from eos_core import events
-from eos_core.db import scoped, utcnow
+from eos_core.db import SessionLocal, scoped, utcnow
+from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +25,31 @@ from ..infrastructure.registry import AdapterContext, AdapterInfo, ProviderInfo,
 from ..infrastructure.secrets import SecretStore, SecretStoreError, get_store
 
 log = logging.getLogger("eos.integration_hub")
+
+
+def as_organisation(organisation_id: str, fn: Callable, *args, **kwargs):
+    """Run `fn(db, *args)` as one organisation and nothing more: in a fresh context, so a caller's platform scope (and
+    its row-level-security bypass) never leaks in, with a session and transactions of its own. Scheduled work and
+    processing after a response go through here, one organisation at a time."""
+    if not organisation_id:
+        raise ValueError("an organisation is required")
+
+    def run():
+        with organisation_scope(organisation_id), SessionLocal() as db:
+            return fn(db, *args, **kwargs)
+
+    return contextvars.Context().run(run)
+
+
+def platform_rows(query) -> list:
+    """Rows of a query across every organisation, read in platform scope in a session of their own (ids and
+    organisation ids to plan the work; the work itself runs through as_organisation)."""
+
+    def run():
+        with platform_scope(), SessionLocal() as db:
+            return list(db.execute(query).all())
+
+    return contextvars.Context().run(run)
 
 
 def clock() -> datetime:

@@ -25,7 +25,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from eos_core.db import SessionLocal, new_id
+from eos_core.db import new_id, scoped
 from eos_core.tenant import platform_scope
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -38,7 +38,7 @@ from ..infrastructure.models import AccountLink, Connection, Delivery, InboundRe
 from ..infrastructure.registry import AdapterContext, AdapterInfo, Outcome, call, get_registry
 from ..infrastructure.secrets import SecretStoreError, get_cipher
 from . import authorisation, deliveries
-from .common import aware, clock, context_for, publish, record, resolve_secrets
+from .common import as_organisation, aware, clock, context_for, platform_rows, publish, record, resolve_secrets
 
 log = logging.getLogger("eos.integration_hub")
 
@@ -459,77 +459,81 @@ def _provider_request(db, info, c, d, receipt, channel, headers, raw_body, timeo
 
 
 def process_now(delivery_id: str) -> None:
-    """The background task the route schedules after answering. Its own session; the sweep retries anything left."""
-    db = SessionLocal()
+    """The background task the route schedules after answering. The sweep retries anything left."""
     try:
-        process(db, delivery_id)
+        process(delivery_id)
     except Exception as e:  # noqa: BLE001 - after the response nothing may raise; the sweep picks it up again
-        db.rollback()
         log.warning("inbound delivery %s could not be processed now: %s", delivery_id, type(e).__name__)
-    finally:
-        db.close()
 
 
-def process(db: Session, delivery_id: str) -> int:
+def process(delivery_id: str) -> int:
+    """Process one acknowledged callback as its organisation (the receipt named it): row-level security applies to
+    the parse, the events and the follow-up work, exactly as for a request of that organisation."""
+    rows = platform_rows(select(Delivery.organisation_id).where(Delivery.id == delivery_id))
+    if not rows or not rows[0][0]:
+        return 0
+    return as_organisation(rows[0][0], process_in_organisation, delivery_id)
+
+
+def process_in_organisation(db: Session, delivery_id: str) -> int:
     config = HubConfig.from_env()
-    with platform_scope():
-        d = db.scalar(select(Delivery).where(Delivery.id == delivery_id).with_for_update())
-        if d is None or d.direction != "inbound" or d.status not in ("queued", "retry_scheduled", "in_progress"):
-            db.rollback()
-            return 0
-        if d.next_attempt_at is not None and aware(d.next_attempt_at) > clock():
-            db.rollback()  # claimed by another worker (its lease runs), or a retry not yet due
-            return 0
-        c = db.get(Connection, d.connection_id) if d.connection_id else None
-        receipt = db.get(InboundReceipt, d.inbound_receipt_id) if d.inbound_receipt_id else None
-        info = get_registry().get(c.adapter) if c else None
-        if c is None or receipt is None or info is None or receipt.raw_encrypted is None:
-            d.status, d.last_error_code, d.completed_at, d.next_attempt_at = "failed", "not_configured", clock(), None
-            db.commit()
-            return 0
-        d.attempts += 1
-        d.status = "in_progress"
-        d.started_at = d.started_at or clock()
-        d.next_attempt_at = clock() + timedelta(seconds=deliveries.async_timeout_s(config) + 60)
+    d = db.scalar(scoped(db, select(Delivery), Delivery).where(Delivery.id == delivery_id).with_for_update())
+    if d is None or d.direction != "inbound" or d.status not in ("queued", "retry_scheduled", "in_progress"):
+        db.rollback()
+        return 0
+    if d.next_attempt_at is not None and aware(d.next_attempt_at) > clock():
+        db.rollback()  # claimed by another worker (its lease runs), or a retry not yet due
+        return 0
+    c = db.get(Connection, d.connection_id) if d.connection_id else None
+    receipt = db.get(InboundReceipt, d.inbound_receipt_id) if d.inbound_receipt_id else None
+    info = get_registry().get(c.adapter) if c else None
+    if c is None or receipt is None or info is None or receipt.raw_encrypted is None:
+        d.status, d.last_error_code, d.completed_at, d.next_attempt_at = "failed", "not_configured", clock(), None
         db.commit()
-        try:
-            headers, raw_body = _unpack(get_cipher(config).decrypt(receipt.raw_encrypted, f"inbound:{receipt.id}"))
-            secrets = resolve_secrets(db, c)
-        except (SecretStoreError, ValueError):
-            out = Outcome.failure("not_configured", "the stored callback cannot be read")
-        else:
-            ctx = context_for(
-                c,
-                secrets=secrets,
-                delivery_id=d.id,
-                attempt=d.attempts,
-                operation="parse_inbound",
-                timeout_s=deliveries.async_timeout_s(config),
-            )
-            out = call(
-                info,
-                "parse_inbound",
-                ctx,
-                {"headers": headers, "raw_body": raw_body},
-                timeout_s=deliveries.async_timeout_s(config),
-            )
-        if out.ok:
-            kinds = _apply(db, c, d, out.output.get("notifications"))
-            d.operation = (",".join(dict.fromkeys(kinds)) or d.operation)[:80]
-            d.status, d.last_error_code, d.completed_at, d.next_attempt_at = "succeeded", None, clock(), None
-            receipt.processed_at = clock()
-        elif out.retryable and d.attempts < config.retry_max_attempts:
-            d.status, d.last_error_code = "retry_scheduled", out.error_code
-            delay = rules.backoff_s(
-                d.attempts, base_s=config.retry_base_s, max_s=config.retry_max_s, retry_after_s=out.retry_after_s
-            )
-            d.next_attempt_at = clock() + timedelta(seconds=delay)
-        else:
-            dead = out.retryable
-            d.status = "dead_lettered" if dead else "failed"
-            d.last_error_code, d.completed_at, d.next_attempt_at = out.error_code, clock(), None
-            receipt.processed_at = clock()
-        db.commit()
+        return 0
+    d.attempts += 1
+    d.status = "in_progress"
+    d.started_at = d.started_at or clock()
+    d.next_attempt_at = clock() + timedelta(seconds=deliveries.async_timeout_s(config) + 60)
+    db.commit()
+    try:
+        headers, raw_body = _unpack(get_cipher(config).decrypt(receipt.raw_encrypted, f"inbound:{receipt.id}"))
+        secrets = resolve_secrets(db, c)
+    except (SecretStoreError, ValueError):
+        out = Outcome.failure("not_configured", "the stored callback cannot be read")
+    else:
+        ctx = context_for(
+            c,
+            secrets=secrets,
+            delivery_id=d.id,
+            attempt=d.attempts,
+            operation="parse_inbound",
+            timeout_s=deliveries.async_timeout_s(config),
+        )
+        out = call(
+            info,
+            "parse_inbound",
+            ctx,
+            {"headers": headers, "raw_body": raw_body},
+            timeout_s=deliveries.async_timeout_s(config),
+        )
+    if out.ok:
+        kinds = _apply(db, c, d, out.output.get("notifications"))
+        d.operation = (",".join(dict.fromkeys(kinds)) or d.operation)[:80]
+        d.status, d.last_error_code, d.completed_at, d.next_attempt_at = "succeeded", None, clock(), None
+        receipt.processed_at = clock()
+    elif out.retryable and d.attempts < config.retry_max_attempts:
+        d.status, d.last_error_code = "retry_scheduled", out.error_code
+        delay = rules.backoff_s(
+            d.attempts, base_s=config.retry_base_s, max_s=config.retry_max_s, retry_after_s=out.retry_after_s
+        )
+        d.next_attempt_at = clock() + timedelta(seconds=delay)
+    else:
+        dead = out.retryable
+        d.status = "dead_lettered" if dead else "failed"
+        d.last_error_code, d.completed_at, d.next_attempt_at = out.error_code, clock(), None
+        receipt.processed_at = clock()
+    db.commit()
     return 1
 
 

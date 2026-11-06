@@ -142,8 +142,7 @@ def test_rejected_requests_are_kept_briefly(client, org, adapter, clock):
     raw = _fixture("webhook_meeting_ended")
     assert client.post(url, content=raw, headers=_signed(adapter, "meet-client-secret", raw)).status_code == 200
     clock.advance(days=8)  # INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS defaults to 7
-    with SessionLocal() as db:
-        deliveries.purge(db)
+    deliveries.purge()
     assert _rejected_receipts(org.id) == []
     assert _deliveries(client, org, status="rejected_inbound") == []
     assert len(_deliveries(client, org, direction="inbound")) == 1  # the accepted one stays (log retention)
@@ -206,8 +205,7 @@ def test_an_app_level_callback_is_resolved_to_the_persons_link_and_runs_a_sync(c
     r = client.post(f"{BASE}/inbound/fake-adapter", content=raw, headers=_signed(adapter, "app-level-signing-key", raw))
     assert r.status_code == 200
     # the follow-up sync is an async delivery; the sweep runs it
-    with SessionLocal() as db:
-        deliveries.process_due(db)
+    deliveries.process_due()
     [ev] = outbox("integration-hub.wearable-data.received", org.id)
     assert ev == {
         "organisation_id": org.id,
@@ -249,8 +247,7 @@ def test_attendance_ready_fetches_the_report_and_publishes_person_ids_only(clien
         f"{BASE}/inbound/fake-adapter/{key_of(c)}", content=raw, headers=_signed(adapter, "meet-client-secret", raw)
     )
     assert r.status_code == 200
-    with SessionLocal() as db:
-        deliveries.process_due(db)
+    deliveries.process_due()
     [ev] = outbox("integration-hub.meeting-attendance.received", org.id)
     assert ev["meeting_key"] == "cs-77" and ev["caller_module"] == "lms" and ev["complete"] is True
     assert ev["unmatched_count"] == 1 and len(ev["participants"]) == 2

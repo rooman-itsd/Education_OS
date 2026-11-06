@@ -19,6 +19,7 @@ import hmac
 import json
 import logging
 import secrets as pysecrets
+import time
 from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlencode, urlsplit
@@ -38,6 +39,7 @@ from ..infrastructure.secrets import SecretStoreError, get_cipher, ref_for
 from . import connections
 from .common import (
     Actor,
+    as_organisation,
     clock,
     context_for,
     get_connection,
@@ -45,6 +47,7 @@ from .common import (
     iso,
     link_secrets,
     page,
+    platform_rows,
     provider_of,
     publish,
     record,
@@ -516,38 +519,38 @@ def _complete(db: Session, adapter: str, code: str | None, error: str | None, s:
 # ------------------------------------------------------------------ token refresh (scheduled)
 
 
-def refresh_due(db: Session) -> int:
+def refresh_due(*, budget_s: float = 50) -> int:
     """Refresh OAuth tokens that expire within INTEGRATION_HUB_TOKEN_REFRESH_LEAD_S. A refresh that answers auth_failed
-    marks the connection unauthorised (health auth_failed) or the link expired, and tells the owner by event."""
+    marks the connection unauthorised (health auth_failed) or the link expired, and tells the owner by event. Each
+    refresh runs as its own organisation (as_organisation: no platform scope), in its own transaction; after
+    `budget_s` no new refresh starts and the next run (every 5 minutes) takes the rest."""
     config = HubConfig.from_env()
     horizon = clock() + timedelta(seconds=config.token_refresh_lead_s)
-    refreshed = 0
-    with platform_scope():
-        orgs = dict(
-            db.execute(
-                select(AccountLink.id, AccountLink.organisation_id).where(
-                    AccountLink.status == "active",
-                    AccountLink.expires_at.is_not(None),
-                    AccountLink.expires_at <= horizon,
-                )
-            ).all()
+    links = platform_rows(
+        select(AccountLink.id, AccountLink.organisation_id).where(
+            AccountLink.status == "active",
+            AccountLink.expires_at.is_not(None),
+            AccountLink.expires_at <= horizon,
         )
-        corgs = dict(
-            db.execute(
-                select(Connection.id, Connection.organisation_id).where(
-                    Connection.authorised.is_(True),
-                    Connection.expires_at.is_not(None),
-                    Connection.expires_at <= horizon,
-                )
-            ).all()
+    )
+    conns = platform_rows(
+        select(Connection.id, Connection.organisation_id).where(
+            Connection.authorised.is_(True),
+            Connection.expires_at.is_not(None),
+            Connection.expires_at <= horizon,
         )
-        db.rollback()
-    for link_id, org in orgs.items():
-        with organisation_scope(org):
-            refreshed += _refresh_link(db, link_id, config)
-    for conn_id, org in corgs.items():
-        with organisation_scope(org):
-            refreshed += _refresh_connection(db, conn_id, config)
+    )
+    work = [(_refresh_link, i, org) for i, org in links] + [(_refresh_connection, i, org) for i, org in conns]
+    deadline = time.monotonic() + budget_s
+    refreshed = done = 0
+    for fn, row_id, org in work:
+        if done and time.monotonic() > deadline:
+            break
+        done += 1
+        try:
+            refreshed += as_organisation(org, fn, row_id, config)
+        except Exception as e:  # noqa: BLE001 - one row must not stop the others
+            log.warning("token refresh of %s failed: %s", row_id, type(e).__name__)
     return refreshed
 
 

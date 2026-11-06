@@ -243,8 +243,7 @@ def test_every_published_event_is_in_events_yaml_with_its_payload(client, org, a
     put_credential(client, org, c["id"], "api_key", "rotated")
     client.post(f"{BASE}/connections/{c['id']}/disable", headers=org.admin)
     create(client, org, display_name="x")
-    with SessionLocal() as db:
-        deliveries.process_due(db)
+    deliveries.process_due()
     with SessionLocal() as db, platform_scope():
         published = list(db.scalars(select(OutboxEvent).where(OutboxEvent.name.like("integration-hub.%"))))
     assert len({e.name for e in published}) >= 8
@@ -282,9 +281,15 @@ def test_scheduled_jobs_report_back_to_the_scheduler(client):
     assert set(JOBS) == set(consumers.RUNS) and all(k.startswith("integration-hub.") for k in JOBS)
     event = type("E", (), {"payload": {"job": "integration-hub.purge", "run_id": "r-1"}, "organisation_id": None})()
     with SessionLocal() as db, platform_scope():
-        consumers.on_job_due(db, event)
+        future = consumers.on_job_due(db, event)
         db.commit()
-        [done] = db.scalars(select(OutboxEvent).where(OutboxEvent.name == "integration-hub.job.finished")).all()
-    assert done.payload["run_id"] == "r-1" and done.payload["outcome"] == "succeeded"
+    future.result(timeout=30)  # the job runs in the hub's worker, not in the relay's session
+    with SessionLocal() as db, platform_scope():
+        done = [
+            e
+            for e in db.scalars(select(OutboxEvent).where(OutboxEvent.name == "integration-hub.job.finished"))
+            if e.payload["run_id"] == "r-1"
+        ]
+    assert len(done) == 1 and done[0].payload["outcome"] == "succeeded"
     declared = {e["name"] for e in _contract("events.yaml")["events"]}
     assert "integration-hub.job.finished" in declared

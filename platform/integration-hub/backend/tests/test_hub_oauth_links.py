@@ -176,20 +176,17 @@ def test_member_cannot_link_through_an_organisation_scope_provider(client, org, 
 
 
 def test_token_refresh_replaces_tokens_and_expires_a_link_on_auth_failed(client, org, adapter, clock):
-    from eos_core.db import SessionLocal
     from eos_integration_hub.application import authorisation
 
     wear_connection(client, org)
     link = link_account(client, org)
     clock.advance(hours=6, minutes=55)  # the fake's token expires at 13:00; lead time 600 s
-    with SessionLocal() as db:
-        assert authorisation.refresh_due(db) >= 1  # other tests' links in the shared database may be due too
+    assert authorisation.refresh_due() >= 1  # other tests' links in the shared database may be due too
     mine = client.get(f"{BASE}/me/account-links", headers=org.member).json()["items"]
     assert mine[0]["expires_at"] == "2026-11-06T13:00:00+00:00"
     adapter.STATE["refresh"] = "refused"
     clock.advance(days=1)
-    with SessionLocal() as db:
-        authorisation.refresh_due(db)
+    authorisation.refresh_due()
     mine = client.get(f"{BASE}/me/account-links", headers=org.member).json()["items"]
     assert mine[0]["status"] == "expired"
     assert outbox("integration-hub.account-link.revoked", org.id)[-1] == {
