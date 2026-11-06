@@ -189,6 +189,15 @@ def class_ids_with_session(db: Session, class_ids: list[str]) -> set[str]:
     return set(db.scalars(query.where(AttendanceSessionRow.scheduled_class_id.in_(class_ids))))
 
 
+def expired_open_sessions(db: Session, now) -> list[AttendanceSessionRow]:
+    """FR-11: the organisation's attendance sessions still open after their marking deadline, earliest deadline first.
+    A closed or cancelled session is never returned."""
+    query = q(db, AttendanceSessionRow).where(
+        AttendanceSessionRow.status == "open", AttendanceSessionRow.marking_deadline < now
+    )
+    return list(db.scalars(query.order_by(AttendanceSessionRow.marking_deadline, AttendanceSessionRow.id)))
+
+
 # ---------------------------------------------------------------- read models (filled from consumed events)
 
 
