@@ -181,12 +181,17 @@ def upgrade() -> None:
         sa.Column("channel", sa.String(41), nullable=True),
         sa.Column("dedupe_key", sa.String(200), nullable=True),
         sa.Column("verdict", sa.String(12), nullable=False),
+        sa.Column("source", sa.String(80), nullable=True),
+        _ts("window_start"),
+        sa.Column("rejected_count", sa.Integer, nullable=False, server_default="0"),
         sa.Column("raw_encrypted", sa.LargeBinary, nullable=True),
         _ts("received_at", nullable=False),
         _ts("processed_at"),
         sa.Column("note", sa.Text, nullable=True),
         # per connection: two organisations' connections at one provider may see the same event id
         sa.UniqueConstraint("connection_id", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
+        # rejected requests: one counting row per source and minute
+        sa.UniqueConstraint("adapter", "source", "window_start", name="uq_integration_hub_inbound_rejected_window"),
     )
     _enable_rls("integration_hub_inbound_receipt")
 

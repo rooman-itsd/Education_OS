@@ -590,7 +590,8 @@ def retry(db: Session, actor: Actor, delivery_id: str) -> dict:
 
 def purge(db: Session) -> int:
     """Encrypted inputs after INTEGRATION_HUB_DELIVERY_PAYLOAD_RETENTION_DAYS from the delivery's end, raw callbacks
-    after INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS, log rows after INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS, and
+    after INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS, rejected requests (their counting receipts and rejected_inbound
+    log rows) after INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS, log rows after INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS, and
     spent OAuth states. Returns how many rows changed."""
     config = HubConfig.from_env()
     now = clock()
@@ -604,6 +605,19 @@ def purge(db: Session) -> int:
                 Delivery.completed_at < now - timedelta(days=config.delivery_payload_retention_days),
             )
             .values(payload_encrypted=None)
+        ).rowcount
+        rejected_cutoff = now - timedelta(days=config.inbound_rejected_retention_days)
+        rejected = select(Delivery.id).where(
+            Delivery.status == "rejected_inbound", Delivery.created_at < rejected_cutoff
+        )
+        db.execute(delete(DeliveryAttempt).where(DeliveryAttempt.delivery_id.in_(rejected)))
+        changed += db.execute(
+            delete(Delivery).where(Delivery.status == "rejected_inbound", Delivery.created_at < rejected_cutoff)
+        ).rowcount
+        changed += db.execute(
+            delete(InboundReceipt).where(
+                InboundReceipt.verdict == "rejected", InboundReceipt.received_at < rejected_cutoff
+            )
         ).rowcount
         changed += db.execute(
             update(InboundReceipt)

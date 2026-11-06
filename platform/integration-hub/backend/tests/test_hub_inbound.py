@@ -84,10 +84,69 @@ def test_a_tampered_or_unsigned_payload_is_rejected_logged_and_never_processed(c
     r = client.post(url, content=raw, headers=_signed(adapter, "another-secret", raw))
     assert r.status_code == 401
     assert outbox("integration-hub.meeting.ended", org.id) == []
+    # counted, not one log row and one audit record each
     rejected = _deliveries(client, org, status="rejected_inbound")
-    assert len(rejected) == 3 and {d["last_error_code"] for d in rejected} == {"signature_invalid"}
-    assert audit_actions(org.id).count("inbound.rejected") == 3
+    assert len(rejected) == 1 and rejected[0]["last_error_code"] == "signature_invalid"
+    assert audit_actions(org.id).count("inbound.rejected") == 1
+    assert _rejected_receipts(org.id) == [3]
     assert not [x for x in adapter.CALLS if x[0] == "parse_inbound"]
+
+
+def _rejected_receipts(organisation_id: str | None, adapter_name: str = "fake-adapter") -> list[int]:
+    from eos_core.tenant import platform_scope
+    from eos_integration_hub.infrastructure.models import InboundReceipt
+    from sqlalchemy import select
+
+    with SessionLocal() as db, platform_scope():
+        q = select(InboundReceipt.rejected_count).where(
+            InboundReceipt.verdict == "rejected", InboundReceipt.adapter == adapter_name
+        )
+        q = q.where(InboundReceipt.organisation_id == organisation_id) if organisation_id else q
+        return list(db.scalars(q.order_by(InboundReceipt.window_start)))
+
+
+def test_unverified_requests_are_rate_limited_per_source_and_counted(client, org, adapter, monkeypatch, clock):
+    monkeypatch.setenv("INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN", "3")
+    c = authorised_meet(client, org, adapter)
+    url = f"{BASE}/inbound/fake-adapter/{key_of(c)}"
+    unsigned = {"content-type": "application/json"}
+    clock.advance(seconds=-clock.now.second)  # the start of a minute
+    assert [client.post(url, content=b"{}", headers=unsigned).status_code for _ in range(3)] == [401] * 3
+    verifies = len([x for x in adapter.CALLS if x[0] == "verify_inbound"])
+    r = client.post(url, content=b"{}", headers=unsigned)
+    assert r.status_code == 429 and r.json()["code"] == "rate_limited" and r.headers["retry-after"] == "60"
+    # over the limit: the adapter is not called and nothing is written
+    assert client.post(url, content=b"{}", headers=unsigned).status_code == 429
+    assert len([x for x in adapter.CALLS if x[0] == "verify_inbound"]) == verifies
+    assert _rejected_receipts(org.id) == [3]
+    # another source is not held back by this one: the app-level URL, keyed by the caller's address
+    assert client.post(f"{BASE}/inbound/fake-adapter", content=b"{}", headers=unsigned).status_code == 401
+    # the next minute opens a new window, still within the hour: counted, not audited again
+    clock.advance(minutes=1)
+    assert client.post(url, content=b"{}", headers=unsigned).status_code == 401
+    assert _rejected_receipts(org.id) == [3, 1]
+    assert audit_actions(org.id).count("inbound.rejected") == 1
+    clock.advance(hours=2)
+    assert client.post(url, content=b"{}", headers=unsigned).status_code == 401
+    assert audit_actions(org.id).count("inbound.rejected") == 2
+    # a signed request on the same URL is still accepted while rejections are counted
+    raw = _fixture("webhook_meeting_ended")
+    r = client.post(url, content=raw, headers=_signed(adapter, "meet-client-secret", raw))
+    assert r.status_code == 200
+
+
+def test_rejected_requests_are_kept_briefly(client, org, adapter, clock):
+    c = authorised_meet(client, org, adapter)
+    url = f"{BASE}/inbound/fake-adapter/{key_of(c)}"
+    assert client.post(url, content=b"{}", headers={"content-type": "application/json"}).status_code == 401
+    raw = _fixture("webhook_meeting_ended")
+    assert client.post(url, content=raw, headers=_signed(adapter, "meet-client-secret", raw)).status_code == 200
+    clock.advance(days=8)  # INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS defaults to 7
+    with SessionLocal() as db:
+        deliveries.purge(db)
+    assert _rejected_receipts(org.id) == []
+    assert _deliveries(client, org, status="rejected_inbound") == []
+    assert len(_deliveries(client, org, direction="inbound")) == 1  # the accepted one stays (log retention)
 
 
 def test_signature_is_checked_over_the_raw_bytes_not_reserialised_json(client, org, adapter):

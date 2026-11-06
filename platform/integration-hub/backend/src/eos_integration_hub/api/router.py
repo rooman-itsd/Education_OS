@@ -389,12 +389,15 @@ async def _inbound(
         query=_query(request),
         headers=dict(request.headers),
         raw_body=raw,
+        client_ip=request.client.host if request.client else None,
     )
     if answer.process_delivery_id:
         background.add_task(inbound.process_now, answer.process_delivery_id)
     if answer.status == 204:
-        return Response(status_code=204)
-    return Response(content=answer.body, status_code=answer.status, media_type=answer.content_type)
+        return Response(status_code=204, headers=answer.headers)
+    return Response(
+        content=answer.body, status_code=answer.status, media_type=answer.content_type, headers=answer.headers
+    )
 
 
 @router.post("/inbound/{adapter}")

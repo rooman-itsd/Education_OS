@@ -43,6 +43,8 @@ class HubConfig:
     inbound_max_bytes: int
     provider_request_timeout_s: int
     inbound_raw_retention_days: int
+    inbound_reject_limit_per_min: int
+    inbound_rejected_retention_days: int
     sync_timeout_s: int
     idempotency_window_days: int
     retry_max_attempts: int
@@ -70,6 +72,8 @@ class HubConfig:
             inbound_max_bytes=_int("INTEGRATION_HUB_INBOUND_MAX_BYTES", 1_048_576, 1024, 10_485_760),
             provider_request_timeout_s=_int("INTEGRATION_HUB_PROVIDER_REQUEST_TIMEOUT_S", 10, 1, 60),
             inbound_raw_retention_days=_int("INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS", 7, 0, 90),
+            inbound_reject_limit_per_min=_int("INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN", 30, 1, 10_000),
+            inbound_rejected_retention_days=_int("INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS", 7, 1, 90),
             sync_timeout_s=_int("INTEGRATION_HUB_SYNC_TIMEOUT_S", 15, 1, 120),
             idempotency_window_days=_int("INTEGRATION_HUB_IDEMPOTENCY_WINDOW_DAYS", 30, 1, 400),
             retry_max_attempts=_int("INTEGRATION_HUB_RETRY_MAX_ATTEMPTS", 8, 1, 50),

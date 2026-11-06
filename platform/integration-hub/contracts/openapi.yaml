@@ -18,7 +18,8 @@ info:
     Error codes (the `code` field of Error): 400 invalid_cursor; 401 signature_invalid, state_invalid; 404 not_found;
     409 adapter_not_installed, provider_not_offered, connection_exists, connection_disabled, credentials_missing,
     health_check_failed, live_not_allowed, link_exists, not_retryable; 413 payload_too_large; 422 invalid_settings,
-    invalid_mode, unknown_credential, mock_not_allowed, invalid_return_url. Each response lists the codes it can return.
+    invalid_mode, unknown_credential, mock_not_allowed, invalid_return_url; 429 rate_limited. Each response lists the
+    codes it can return.
 servers:
   - url: /api/v1/integration-hub
 
@@ -313,6 +314,7 @@ paths:
         "200": { description: "Acknowledged, or a handshake answer in the provider's own format" }
         "204": { description: Acknowledged }
         "401": { description: "signature_invalid (the status may be another the provider expects, e.g. 404 for Fitbit)" }
+        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
     get:
@@ -340,6 +342,7 @@ paths:
         "202": { description: "Acknowledged (Graph expects 202)" }
         "204": { description: Acknowledged }
         "401": { description: signature_invalid }
+        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
     get:
@@ -369,6 +372,7 @@ paths:
       responses:
         "200": { description: "The adapter's answer, in the provider's format (XML or JSON)" }
         "401": { description: signature_invalid }
+        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
 

@@ -180,12 +180,17 @@ class DeliveryAttempt(Base, TenantMixin):
 class InboundReceipt(Base, TenantMixin):
     """One provider callback as it arrived. Written by the hub's platform role before the tenant is known (an app-level
     callback); organisation_id is set once verify_inbound names the connection. The raw body and headers are encrypted
-    and purged after INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS."""
+    and purged after INTEGRATION_HUB_INBOUND_RAW_RETENTION_DAYS.
+
+    Requests that fail verification are not one row each: one `rejected` row per source (`connection:<id>`, or
+    `ip:<hash>` on an app-level URL) and minute (`window_start`) counts them in `rejected_count`, and is purged after
+    INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS."""
 
     __tablename__ = f"{PREFIX}inbound_receipt"
     __table_args__ = (
         # Per connection: two organisations' connections at one provider may see the same event id.
         UniqueConstraint("connection_id", "dedupe_key", name="uq_integration_hub_inbound_dedupe"),
+        UniqueConstraint("adapter", "source", "window_start", name="uq_integration_hub_inbound_rejected_window"),
         Index("ix_integration_hub_inbound_received", "received_at"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -194,6 +199,9 @@ class InboundReceipt(Base, TenantMixin):
     channel: Mapped[str | None] = mapped_column(String(41), nullable=True)
     dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     verdict: Mapped[str] = mapped_column(String(12))
+    source: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    window_start: Mapped[datetime | None] = _ts()
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
     raw_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     received_at: Mapped[datetime] = _ts(nullable=False, default=utcnow)
     processed_at: Mapped[datetime | None] = _ts()
