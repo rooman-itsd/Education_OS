@@ -13,6 +13,11 @@
   /* Brand */
   --eos-primary: #f65b66;
   --eos-primary-hover: #e9505c;
+  /* The filled button's ground: white text on it is 4.9:1 (the coral above is 3.2:1, below AA for 13px text). */
+  --eos-primary-strong: #d23443;
+  --eos-primary-strong-hover: #bf2c3b;
+  /* Keyboard focus ring: indigo reads at 7:1 on white and on the page ground; coral did not (3:1). */
+  --eos-focus: var(--eos-accent);
   --eos-primary-tint: #fff0f1;
   --eos-accent: #4338ca;
   --eos-accent-hover: #3730a3;
@@ -42,7 +47,7 @@
   --eos-text: #12233f;
   --eos-text-2: #334155;
   --eos-text-3: #475569;
-  --eos-muted: #64748b;
+  --eos-muted: #5a6a7e; /* 5.0:1 on the page ground and on hover tints (was #64748b, 4.3:1) */
   --eos-faint: #94a3b8;
   --eos-on-dark: #ffffff;
 

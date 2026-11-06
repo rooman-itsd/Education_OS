@@ -23,8 +23,24 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
 const TITLE = "Industry Coordinator";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "field-training.placements-open", module: "practice/field-training", batch: "#339" },
-  { id: "field-training.active-placements", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.placements-open",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Open placements",
+    probe: "/field-training/openings?status=open&has_seats=true&limit=1",
+    empty: "No open placements with seats",
+    unavailable: "Field training data is not available yet.",
+  },
+  {
+    id: "field-training.active-placements",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Active placements",
+    probe: "/field-training/placements?status=active&limit=1",
+    empty: "No placements under way",
+    unavailable: "Field training data is not available yet.",
+  },
   // The staff view of openings (#424 splits it from the learner widget placement-career.openings).
   {
     id: "placement-career.openings-summary",
@@ -36,7 +52,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Placement data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 

@@ -5,6 +5,11 @@ title: "Management (VC, Registrar)"
 module_roles:
   - grievance-viewer
   - regulatory-reports-viewer
+  # Read-only oversight of the support modules (each module's default for management).
+  - amc-vendor-support-viewer
+  - knowledge-base-viewer
+  - incident-management-viewer
+  - sla-management-viewer
 widgets:
   - admissions.funnel
   - fees-accounts.collection-vs-target

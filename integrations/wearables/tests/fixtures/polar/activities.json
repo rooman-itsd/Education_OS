@@ -1,0 +1,2 @@
+[{"start_time": "2026-11-04T00:00:00", "end_time": "2026-11-04T23:59:59", "active_duration": "PT2H10M", "inactive_duration": "PT20H", "calories": 2400, "active_calories": 640, "steps": 11234, "distance_from_steps": 8421.5},
+ {"start_time": "2026-11-03T00:00:00", "active_duration": "PT1H", "calories": 2300, "active_calories": 500, "steps": 9000, "distance_from_steps": 6800.0}]

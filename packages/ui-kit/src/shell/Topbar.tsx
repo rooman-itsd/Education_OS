@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Bell, HelpCircle, LogOut, Menu, Search, User as UserIcon, X } from "../icons";
 import type { Crumb, SearchResult, ShellUser } from "./types";
 
@@ -10,6 +10,8 @@ export interface TopbarProps {
   searchPlaceholder?: string;
   onNavigate: (href: string) => void;
   onToggleMobileMenu: () => void;
+  /** Whether the slide-in navigation is open, for the menu button's aria-expanded. */
+  mobileMenuOpen?: boolean;
   onSignOut?: () => void;
   onOpenProfile?: () => void;
   /** Items in the notifications menu; omit to hide the bell. */
@@ -29,13 +31,19 @@ const initialsOf = (name: string) =>
     .join("") || "U";
 
 /** The sticky top bar: menu button, breadcrumb, search, help, notifications and the account menu. */
-export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search pages and modules…", onNavigate, onToggleMobileMenu, onSignOut, onOpenProfile, notifications, notificationsFooter, accountSlot, onHelp }: TopbarProps) {
+export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search pages and modules…", onNavigate, onToggleMobileMenu, mobileMenuOpen = false, onSignOut, onOpenProfile, notifications, notificationsFooter, accountSlot, onHelp }: TopbarProps) {
   const [query, setQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
+  const accountButton = useRef<HTMLButtonElement>(null);
+  const notifButton = useRef<HTMLButtonElement>(null);
+  const menusOpen = useRef({ notifications: false, account: false });
+  menusOpen.current = { notifications: showNotifications, account: showAccount };
+  const searchOpener = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -47,7 +55,14 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
         e.preventDefault();
         setShowSearch((s) => !s);
       }
-      if (e.key === "Escape") setShowSearch(false);
+      if (e.key === "Escape") {
+        setShowSearch(false);
+        // Escape closes an open menu and gives focus back to the button that opened it.
+        if (menusOpen.current.notifications) notifButton.current?.focus();
+        if (menusOpen.current.account) accountButton.current?.focus();
+        setShowNotifications(false);
+        setShowAccount(false);
+      }
     };
     document.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
@@ -56,6 +71,47 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
       window.removeEventListener("keydown", onKey);
     };
   }, [search.length]);
+
+  // Opening the account menu puts focus on its first item.
+  useEffect(() => {
+    if (showAccount) accountRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [showAccount]);
+
+  // The search dialog takes focus when it opens and gives it back to what opened it when it closes.
+  useEffect(() => {
+    if (showSearch) {
+      searchOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    } else if (searchOpener.current) {
+      searchOpener.current.focus();
+      searchOpener.current = null;
+    }
+  }, [showSearch]);
+
+  /** Tab stays inside the open dialog. */
+  const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab" || !dialogRef.current) return;
+    const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>("button, input, [href]"));
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  /** Arrow keys, Home and End move between the account menu's items. */
+  const menuKeys = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const to = e.key === "ArrowDown" ? (at + 1) % items.length : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length : e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : -1;
+    if (to < 0 || items.length === 0) return;
+    e.preventDefault();
+    items[to]!.focus();
+  };
 
   const q = query.trim().toLowerCase();
   const results = search.filter((r) => !q || r.label.toLowerCase().includes(q) || (r.hint ?? "").toLowerCase().includes(q)).slice(0, 8);
@@ -69,13 +125,13 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
     <>
       <header className="eos-topbar">
         <div className="eos-topbar__left">
-          <button type="button" className="eos-btn eos-btn--ghost eos-btn--icon eos-topbar__menu" onClick={onToggleMobileMenu} aria-label="Open navigation menu">
+          <button type="button" className="eos-btn eos-btn--ghost eos-btn--icon eos-topbar__menu" onClick={onToggleMobileMenu} aria-label="Navigation menu" aria-expanded={mobileMenuOpen} aria-controls="eos-sidebar">
             <Menu />
           </button>
           <nav className="eos-breadcrumb" aria-label="Breadcrumb">
             {crumbs.map((c, i) => (
               <Fragment key={i}>
-                {i > 0 && <span className="eos-breadcrumb__sep">/</span>}
+                {i > 0 && <span className="eos-breadcrumb__sep" aria-hidden>/</span>}
                 {c.href && i < crumbs.length - 1 ? (
                   <a
                     href={c.href}
@@ -87,7 +143,7 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
                     {c.label}
                   </a>
                 ) : (
-                  <span className={i === crumbs.length - 1 ? "eos-breadcrumb__current" : undefined}>{c.label}</span>
+                  <span className={i === crumbs.length - 1 ? "eos-breadcrumb__current" : undefined} aria-current={i === crumbs.length - 1 ? "page" : undefined}>{c.label}</span>
                 )}
               </Fragment>
             ))}
@@ -119,12 +175,12 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
           )}
           {notifications && (
             <div style={{ position: "relative" }} ref={notifRef}>
-              <button type="button" className="eos-btn eos-btn--ghost eos-btn--icon" style={{ position: "relative" }} onClick={() => setShowNotifications((s) => !s)} aria-label={`Notifications, ${notifications.length}`} aria-expanded={showNotifications}>
+              <button type="button" className="eos-btn eos-btn--ghost eos-btn--icon" ref={notifButton} style={{ position: "relative" }} onClick={() => setShowNotifications((s) => !s)} aria-label={`Notifications, ${notifications.length}`} aria-expanded={showNotifications}>
                 <Bell />
                 {notifications.length > 0 && <span className="eos-dot-badge eos-pulse" aria-hidden />}
               </button>
               {showNotifications && (
-                <div className="eos-menu eos-menu--wide" role="menu">
+                <div className="eos-menu eos-menu--wide" role="region" aria-label="Notifications">
                   <div className="eos-menu__head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <b>Notifications</b>
                     <button type="button" className="eos-panel-link" onClick={() => setShowNotifications(false)}>
@@ -149,7 +205,7 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
           {accountSlot}
           {user && (
             <div style={{ position: "relative" }} ref={accountRef}>
-              <button type="button" className="eos-topbar__account" onClick={() => setShowAccount((s) => !s)} aria-haspopup="menu" aria-expanded={showAccount}>
+              <button ref={accountButton} type="button" className="eos-topbar__account" onClick={() => setShowAccount((s) => !s)} aria-haspopup="menu" aria-expanded={showAccount}>
                 <span className="eos-topbar__account-text">
                   <span className="eos-topbar__account-name" style={{ display: "block" }}>
                     {user.name}
@@ -165,7 +221,7 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
                 </span>
               </button>
               {showAccount && (
-                <div className="eos-menu" role="menu">
+                <div className="eos-menu" role="menu" aria-label="Account" onKeyDown={menuKeys}>
                   <div className="eos-menu__head">
                     <b>{user.name}</b>
                     {user.email && <span>{user.email}</span>}
@@ -210,7 +266,7 @@ export function Topbar({ crumbs, user, search = [], searchPlaceholder = "Search 
 
       {showSearch && (
         <div className="eos-dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setShowSearch(false)}>
-          <div className="eos-dialog" role="dialog" aria-label="Search">
+          <div className="eos-dialog" role="dialog" aria-modal="true" aria-label="Search" ref={dialogRef} onKeyDown={trapTab}>
             <div className="eos-dialog__search">
               <Search />
               <input autoFocus placeholder={searchPlaceholder} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && results[0] && open(results[0].href)} />

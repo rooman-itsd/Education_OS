@@ -5,6 +5,11 @@
 # Himanshu is the third owner of the host, tests, infra and CI paths: the branch rule refuses an approval from the
 # person who made the last push, and the merge queue pushes updates from Faizan's account, so Srujan's PRs there
 # need an approver who is neither Srujan nor Faizan.
+# Until the v1.0 launch (target Thu 12 Nov 2026, lead's decision of 5 Nov), Faizan is also an owner of every
+# module path, so the automated review's approval on his behalf (auto-review.yml, auto-approve.yml) counts as the
+# code-owner approval for module code. The module owners still review, after the merge if not before. A PR opened
+# from Faizan's account (Claude builds) still needs one of the other owners. Remove the @faizanrooman entries on
+# /modules/ lines after the launch.
 
 /docs/architecture/                  @faizanrooman @srujanrooman @himanshu-rooman
 /docs/team/                          @faizanrooman @srujanrooman
@@ -24,27 +29,27 @@
 /platform/                           @himanshu-rooman @faizanrooman @srujanrooman
 /integrations/                       @himanshu-rooman @faizanrooman @akshatatrathodrooman
 /integrations/payment-sbiepay/       @gokulalakshmirooman-source @Ashritharooman @faizanrooman
-/modules/practice/productions/       @himanshu-rooman @akshatatrathodrooman
+/modules/practice/productions/       @himanshu-rooman @akshatatrathodrooman @faizanrooman
 
-/modules/student-lifecycle/          @praveen-rooman @shivanisinghrooman-09
-/modules/practice/portfolio/         @praveen-rooman @shivanisinghrooman-09
-/modules/practice/selection-process/ @praveen-rooman @shivanisinghrooman-09
+/modules/student-lifecycle/          @praveen-rooman @shivanisinghrooman-09 @faizanrooman
+/modules/practice/portfolio/         @praveen-rooman @shivanisinghrooman-09 @faizanrooman
+/modules/practice/selection-process/ @praveen-rooman @shivanisinghrooman-09 @faizanrooman
 
-/modules/academics/                  @shivanisinghrooman-09 @praveen-rooman
+/modules/academics/                  @shivanisinghrooman-09 @praveen-rooman @faizanrooman
 
-/modules/sports/                     @akshatatrathodrooman @himanshu-rooman @Ashritharooman
-/modules/practice/skill-progress/    @akshatatrathodrooman @himanshu-rooman @Ashritharooman
+/modules/sports/                     @akshatatrathodrooman @himanshu-rooman @Ashritharooman @faizanrooman
+/modules/practice/skill-progress/    @akshatatrathodrooman @himanshu-rooman @Ashritharooman @faizanrooman
 
-/modules/facilities/                 @Ashritharooman @gokulalakshmirooman-source
-/modules/facilities/sports-facilities/ @Ashritharooman @akshatatrathodrooman
+/modules/facilities/                 @Ashritharooman @gokulalakshmirooman-source @faizanrooman
+/modules/facilities/sports-facilities/ @Ashritharooman @akshatatrathodrooman @faizanrooman
 
-/modules/finance-operations/         @gokulalakshmirooman-source @Ashritharooman
-/modules/campus-life/placement-career/ @gokulalakshmirooman-source @tejaswini-rooman
-/modules/campus-life/alumni/         @gokulalakshmirooman-source @tejaswini-rooman
+/modules/finance-operations/         @gokulalakshmirooman-source @Ashritharooman @faizanrooman
+/modules/campus-life/placement-career/ @gokulalakshmirooman-source @tejaswini-rooman @faizanrooman
+/modules/campus-life/alumni/         @gokulalakshmirooman-source @tejaswini-rooman @faizanrooman
 
-/modules/campus-life/                @tejaswini-rooman @madhumitha-rooman
-/modules/practice/field-training/    @tejaswini-rooman @madhumitha-rooman
-/modules/practice/projects/          @tejaswini-rooman @madhumitha-rooman
+/modules/campus-life/                @tejaswini-rooman @madhumitha-rooman @faizanrooman
+/modules/practice/field-training/    @tejaswini-rooman @madhumitha-rooman @faizanrooman
+/modules/practice/projects/          @tejaswini-rooman @madhumitha-rooman @faizanrooman
 
-/modules/governance/                 @madhumitha-rooman @tejaswini-rooman
-/modules/support/                    @madhumitha-rooman @tejaswini-rooman
+/modules/governance/                 @madhumitha-rooman @tejaswini-rooman @faizanrooman
+/modules/support/                    @madhumitha-rooman @tejaswini-rooman @faizanrooman

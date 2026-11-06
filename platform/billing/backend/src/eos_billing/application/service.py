@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from eos_core import events
 from eos_core.config import load_plans
@@ -12,7 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..domain.models import Invoice, Plan, Subscription, TrialReminder
+from ..domain import gst
+from ..domain.models import BillingProfile, Invoice, InvoiceCounter, Plan, Subscription, TrialReminder
+from . import config
 
 
 class BillingError(Exception):
@@ -129,18 +132,20 @@ def _activate(db: Session, sub: Subscription, plan_id: str, billing_cycle: str, 
     sub.payment_reference = reference
     plan = get_plan(db, plan_id)
     months = 12 if billing_cycle == "yearly" else 1
+    taxable = gst.money(Decimal(str(plan.price_per_month or 0)) * months)
     db.add(
         Invoice(
             organisation_id=sub.organisation_id,
             subscription_id=sub.id,
             plan_id=plan_id,
-            amount=float(plan.price_per_month or 0) * months,
+            amount=taxable,
             currency=plan.currency,
             status="paid",
             issued_at=now,
             period_start=now,
             period_end=sub.current_period_ends_at,
             payment_reference=reference,
+            **_tax_fields(db, sub.organisation_id, taxable, now),
         )
     )
     events.publish(
@@ -155,6 +160,121 @@ def _activate(db: Session, sub: Subscription, plan_id: str, billing_cycle: str, 
         sub.organisation_id,
         {"organisation_id": sub.organisation_id, "plan": plan_id},
     )
+
+
+def _next_number(db: Session, prefix: str, fy: str) -> str:
+    """The next number of the series for a financial year, taken under a row lock inside the caller's transaction."""
+    counter = db.scalar(select(InvoiceCounter).where(InvoiceCounter.financial_year == fy).with_for_update())
+    if counter is None:
+        try:
+            with db.begin_nested():
+                db.add(InvoiceCounter(financial_year=fy, last_sequence=0))
+                db.flush()
+        except IntegrityError:
+            pass  # another transaction created the year's row first
+        counter = db.scalar(select(InvoiceCounter).where(InvoiceCounter.financial_year == fy).with_for_update())
+    counter.last_sequence += 1
+    db.flush()
+    return gst.invoice_number(prefix, fy, counter.last_sequence)
+
+
+def _tax_fields(db: Session, organisation_id: str, taxable: Decimal, issued_at: datetime) -> dict:
+    """The GST columns of an invoice: parties, place of supply, SAC, the tax heads and the number.
+
+    With no supplier GSTIN configured (development, pilots) the invoice carries no tax: scheme 'none', total equal
+    to the taxable value, and still a number, so the series is the same everywhere."""
+    try:
+        cfg = config.invoicing()
+    except gst.GstError as e:
+        raise BillingError(f"invoicing is not configured correctly: {e}", 503) from e
+    fy = gst.financial_year(issued_at)
+    profile = get_profile(db, organisation_id)
+    fields: dict = {
+        "financial_year": fy,
+        "sac_code": cfg.sac_code,
+        "recipient_name": profile.legal_name if profile else None,
+        "recipient_gstin": profile.gstin if profile else None,
+        "recipient_address": profile.address if profile else None,
+        "recipient_state_code": profile.state_code if profile else None,
+    }
+    if cfg.supplier is None:
+        zero = Decimal("0.00")
+        fields.update(
+            tax_scheme="none",
+            gst_rate=Decimal("0.00"),
+            taxable_value=taxable,
+            cgst_amount=zero,
+            sgst_amount=zero,
+            igst_amount=zero,
+            total_amount=taxable,
+        )
+    else:
+        supplier = cfg.supplier
+        pos = gst.place_of_supply(profile.state_code if profile else None, supplier.state_code)
+        tax = gst.compute_tax(taxable, cfg.gst_rate, intra_state=pos == supplier.state_code)
+        fields.update(
+            tax_scheme=tax.scheme,
+            gst_rate=tax.rate,
+            taxable_value=tax.taxable_value,
+            cgst_amount=tax.cgst,
+            sgst_amount=tax.sgst,
+            igst_amount=tax.igst,
+            total_amount=tax.total,
+            place_of_supply=pos,
+            supplier_name=supplier.name,
+            supplier_gstin=supplier.gstin,
+            supplier_address=supplier.address,
+            supplier_state_code=supplier.state_code,
+        )
+    fields["invoice_number"] = _next_number(db, cfg.prefix, fy)
+    return fields
+
+
+def get_profile(db: Session, organisation_id: str) -> BillingProfile | None:
+    with organisation_scope(organisation_id):
+        return db.scalar(scoped(db, select(BillingProfile), BillingProfile))
+
+
+def save_profile(
+    db: Session,
+    *,
+    organisation_id: str,
+    legal_name: str,
+    gstin: str | None,
+    address: str,
+    state_code: str | None,
+) -> BillingProfile:
+    """Set who invoices are addressed to. A GSTIN must be valid (format and check character) and fixes the state;
+    an explicit state code that disagrees with it is refused. With no GSTIN the state code is optional: invoices
+    then go to the consumer's state, or the supplier's when none is given."""
+    try:
+        number = gst.normalise_gstin(gstin)
+        number = gst.validate_gstin(number) if number else None
+        state = (state_code or "").strip() or None
+        if state:
+            gst.validate_state_code(state)
+        if number:
+            if state and state != gst.state_code(number):
+                raise gst.GstError("state code does not match the state in the GSTIN")
+            state = gst.state_code(number)
+    except gst.GstError as e:
+        raise BillingError(str(e), 422) from e
+    name = (legal_name or "").strip()
+    if not name:
+        raise BillingError("legal name is required", 422)
+    with organisation_scope(organisation_id):
+        profile = db.scalar(scoped(db, select(BillingProfile), BillingProfile))
+        if profile is None:
+            profile = BillingProfile(organisation_id=organisation_id)
+            db.add(profile)
+        profile.legal_name, profile.gstin, profile.address, profile.state_code = (
+            name,
+            number,
+            (address or "").strip(),
+            state,
+        )
+        db.commit()
+    return profile
 
 
 def list_invoices(db: Session, organisation_id: str) -> list[dict]:

@@ -37,10 +37,14 @@ export function ListRow({ title, meta, icon: Icon, initials, date, tone = "accen
   const inner = (
     <>
       {d ? (
-        <span className="eos-row__date" aria-hidden>
-          <b>{String(d.getDate()).padStart(2, "0")}</b>
-          <span>{d.toLocaleDateString("en-GB", { month: "short" })}</span>
-        </span>
+        <>
+          <span className="eos-row__date" aria-hidden>
+            <b>{String(d.getDate()).padStart(2, "0")}</b>
+            <span>{d.toLocaleDateString("en-GB", { month: "short" })}</span>
+          </span>
+          {/* The tile is decorative to a screen reader; the date itself is read from here. */}
+          <span className="eos-sr-only">{d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</span>
+        </>
       ) : Icon ? (
         <span className="eos-row__tile eos-pop-in" aria-hidden>
           <Icon />

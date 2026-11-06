@@ -99,6 +99,8 @@ describe("List rows", () => {
     );
     expect(screen.getByText("09")).toBeTruthy();
     expect(screen.getByText("Oct")).toBeTruthy();
+    // the tile is hidden from screen readers, so the full date is there as text
+    expect(screen.getByText("9 October 2026").className).toContain("eos-sr-only");
   });
 });
 
@@ -112,8 +114,10 @@ describe("ProgressList, Segmented, Badge, EmptyState", () => {
   it("segmented control marks the selected option and reports changes", () => {
     const onChange = vi.fn();
     render(<Segmented label="View" value="bars" options={[["bars", "Bars"], ["trend", "Trend"]]} onChange={onChange} />);
-    expect(screen.getByRole("tab", { name: "Bars" }).getAttribute("aria-selected")).toBe("true");
-    fireEvent.click(screen.getByRole("tab", { name: "Trend" }));
+    expect(screen.getByRole("group", { name: "View" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Bars" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Trend" }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Trend" }));
     expect(onChange).toHaveBeenCalledWith("trend");
   });
 
