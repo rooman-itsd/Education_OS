@@ -67,6 +67,10 @@ tests, `packages/testing`. The backend is `eos_training_video_analysis.api.route
 its event handlers are on the `eos.event_consumers` entry point. This module must not import code from any other
 module under `modules/`.
 
+`sports/training-video-analysis` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts its router
+under `/api/v1/training-video-analysis` behind the entitlement gate, and in
+`apps/frontend/config/modules.enabled.yaml`, which registers its widgets.
+
 ## Layout
 | Path | Purpose |
 |---|---|
