@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The Coach layout names `training-video-analysis.session-plan` and the Athlete layout
+  `training-video-analysis.training-schedule`, in place of the athlete-performance ids that module never built:
+  training plans and sessions belong to training-video-analysis (#330).
 - The Support Staff, Organisation Admin and Management layouts list the roles of the support modules
   (knowledge-base, incident-management, sla-management, amc-vendor-support) that each module's catalogue names as its
   default for that profile role. Support staff hold `knowledge-base-author` and `amc-vendor-support-coordinator`
