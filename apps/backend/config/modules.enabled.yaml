@@ -23,6 +23,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/iqac-accreditation
   - practice/selection-process
   - practice/portfolio
   - practice/productions
@@ -31,6 +32,7 @@ modules:
   - sports/athlete-performance
   - sports/sports-nutrition-health
   - sports/tournament-events
+  - sports/training-video-analysis
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/student-information
@@ -38,3 +40,4 @@ modules:
   - support/helpdesk
 integrations: [messaging-providers, payment-sbiepay]
 platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit, reporting]
+platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit, workflow]

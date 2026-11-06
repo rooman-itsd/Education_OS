@@ -30,7 +30,7 @@ const WIDGETS: LayoutWidget[] = [
   {
     id: "workflow.approvals-pending",
     module: "platform/workflow",
-    batch: "#317 (enablement waits on PR #430)",
+    batch: "#317",
     title: "Approvals pending",
     probe: "/workflow/requests/pending?limit=8",
     empty: "No pending approvals",
