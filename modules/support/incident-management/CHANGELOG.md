@@ -25,3 +25,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   same three-character minimum and `description_blank` for spaces. Adding a timeline update and adding a corrective
   action lock the incident or problem row first, as references and the status moves do, so neither can land on a
   record that a close or cancel is committing at the same moment (409).
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/incident-management`) and
+  `apps/frontend/config/modules.enabled.yaml` (`incident-management.open` on the Support Staff dashboard, the only
+  dashboard that lists it).

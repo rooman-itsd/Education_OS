@@ -38,6 +38,7 @@ modules:
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
   - support/helpdesk
+  - support/incident-management
 platform:
   - billing
   - tenancy
