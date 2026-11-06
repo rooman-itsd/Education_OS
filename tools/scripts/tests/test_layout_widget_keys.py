@@ -28,13 +28,12 @@ LAYOUTS = ROOT / "platform" / "identity" / "config" / "dashboards"
 # Wrong on main when this test was added (6 Nov 2026); each needs its layout or its widget changed by the owner.
 # Fixing one never fails this test; adding one does. Remove a line once it is fixed (the list only shrinks).
 KNOWN = {
-    ("research-lead", "projects.to-review"): "API takes guidance:read only (403); #537: give the role projects-guide",
     # GET /projects?status=active also takes projects:project:read, which projects-coordinator holds, so the API
     # answers these roles; but the widget declares projects:guidance:read, so the shell will not show it to them.
-    # Either the layouts give projects-guide, or projects offers coordinators a widget that declares project:read.
-    ("research-lead", "projects.active"): "declared key is guidance:read, coordinators hold project:read",
-    ("research-office", "projects.active"): "as above",
-    ("industry-liaison", "projects.active"): "as above",
+    # Either the layouts give projects-guide (as research-lead's did, #596), or projects offers coordinators a widget
+    # that declares project:read.
+    ("research-office", "projects.active"): "declared key is guidance:read, coordinators hold project:read",
+    ("industry-liaison", "projects.active"): "declared key is guidance:read, coordinators hold project:read",
     ("applicant", "web-portal-cms.announcements"): "applicant holds no web-portal-cms:announcement:read",
 }
 
