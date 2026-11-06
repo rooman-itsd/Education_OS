@@ -4,8 +4,8 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/amc-vendor-support`) and
-  `apps/frontend/config/modules.enabled.yaml` (`amc-vendor-support.contracts-expiring` on the Support Staff, Organisation Admin and Management
-  dashboards that list it).
+  `apps/frontend/config/modules.enabled.yaml` (`amc-vendor-support.contracts-expiring` on the Support Staff
+  dashboard, the only dashboard that lists it).
 - Module scaffolded.
 - Contracts proposed: AMC contracts referencing procurement vendors, covered items, activation, renewal and
   termination, expiry worked out when read; engagements (breakdown calls and preventive visits); `GET /coverage`;
