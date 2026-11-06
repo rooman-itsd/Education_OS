@@ -10,6 +10,7 @@
 modules:
   - academics/academic-management
   - academics/examinations
+  - academics/lms
   - campus-life/hostel
   - campus-life/library
   - campus-life/transport
@@ -23,7 +24,9 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/regulatory-reports
   - governance/iqac-accreditation
+  - practice/field-training
   - practice/selection-process
   - practice/portfolio
   - practice/productions
@@ -38,5 +41,6 @@ modules:
   - student-lifecycle/student-information
   - student-lifecycle/web-portal-cms
   - support/helpdesk
+  - support/incident-management
 integrations: [messaging-providers, payment-sbiepay]
-platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit, workflow, integration-hub]
+platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit, workflow, reporting, integration-hub]

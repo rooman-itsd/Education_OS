@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (backend and widget built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend and widget built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 Incident and problem records, root cause analysis.
 
@@ -51,7 +51,7 @@ decided.
 
 ### Needs from the host repo
 - `packages/core` (`eos_core`); for tests, `packages/testing` (`eos_testing`).
-- `support/incident-management` in `apps/backend/config/modules.enabled.yaml`, added in a later pull request of #342.
+- `support/incident-management` in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/incident-management` behind the entitlement gate).
   From that list the module loader mounts `eos_incident_management.api.router:router` at
   `/api/v1/incident-management`, the API image installs the package, the auto-deploy runs the Alembic chain and CI
   runs `backend/tests`. Until then the module's tests run only as shown below.
@@ -72,7 +72,7 @@ investigating and mitigated, from `GET /api/v1/incident-management/stats/open` (
 client matching the contract's `OpenCounts`, until the repo has a generated client. Tests are in `frontend/tests/`
 (Vitest and Testing Library).
 
-The dashboard shows the widget once `apps/frontend/config/modules.enabled.yaml` lists `support/incident-management`.
+The dashboard shows the widget because `apps/frontend/config/modules.enabled.yaml` lists `support/incident-management`.
 
 ## Run the checks
 ```
