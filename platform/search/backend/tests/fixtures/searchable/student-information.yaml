@@ -1,0 +1,17 @@
+# Test fixture: what student-information must ship as contracts/searchable.yaml (docs/prd.md, "First modules").
+module: student-information
+types:
+  - name: person
+    label: Students
+    url: /students/{id}
+    triggers:
+      - { event: student-information.person.created, action: upsert, id_field: person_id }
+      - { event: student-information.person.updated, action: upsert, id_field: person_id }
+      - { event: student-information.person.status-changed, action: upsert, id_field: person_id }
+    fields:
+      name:      { kind: text,    analyzer: name, boost: 3, role: title }
+      status:    { kind: keyword, display: true, filterable: true }
+      programme: { kind: keyword, display: true, filterable: true }
+      admission_no: { kind: text, analyzer: code, display: true }
+    read_permissions:
+      any_of: [student-information:person:read]
