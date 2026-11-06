@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: billing API
-  version: 0.2.0
+  version: 0.3.0
   description: "Plans, trials, subscriptions, upgrades and invoices. See ADR-0005."
 servers:
   - url: /api/v1/billing
@@ -28,6 +28,14 @@ paths:
     get:
       summary: Invoices of the caller's organisation, newest first; one per paid period. Permission billing:subscription:read.
       responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Invoice" } } } } } }
+  /billing-profile:
+    get:
+      summary: Who the caller's invoices are addressed to (the GST recipient). 404 until one is saved. Permission billing:subscription:read.
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BillingProfile" } } } }, "404": { description: None saved } }
+    put:
+      summary: "Set the recipient of future invoices. A GSTIN is optional (business-to-consumer without one); when given it is checked for format, state code and check character, and fixes the state. 422 on a bad GSTIN, an unknown state code, or a state code that disagrees with the GSTIN. Invoices already issued are not changed. Permission billing:subscription:manage."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingProfile" } } } }
+      responses: { "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/BillingProfile" } } } }, "422": { description: Invalid GSTIN or state } }
   /webhooks/payment:
     post:
       summary: Payment adapter callback. Confirms an upgrade and activates the subscription.
@@ -131,7 +139,7 @@ components:
         id: { type: string }
         organisation_id: { type: string, format: uuid }
         plan: { type: string, description: "Plan id the period was charged for" }
-        amount: { type: number }
+        amount: { type: number, description: "The taxable value (before GST); revenue reports use this, so they exclude GST" }
         currency: { type: string }
         status: { type: string, enum: [draft, due, paid, void] }
         issued_at: { type: string, format: date-time }
@@ -139,3 +147,33 @@ components:
         period_end: { type: string, format: date-time }
         payment_reference: { type: string, nullable: true, description: "Reference the payment adapter confirmed" }
         document_id: { type: string, nullable: true, description: "PDF in platform/documents; null until generated" }
+        invoice_number: { type: string, nullable: true, maxLength: 16, description: "PREFIX/YY-YY/NNNNNN, one series per financial year (1 April to 31 March, Indian time), no gaps, never reused. Null on an invoice issued before 0.3.0." }
+        financial_year: { type: string, nullable: true, example: "26-27" }
+        tax_scheme: { type: string, enum: [intra, inter, none], nullable: true, description: "intra: CGST + SGST (place of supply is the supplier's state); inter: IGST; none: no supplier GSTIN configured, no tax charged" }
+        sac_code: { type: string, nullable: true, description: "Service accounting code of the subscription, six digits" }
+        gst_rate: { type: string, nullable: true, description: "Percent, two places; the whole rate (CGST and SGST are half each)", example: "18.00" }
+        taxable_value: { type: string, nullable: true, description: "Decimal, two places" }
+        cgst_amount: { type: string, nullable: true }
+        sgst_amount: { type: string, nullable: true }
+        igst_amount: { type: string, nullable: true }
+        total_amount: { type: string, nullable: true, description: "taxable_value + cgst + sgst + igst" }
+        place_of_supply: { type: string, nullable: true, description: "State code: the recipient's, or the supplier's when the recipient has no state on record" }
+        supplier: { $ref: "#/components/schemas/InvoiceParty" }
+        recipient: { $ref: "#/components/schemas/InvoiceParty" }
+    InvoiceParty:
+      type: object
+      description: A party as it stood on the day the invoice was issued. The recipient's gstin is null for a business-to-consumer invoice.
+      properties:
+        name: { type: string, nullable: true }
+        gstin: { type: string, nullable: true, minLength: 15, maxLength: 15 }
+        address: { type: string, nullable: true }
+        state_code: { type: string, nullable: true, description: "Two digits, the first two of a GSTIN" }
+    BillingProfile:
+      type: object
+      required: [legal_name]
+      properties:
+        organisation_id: { type: string, format: uuid, readOnly: true }
+        legal_name: { type: string }
+        gstin: { type: string, nullable: true, description: "15 characters; upper-cased on save" }
+        address: { type: string }
+        state_code: { type: string, nullable: true, description: "Two digits; optional, taken from the GSTIN when there is one" }
