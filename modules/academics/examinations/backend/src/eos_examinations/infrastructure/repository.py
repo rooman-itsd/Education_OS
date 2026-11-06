@@ -59,6 +59,18 @@ CONSTRAINTS = {
     "paper_in_session": {
         "uq_examinations_session_paper": ("examinations_session_paper", ("organisation_id", "exam_paper_id")),
     },
+    "duty_on_session": {
+        "uq_examinations_duty_session_live": (
+            "examinations_exam_duty",
+            ("organisation_id", "staff_id", "duty_type", "exam_session_id"),
+        ),
+    },
+    "duty_on_paper": {
+        "uq_examinations_duty_paper_live": (
+            "examinations_exam_duty",
+            ("organisation_id", "staff_id", "duty_type", "exam_paper_id"),
+        ),
+    },
     "audit_token": {
         "uq_examinations_audit_client_token": ("examinations_audit_entry", ("organisation_id", "client_token")),
     },
@@ -130,11 +142,14 @@ def paper_ids_in_sessions(db: Session, paper_ids: list[str]) -> set[str]:
 
 
 def assigned_invigilation_sessions(db: Session, staff_id: str) -> list[ExamSessionRow]:
-    """The sessions a staff member invigilates through an assigned duty (FR-9's overlap check starts from these)."""
+    """The sessions a staff member invigilates through an assigned duty (FR-9's overlap check starts from these). A
+    cancelled session is left out: its duties stay `assigned` (nothing cancels them with it) but it no longer takes the
+    staff member's time."""
     query = (
         q(db, ExamSessionRow)
         .join(ExamDutyRow, ExamDutyRow.exam_session_id == ExamSessionRow.id)
         .where(
+            ExamSessionRow.status != "cancelled",
             ExamDutyRow.staff_id == staff_id,
             ExamDutyRow.duty_type == "invigilation",
             ExamDutyRow.status == "assigned",
@@ -180,3 +195,33 @@ def grading_scheme_in_use(db: Session, grading_scheme_id: str) -> bool:
 
 def grading_schemes(db: Session) -> list[GradingSchemeRow]:
     return list(db.scalars(q(db, GradingSchemeRow).order_by(GradingSchemeRow.name, GradingSchemeRow.id)))
+
+
+# ---------------------------------------------------------------- exam duties
+
+LIVE_DUTY_STATUSES = ("assigned", "completed")  # the statuses the unique indexes of ex_0003 cover
+
+
+def duty(db: Session, exam_duty_id: str) -> ExamDutyRow | None:
+    return get(db, ExamDutyRow, exam_duty_id)
+
+
+def live_duplicate_duty(
+    db: Session, staff_id: str, duty_type: str, exam_session_id: str | None, exam_paper_id: str | None
+) -> ExamDutyRow | None:
+    """The assigned or completed duty of this staff member and type on the same target, if any."""
+    query = q(db, ExamDutyRow).where(
+        ExamDutyRow.staff_id == staff_id,
+        ExamDutyRow.duty_type == duty_type,
+        ExamDutyRow.status.in_(LIVE_DUTY_STATUSES),
+    )
+    if exam_session_id is not None:
+        query = query.where(ExamDutyRow.exam_session_id == exam_session_id)
+    else:
+        query = query.where(ExamDutyRow.exam_paper_id == exam_paper_id)
+    return db.scalars(query).first()
+
+
+def duties_of_staff(db: Session, staff_id: str, status: str) -> list[ExamDutyRow]:
+    rows = db.scalars(q(db, ExamDutyRow).where(ExamDutyRow.staff_id == staff_id, ExamDutyRow.status == status))
+    return sorted(rows, key=lambda r: (r.created_at, r.id))

@@ -12,9 +12,12 @@ from sqlalchemy.orm import Session
 from ..domain.values import DAYS_OF_WEEK
 from .models import (
     AssignmentRef,
+    AttendanceSessionRow,
     AuditEntry,
     OfferingRef,
+    ScheduledClassRow,
     SectionRef,
+    TermRef,
     TimetableRow,
     TimetableSlotRow,
 )
@@ -172,7 +175,26 @@ def published_slots_in_period(
     return [(r.timetable_id, r) for r in rows]
 
 
+def classes_of_timetable(db: Session, timetable_id: str) -> list[ScheduledClassRow]:
+    """Every scheduled class generated from the timetable, earliest first."""
+    rows = db.scalars(q(db, ScheduledClassRow).where(ScheduledClassRow.timetable_id == timetable_id))
+    return sorted(rows, key=lambda r: (r.starts_at, r.id))
+
+
+def class_ids_with_session(db: Session, class_ids: list[str]) -> set[str]:
+    """Of these classes, the ids of those that have an attendance session (open or closed)."""
+    if not class_ids:
+        return set()
+    query = q(db, AttendanceSessionRow).with_only_columns(AttendanceSessionRow.scheduled_class_id)
+    return set(db.scalars(query.where(AttendanceSessionRow.scheduled_class_id.in_(class_ids))))
+
+
 # ---------------------------------------------------------------- read models (filled from consumed events)
+
+
+def term_ref(db: Session, academic_period_id: str) -> TermRef | None:
+    """The known term for an academic period, or None (its `term.created` event has not been consumed)."""
+    return db.scalars(q(db, TermRef).where(TermRef.academic_period_id == academic_period_id)).first()
 
 
 def offering_refs(db: Session, ids: set[str]) -> dict[str, OfferingRef]:

@@ -22,14 +22,17 @@ exposes:
 
 # Events this module subscribes to (by name, from other modules' events.yaml). Each is handled by
 # application/consumers.py, registered under the `eos.event_consumers` entry point in backend/pyproject.toml.
-# Not consumed yet: academic-management `faculty-assignment.*` (the identity mapping of the assignee is unconfirmed) and
-# enrolment-registration events (they depend on the unconfirmed student_id mapping); see docs/reviewer-decisions.md.
+# Not consumed yet: academic-management `faculty-assignment.*` (the identity mapping of the assignee is unconfirmed);
+# see docs/reviewer-decisions.md.
 consumes_events:
   - academic-management.term.created
   - academic-management.offering.created
   - academic-management.offering.status-changed
   - academic-management.section.created
   - academic-management.section.updated
+  - enrolment-registration.course-registration.confirmed
+  - enrolment-registration.course-registration.withdrawn
+  - enrolment-registration.section-allocation.changed
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
