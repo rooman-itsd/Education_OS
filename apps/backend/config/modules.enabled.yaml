@@ -24,6 +24,7 @@ modules:
   - finance-operations/hr-payroll
   - finance-operations/procurement
   - governance/regulatory-reports
+  - governance/iqac-accreditation
   - practice/selection-process
   - practice/portfolio
   - practice/productions
@@ -39,4 +40,4 @@ modules:
   - student-lifecycle/web-portal-cms
   - support/helpdesk
 integrations: [messaging-providers, payment-sbiepay]
-platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit]
+platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit, workflow]
