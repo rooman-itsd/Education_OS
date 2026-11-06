@@ -39,6 +39,7 @@ events:
       /account-links/republish announces every current link again (previous_identity_user_id null), the backfill for
       links made before this event existed; applying a republished link twice changes nothing.
     payload: { organisation_id: uuid, person_id: uuid, identity_user_id: "uuid?", linked: boolean, previous_identity_user_id: "uuid?" }
+    consumers: [fees-accounts, lms, timetable-attendance]
   - name: student-information.id-card.issued
     description: An ID card was issued to a person.
     payload: { organisation_id: uuid, person_id: uuid, card_id: uuid, card_number: string }

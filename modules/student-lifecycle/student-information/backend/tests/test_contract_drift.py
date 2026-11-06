@@ -154,7 +154,9 @@ def test_contracted_events_catalog(events):
 def test_account_linked_payload_matches_the_published_fields(events):
     """The account-linked payload and the identity_user_id added to person.created are what the service publishes."""
     by_name = {e["name"]: e for e in events["events"]}
-    linked = by_name["student-information.person.account-linked"]["payload"]
+    account_linked = by_name["student-information.person.account-linked"]
+    assert set(account_linked["consumers"]) == {"fees-accounts", "lms", "timetable-attendance"}
+    linked = account_linked["payload"]
     assert set(linked) == {"organisation_id", "person_id", "identity_user_id", "linked", "previous_identity_user_id"}
     assert linked["identity_user_id"] == "uuid?" and linked["linked"] == "boolean"
     assert by_name["student-information.person.created"]["payload"]["identity_user_id"] == "uuid?"
