@@ -1,0 +1,3 @@
+{"value": [{"subscriptionId": "sub-7f1c", "subscriptionExpirationDateTime": "2026-11-08T04:55:00Z", "changeType": "created", "clientState": "__CLIENT_STATE__",
+  "resource": "communications/onlineMeetings('MSpkYzE3NjcyNS01MTA1LTQyZjQtYjRjZS00ZDE5YzRiYTVjNzEqMCoqMTk6bWVldGluZ19ZMkV5.example')/recordings('rec-1')",
+  "resourceData": {"@odata.type": "#Microsoft.Graph.callRecording", "@odata.id": "x", "id": "rec-1"}, "tenantId": "11111111-2222-3333-4444-555555555555"}]}

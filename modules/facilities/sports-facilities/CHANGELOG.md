@@ -29,3 +29,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `description` at 5000 characters, stated in `openapi.yaml`; `PUT .../hours` locks the facility row and slots are
   unique on (organisation, facility, day, opening time) in `sf_0001`, a clash is 409 `hours_conflict`; a 401 no
   longer echoes the token library's message; `PyJWT` declared; stray `.gitkeep` files removed.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/sports-facilities`) and
+  `apps/frontend/config/modules.enabled.yaml` (no widgets) (#331).

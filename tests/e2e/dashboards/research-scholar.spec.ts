@@ -68,8 +68,24 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The scholar's own widgets.
-  { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
-  { id: "projects.milestones-due", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.my-projects",
+    module: "practice/projects",
+    batch: "#339",
+    title: "My projects",
+    probe: "/projects/me/projects",
+    empty: "You are not on a project yet",
+    unavailable: "Projects data is not available yet.",
+  },
+  {
+    id: "projects.milestones-due",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Milestones due",
+    probe: "/projects/me/milestones?within_days=14",
+    empty: "Nothing due in the next two weeks",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "portfolio.my-portfolio",
     module: "practice/portfolio",
@@ -79,7 +95,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No portfolio items yet",
     unavailable: "Portfolio data is not available yet.",
   },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
+  },
   {
     id: "selection-process.my-applications",
     module: "practice/selection-process",

@@ -1,0 +1,18 @@
+# What platform/search may index from this module (platform/search/docs/prd.md, decision 1).
+# Only the name and the status are indexed. The person table holds no programme and no roll or admission number
+# (programme enrolment belongs to enrolment-registration), and identity_number is a national ID or passport number,
+# so it is never indexed. Contact details, guardians, date of birth and gender are never indexed either.
+module: student-information
+types:
+  - name: person
+    label: Students
+    url: /students/{id}
+    triggers:
+      - { event: student-information.person.created, action: upsert, id_field: person_id }
+      - { event: student-information.person.updated, action: upsert, id_field: person_id }
+      - { event: student-information.person.status-changed, action: upsert, id_field: person_id }
+    fields:
+      name:   { kind: text, analyzer: name, boost: 3, role: title }
+      status: { kind: keyword, display: true, filterable: true }
+    read_permissions:
+      any_of: [student-information:person:read]

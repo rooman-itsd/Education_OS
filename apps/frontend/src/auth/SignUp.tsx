@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@eos/ui-kit";
 import { api, ApiError } from "../api/client";
 import { AuthLayout } from "./AuthLayout";
@@ -23,6 +23,11 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
   const [registered, setRegistered] = useState<Registered | null>(null);
   const [verified, setVerified] = useState<{ status: string } | null>(null);
   const [token, setToken] = useState("");
+  // The later steps replace the form: focus moves to their heading so a screen reader announces the new step.
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (registered || verified) stepHeading.current?.focus();
+  }, [registered, verified]);
 
   useEffect(() => {
     api<AcademyType[]>("/tenancy/academy-types").then((t) => {
@@ -80,7 +85,7 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
     return (
       <AuthLayout>
         <div className="eos-auth__card">
-          <h1>Email verified</h1>
+          <h1 ref={stepHeading} tabIndex={-1}>Email verified</h1>
           <p>{form.organisation_name} is waiting for the platform administrator to approve its academic package. You will get an email when it is approved, and can then sign in.</p>
           <p className="eos-auth__footnote">{backToLogin}</p>
         </div>
@@ -92,7 +97,7 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
     return (
       <AuthLayout>
         <form className="eos-auth__card" onSubmit={verify}>
-          <h1>Verify your email</h1>
+          <h1 ref={stepHeading} tabIndex={-1}>Verify your email</h1>
           <p>We sent a verification token to {form.email}. Paste it below to activate {form.organisation_name}.</p>
           <label className="eos-field">
             Verification token
@@ -136,7 +141,7 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
           <input className="eos-input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required autoComplete="email" />
         </label>
         <label className="eos-field">
-          Password
+          Password <span className="eos-field__hint">(at least 8 characters)</span>
           <input className="eos-input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="new-password" />
         </label>
         {error && <p className="eos-form-error" role="alert">{error}</p>}

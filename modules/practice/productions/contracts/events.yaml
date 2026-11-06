@@ -1,9 +1,42 @@
 # Domain events published by productions.
-# Naming: <module>.<entity>.<past-tense-verb>  e.g. admissions.application.submitted
-# Every event carries: id, occurred_at, actor, tenant, version, payload.
+# Naming: <module>.<entity>.<past-tense-verb>
+# Every event carries: id, occurred_at, actor, organisation_id (tenant), version, payload.
 module: productions
 version: 1
-events: []
-#  - name: productions.example.created
-#    description: ...
-#    payload_schema: ./schemas/example-created.json
+events:
+  - name: productions.production.created
+    description: A production was added to the calendar, in planning.
+    payload: { organisation_id: uuid, production_id: uuid, title: string, kind: string, department: string, lead_user_id: uuid, created_by: uuid }
+  - name: productions.production.updated
+    description: A production's details changed. `changed` lists the fields.
+    payload: { organisation_id: uuid, production_id: uuid, changed: [string] }
+  - name: productions.production.preparation-started
+    description: A planned production moved into preparation; its tasks and casting are now live.
+    payload: { organisation_id: uuid, production_id: uuid, title: string, lead_user_id: uuid }
+  - name: productions.production.scheduled
+    description: A production has its dates, venue and call time. Rescheduling publishes this again with from_starts_at set.
+    payload: { organisation_id: uuid, production_id: uuid, title: string, starts_at: datetime, ends_at: datetime, call_time: datetime, venue: string, from_starts_at: datetime }
+  - name: productions.production.cancelled
+    description: A production will not happen. Its outstanding invitations are withdrawn.
+    payload: { organisation_id: uuid, production_id: uuid, title: string, reason: string, cancelled_by: uuid, starts_at: datetime, cast_user_ids: [uuid] }
+  - name: productions.production.completed
+    description: A production has been performed and is closed.
+    payload: { organisation_id: uuid, production_id: uuid, title: string, completed_at: datetime, cast_user_ids: [uuid] }
+  - name: productions.role.assigned
+    description: Someone was offered a part or a crew job. Notification tells them.
+    payload: { organisation_id: uuid, production_id: uuid, role_id: uuid, user_id: uuid, role_name: string, kind: string, assigned_by: uuid }
+  - name: productions.role.accepted
+    description: The person accepted the part offered to them.
+    payload: { organisation_id: uuid, production_id: uuid, role_id: uuid, user_id: uuid, role_name: string }
+  - name: productions.role.declined
+    description: The person declined the part offered to them.
+    payload: { organisation_id: uuid, production_id: uuid, role_id: uuid, user_id: uuid, role_name: string, reason: string }
+  - name: productions.role.withdrawn
+    description: A lead withdrew an assignment, or the production was cancelled.
+    payload: { organisation_id: uuid, production_id: uuid, role_id: uuid, user_id: uuid, role_name: string, withdrawn_by: uuid, reason: string }
+  - name: productions.task.added
+    description: A preparation task was added to a production.
+    payload: { organisation_id: uuid, production_id: uuid, task_id: uuid, title: string, due_at: datetime, assignee_user_id: uuid, added_by: uuid }
+  - name: productions.task.completed
+    description: A preparation task was marked done.
+    payload: { organisation_id: uuid, production_id: uuid, task_id: uuid, title: string, completed_by: uuid, outstanding: integer }

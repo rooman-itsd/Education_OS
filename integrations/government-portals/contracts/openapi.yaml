@@ -1,0 +1,111 @@
+openapi: 3.1.0
+info:
+  title: government-portals API
+  version: 0.2.0
+  description: >-
+    AISHE, NIRF and NAAC submission adapter. See docs/prd.md. Modules never call this API: regulatory-reports and
+    iqac-accreditation use the regulatory-submission port (contracts/ports/regulatory-submission.yaml) through
+    packages/sdk, and integration-hub routes the call here. No portal calls back, so there are no inbound channels.
+    What is exposed is read-only: the forms this adapter can prepare, and an operator view of prepared packages.
+
+
+    Error codes (the `code` field of Error): 400 invalid_cursor; 404 not_found.
+servers:
+  - url: /api/v1/government-portals
+
+paths:
+  /forms:
+    get:
+      summary: >-
+        The forms this adapter prepares, with the authority, the channel (manual_entry, file_upload, api), the format
+        version, the period kind, the data schema and the evidence each metric needs. The same as the port's
+        list_forms. Permission government-portals:package:read.
+      operationId: listForms
+      parameters:
+        - { name: authority, in: query, schema: { type: string, enum: [aishe, nirf, naac] } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Form" } } } } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /packages:
+    get:
+      summary: Prepared packages, newest first, with form, period, status and portal reference. Permission government-portals:package:read.
+      operationId: listPackages
+      parameters:
+        - { name: form_code, in: query, schema: { type: string } }
+        - { name: period, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/PackageStatus" } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PackagePage" } } } }
+        "400": { description: invalid_cursor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /packages/{id}:
+    get:
+      summary: One package with its files (document ids), checklist, validation issues and filing record. Permission government-portals:package:read.
+      operationId: getPackage
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PackageDetail" } } } }
+        "403": { description: Missing permission, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: not_found, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+components:
+  schemas:
+    PackageStatus:
+      type: string
+      enum: [draft, prepared, invalid, submitted, uploaded_manually, acknowledged, superseded]
+    Form:
+      type: object
+      required: [form_code, authority, title, channel, format_version, period_kind]
+      properties:
+        form_code: { type: string, examples: ["aishe.dcf-ii", "nirf.dcs.overall", "naac.aqar"] }
+        authority: { type: string, enum: [aishe, nirf, naac] }
+        title: { type: string }
+        channel: { type: string, enum: [manual_entry, file_upload, api] }
+        format_version: { type: string, description: "The authority's cycle the format follows, e.g. 2025-26" }
+        period_kind: { type: string, enum: [academic_year, calendar_year, accreditation_cycle] }
+        portal_url: { type: string, format: uri }
+        data_schema: { type: object, description: JSON Schema of the data the form needs }
+        evidence:
+          type: array
+          items: { type: object, properties: { metric: { type: string }, required: { type: boolean }, accepts: { type: array, items: { type: string } } } }
+    Package:
+      type: object
+      required: [id, form_code, period, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        package_key: { type: string }
+        form_code: { type: string }
+        period: { type: string }
+        status: { $ref: "#/components/schemas/PackageStatus" }
+        portal_reference: { type: [string, "null"] }
+        submitted_on: { type: [string, "null"], format: date }
+        created_at: { type: string, format: date-time }
+    PackageDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Package" }
+        - type: object
+          properties:
+            files:
+              type: array
+              items: { type: object, properties: { document_id: { type: string, format: uuid }, filename: { type: string }, role: { type: string, enum: [upload, keying_sheet, website_copy, evidence, bundle] } } }
+            checklist: { type: array, items: { type: object, properties: { step: { type: integer }, detail: { type: string }, portal_section: { type: string } } } }
+            issues: { type: array, items: { type: object, properties: { path: { type: string }, code: { type: string }, severity: { type: string, enum: [error, warning] } } } }
+            submitted_by: { type: [string, "null"], format: uuid }
+            acknowledgement_document_id: { type: [string, "null"], format: uuid }
+    PackagePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Package" } }
+        next_cursor: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [code, detail]
+      properties:
+        code: { type: string }
+        detail: { type: string }

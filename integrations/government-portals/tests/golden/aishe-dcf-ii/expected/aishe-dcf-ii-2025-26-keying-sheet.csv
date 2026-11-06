@@ -1,0 +1,240 @@
+﻿section,item,field,value
+1. Basic details,,institution name,Sample Institute of Higher Education
+1. Basic details,,aishe code,C-12345
+1. Basic details,,institution type,college
+1. Basic details,,year of establishment,1998
+1. Basic details,,management,Private unaided
+1. Basic details,,state,Kerala
+1. Basic details,,district,Ernakulam
+3. Programmes and enrolment,1,name,B.Sc. Computer Science
+3. Programmes and enrolment,1,level,ug
+3. Programmes and enrolment,1,discipline,Science
+3. Programmes and enrolment,1,duration years,3
+3. Programmes and enrolment,1,intake,60
+3. Programmes and enrolment,1,enrolment by gender.male,70
+3. Programmes and enrolment,1,enrolment by gender.female,95
+3. Programmes and enrolment,1,enrolment by gender.transgender,1
+3. Programmes and enrolment,1,enrolment by category.general,90
+3. Programmes and enrolment,1,enrolment by category.sc,20
+3. Programmes and enrolment,1,enrolment by category.st,6
+3. Programmes and enrolment,1,enrolment by category.obc,40
+3. Programmes and enrolment,1,enrolment by category.ews,8
+3. Programmes and enrolment,1,enrolment by category.other,2
+3. Programmes and enrolment,1,total enrolment (checked against category total),166
+3. Programmes and enrolment,2,name,M.Com
+3. Programmes and enrolment,2,level,pg
+3. Programmes and enrolment,2,discipline,Commerce
+3. Programmes and enrolment,2,duration years,2
+3. Programmes and enrolment,2,intake,40
+3. Programmes and enrolment,2,enrolment by gender.male,20
+3. Programmes and enrolment,2,enrolment by gender.female,45
+3. Programmes and enrolment,2,enrolment by gender.transgender,0
+3. Programmes and enrolment,2,enrolment by category.general,30
+3. Programmes and enrolment,2,enrolment by category.sc,12
+3. Programmes and enrolment,2,enrolment by category.st,3
+3. Programmes and enrolment,2,enrolment by category.obc,15
+3. Programmes and enrolment,2,enrolment by category.ews,5
+3. Programmes and enrolment,2,enrolment by category.other,0
+3. Programmes and enrolment,2,total enrolment (checked against category total),65
+4. Examination results,1,programme,B.Sc. Computer Science
+4. Examination results,1,appeared,55
+4. Examination results,1,passed,49
+4. Examination results,2,programme,M.Com
+4. Examination results,2,appeared,30
+4. Examination results,2,passed,30
+5. Staff,,teaching.male,12
+5. Staff,,teaching.female,14
+5. Staff,,teaching.transgender,0
+5. Staff,,non teaching.male,6
+5. Staff,,non teaching.female,9
+5. Staff,,non teaching.transgender,0
+6. Teacher information,1,name,Teacher 00
+6. Teacher information,1,designation,Associate Professor
+6. Teacher information,1,gender,male
+6. Teacher information,1,category,general
+6. Teacher information,1,highest qualification,PhD
+6. Teacher information,1,nature of appointment,regular
+6. Teacher information,1,date of joining,2010-06-01
+6. Teacher information,2,name,Teacher 01
+6. Teacher information,2,designation,Assistant Professor
+6. Teacher information,2,gender,female
+6. Teacher information,2,category,obc
+6. Teacher information,2,highest qualification,M.Phil
+6. Teacher information,2,nature of appointment,regular
+6. Teacher information,2,date of joining,2011-06-01
+6. Teacher information,3,name,Teacher 02
+6. Teacher information,3,designation,Assistant Professor
+6. Teacher information,3,gender,male
+6. Teacher information,3,category,sc
+6. Teacher information,3,highest qualification,M.Phil
+6. Teacher information,3,nature of appointment,regular
+6. Teacher information,3,date of joining,2012-06-01
+6. Teacher information,4,name,Teacher 03
+6. Teacher information,4,designation,Associate Professor
+6. Teacher information,4,gender,female
+6. Teacher information,4,category,general
+6. Teacher information,4,highest qualification,M.Phil
+6. Teacher information,4,nature of appointment,regular
+6. Teacher information,4,date of joining,2013-06-01
+6. Teacher information,5,name,Teacher 04
+6. Teacher information,5,designation,Assistant Professor
+6. Teacher information,5,gender,male
+6. Teacher information,5,category,obc
+6. Teacher information,5,highest qualification,PhD
+6. Teacher information,5,nature of appointment,regular
+6. Teacher information,5,date of joining,2014-06-01
+6. Teacher information,6,name,Teacher 05
+6. Teacher information,6,designation,Assistant Professor
+6. Teacher information,6,gender,female
+6. Teacher information,6,category,sc
+6. Teacher information,6,highest qualification,M.Phil
+6. Teacher information,6,nature of appointment,regular
+6. Teacher information,6,date of joining,2015-06-01
+6. Teacher information,7,name,Teacher 06
+6. Teacher information,7,designation,Associate Professor
+6. Teacher information,7,gender,male
+6. Teacher information,7,category,general
+6. Teacher information,7,highest qualification,M.Phil
+6. Teacher information,7,nature of appointment,regular
+6. Teacher information,7,date of joining,2016-06-01
+6. Teacher information,8,name,Teacher 07
+6. Teacher information,8,designation,Assistant Professor
+6. Teacher information,8,gender,female
+6. Teacher information,8,category,obc
+6. Teacher information,8,highest qualification,M.Phil
+6. Teacher information,8,nature of appointment,regular
+6. Teacher information,8,date of joining,2017-06-01
+6. Teacher information,9,name,Teacher 08
+6. Teacher information,9,designation,Assistant Professor
+6. Teacher information,9,gender,male
+6. Teacher information,9,category,sc
+6. Teacher information,9,highest qualification,PhD
+6. Teacher information,9,nature of appointment,regular
+6. Teacher information,9,date of joining,2018-06-01
+6. Teacher information,10,name,Teacher 09
+6. Teacher information,10,designation,Associate Professor
+6. Teacher information,10,gender,female
+6. Teacher information,10,category,general
+6. Teacher information,10,highest qualification,M.Phil
+6. Teacher information,10,nature of appointment,regular
+6. Teacher information,10,date of joining,2019-06-01
+6. Teacher information,11,name,Teacher 10
+6. Teacher information,11,designation,Assistant Professor
+6. Teacher information,11,gender,male
+6. Teacher information,11,category,obc
+6. Teacher information,11,highest qualification,M.Phil
+6. Teacher information,11,nature of appointment,regular
+6. Teacher information,11,date of joining,2020-06-01
+6. Teacher information,12,name,Teacher 11
+6. Teacher information,12,designation,Assistant Professor
+6. Teacher information,12,gender,female
+6. Teacher information,12,category,sc
+6. Teacher information,12,highest qualification,M.Phil
+6. Teacher information,12,nature of appointment,regular
+6. Teacher information,12,date of joining,2021-06-01
+6. Teacher information,13,name,Teacher 12
+6. Teacher information,13,designation,Associate Professor
+6. Teacher information,13,gender,male
+6. Teacher information,13,category,general
+6. Teacher information,13,highest qualification,PhD
+6. Teacher information,13,nature of appointment,regular
+6. Teacher information,13,date of joining,2010-06-01
+6. Teacher information,14,name,Teacher 13
+6. Teacher information,14,designation,Assistant Professor
+6. Teacher information,14,gender,female
+6. Teacher information,14,category,obc
+6. Teacher information,14,highest qualification,M.Phil
+6. Teacher information,14,nature of appointment,regular
+6. Teacher information,14,date of joining,2011-06-01
+6. Teacher information,15,name,Teacher 14
+6. Teacher information,15,designation,Assistant Professor
+6. Teacher information,15,gender,male
+6. Teacher information,15,category,sc
+6. Teacher information,15,highest qualification,M.Phil
+6. Teacher information,15,nature of appointment,regular
+6. Teacher information,15,date of joining,2012-06-01
+6. Teacher information,16,name,Teacher 15
+6. Teacher information,16,designation,Associate Professor
+6. Teacher information,16,gender,female
+6. Teacher information,16,category,general
+6. Teacher information,16,highest qualification,M.Phil
+6. Teacher information,16,nature of appointment,regular
+6. Teacher information,16,date of joining,2013-06-01
+6. Teacher information,17,name,Teacher 16
+6. Teacher information,17,designation,Assistant Professor
+6. Teacher information,17,gender,male
+6. Teacher information,17,category,obc
+6. Teacher information,17,highest qualification,PhD
+6. Teacher information,17,nature of appointment,regular
+6. Teacher information,17,date of joining,2014-06-01
+6. Teacher information,18,name,Teacher 17
+6. Teacher information,18,designation,Assistant Professor
+6. Teacher information,18,gender,female
+6. Teacher information,18,category,sc
+6. Teacher information,18,highest qualification,M.Phil
+6. Teacher information,18,nature of appointment,regular
+6. Teacher information,18,date of joining,2015-06-01
+6. Teacher information,19,name,Teacher 18
+6. Teacher information,19,designation,Associate Professor
+6. Teacher information,19,gender,male
+6. Teacher information,19,category,general
+6. Teacher information,19,highest qualification,M.Phil
+6. Teacher information,19,nature of appointment,regular
+6. Teacher information,19,date of joining,2016-06-01
+6. Teacher information,20,name,Teacher 19
+6. Teacher information,20,designation,Assistant Professor
+6. Teacher information,20,gender,female
+6. Teacher information,20,category,obc
+6. Teacher information,20,highest qualification,M.Phil
+6. Teacher information,20,nature of appointment,regular
+6. Teacher information,20,date of joining,2017-06-01
+6. Teacher information,21,name,Teacher 20
+6. Teacher information,21,designation,Assistant Professor
+6. Teacher information,21,gender,male
+6. Teacher information,21,category,sc
+6. Teacher information,21,highest qualification,PhD
+6. Teacher information,21,nature of appointment,regular
+6. Teacher information,21,date of joining,2018-06-01
+6. Teacher information,22,name,Teacher 21
+6. Teacher information,22,designation,Associate Professor
+6. Teacher information,22,gender,female
+6. Teacher information,22,category,general
+6. Teacher information,22,highest qualification,M.Phil
+6. Teacher information,22,nature of appointment,regular
+6. Teacher information,22,date of joining,2019-06-01
+6. Teacher information,23,name,Teacher 22
+6. Teacher information,23,designation,Assistant Professor
+6. Teacher information,23,gender,male
+6. Teacher information,23,category,obc
+6. Teacher information,23,highest qualification,M.Phil
+6. Teacher information,23,nature of appointment,regular
+6. Teacher information,23,date of joining,2020-06-01
+6. Teacher information,24,name,Teacher 23
+6. Teacher information,24,designation,Assistant Professor
+6. Teacher information,24,gender,female
+6. Teacher information,24,category,sc
+6. Teacher information,24,highest qualification,M.Phil
+6. Teacher information,24,nature of appointment,regular
+6. Teacher information,24,date of joining,2021-06-01
+6. Teacher information,25,name,Teacher 24
+6. Teacher information,25,designation,Associate Professor
+6. Teacher information,25,gender,male
+6. Teacher information,25,category,general
+6. Teacher information,25,highest qualification,PhD
+6. Teacher information,25,nature of appointment,regular
+6. Teacher information,25,date of joining,2010-06-01
+6. Teacher information,26,name,Teacher 25
+6. Teacher information,26,designation,Assistant Professor
+6. Teacher information,26,gender,female
+6. Teacher information,26,category,obc
+6. Teacher information,26,highest qualification,M.Phil
+6. Teacher information,26,nature of appointment,regular
+6. Teacher information,26,date of joining,2011-06-01
+7. Infrastructure,,classrooms,24
+7. Infrastructure,,laboratories,8
+7. Infrastructure,,library books,18250
+7. Infrastructure,,computers,140
+7. Infrastructure,,hostels,2
+8. Finance,,income total,41250000.5
+8. Finance,,expenditure total,39800000
+8. Finance,,salary expenditure,27500000

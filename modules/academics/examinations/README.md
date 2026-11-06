@@ -4,7 +4,10 @@
 **Kind:** feature
 **Status:** in progress (issue #325). Built: the backend domain rules and persistence foundation (exam cycles, grading
 and assessment schemes, papers, sessions, duties), the permission keys and the authentication guard, and the three
-Examination Staff widgets (their endpoints are not served yet). Not built: the API, candidates and eligibility, hall tickets,
+Examination Staff widgets (their endpoints are not served yet). The API serves 24 of 51 operations: grading schemes,
+assessment schemes, exam cycles, exam papers and exam sessions (`api/router.py`), mounted under `/api/v1/examinations`
+because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other 27 operations, candidates
+and eligibility, hall tickets,
 marks, results, the event consumers, and the widgets `exam-duties`, `upcoming-assessments` and `results-summary`. Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
@@ -23,7 +26,7 @@ Under `backend/src/eos_examinations/`:
 | `domain/` | Rules independent of FastAPI and SQLAlchemy: `cycles` (lifecycle, FR-1), `grading` (FR-3), `assessment` (FR-2, activation supersedes), `papers` (FR-4, marks pipeline), `sessions` (FR-5, FR-6 and duties, FR-9) |
 | `infrastructure/` | `models.py` (11 `examinations_` tables, all with `organisation_id`) and `repository.py` (every query goes through `eos_core.db.scoped`) |
 | `application/` | `access.py` (the 43 permission keys of `contracts/permissions.yaml`, checked by a test) and `errors.py` |
-| `api/` | `deps.py`: token authentication and `require()`. No routes yet |
+| `api/` | `deps.py`: token authentication and `require()`; `router.py`: the grading-scheme, assessment-scheme, exam-cycle, paper and session operations (24) |
 
 Tables: `grading_scheme`, `grading_band`, `exam_cycle`, `assessment_scheme`, `assessment_component`, `exam_paper`,
 `exam_session`, `session_paper`, `exam_duty`, `offering_ref` and `audit_entry`. The database itself holds one default grading
@@ -46,7 +49,7 @@ points at a throwaway PostgreSQL server as a superuser.
 ```
 cd modules/academics/examinations/db && alembic upgrade head
 ```
-The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`. The chain is `ex_0001`, with its own
+The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`. The chain is `ex_0001` then `ex_0002` (the optional paper title), with its own
 version table `examinations_alembic_version`.
 
 ## Public surface

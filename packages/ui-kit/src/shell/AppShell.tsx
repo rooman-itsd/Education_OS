@@ -26,7 +26,7 @@ export function Notice({ children, tone = "positive", onDismiss }: NoticeProps) 
 
 export interface AppShellProps {
   sidebar: Omit<SidebarProps, "collapsed" | "onToggleCollapse" | "mobileOpen" | "onCloseMobile" | "organisation">;
-  topbar: Omit<TopbarProps, "onToggleMobileMenu">;
+  topbar: Omit<TopbarProps, "onToggleMobileMenu" | "mobileMenuOpen">;
   organisation?: ShellOrganisation;
   notice?: ReactNode;
   /** A key that changes with the page, so the content fades in on navigation. */
@@ -44,11 +44,14 @@ export function AppShell({ sidebar, topbar, organisation, notice, pageKey, foote
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div className={collapsed ? "eos-shell eos-shell--collapsed" : "eos-shell"}>
+      <a className="eos-skip-link" href="#eos-main" onClick={(e) => { e.preventDefault(); document.getElementById("eos-main")?.focus(); }}>
+        Skip to main content
+      </a>
       <Sidebar {...sidebar} organisation={organisation} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)} mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
       <div className="eos-shell__main">
         {notice}
-        <Topbar {...topbar} onToggleMobileMenu={() => setMobileOpen((o) => !o)} />
-        <main className="eos-shell__content">
+        <Topbar {...topbar} mobileMenuOpen={mobileOpen} onToggleMobileMenu={() => setMobileOpen((o) => !o)} />
+        <main id="eos-main" tabIndex={-1} className="eos-shell__content">
           <div key={pageKey} className="eos-page-enter">
             {children}
           </div>

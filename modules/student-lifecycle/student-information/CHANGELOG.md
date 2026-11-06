@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Searchable for platform/search: `contracts/searchable.yaml` (type `person`, triggers `person.created`, `person.updated`, `person.status-changed`) and a document provider on the `eos.search_documents` entry point. Indexes name and status only; the person's own user may read the record.
 - Backend package `eos-student-information` implemented with domain models, application service, infrastructure models, and FastAPI router.
 - Domain enums and logic: `PersonStatus` state machine, `DocumentType`, `IdCardStatus`, and collision-resistant card number generator (`IDC-{ORG4}-{YYYYMM}-{RANDOM6}`).
 - Database & Alembic: Dedicated migration chain (`student_information_alembic_version`, revision `20261026_0001_initial`) creating 4 tables (`student_information_person`, `student_information_status_history`, `student_information_document`, `student_information_id_card`) with multi-tenant row-level security (`app.organisation_id`).

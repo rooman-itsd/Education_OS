@@ -1,0 +1,2 @@
+{"token_type": "Bearer", "expires_at": 1794220800, "expires_in": 21600, "refresh_token": "strava-refresh-1", "access_token": "strava-access-1",
+ "athlete": {"id": 12345678, "username": "athlete_one", "firstname": "A", "lastname": "B"}}
