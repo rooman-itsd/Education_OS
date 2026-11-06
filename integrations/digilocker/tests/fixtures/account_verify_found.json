@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/public/account/2/verify",
+    "form": {
+      "clientid": "PUSH-APP-001",
+      "mobile": "+919800000001",
+      "ts": "1793853000",
+      "hmac": "28e59388dce15654c44a4a483fa7a195373b764c2e441f3238613f19de5a00c0"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "found",
+      "digilockerid": "dl-holder-0001"
+    }
+  }
+}
