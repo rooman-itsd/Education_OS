@@ -85,6 +85,8 @@ trail, which the API itself records as a super admin action. The columns are wha
 current name (or "System"), module, action, entity and summary, with a badge on a redacted record; search and the
 module filter work on the records loaded. Records are append-only, so the page has no edit or delete. Export waits for
 `POST /records/export`, which the API does not serve yet. In preview mode the page shows labelled sample events.
+The Dashboard's **Recent Activity** panel shows the five newest of the same records (organisation admin: their
+organisation's; super admin: the platform's), with "View all" leading here; preview mode keeps its sample events.
 
 
 ## Organisations and Subscriptions (super admin)

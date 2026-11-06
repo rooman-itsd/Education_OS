@@ -38,9 +38,28 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No collection targets set",
     unavailable: "Fee data is not available yet.",
   },
-  { id: "reporting.attendance-and-results-by-department", module: "platform/reporting", batch: "#317" },
+  {
+    id: "reporting.attendance-and-results-by-department",
+    module: "platform/reporting",
+    batch: "#317",
+    title: "Attendance & Results by Department",
+    probe: "/reporting/widgets/attendance-and-results",
+    empty: "No departmental metrics",
+    unavailable: "Reporting service is not available yet.",
+  },
+
   { id: "grievance.open", module: "governance/grievance", batch: "#343" },
-  { id: "regulatory-reports.compliance-calendar", module: "governance/regulatory-reports", batch: "#343" },
+  {
+    id: "regulatory-reports.compliance-calendar",
+    module: "governance/regulatory-reports",
+    batch: "#343",
+    title: "Compliance calendar",
+    // The widget asks for today and 90 days on; the probe only needs a range the API accepts.
+    probe: "/regulatory-reports/calendar?from=2026-01-01&to=2026-01-31",
+    empty: "No filings due",
+    unavailable: "Regulatory report data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     id: "productions.upcoming",
     module: "practice/productions",

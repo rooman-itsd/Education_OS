@@ -10,6 +10,7 @@ from eos_api_gateway import token_claims
 from eos_core.db import SessionLocal
 from eos_core.entitlement import PLATFORM_MODULES, module_entitled
 from fastapi import Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -39,13 +40,10 @@ class EntitlementGate(BaseHTTPMiddleware):
         structlog.contextvars.bind_contextvars(organisation_id=org)
         if not org:
             return JSONResponse({"detail": "feature modules need an organisation user"}, status_code=403)
-        from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
-
-        db = SessionLocal()
-        try:
-            ent = tenancy.entitlement(db, org)
-        finally:
-            db.close()
+        # In a worker thread, never on the event loop: a pool checkout blocks while every connection is taken, and
+        # the requests holding them need the loop to finish and give them back, so a burst of dashboard requests
+        # would hang the whole API until the pool timed out (30 s).
+        ent = await run_in_threadpool(_entitlement, org)
         if ent["status"] != "active":
             return JSONResponse(
                 {"detail": f"organisation is {ent['status']}", "code": "organisation_inactive"}, status_code=403
@@ -65,3 +63,13 @@ class EntitlementGate(BaseHTTPMiddleware):
                 status_code=403,
             )
         return await call_next(request)
+
+
+def _entitlement(org: str) -> dict:
+    from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
+
+    db = SessionLocal()
+    try:
+        return tenancy.entitlement(db, org)
+    finally:
+        db.close()

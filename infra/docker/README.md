@@ -256,6 +256,34 @@ Check: the live site's `/api/v1/health` still answers, SSH still works, and from
 `curl -m 5 http://<container-ip>:8000/api/v1/health` now times out. If SSH is lost, set
 `Firewall` back to `No` under Firewall → Options in the Proxmox UI.
 
+#### Behind the public proxy
+
+The public nginx sends every API request on with `X-Forwarded-For` (the visitor's address) and `X-Forwarded-Proto`
+(`https`) (`wire-api-proxy.sh`). `uvicorn` believes those headers only from the addresses in `FORWARDED_ALLOW_IPS`,
+which `docker-compose.api.yml` takes from `EOS_FORWARDED_ALLOW_IPS` in `.env.api`. Unset, that is this host only
+(`127.0.0.1,::1`), so the API sees every request as coming from the proxy, over `http`. Anything that counts or limits
+by caller then treats all visitors as one, for example the integration hub's limit on unverified callbacks (#554).
+
+Set it to the address the nginx container reaches the API from: the same `<nginx-container-ip>` as the firewall rule
+above. Only that address: whoever is trusted can claim any visitor address.
+
+```
+cd /opt/education-os
+nano infra/docker/.env.api        # EOS_FORWARDED_ALLOW_IPS=<nginx-container-ip>
+C="docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api"
+$C up -d api
+```
+
+**Check:** `$C exec -T api printenv FORWARDED_ALLOW_IPS` prints the address, and the live site's `/api/v1/health`
+still answers. The API's `request` log lines carry no visitor address on purpose (it is personal data), so the
+setting does not show there. To undo, remove the line and `$C up -d api`.
+
+#### Worker processes
+
+One `uvicorn` process unless `EOS_API_WORKERS` is set in `.env.api` (`docker-compose.api.yml` passes it as
+`WEB_CONCURRENCY`). When and how to raise it, and how to measure: `../runbooks/scale-the-api.md`, section 3. Switch
+the connection pooler (below) on first.
+
 ### Connection pooler (PgBouncer, #96)
 
 Off unless a host switches it on. With it on, the API, the relay and the scheduler reach Postgres through

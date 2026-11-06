@@ -2,7 +2,7 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** in-progress
+**Status:** in-progress (enabled in `apps/backend`, mounted at `/api/v1/reporting`, and `apps/frontend`)
 
 Dashboards, MIS reports, analytics, metric snapshots, and warehouse export integration.
 

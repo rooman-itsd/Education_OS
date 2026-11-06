@@ -2,8 +2,8 @@
 
 **Domain:** practice
 **Kind:** feature
-**Status:** in-progress (contract 0.1.0; backend, migrations, tests and the five widgets built; not yet listed in the
-apps)
+**Status:** in-progress (contract 0.1.0; backend, migrations, tests and the five widgets built; enabled in
+`apps/backend` and `apps/frontend`)
 
 Field training placements: clinical rotations, teaching practice, farm rotations, internships, court visits.
 
@@ -47,9 +47,9 @@ What it needs from the host repo:
 - `packages/ui-kit` for the widgets. No platform service is called directly yet: events go to the outbox, audit
   entries to the module's own table, and the daily job (`backend/src/eos_field_training/application/jobs.py`,
   `run_daily`: start assigned placements on their start date) waits for `platform/scheduler` to call it.
-- The API router is `eos_field_training.api.router:router`, to be mounted under `/api/v1/field-training` by the module
-  loader from `apps/backend/config/modules.enabled.yaml`; the widgets are registered from
-  `apps/frontend/config/modules.enabled.yaml`. Neither lists the module yet.
+- The API router is `eos_field_training.api.router:router`. `practice/field-training` is listed in
+  `apps/backend/config/modules.enabled.yaml`, which mounts it under `/api/v1/field-training` behind the entitlement
+  gate, and in `apps/frontend/config/modules.enabled.yaml`, which registers its five widgets on the dashboards.
 
 ## Run the checks
 ```

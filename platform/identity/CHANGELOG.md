@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The Research Lead layout (agriculture-college) also holds `projects-guide`. It lists `projects.to-review`, whose
+  request needs `projects:guidance:read`, and `projects-coordinator` alone does not grant it, so the widget answered
+  403. Every other layout with that widget already held the role (found by the e2e journey in #537).
+- The Coach layout names `training-video-analysis.session-plan` and the Athlete layout
+  `training-video-analysis.training-schedule`, in place of the athlete-performance ids that module never built:
+  training plans and sessions belong to training-video-analysis (#330).
 - Plan user limit. `create_user` refuses the person who would take the organisation past its plan's `users`
   limit with `PlanLimitReachedError`, before anything is written; `POST /users` answers `409` with
   `{"code": "plan_limit_reached", "limit": "users", "allowed", "used"}`. The limit comes through the new
