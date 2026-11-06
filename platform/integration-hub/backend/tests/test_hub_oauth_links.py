@@ -293,3 +293,46 @@ def test_an_authenticated_callback_must_be_the_same_person(client, org):
     # the cookie is cleared once used
     [cleared] = [x for x in r.headers.get_list("set-cookie") if x.startswith(cookie["cookie"].split("=", 1)[0])]
     assert "max-age=0" in cleared.lower()
+
+
+# ------------------------------------------------------------------ redemption is atomic
+
+
+def test_two_callbacks_racing_with_one_state_redeem_it_once(client, org, adapter):
+    """Both requests read the state as unused before either writes; only one may exchange the code. The redemption
+    is a single UPDATE ... WHERE used_at IS NULL, so the loser matches no row."""
+    import threading
+
+    import pytest
+    from eos_integration_hub.application import authorisation
+
+    _c, start, cookie = _start_meet(client, org)
+    barrier = threading.Barrier(2)
+    real = authorisation.update
+
+    def update_after_both_arrive(*a, **kw):
+        try:
+            barrier.wait(timeout=2)  # both callbacks are past their checks and about to redeem
+        except threading.BrokenBarrierError:
+            pass
+        return real(*a, **kw)
+
+    results = []
+
+    def go():
+        results.append(_callback(client, start, cookie))
+
+    mp = pytest.MonkeyPatch()
+    mp.setattr(authorisation, "update", update_after_both_arrive)
+    try:
+        threads = [threading.Thread(target=go) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+    finally:
+        mp.undo()
+    assert sorted(r.status_code for r in results) == [302, 401]
+    assert len([x for x in adapter.CALLS if x[0] == "complete_authorisation"]) == 1
+    assert len(outbox("integration-hub.connection.authorised", org.id)) == 1
+

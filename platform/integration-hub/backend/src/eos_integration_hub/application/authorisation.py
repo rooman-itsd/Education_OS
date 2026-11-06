@@ -25,7 +25,7 @@ from urllib.parse import urlencode, urlsplit
 
 from eos_core.db import scoped
 from eos_core.tenant import organisation_scope, platform_scope
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..domain import rules
@@ -38,7 +38,6 @@ from ..infrastructure.secrets import SecretStoreError, get_cipher, ref_for
 from . import connections
 from .common import (
     Actor,
-    aware,
     clock,
     context_for,
     get_connection,
@@ -367,13 +366,26 @@ def callback(
     browser, or by another person, is refused and spent: the code is never exchanged."""
     if not state or len(state) > 200:
         raise HubError(401, "state_invalid", "unknown or expired state")
+    state_hash = rules.sha256_hex(state)
     with platform_scope():
-        row = db.scalar(select(OAuthState).where(OAuthState.state_hash == rules.sha256_hex(state)))
         now = clock()
-        if row is None or row.adapter != adapter or row.used_at is not None or aware(row.expires_at) <= now:
+        # Redeemed in one statement: of two requests racing with the same state, exactly one updates the row (the
+        # other waits on its lock, then finds used_at set and matches nothing). Single use, whatever happens next.
+        claimed = db.execute(
+            update(OAuthState)
+            .where(
+                OAuthState.state_hash == state_hash,
+                OAuthState.adapter == adapter,
+                OAuthState.used_at.is_(None),
+                OAuthState.expires_at > now,
+            )
+            .values(used_at=now)
+            .execution_options(synchronize_session=False)
+        ).rowcount
+        if claimed != 1:
             db.rollback()
             raise HubError(401, "state_invalid", "unknown or expired state")
-        row.used_at = now  # single use, whatever happens next
+        row = db.scalar(select(OAuthState).where(OAuthState.state_hash == state_hash))
         if not _same_browser(row, binding) or (caller_id is not None and caller_id != row.person_id):
             record(
                 db,
