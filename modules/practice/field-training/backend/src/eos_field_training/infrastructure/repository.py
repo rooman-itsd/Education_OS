@@ -7,7 +7,7 @@ import base64
 from datetime import date
 
 from eos_core.db import scoped
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, select, text
 from sqlalchemy.orm import Session
 
 from ..domain.rules import OVERLAP_BLOCKING, SEAT_HOLDING
@@ -219,6 +219,17 @@ def placements_in(db: Session, opening_id: str, statuses: tuple[str, ...]) -> li
 
 def trainee_placements(db: Session, trainee_id: str) -> list[Placement]:
     return list(db.scalars(_scoped(db, Placement).where(Placement.trainee_id == trainee_id)))
+
+
+def lock_trainee(db: Session, trainee_id: str) -> None:
+    """Serialise every overlap check of one trainee until the transaction ends, so two requests for different openings
+    cannot both pass it (the row locks on the openings do not cover that). Postgres only: SQLite runs one writer at
+    a time. The lock is the last one a request takes, after its opening or placement rows, so it cannot deadlock."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"field-training-trainee:{trainee_id}"},
+        )
 
 
 def overlapping(

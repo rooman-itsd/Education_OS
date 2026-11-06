@@ -9,7 +9,7 @@ import yaml
 
 pytest.importorskip("eos_core", reason="needs eos_core on PYTHONPATH (see conftest.py)")
 
-from conftest import ADMIN, BASE, make_timetable, ok, slot  # noqa: E402
+from conftest import ADMIN, BASE, CLASSES_AND_ATTENDANCE, make_timetable, ok, slot  # noqa: E402
 from eos_timetable_attendance.api.router import router  # noqa: E402
 
 CONTRACT = yaml.safe_load(
@@ -95,7 +95,8 @@ def test_every_implemented_route_is_a_contract_operation_with_its_x_permission()
             for dep in route.dependant.dependencies:
                 keys |= set(getattr(dep.call, "permissions", ()))
             routes[(method.lower(), route.path)] = keys
-    assert set(routes) == set(IMPLEMENTED.values())
+    # the classes, attendance and reports operations are checked in test_api_contract_attendance.py
+    assert set(routes) == set(IMPLEMENTED.values()) | set(CLASSES_AND_ATTENDANCE.values())
     for operation_id, (method, path) in IMPLEMENTED.items():
         op = CONTRACT["paths"][path][method]
         assert op["operationId"] == operation_id
