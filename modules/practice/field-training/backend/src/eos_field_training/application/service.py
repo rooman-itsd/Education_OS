@@ -524,6 +524,7 @@ def _placement_transition(p: Placement, action: str) -> None:
 
 
 def _check_no_overlap(db: Session, trainee_id: str, start: date, end: date, exclude_id: str | None = None) -> None:
+    repo.lock_trainee(db, trainee_id)  # before the check, so two requests for one trainee run one after the other
     if repo.overlapping(db, trainee_id, start, end, exclude_id) is not None:
         raise _conflict("overlapping_placement", "the trainee already has a placement or application for these dates")
 

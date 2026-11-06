@@ -111,6 +111,10 @@ INSERTS = {
         "INSERT INTO timetable_attendance_term_ref (id, organisation_id, created_at, academic_period_id, code, name, "
         "starts_on, ends_on) VALUES (:id, :org, now(), :id, 'T', 'T', current_date, current_date)"
     ),
+    "timetable_attendance_registration_ref": (
+        "INSERT INTO timetable_attendance_registration_ref (id, organisation_id, created_at, registration_id, "
+        "student_id, course_offering_id, moves) VALUES (:id, :org, now(), :id, :id, :id, '[]')"
+    ),
     "timetable_attendance_processed_event": (
         "INSERT INTO timetable_attendance_processed_event (id, organisation_id, created_at, event_id, name) "
         "VALUES (:id, :org, now(), :id, 'probe')"

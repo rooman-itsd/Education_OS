@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/lms`) and
+  `apps/frontend/config/modules.enabled.yaml` (`lms.assignments-to-grade` and `lms.course-materials` on the Faculty and
+  Student dashboards).
 - Backend (`eos_lms`): every operation of contract 0.1.0 in domain, application, infrastructure and api layers, each
   behind its `x-permission` and narrowed to the caller's course spaces; events to the outbox in the change's
   transaction; an audit entry for every state change; request bodies and query parameters bounded (400, never a 500).
