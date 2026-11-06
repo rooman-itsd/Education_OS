@@ -195,7 +195,7 @@ class ExamSessionPaperRow(Base, TenantMixin):
 
 class ExamDutyRow(Base, TenantMixin, TimestampMixin):
     """Invigilation covers a session, evaluation and moderation a paper, never both (FR-9): a check constraint holds the
-    rule below the application."""
+    rule below the application. `staff_id` is an identity user id kept as given: there is no identity lookup (Q11)."""
 
     __tablename__ = f"{PREFIX}exam_duty"
     __table_args__ = (
@@ -205,6 +205,27 @@ class ExamDutyRow(Base, TenantMixin, TimestampMixin):
             name="ck_examinations_duty_target",
         ),
         Index("ix_examinations_duty_staff", "organisation_id", "staff_id", "status"),
+        # ex_0003: one live duty (assigned or completed) per staff member, type and target; a cancelled duty frees it.
+        Index(
+            "uq_examinations_duty_session_live",
+            "organisation_id",
+            "staff_id",
+            "duty_type",
+            "exam_session_id",
+            unique=True,
+            postgresql_where=text("exam_session_id IS NOT NULL AND status IN ('assigned', 'completed')"),
+            sqlite_where=text("exam_session_id IS NOT NULL AND status IN ('assigned', 'completed')"),
+        ),
+        Index(
+            "uq_examinations_duty_paper_live",
+            "organisation_id",
+            "staff_id",
+            "duty_type",
+            "exam_paper_id",
+            unique=True,
+            postgresql_where=text("exam_paper_id IS NOT NULL AND status IN ('assigned', 'completed')"),
+            sqlite_where=text("exam_paper_id IS NOT NULL AND status IN ('assigned', 'completed')"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

@@ -2,7 +2,7 @@
 
 **Domain:** platform
 **Kind:** platform
-**Status:** in-progress
+**Status:** in-progress (enabled in `apps/backend`, mounted at `/api/v1/workflow`, and `apps/frontend`)
 
 Configurable workflow and approval engine (state machines, SLAs, delegation).
 

@@ -2,7 +2,7 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** in-progress (backend and widgets built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend and widgets built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 UGC, AISHE, NIRF and other statutory reporting.
 
@@ -44,8 +44,8 @@ due date is worked out from it.
 
 ### Needs from the host repo
 - `packages/core` (`eos_core`); for tests, `packages/testing` (`eos_testing`).
-- `governance/regulatory-reports` in `apps/backend/config/modules.enabled.yaml` and
-  `apps/frontend/config/modules.enabled.yaml`, in a later pull request of #343.
+- `governance/regulatory-reports` in `apps/backend/config/modules.enabled.yaml` (mounted at
+  `/api/v1/regulatory-reports` behind the entitlement gate) and `apps/frontend/config/modules.enabled.yaml`.
 - Permissions come from the roles in the token. The layouts already grant the module roles: Governance
   `regulatory-reports-coordinator`, Management `regulatory-reports-viewer`, Hospital Coordinator and Research Office
   `regulatory-reports-preparer`.
