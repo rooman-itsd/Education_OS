@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from eos_core.db import Base, TenantMixin, TimestampMixin, new_id, utcnow
 from sqlalchemy import JSON, Boolean, DateTime, Integer, Numeric, String, UniqueConstraint
@@ -80,6 +81,7 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     activated at once when no payment adapter is configured); the PDF in platform/documents comes later."""
 
     __tablename__ = "billing_invoice"
+    __table_args__ = (UniqueConstraint("invoice_number", name="uq_billing_invoice_number"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     subscription_id: Mapped[str] = mapped_column(String(36), index=True)
     plan_id: Mapped[str] = mapped_column(String(40))
@@ -91,8 +93,33 @@ class Invoice(Base, TenantMixin, TimestampMixin):
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     payment_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # GST tax invoice (contract 0.3.0). A snapshot taken when the invoice is issued, never recomputed: a later
+    # change of the organisation's profile or of the rate does not touch an invoice already issued. Null on an
+    # invoice issued before GST invoicing existed. `amount` stays the taxable value, so revenue excludes GST.
+    invoice_number: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    financial_year: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    tax_scheme: Mapped[str | None] = mapped_column(String(5), nullable=True)  # intra | inter | none
+    sac_code: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    gst_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    taxable_value: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    cgst_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    sgst_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    igst_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    place_of_supply: Mapped[str | None] = mapped_column(String(2), nullable=True)  # state code
+    supplier_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    supplier_gstin: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    supplier_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    supplier_state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    recipient_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    recipient_gstin: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    recipient_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    recipient_state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
     def to_dict(self) -> dict:
+        def dec(v: Decimal | None) -> str | None:
+            return None if v is None else f"{Decimal(v):.2f}"
+
         return {
             "id": self.id,
             "organisation_id": self.organisation_id,
@@ -105,6 +132,62 @@ class Invoice(Base, TenantMixin, TimestampMixin):
             "period_end": self.period_end.isoformat() if self.period_end else None,
             "payment_reference": self.payment_reference,
             "document_id": self.document_id,
+            "invoice_number": self.invoice_number,
+            "financial_year": self.financial_year,
+            "tax_scheme": self.tax_scheme,
+            "sac_code": self.sac_code,
+            "gst_rate": None if self.gst_rate is None else f"{Decimal(self.gst_rate):.2f}",
+            "taxable_value": dec(self.taxable_value),
+            "cgst_amount": dec(self.cgst_amount),
+            "sgst_amount": dec(self.sgst_amount),
+            "igst_amount": dec(self.igst_amount),
+            "total_amount": dec(self.total_amount),
+            "place_of_supply": self.place_of_supply,
+            "supplier": {
+                "name": self.supplier_name,
+                "gstin": self.supplier_gstin,
+                "address": self.supplier_address,
+                "state_code": self.supplier_state_code,
+            },
+            "recipient": {
+                "name": self.recipient_name,
+                "gstin": self.recipient_gstin,
+                "address": self.recipient_address,
+                "state_code": self.recipient_state_code,
+            },
+        }
+
+
+class InvoiceCounter(Base):
+    """The last invoice sequence used in a financial year ('26-27'). Platform-wide, like Plan: the platform is
+    the one supplier, and GST numbering is one series per registration. The row is locked while a number is
+    taken and the number is written in the same transaction as its invoice, so a failed activation rolls the
+    counter back and no number is ever skipped or reused."""
+
+    __tablename__ = "billing_invoice_counter"
+    financial_year: Mapped[str] = mapped_column(String(5), primary_key=True)
+    last_sequence: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class BillingProfile(Base, TenantMixin, TimestampMixin):
+    """Who an organisation's invoices are addressed to (the GST recipient). One row per organisation. The GSTIN
+    is optional: without one the invoice is business-to-consumer."""
+
+    __tablename__ = "billing_profile"
+    __table_args__ = (UniqueConstraint("organisation_id", name="uq_billing_profile_organisation"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    legal_name: Mapped[str] = mapped_column(String(200), default="")
+    gstin: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    address: Mapped[str] = mapped_column(String(500), default="")
+    state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "organisation_id": self.organisation_id,
+            "legal_name": self.legal_name,
+            "gstin": self.gstin,
+            "address": self.address,
+            "state_code": self.state_code,
         }
 
 

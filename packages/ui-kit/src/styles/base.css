@@ -68,8 +68,28 @@ button:not(:disabled):active {
 }
 
 :focus-visible {
-  outline: 2px solid var(--eos-primary);
+  outline: 2px solid var(--eos-focus);
   outline-offset: 2px;
+}
+
+/* The first tab stop: jumps over the sidebar and top bar to the page content. */
+.eos-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: var(--eos-radius);
+  background: var(--eos-text);
+  color: #fff;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.eos-skip-link:focus {
+  transform: none;
+}
+main:focus {
+  outline: none;
 }
 
 .eos-tnum {

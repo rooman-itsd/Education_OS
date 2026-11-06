@@ -1,0 +1,24 @@
+[project]
+name = "eos-digilocker"
+version = "0.3.0"
+description = "Education OS integration: DigiLocker adapter (certificate-issuance port: issue, replace, withdraw, Pull Issuer API, consented fetch)."
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115", "sqlalchemy>=2", "alembic>=1.13", "httpx>=0.27", "pydantic>=2", "eos-core"]
+
+# How platform/integration-hub finds this adapter WITHOUT importing it (contracts/ports/adapter.yaml, registration).
+# The name is the adapter folder. Requires an install (`pip install -e .`) before the entry point is discoverable.
+[project.entry-points."eos.integration_adapters"]
+digilocker = "eos_digilocker.application.adapter:get_adapter"
+
+[project.optional-dependencies]
+test = ["pytest>=8", "eos-testing"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

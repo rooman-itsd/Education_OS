@@ -4,7 +4,7 @@ name: wearables
 kind: integration              # feature | platform | integration
 domain: integrations
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.2.0
+version: 0.3.0
 status: in-progress       # planned | in-progress | stable | deprecated
 description: "Garmin, Polar, Fitbit and Strava adapter: athletes' own device data, with their consent."
 owners: [himanshu-rooman] # GitHub handles. Keep in sync with CODEOWNERS.

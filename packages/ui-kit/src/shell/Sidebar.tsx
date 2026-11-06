@@ -82,6 +82,14 @@ export function Sidebar({ sections, currentHref, collapsed, onToggleCollapse, mo
     if (activeGroup) setOpen((o) => (o[activeGroup.id] ? o : { ...o, [activeGroup.id]: true }));
   }, [activeGroup]);
 
+  // Escape closes the slide-in menu on a phone.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCloseMobile();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen, onCloseMobile]);
+
   const toggle = (id: string) => {
     if (collapsed) onToggleCollapse();
     setOpen((o) => ({ ...o, [id]: collapsed ? true : !o[id] }));
@@ -90,7 +98,7 @@ export function Sidebar({ sections, currentHref, collapsed, onToggleCollapse, mo
   return (
     <>
       {mobileOpen && <div className="eos-sidebar-backdrop" onClick={onCloseMobile} aria-hidden />}
-      <aside className={["eos-sidebar", collapsed ? "eos-sidebar--collapsed" : "", mobileOpen ? "eos-sidebar--open" : ""].filter(Boolean).join(" ")}>
+      <aside id="eos-sidebar" className={["eos-sidebar", collapsed ? "eos-sidebar--collapsed" : "", mobileOpen ? "eos-sidebar--open" : ""].filter(Boolean).join(" ")}>
         <div className="eos-sidebar__brand">
           <a className="eos-sidebar__brand-link" href={homeHref} title="Education OS">
             <EduMark size={36} />
