@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/knowledge-base`) and
+  `apps/frontend/config/modules.enabled.yaml` (`knowledge-base.top-articles` on the Support Staff, Organisation Admin and Management
+  dashboards that list it).
 - Module scaffolded.
 - Contracts proposed: categories; articles of type article, FAQ and how-to with `everyone` and `staff` audiences;
   drafts and revisions with history and rollback; review, publish, archive and restore; browse and search
