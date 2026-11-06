@@ -10,6 +10,7 @@
 modules:
   - academics/academic-management
   - academics/examinations
+  - academics/timetable-attendance
   - campus-life/hostel
   - campus-life/library
   - campus-life/transport

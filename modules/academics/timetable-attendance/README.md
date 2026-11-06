@@ -6,7 +6,7 @@
 Alembic chain `tt_0001`, `tt_0002`, interim audit table), the timetable operations of `contracts/openapi.yaml` (list,
 create, get, update, replace slots, list conflicts) and the academic-management event consumers that fill the term,
 offering and section read models. Not built yet: publishing, class generation, scheduled classes, attendance, reports,
-widgets, and the consumers whose identity mappings are unconfirmed. Open decisions:
+widgets, and the consumers whose identity mappings are unconfirmed. Enabled in `apps/backend` (not in `apps/frontend`: no widgets are built). Open decisions:
 [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 Timetable generation, class scheduling, attendance capture and reports.

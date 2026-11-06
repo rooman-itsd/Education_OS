@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/timetable-attendance`; its event consumers
+  now run). Not listed in `apps/frontend/config/modules.enabled.yaml`: no widget is built yet.
 - Event consumers (issue #325, part 3), registered under `eos.event_consumers` and listed in `module.yaml`:
   academic-management `term.created` into the new `term_ref` (a term's dates), `offering.created` and
   `offering.status-changed` into `offering_ref`, `section.created` and `section.updated` into `section_ref`. Migration
