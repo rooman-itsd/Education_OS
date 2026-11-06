@@ -64,7 +64,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No candidates awaiting review",
     unavailable: "Judging tasks are not available yet.",
   },
-  { id: "projects.to-review", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "facility-booking.bookings-today",
     module: "facilities/facility-booking",
