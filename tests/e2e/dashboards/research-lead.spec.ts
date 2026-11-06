@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { FARM, seedPlacement } from "./field-training-data";
+import { MILESTONE, seedProject, TRIAL } from "./projects-data";
 import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -13,8 +15,11 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   backend is missing;
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
  *   builds it: projects and field-training (#339, texts of PRs #506 and #504) and productions (#318, PR #454);
- * - there is no data journey: all four widgets belong to modules that have not shipped, and those modules' own
- *   journeys cover their data. The empty states are what this checks.
+ * - data journeys: a research trial the research lead (projects:project:manage) creates, guided by the lead
+ *   (projects-guide), shows in `projects.active`; a milestone the trainee submits on it shows in `projects.to-review`;
+ *   an opening the field-training coordinator publishes, with one of its two seats taken, shows in
+ *   `field-training.placements-open`. Each skips until its module is enabled. `productions.upcoming` has no data
+ *   journey here; its data journeys live in the productions-owning journeys.
  *
  * The super admin moves the organisation to Standard first, as the other journeys do (platform/billing/config/plans.yaml).
  * The empty-state tests run before any data is created (serial mode).
@@ -69,11 +74,20 @@ const WIDGETS: LayoutWidget[] = [
   },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
 let user: DashboardUser;
+/**
+ * Who sets up the rest: the field-training coordinator (a module role no agriculture-college profile role holds, so the
+ * user has it directly), a farm supervisor named on the site, and the field trainee on the placement and the trial.
+ */
+let coordinator: DashboardUser;
+let supervisor: DashboardUser;
+let trainee: DashboardUser;
 
 /** Per shipped widget id: what its GET answered the research lead. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
@@ -81,6 +95,9 @@ test.beforeAll(async ({ request }) => {
   const admin = await organisationAdmin(request, { academyType: "agriculture-college" });
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "research-lead");
+  coordinator = await addUser(request, admin, "field-training-coordinator");
+  supervisor = await addUser(request, admin, "farm-supervisor");
+  trainee = await addUser(request, admin, "field-trainee");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -114,4 +131,44 @@ test.describe("research-lead widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with projects and field-training data", () => {
+  test("projects.active and projects.to-review show the trial the research lead guides and the milestone the trainee submits", async ({ page, request }) => {
+    for (const id of ["projects.active", "projects.to-review"]) {
+      test.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test.skip(!ready(id), `the projects API answered ${status[id]} to the research-lead role`);
+    }
+    // The research lead creates the trial active (projects-coordinator) with the trainee as lead and themself as guide
+    // (projects-guide), adds a milestone, and the trainee submits it.
+    await seedProject(request, { coordinator: user, guide: user, lead: trainee }, { milestone: true, submit: true });
+    await signIn(page, user);
+
+    const active = widget(page, "Active projects");
+    await expect(active.getByText("No active projects")).toHaveCount(0);
+    const trial = active.getByRole("list", { name: "Active projects" }).getByRole("listitem").filter({ hasText: TRIAL });
+    await expect(trial).toContainText("Research · 1 member");
+    await expect(trial.getByLabel("Milestones accepted")).toHaveText("0/1");
+
+    const review = widget(page, "To review");
+    await expect(review.getByText("Nothing waiting for your review")).toHaveCount(0);
+    const item = review.getByRole("list", { name: "Work to review" }).getByRole("listitem").filter({ hasText: MILESTONE });
+    await expect(item).toContainText(`${TRIAL} · version 1`);
+    await expect(item).toContainText("Today");
+  });
+
+  test("field-training.placements-open lists the opening with a seat left", async ({ page, request }) => {
+    const w = byId("field-training.placements-open");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the field-training API answered ${status[w.id]} to the research-lead role`);
+    // The coordinator publishes an opening with two seats and assigns the trainee to one; the research lead
+    // (field-training-viewer) sees it with one seat left.
+    await seedPlacement(request, { coordinator, supervisor, trainee }, { names: FARM });
+    await signIn(page, user);
+    const panel = widget(page, "Open placements");
+    await expect(panel.getByText("No open placements with seats")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "Open placements" }).getByRole("listitem").filter({ hasText: FARM.opening });
+    await expect(row).toContainText(FARM.site);
+    await expect(row).toContainText("1 seat left"); // two seats, one taken by the placement
+  });
 });
