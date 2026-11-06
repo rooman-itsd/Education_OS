@@ -26,4 +26,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Tests: domain, API, athlete self-scope, consumers, cross-tenant leak, migration and contract-drift tests.
 - API: `GET /videos?annotated=false` lists videos with no annotation yet (waiting for review); `true` the reviewed ones.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/training-video-analysis`) and
-  `apps/frontend/config/modules.enabled.yaml`, which registers its widget `reviews-pending` (#330).
+  `apps/frontend/config/modules.enabled.yaml` (widgets `reviews-pending`, `session-plan` and `training-schedule`) (#330).
+- Frontend: widgets `session-plan` (Coach) and `training-schedule` (Athlete), moved here from athlete-performance, which has
+  no plans or sessions: the coming scheduled sessions, earliest first, from `GET /sessions` (#330). The coach and athlete
+  layouts and journeys name the new ids.
+- Frontend: the coach's `session-plan` no longer calls the organisation's sessions "your" sessions: `GET /sessions`
+  narrows only an athlete, so a coach sees every coach's sessions.

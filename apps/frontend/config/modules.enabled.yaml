@@ -25,7 +25,9 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/regulatory-reports
   - governance/iqac-accreditation
+  - practice/field-training
   - practice/selection-process
   - practice/portfolio
   - practice/productions
@@ -40,10 +42,12 @@ modules:
   - student-lifecycle/web-portal-cms
   - support/helpdesk
   - support/knowledge-base
+  - support/incident-management
 platform:
   - billing
   - tenancy
   - identity
   - audit
+  - workflow
 integrations:
   - payment-sbiepay

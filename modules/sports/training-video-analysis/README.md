@@ -59,7 +59,9 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 The contract has no review status on a video, so a video waits for review while it has no annotation.
 `GET /videos?annotated=false` lists those, most recently recorded first, and its `total` (every such video, not only
 the rows shown) is the "Waiting for review" count. The coach's `session-plan` and the athlete's
-`training-schedule` are not built here yet: their layout ids still name athlete-performance.
+`training-schedule` are built here: both list the coming sessions (`GET /sessions?status=scheduled&from_date=today`,
+earliest first, `total` counting every one); the server narrows an athlete to the sessions they attend. The Coach and
+Athlete layouts name `training-video-analysis.session-plan` and `.training-schedule` (they used to name athlete-performance).
 
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its
