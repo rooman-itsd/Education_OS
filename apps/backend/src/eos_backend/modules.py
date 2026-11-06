@@ -52,6 +52,22 @@ class Entry:
         return f"{self.kind}/{self.entry}"
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """safe_load that refuses a key given twice. PyYAML keeps the last one silently, so a merge that keeps both
+    sides of a `platform:` line would drop one side's services without a word."""
+
+    def construct_mapping(self, node, deep=False):
+        seen: set = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise RuntimeError(
+                    f"`{key}` is given twice (line {key_node.start_mark.line + 1}); merge them into one list"
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 def enabled(path: Path | None = None) -> list[Entry]:
     """Entries in order: platform services first, then modules, then integrations.
     EOS_MODULES_FILE overrides the file (tests)."""
@@ -60,7 +76,10 @@ def enabled(path: Path | None = None) -> list[Entry]:
         raise RuntimeError(
             f"{path} not found: set EOS_REPO_ROOT to the repository root, or EOS_MODULES_FILE to the file to use"
         )
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader) or {}  # noqa: S506 (a SafeLoader)
+    except RuntimeError as e:
+        raise RuntimeError(f"{path}: {e}") from e
     entries: list[Entry] = []
     for kind in ("platform", "modules", "integrations"):
         listed = data.get(kind) or []

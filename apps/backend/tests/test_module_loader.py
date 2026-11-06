@@ -96,6 +96,21 @@ def test_a_platform_service_marked_router_false_is_installed_but_mounts_nothing(
     assert any(p.startswith("/api/v1/identity/") for p in _paths(app))
 
 
+def test_a_key_given_twice_stops_start_up(tmp_path, monkeypatch):
+    """PyYAML would keep the second `platform:` and drop the first one's services (a merge that kept both sides)."""
+    monkeypatch.setenv(
+        "EOS_MODULES_FILE", str(_yaml(tmp_path, "platform: [identity, api-gateway]\nplatform: [identity]\n"))
+    )
+    with pytest.raises(RuntimeError, match=r"`platform` is given twice \(line 2\)"):
+        enabled()
+
+
+def test_the_host_enables_the_gateway_and_workflow():
+    """Both sides of the merge that added them: api-gateway (middleware) and workflow (routes)."""
+    platform = {e.name for e in enabled(CONFIG) if e.kind == "platform"}
+    assert {"api-gateway", "workflow", "identity", "billing"} <= platform
+
+
 def _installed_service_without_router(tmp_path, monkeypatch, manifest: str) -> None:
     """An installed package eos_quiet_service with no api/router.py, and its module.yaml under a fake repo."""
     pkg = tmp_path / "site" / "eos_quiet_service"
