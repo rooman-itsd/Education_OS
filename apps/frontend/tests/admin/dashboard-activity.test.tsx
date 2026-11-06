@@ -61,7 +61,8 @@ describe("Dashboard: Recent Activity", () => {
     expect(within(panel()).getAllByText("Asha Rao · hostel")).toHaveLength(5);
     expect(within(panel()).queryByText("Sample")).toBeNull();
     expect(within(panel()).getByText("The newest changes in your organisation")).toBeTruthy();
-    expect(f.mock.calls.map(([u]) => String(u))).toContain("/api/v1/audit/records?limit=50&offset=0");
+    // Only the five it shows, not a page of fifty.
+    expect(f.mock.calls.map(([u]) => String(u))).toContain("/api/v1/audit/records?limit=5&offset=0");
   });
 
   it("names the action when a record has no summary, and the system when there is no actor", async () => {
@@ -85,6 +86,23 @@ describe("Dashboard: Recent Activity", () => {
     page();
     expect(await within(panel()).findByText("Recent activity is not available right now.")).toBeTruthy();
     expect(within(panel()).queryAllByRole("listitem")).toHaveLength(0);
+    expect(within(panel()).queryByRole("list")).toBeNull();
+  });
+
+  it("says the viewer has no access when the audit API answers 403", async () => {
+    auth.value = orgAdmin();
+    stub({ status: 403, body: { detail: "missing permission audit_trail.read" } });
+    page();
+    expect(await within(panel()).findByText("You do not have access to audit records.")).toBeTruthy();
+  });
+
+  it("announces loading and then the result in a live region", async () => {
+    auth.value = orgAdmin();
+    stub({ status: 200, body: { items: [], total: 0 } });
+    page();
+    expect(within(panel()).getByRole("status").textContent).toBe("Loading recent activity…");
+    await within(panel()).findByText("No activity yet.");
+    expect(within(panel()).getByRole("status").textContent).toBe("No activity yet.");
   });
 
   it("tells a super admin these are the platform's actions", async () => {

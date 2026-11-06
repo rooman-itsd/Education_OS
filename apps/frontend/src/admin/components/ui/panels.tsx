@@ -534,44 +534,49 @@ export const ActivityPanel: React.FC<{
       subtitle={subtitle}
       action={action}
     />
-    {items.length === 0 && <p className="px-5 pb-5 text-xs text-[#64748B]">{emptyText}</p>}
-    <ul className="relative px-3 pb-3">
-      {items.map((item, i) => {
-        const tone = item.tone ?? { icon: Activity, bg: 'var(--accent-tint)', fg: 'var(--accent)' };
-        const Icon = tone.icon;
-        const status = item.status ? STATUS_CHIP[item.status] : null;
-        const StatusIcon = status?.icon;
-        const last = i === items.length - 1;
-        return (
-          <li
-            key={item.id}
-            className="group relative flex items-center gap-4 rounded-lg px-2 py-2.5 transition-all duration-200 hover:bg-[#F8FAFC] hover:translate-x-0.5 animate-fade-up"
-            style={{ animationDelay: `${120 + i * 70}ms` }}
-          >
-            <span className="hidden sm:block w-20 flex-shrink-0 text-right text-[12px] font-medium text-[#64748B] tabular-nums">{item.time}</span>
-            {/* timeline node */}
-            <span className="relative flex-shrink-0 self-stretch flex items-center">
-              {!last && <span aria-hidden className="absolute left-1/2 top-1/2 h-[calc(100%+20px)] w-px -translate-x-1/2 bg-[#E6EAF0]" />}
-              <span
-                className="relative z-10 w-8 h-8 rounded-full ring-4 ring-white flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
-                style={{ backgroundColor: tone.bg, color: tone.fg }}
-              >
-                <Icon className="w-4 h-4" />
+    {/* A live region, so a screen reader hears "Loading…" turn into the list, "No activity yet." or the failure. */}
+    <p role="status" className={items.length === 0 ? 'px-5 pb-5 text-xs text-[#64748B]' : 'sr-only'}>
+      {items.length === 0 ? emptyText : `${items.length} recent ${items.length === 1 ? 'event' : 'events'}`}
+    </p>
+    {items.length > 0 && (
+      <ul className="relative px-3 pb-3">
+        {items.map((item, i) => {
+          const tone = item.tone ?? { icon: Activity, bg: 'var(--accent-tint)', fg: 'var(--accent)' };
+          const Icon = tone.icon;
+          const status = item.status ? STATUS_CHIP[item.status] : null;
+          const StatusIcon = status?.icon;
+          const last = i === items.length - 1;
+          return (
+            <li
+              key={item.id}
+              className="group relative flex items-center gap-4 rounded-lg px-2 py-2.5 transition-all duration-200 hover:bg-[#F8FAFC] hover:translate-x-0.5 animate-fade-up"
+              style={{ animationDelay: `${120 + i * 70}ms` }}
+            >
+              <span className="hidden sm:block w-20 flex-shrink-0 text-right text-[12px] font-medium text-[#64748B] tabular-nums">{item.time}</span>
+              {/* timeline node */}
+              <span className="relative flex-shrink-0 self-stretch flex items-center">
+                {!last && <span aria-hidden className="absolute left-1/2 top-1/2 h-[calc(100%+20px)] w-px -translate-x-1/2 bg-[#E6EAF0]" />}
+                <span
+                  className="relative z-10 w-8 h-8 rounded-full ring-4 ring-white flex items-center justify-center transition-transform duration-200 group-hover:scale-110"
+                  style={{ backgroundColor: tone.bg, color: tone.fg }}
+                >
+                  <Icon className="w-4 h-4" />
+                </span>
               </span>
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13.5px] font-medium text-[#12233F] truncate">{item.title}</p>
-              <p className="text-xs text-[#64748B] truncate">{item.meta}</p>
-            </div>
-            {status && StatusIcon && (
-              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md ring-1 flex-shrink-0 ${status.cls}`}>
-                <StatusIcon className="w-3.5 h-3.5" />
-                {item.status}
-              </span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13.5px] font-medium text-[#12233F] truncate">{item.title}</p>
+                <p className="text-xs text-[#64748B] truncate">{item.meta}</p>
+              </div>
+              {status && StatusIcon && (
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-md ring-1 flex-shrink-0 ${status.cls}`}>
+                  <StatusIcon className="w-3.5 h-3.5" />
+                  {item.status}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    )}
   </section>
 );

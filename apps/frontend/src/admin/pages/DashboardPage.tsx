@@ -30,6 +30,10 @@ import { HistogramPanel, BreakdownPanel, ActionSummaryPanel, UpcomingPanel, Acti
 import { ENROLLMENT_TREND, ADMISSIONS_FUNNEL, FUNNEL_COLORS, MOCK_AUDIT_LOGS } from '../data/mockData';
 import { OrganisationApprovalQueue } from '../components/organisations/OrganisationApprovalQueue';
 import { actorLabel, listAuditRecords, type AuditRecord } from '../lib/auditAdmin';
+import { ApiError } from '../../api/client';
+
+/** How many audit records Recent Activity shows (and asks the API for). */
+const RECENT_ACTIVITY = 5;
 
 const ENROLLMENT_SERIES = [
   { key: 'academics', name: 'Academic' },
@@ -95,15 +99,23 @@ export const DashboardPage: React.FC = () => {
   const moreRef = useRef<HTMLDivElement>(null);
   // Recent Activity: the five newest audit records (GET /audit/records, as the Audit page reads them: the
   // organisation's own trail for an organisation admin, the platform's actions for a super admin). Preview keeps samples.
-  const [activity, setActivity] = useState<{ records: AuditRecord[] | null; failed: boolean }>({ records: null, failed: false });
+  // `failure` is what the panel says instead of the list: no access (403) or not available (anything else).
+  const [activity, setActivity] = useState<{ records: AuditRecord[] | null; failure: string | null }>({ records: null, failure: null });
 
   useEffect(() => {
     if (preview || !session) return;
     let live = true;
-    setActivity({ records: null, failed: false });
-    listAuditRecords()
-      .then((page) => live && setActivity({ records: page.items.slice(0, 5), failed: false }))
-      .catch(() => live && setActivity({ records: null, failed: true }));
+    setActivity({ records: null, failure: null });
+    listAuditRecords({ limit: RECENT_ACTIVITY })
+      .then((page) => live && setActivity({ records: page.items.slice(0, RECENT_ACTIVITY), failure: null }))
+      .catch((e: unknown) => {
+        if (!live) return;
+        const forbidden = e instanceof ApiError && e.status === 403;
+        setActivity({
+          records: null,
+          failure: forbidden ? 'You do not have access to audit records.' : 'Recent activity is not available right now.'
+        });
+      });
     return () => {
       live = false;
     };
@@ -365,7 +377,7 @@ export const DashboardPage: React.FC = () => {
             title: r.summary || r.action,
             meta: `${actorLabel(r)} · ${r.module}`
           }))}
-          emptyText={activity.records === null ? (activity.failed ? 'Recent activity is not available right now.' : 'Loading recent activity…') : 'No activity yet.'}
+          emptyText={activity.records === null ? (activity.failure ?? 'Loading recent activity…') : 'No activity yet.'}
           action={<PanelLink onClick={() => navigate('/audit-logs')}>View all</PanelLink>}
         />
       )}
