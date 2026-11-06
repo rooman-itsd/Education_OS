@@ -23,6 +23,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/regulatory-reports
   - practice/selection-process
   - practice/portfolio
   - practice/productions
