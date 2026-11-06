@@ -1,0 +1,102 @@
+# The WearableData port.
+#
+# Defined by platform/integration-hub; adapters copy it into their own contracts/. Every operation also follows
+# ports/adapter.yaml (context, result, error codes). Called through packages/sdk, never against a provider.
+#
+# Health data is sensitive personal data. Nothing flows without the athlete's own authorisation (an account link the
+# athlete made, scope person), every read is for a stated purpose, and revoking the link deletes what was collected
+# under it (docs/prd.md, "Personal data").
+port: WearableData
+id: wearable-data
+version: 1
+defined_by: integration-hub
+implemented_by: [wearables]
+consumers: [athlete-performance, sports-nutrition-health]
+
+purpose: >-
+  Let an athlete connect their own device account (Garmin, Polar, Fitbit, Strava and others), receive their daily
+  summaries, sleep and workouts as the provider makes them available, normalise them to one shape, and let the
+  sports modules read them for that athlete.
+
+vocabulary:
+  data_type: [daily_summary, activity, sleep, heart_rate_variability, body_composition]
+  link_status: [pending, active, expired, revoked, error]
+
+# One normalised shape per data type. Units are fixed: metres, seconds, kilograms, beats per minute, kilocalories.
+records:
+  daily_summary: { date: date, steps: integer, distance_m: number, active_kcal: number, resting_hr_bpm: integer,
+                   avg_hr_bpm: integer, max_hr_bpm: integer, active_seconds: integer, stress_avg: integer, source: string }
+  activity:      { provider_activity_id: string, sport: string, started_at: datetime, duration_s: integer,
+                   distance_m: number, kcal: number, avg_hr_bpm: integer, max_hr_bpm: integer,
+                   training_load: number, hr_zones_s: array, source: string }
+  sleep:         { date: date, started_at: datetime, ended_at: datetime, total_s: integer, deep_s: integer,
+                   light_s: integer, rem_s: integer, awake_s: integer, score: integer, source: string }
+  heart_rate_variability: { date: date, rmssd_ms: number, source: string }
+  body_composition: { measured_at: datetime, weight_kg: number, body_fat_pct: number, source: string }
+
+operations:
+  - name: link_account
+    mode: sync
+    description: >-
+      Start connecting an athlete's provider account. The hub creates the account link and returns the provider's
+      authorize URL (begin_authorisation in ports/adapter.yaml); the athlete approves on the provider's site and the
+      hub's OAuth callback completes the link. Only the athlete may start it for themselves.
+    input: { person_id: uuid, provider: string, data_types: array, return_url: string }
+    output: { account_link_id: uuid, authorize_url: string }
+    errors: [not_configured, invalid_request, conflict]
+
+  - name: unlink_account
+    mode: async
+    description: >-
+      Disconnect: revoke at the provider, delete every record collected under the link, and publish
+      integration-hub.account-link.revoked. The athlete or an admin may do it.
+    input: { account_link_id: uuid, reason: string }
+    output: { account_link_id: uuid, status: string, records_deleted: integer }
+    errors: [not_found, transport_unavailable, provider_error]
+
+  - name: sync
+    mode: async
+    description: >-
+      Fetch new data for one link and date range from the provider (the pull path, and the follow-up of a ping-only
+      webhook). Idempotent per provider record id. Publishes integration-hub.wearable-data.received per sync that
+      stored something.
+    input: { account_link_id: uuid, data_types: array, from: date, to: date }
+    output: { stored: integer, updated: integer, from: date, to: date }
+    errors: [not_configured, consent_required, auth_failed, unsupported, throttled, transport_unavailable, provider_error]
+
+  - name: request_backfill
+    mode: async
+    description: Ask the provider for history before the link was made, where the provider and the athlete's consent allow it.
+    input: { account_link_id: uuid, data_types: array, from: date, to: date }
+    output: { requested: boolean, available_from: date }
+    errors: [consent_required, unsupported, throttled, transport_unavailable, provider_error]
+
+  - name: read
+    mode: sync
+    description: >-
+      Read stored, normalised records for one athlete. Does not call the provider. The calling module states the
+      purpose, which is recorded with the read.
+    input: { person_id: uuid, data_type: string, from: date, to: date, purpose: string, cursor: string, limit: integer }
+    output: { items: array, next_cursor: string, last_synced_at: datetime }
+    errors: [consent_required, invalid_request]
+
+  - name: link_status
+    mode: sync
+    description: Links for a set of athletes, with provider, status and freshness. Backs the coach's alerts widget.
+    input: { person_ids: array }
+    output: { items: array }                  # [{person_id, account_link_id, provider, status, last_synced_at, data_types}]
+    errors: []
+
+capabilities:
+  data_types: array                           # what this provider supplies
+  push: boolean                               # provider sends data or a ping on its own
+  backfill_days: integer                      # 0 when none
+  rate_limit: string                          # human-readable, e.g. "200 per 15 min, 2000 per day per app"
+  requires_mobile_app: boolean                # true for on-device stores (Health Connect, HealthKit): no server API
+  display_to_others_allowed: boolean          # false when the provider's terms let data be shown only to the athlete (Strava)
+
+inbound:
+  - kind: data_available                      # a ping or a push; the hub then runs sync for that link
+    data: { account_link_subject: string, data_types: array, from: date, to: date }
+  - kind: link_revoked_by_provider            # the athlete disconnected on the provider's side
+    data: { account_link_subject: string }

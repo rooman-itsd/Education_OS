@@ -1,0 +1,44 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/public/oauth2/2/files/issued",
+    "authorization": "Bearer access-token-fixture"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "items": [
+        {
+          "name": "Class XII Marksheet",
+          "type": "file",
+          "size": "",
+          "date": "08/02/2019 11:32:15",
+          "parent": "",
+          "mime": [
+            "application/pdf"
+          ],
+          "uri": "in.gov.cbse-HSCER-2019-1234567",
+          "doctype": "HSCER",
+          "description": "Class XII Marksheet",
+          "issuerid": "in.gov.cbse",
+          "issuer": "CBSE"
+        },
+        {
+          "name": "x",
+          "type": "file",
+          "size": "",
+          "date": "",
+          "parent": "",
+          "mime": [
+            "application/pdf"
+          ],
+          "uri": "bad uri with spaces",
+          "doctype": "X",
+          "description": "",
+          "issuerid": "i",
+          "issuer": "I"
+        }
+      ]
+    }
+  }
+}

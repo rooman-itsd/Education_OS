@@ -3,6 +3,29 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- GST tax invoices (contract 0.3.0, additive; #155, batch #337). Each invoice written when a paid plan is activated
+  now carries: a number `PREFIX/YY-YY/NNNNNN` (at most 16 characters, one series per financial year, 1 April to
+  31 March read in Indian time, no gaps: the counter row is locked and written in the invoice's own transaction, so
+  a failed activation gives the number back); the supplier's and the recipient's name, GSTIN, address and state;
+  the SAC code (`BILLING_SAC_CODE`, default 998315); the place of supply (the recipient's state, or the supplier's
+  when none is on record); and the tax as decimal strings: CGST + SGST (half the rate each) when the place of supply
+  is the supplier's state, IGST otherwise, at `BILLING_GST_RATE` (default 18), rounded half up to the paisa per head.
+  GSTINs are checked for format, state code and check character. `amount` is unchanged and now means the taxable
+  value, so revenue reports exclude GST. New: `GET/PUT /billing-profile` (the recipient: legal name, optional GSTIN,
+  address, state; B2C when there is no GSTIN) and migration `billing_0004` (invoice columns, `billing_profile` with
+  RLS, `billing_invoice_counter`, platform-wide like plans). Invoices issued earlier keep null in the new fields and
+  are not renumbered. With no `BILLING_SUPPLIER_GSTIN` set (development, pilots) an invoice is numbered but carries
+  no tax (`tax_scheme: none`); a set but invalid supplier GSTIN, rate, SAC or prefix refuses the upgrade with 503
+  rather than issue a non-compliant invoice. Not covered: UTGST for union territories without a legislature (shown
+  as SGST), reverse charge, credit notes and the PDF in platform/documents (`document_id` stays null).
+- Super admin report (contract 0.2.0, #346): `GET /admin/reports/subscriptions` on `platform:revenue:read`, the
+  catalogue key no route used yet: subscriptions per plan and status, monthly recurring revenue, paid invoices of
+  the last 30 days (both as decimal strings) and trials ending within 14 days with the organisation's name (from
+  the `eos.organisation_directory` entry point). Three Super Admin widgets read it: `billing.trials-expiring`,
+  `billing.revenue-by-plan`, `billing.subscriptions-by-plan`. Read-only; nothing about charging changes. Comped
+  subscriptions count as `comped`, not as recurring revenue; an unknown status counts as `other`; trials past their
+  end but not yet expired by the daily job are listed (negative `days_left`). A paid invoice on a deleted plan still counts
+  (its own row); trial dates are read in UTC whatever the connection's zone; the three widgets share one request.
 - A trial reminder missed on its day is sent on the next run (#316 follow-up). Reminders fired only when exactly
   7, 3 or 1 days were left, so a day the scheduler missed lost that reminder. Chain `billing_0003` adds
   `billing_trial_reminder` (one row per organisation, trial end and threshold; unique; RLS); each run raises the

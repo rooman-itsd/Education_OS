@@ -1,0 +1,105 @@
+# Merges approved pull requests on GitHub's side, whether or not anyone's computer is on
+# (docs/team/automated-review.md). Runs every 10 minutes, after every review, and after every CI run.
+#
+# A pull request is merged when all of these hold:
+#   - it is open, not a draft, and based on main;
+#   - someone other than its author approved it, and no reviewer's latest review is "changes requested";
+#   - no review thread is unresolved;
+#   - GitHub says it can merge (branch protection satisfied: code owners, required checks) and no check on its
+#     latest commit has failed, required or not (the end-to-end journeys included).
+# Merges are squash merges. A merge made with this workflow's token does not start push workflows on main, so the
+# job starts web.yml (publishes the site) and system.yml (end-to-end journeys) on main itself afterwards.
+# Nor does such a merge close the issues the pull request links with a closing keyword ("Closes #N"), and closing them
+# with the same token starts no issues.closed or pull_request.closed workflow, so auto-assign.yml would not run either:
+# the job closes the linked issues and hands out the next issue (tools/scripts/next-issue.py) itself.
+name: auto-merge
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  pull_request_review:
+    types: [submitted]
+  workflow_run:
+    workflows: [api, web, governance, system, auto-review]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: auto-merge
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+  checks: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge every pull request that is ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          merged=0; merged_prs=""; closed=""
+          for n in $(gh pr list -R "$REPO" --state open --base main --limit 100 --json number,isDraft --jq '.[] | select(.isDraft|not) | .number' | sort -n); do
+            info=$(gh pr view "$n" -R "$REPO" --json author,reviews,mergeStateStatus,headRefOid)
+            author=$(echo "$info" | jq -r .author.login)
+            ok=$(echo "$info" | jq --arg a "$author" '
+              ([.reviews[] | select(.author.login != $a and (.state=="APPROVED" or .state=="CHANGES_REQUESTED" or .state=="DISMISSED"))]
+               | group_by(.author.login) | map(max_by(.submittedAt).state)) as $latest
+              | ([.reviews[] | select(.author.login != $a and .state=="APPROVED")] | length > 0)
+                and (($latest | index("CHANGES_REQUESTED")) | not)')
+            [ "$ok" = true ] || continue
+            state=$(echo "$info" | jq -r .mergeStateStatus)
+            case "$state" in CLEAN|BEHIND|HAS_HOOKS) ;; *) echo "#$n: $state, not mergeable yet"; continue;; esac
+            threads=$(gh api graphql -f query="{ repository(owner:\"${REPO%/*}\", name:\"${REPO#*/}\") { pullRequest(number:$n) { reviewThreads(first:100){ nodes { isResolved } } } } }" --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved|not)] | length')
+            [ "$threads" = 0 ] || { echo "#$n: $threads unresolved review threads"; continue; }
+            head=$(echo "$info" | jq -r .headRefOid)
+            bad=$(gh api "repos/$REPO/commits/$head/check-runs?per_page=100" --jq '[.check_runs[]] | group_by(.name) | map(max_by(.id)) | map(select(.status!="completed" or (.conclusion as $c | ["success","skipped","neutral"] | index($c) | not))) | map(.name) | join(",")')
+            [ -z "$bad" ] || { echo "#$n: checks not green yet: $bad"; continue; }
+            if gh pr merge "$n" -R "$REPO" --squash --delete-branch --match-head-commit "$head"; then
+              echo "#$n merged"; merged=$((merged + 1)); merged_prs="$merged_prs $n"
+              for i in $(gh pr view "$n" -R "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number'); do
+                [ "$(gh issue view "$i" -R "$REPO" --json state --jq .state)" = OPEN ] || continue
+                if gh issue close "$i" -R "$REPO" --reason completed --comment "Closed by #$n, which links this issue with a closing keyword and was merged by auto-merge."; then
+                  echo "#$i closed (linked by #$n)"; closed="$closed $i"
+                fi
+              done
+            else
+              echo "#$n: merge refused (see above)"
+            fi
+          done
+          echo "merged=$merged" >> "$GITHUB_ENV"
+          echo "merged_prs=${merged_prs# }" >> "$GITHUB_ENV"
+          echo "closed=${closed# }" >> "$GITHUB_ENV"
+      # main, never the default ref: on pull_request_review that is the reviewed PR's merge commit, and the next step runs
+      # tools/scripts/next-issue.py with this job's write token, so a PR could otherwise run its own copy of the script.
+      - uses: actions/checkout@v4
+        if: env.merged != '0'
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: env.merged != '0'
+        with:
+          python-version: "3.12"
+      - name: Hand out the next issue, as auto-assign.yml does for a merge or a close by a person
+        if: env.merged != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install -q pyyaml
+          for p in $merged_prs; do python tools/scripts/next-issue.py --event pr --pr "$p"; done
+          for i in $closed; do python tools/scripts/next-issue.py --event closed --issue "$i"; done
+      - name: Publish the site and run the journeys on main
+        if: env.merged != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run web.yml -R "${{ github.repository }}" --ref main
+          gh workflow run system.yml -R "${{ github.repository }}" --ref main

@@ -1,0 +1,10 @@
+# Domain events published by video-conferencing.
+# Envelope: see platform/event-bus/contracts/events.yaml.
+#
+# None. Meeting outcomes are published by integration-hub as port events (integration-hub.meeting.started, .ended,
+# integration-hub.meeting-attendance.received, integration-hub.meeting-recording.available), the same whichever
+# provider ran the meeting (integrations/README.md, "Swap rule").
+module: video-conferencing
+version: 1
+events: []
+consumes: []

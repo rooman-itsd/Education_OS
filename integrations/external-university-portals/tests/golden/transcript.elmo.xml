@@ -1,0 +1,117 @@
+<?xml version='1.0' encoding='utf-8'?>
+<elmo xmlns="https://github.com/emrex-eu/elmo-schemas/tree/v2">
+  <generatedDate>2026-11-05T12:00:00Z</generatedDate>
+  <learner>
+    <identifier type="partnerStudentId">STU-2024-0042</identifier>
+    <identifier type="apaar">123456789012</identifier>
+    <givenNames>Asha</givenNames>
+    <familyName>Nair</familyName>
+    <dateOfBirth>2003-04-12</dateOfBirth>
+  </learner>
+  <report>
+    <issuer>
+      <country type="ISO">IN</country>
+      <identifier type="local">C-12345</identifier>
+      <title xml:lang="en">Sample Institute of Higher Education</title>
+      <url>https://www.example.edu</url>
+    </issuer>
+    <learningOpportunitySpecification>
+      <identifier type="local">BSC-CS</identifier>
+      <title xml:lang="en">B.Sc. Computer Science</title>
+      <type>Degree Programme</type>
+      <specifies>
+        <learningOpportunityInstance>
+          <level>
+            <type>EQF</type>
+            <value>6</value>
+          </level>
+        </learningOpportunityInstance>
+      </specifies>
+      <hasPart>
+        <learningOpportunitySpecification>
+          <identifier type="local">CS101</identifier>
+          <title xml:lang="en">Programming Fundamentals</title>
+          <type>Course</type>
+          <specifies>
+            <learningOpportunityInstance>
+              <start>2024-07-15</start>
+              <date>2024-12-10</date>
+              <academicTerm>
+                <title xml:lang="en">Semester 1, 2024</title>
+                <start>2024-07-15</start>
+                <end>2024-12-10</end>
+              </academicTerm>
+              <status>passed</status>
+              <gradingSchemeLocalId>10-point</gradingSchemeLocalId>
+              <resultLabel>A</resultLabel>
+              <credit>
+                <scheme>indian_credit</scheme>
+                <value>4</value>
+              </credit>
+            </learningOpportunityInstance>
+          </specifies>
+        </learningOpportunitySpecification>
+      </hasPart>
+      <hasPart>
+        <learningOpportunitySpecification>
+          <identifier type="local">MA102</identifier>
+          <title xml:lang="en">Discrete Mathematics</title>
+          <type>Course</type>
+          <specifies>
+            <learningOpportunityInstance>
+              <start>2024-07-15</start>
+              <date>2024-12-10</date>
+              <academicTerm>
+                <title xml:lang="en">Semester 1, 2024</title>
+                <start>2024-07-15</start>
+                <end>2024-12-10</end>
+              </academicTerm>
+              <status>passed</status>
+              <gradingSchemeLocalId>10-point</gradingSchemeLocalId>
+              <resultLabel>B+</resultLabel>
+              <credit>
+                <scheme>indian_credit</scheme>
+                <value>3.5</value>
+              </credit>
+            </learningOpportunityInstance>
+          </specifies>
+        </learningOpportunitySpecification>
+      </hasPart>
+      <hasPart>
+        <learningOpportunitySpecification>
+          <identifier type="local">PH103</identifier>
+          <title xml:lang="en">Physics for Computing</title>
+          <type>Course</type>
+          <specifies>
+            <learningOpportunityInstance>
+              <status>failed</status>
+              <gradingSchemeLocalId>10-point</gradingSchemeLocalId>
+              <resultLabel>F</resultLabel>
+              <credit>
+                <scheme>indian_credit</scheme>
+                <value>3</value>
+              </credit>
+            </learningOpportunityInstance>
+          </specifies>
+        </learningOpportunitySpecification>
+      </hasPart>
+      <hasPart>
+        <learningOpportunitySpecification>
+          <identifier type="local">CS201</identifier>
+          <title xml:lang="en">Data Structures</title>
+          <type>Course</type>
+          <specifies>
+            <learningOpportunityInstance>
+              <status>in-progress</status>
+              <credit>
+                <scheme>indian_credit</scheme>
+                <value>4</value>
+              </credit>
+            </learningOpportunityInstance>
+          </specifies>
+        </learningOpportunitySpecification>
+      </hasPart>
+    </learningOpportunitySpecification>
+    <issueDate>2025-11-01T00:00:00Z</issueDate>
+  </report>
+</elmo>
