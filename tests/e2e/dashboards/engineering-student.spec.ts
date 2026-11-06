@@ -28,8 +28,26 @@ const TITLE = "Engineering Student";
 
 const WIDGETS: LayoutWidget[] = [
   // Inherited from the Student layout (extends: student).
-  { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
+  {
+    id: "timetable-attendance.today",
+    module: "academics/timetable-attendance",
+    batch: "#325",
+    title: "Today's classes",
+    probe: "/timetable-attendance/me/schedule",
+    empty: "No classes today",
+    unavailable: "Timetable and attendance are not available yet.",
+  },
+  {
+    id: "timetable-attendance.attendance-summary",
+    module: "academics/timetable-attendance",
+    batch: "#325",
+    title: "My attendance",
+    probe: "/timetable-attendance/me/attendance-summary",
+    empty: "No attendance recorded yet",
+    // No active term: timetable-attendance answers 404 active_term_not_found, which the widget shows as nothing recorded yet.
+    emptyCode: "active_term_not_found",
+    unavailable: "Timetable and attendance are not available yet.",
+  },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
   { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
   {
