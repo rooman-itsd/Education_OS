@@ -297,22 +297,38 @@ def _unpack(blob: bytes) -> tuple[dict, bytes]:
 
 
 def _resolve(db: Session, adapter: str, resolves_to) -> tuple[Connection | None, AccountLink | None]:
+    """The tenant an app-level callback names. A connection id must be one of this adapter's connections. A subject
+    resolves only to an active link (never a revoked, expired or pending one), within the named connection when
+    there is one, and only when exactly one active link matches: the same provider account linked in two
+    organisations is ambiguous, and the hub never guesses a tenant."""
     r = resolves_to if isinstance(resolves_to, dict) else {}
     cid, subject = r.get("connection_id"), r.get("account_link_subject")
-    if isinstance(cid, str) and len(cid) <= 36:
+    c = None
+    if isinstance(cid, str) and cid:
+        if len(cid) > 36:
+            return None, None
         c = db.scalar(select(Connection).where(Connection.id == cid, Connection.adapter == adapter))
+        if c is None:
+            return None, None
+    if not isinstance(subject, str) or not 0 < len(subject) <= MAX_SUBJECT:
         return c, None
-    if isinstance(subject, str) and 0 < len(subject) <= MAX_SUBJECT:
-        link = db.scalar(
-            select(AccountLink)
-            .join(Connection, Connection.id == AccountLink.connection_id)
-            .where(AccountLink.provider_subject == subject, Connection.adapter == adapter)
-            .order_by(AccountLink.created_at.desc())
-            .limit(1)
+    q = (
+        select(AccountLink)
+        .join(Connection, Connection.id == AccountLink.connection_id)
+        .where(
+            AccountLink.provider_subject == subject,
+            AccountLink.status == "active",
+            Connection.adapter == adapter,
+            Connection.organisation_id == AccountLink.organisation_id,
         )
-        if link is not None:
-            return db.get(Connection, link.connection_id), link
-    return None, None
+    )
+    if c is not None:
+        q = q.where(AccountLink.connection_id == c.id, AccountLink.organisation_id == c.organisation_id)
+    links = list(db.scalars(q.limit(2)))
+    if len(links) != 1:
+        return c, None  # nobody, or more than one organisation: unresolved
+    link = links[0]
+    return c or db.get(Connection, link.connection_id), link
 
 
 def _provider_request(db, info, c, d, receipt, channel, headers, raw_body, timeout) -> Answer:

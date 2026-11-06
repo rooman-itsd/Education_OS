@@ -210,6 +210,8 @@ class FakeAdapter:
         out = {"verdict": "accept", "dedupe_key": body.get("event_id")}
         if not connection_level:
             out["resolves_to"] = {"account_link_subject": body.get("owner_id")}
+            if body.get("connection_id"):  # a provider that also names the subscription's tenant
+                out["resolves_to"]["connection_id"] = body["connection_id"]
         if body.get("ack") in (202, 204):
             out["ack_status"] = body["ack"]
         return out

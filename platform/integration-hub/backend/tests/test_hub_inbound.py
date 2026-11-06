@@ -276,3 +276,66 @@ def test_the_same_event_id_at_two_organisations_connections_is_processed_for_eac
         f"{BASE}/inbound/fake-adapter/{key_of(b)}", content=raw, headers=_signed(adapter, "meet-client-secret", raw)
     )
     assert r.status_code == 200 and len(_deliveries(client, other_org, direction="inbound")) == 1
+
+
+def _app_level(client, adapter, data: dict):
+    raw = body(data)
+    return client.post(
+        f"{BASE}/inbound/fake-adapter", content=raw, headers=_signed(adapter, "app-level-signing-key", raw)
+    )
+
+
+def _link_status(client, org, who="member"):
+    return [x["status"] for x in client.get(f"{BASE}/me/account-links", headers=org.headers[who]).json()["items"]]
+
+
+def test_an_app_level_callback_resolves_only_to_an_active_link(client, org, other_org, adapter):
+    """The same provider account linked in organisation A (active) and, later, in B (then revoked): the callback
+    reaches A's link, never B's newer revoked one."""
+    from eos_integration_hub.application import inbound
+
+    subject = f"athlete-{org.id[:8]}"
+    wear_connection(client, org)
+    wear_connection(client, other_org)
+    link_account(client, org, subject=subject, adapter=adapter)
+    b_link = link_account(client, other_org, subject=subject, adapter=adapter)
+    r = client.post(
+        f"{BASE}/account-links/{b_link['id']}/revoke", json={"reason": "Left the academy"}, headers=other_org.admin
+    )
+    assert r.status_code == 200
+    with SessionLocal() as db:
+        from eos_core.tenant import platform_scope
+
+        with platform_scope():
+            c, link = inbound._resolve(db, "fake-adapter", {"account_link_subject": subject})
+            assert link is not None and link.organisation_id == org.id and c.organisation_id == org.id
+    r = _app_level(client, adapter, {"event": "deauthorize", "owner_id": subject, "event_id": f"d-{subject}"})
+    assert r.status_code == 200
+    assert _link_status(client, org) == ["revoked"]  # A's link was the one ended
+    assert outbox("integration-hub.account-link.revoked", other_org.id)[-1]["cause"] == "revoked_by_admin"
+
+
+def test_a_subject_active_in_two_organisations_is_not_guessed(client, org, other_org, adapter):
+    subject = f"twin-{org.id[:8]}"
+    wear_connection(client, org)
+    wear_connection(client, other_org)
+    link_account(client, org, subject=subject, adapter=adapter)
+    link_account(client, other_org, subject=subject, adapter=adapter)
+    r = _app_level(client, adapter, {"event": "deauthorize", "owner_id": subject, "event_id": f"d-{subject}"})
+    assert r.status_code == 401  # ambiguous: rejected, neither link touched
+    assert _link_status(client, org) == ["active"] and _link_status(client, other_org) == ["active"]
+
+
+def test_a_named_connection_scopes_the_subject_to_its_organisation(client, org, other_org, adapter):
+    subject = f"scoped-{org.id[:8]}"
+    wear_connection(client, org)
+    b = wear_connection(client, other_org)
+    link_account(client, org, subject=subject, adapter=adapter)
+    link_account(client, other_org, subject=subject, adapter=adapter)
+    r = _app_level(
+        client,
+        adapter,
+        {"event": "deauthorize", "owner_id": subject, "event_id": f"d2-{subject}", "connection_id": b["id"]},
+    )
+    assert r.status_code == 200
+    assert _link_status(client, org) == ["active"] and _link_status(client, other_org) == ["revoked"]
