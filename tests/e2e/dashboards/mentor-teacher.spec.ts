@@ -29,8 +29,24 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
@@ -45,7 +61,15 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "Could not load your courses",
   },
   // The mentor teacher's own widgets.
-  { id: "field-training.trainees-to-assess", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.trainees-to-assess",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Trainees to assess",
+    probe: "/field-training/me/trainees?limit=1",
+    empty: "Nothing to assess right now",
+    unavailable: "Field training data is not available yet.",
+  },
   {
     // Texts of ReviewsPendingWidget.tsx (practice/portfolio, merged in #413).
     id: "portfolio.reviews-pending",
@@ -56,7 +80,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No reviews pending",
     unavailable: "Portfolio review data is not available yet.",
   },
-  { id: "projects.to-review", module: "practice/field-training", batch: "#339" },
+  {
+    id: "projects.to-review",
+    module: "practice/projects",
+    batch: "#339",
+    title: "To review",
+    probe: "/projects/me/reviews?limit=1",
+    empty: "Nothing waiting for your review",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "skill-progress.assessments-due",
     module: "practice/skill-progress",

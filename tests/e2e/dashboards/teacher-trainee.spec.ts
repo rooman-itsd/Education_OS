@@ -30,7 +30,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
-  { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.course-materials",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Course materials",
+    probe: "/lms/me/course-materials?limit=1",
+    empty: "No new course materials",
+    unavailable: "Course data is not available yet.",
+  },
   {
     id: "fees-accounts.fee-dues",
     module: "finance-operations/fees-accounts",
@@ -71,8 +79,24 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Library data is not available yet.",
   },
   // The teacher trainee's own widgets.
-  { id: "field-training.my-placement", module: "practice/field-training", batch: "#339" },
-  { id: "projects.my-projects", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.my-placement",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "My placement",
+    probe: "/field-training/me/placements",
+    empty: "No placement yet",
+    unavailable: "Field training data is not available yet.",
+  },
+  {
+    id: "projects.my-projects",
+    module: "practice/projects",
+    batch: "#339",
+    title: "My projects",
+    probe: "/projects/me/projects",
+    empty: "You are not on a project yet",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     // Texts of MyPortfolioWidget.tsx (practice/portfolio, merged in #413).
     id: "portfolio.my-portfolio",
@@ -93,7 +117,15 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Skill progress data is not available yet.",
     forbidden: "You do not have access to this.",
   },
-  { id: "field-training.hours-logged", module: "practice/field-training", batch: "#339" },
+  {
+    id: "field-training.hours-logged",
+    module: "practice/field-training",
+    batch: "#339",
+    title: "Hours logged",
+    probe: "/field-training/me/hours",
+    empty: "No hours to show yet",
+    unavailable: "Field training data is not available yet.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
