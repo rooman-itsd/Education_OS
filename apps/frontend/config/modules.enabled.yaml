@@ -36,6 +36,7 @@ modules:
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
+  - support/amc-vendor-support
   - support/helpdesk
 platform:
   - billing

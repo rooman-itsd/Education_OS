@@ -35,6 +35,7 @@ modules:
   - student-lifecycle/admissions
   - student-lifecycle/student-information
   - student-lifecycle/web-portal-cms
+  - support/amc-vendor-support
   - support/helpdesk
 integrations: [messaging-providers, payment-sbiepay]
 platform: [identity, tenancy, billing, notification, event-bus, scheduler, audit]
