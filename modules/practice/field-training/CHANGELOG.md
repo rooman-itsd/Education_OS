@@ -36,3 +36,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   sending their own id in capitals (201, then 200), and `supervisor_ids` `[x, X]` passed the uniqueness check. Ids in bodies,
   paths and filters, and the token's `sub` and `org`, are now lowercased before use; the guard and every lookup compare
   lowercase ids.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/field-training`) and
+  `apps/frontend/config/modules.enabled.yaml` (its five widgets on the trainee, supervisor and coordinator dashboards)
+  (#339).

@@ -27,6 +27,7 @@ modules:
   - finance-operations/procurement
   - governance/regulatory-reports
   - governance/iqac-accreditation
+  - practice/field-training
   - practice/selection-process
   - practice/portfolio
   - practice/productions
