@@ -33,3 +33,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   start date and contact links, and up to five upcoming sessions with date and time in Asia/Kolkata; empty state "No
   mentor assigned yet" when `assignment` is null; loading and error states with retry; vitest and Testing Library
   tests.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/alumni`) and
+  `apps/frontend/config/modules.enabled.yaml` (the `alumni.mentoring` widget on the Management Student dashboard)
+  (#337). The management-student journey now checks the widget's title and empty state.
