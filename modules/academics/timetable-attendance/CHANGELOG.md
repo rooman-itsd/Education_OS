@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/timetable-attendance`; its event consumers
+  now run). Not listed in `apps/frontend/config/modules.enabled.yaml`: no widget is built yet.
 - Automatic closing of open attendance sessions at their marking deadline (issue #325, FR-11): the scheduler job
   `timetable-attendance.close-expired-sessions` (`application/auto_close.py`), declared on the `eos.scheduler_jobs` entry
   point (organisation scope, idempotent) and run from `scheduler.job.due`, which the module now consumes for its own job
