@@ -4,7 +4,9 @@
 #
 # student-information is the Person system of record. Other modules consume these events to keep
 # a read-only cached copy of the fields they need (name, status) next to their own person_id
-# reference, never by querying this module's database (ADR-0003). No event here is triggered by,
+# reference, never by querying this module's database (ADR-0003). person.account-linked maps a person to their
+# platform/identity sign-in account, so a module that keys data on person_id can still answer a student's own
+# /me reads, which name the caller by user id. No event here is triggered by,
 # or assumes the existence of, a public sign-up flow — every person.created is staff-initiated.
 module: student-information
 version: 1
@@ -13,7 +15,9 @@ events:
     description: >-
       A Person record was created by an authorised staff role. Consumers may start caching this
       person's name and status against their own person_id reference.
-    payload: { organisation_id: uuid, person_id: uuid, first_name: string, last_name: string, email: string, status: string, source: { module: string, entity: string, id: string } }
+      identity_user_id is the linked platform/identity user, or null when no account is linked yet; a person created
+      with an account is also announced by person.account-linked.
+    payload: { organisation_id: uuid, person_id: uuid, first_name: string, last_name: string, email: string, status: string, source: { module: string, entity: string, id: string }, identity_user_id: "uuid?" }
   - name: student-information.person.updated
     description: Profile fields changed. Consumers refresh their cached copy of name/contact fields.
     payload: { organisation_id: uuid, person_id: uuid, first_name: string, last_name: string, email: string }
@@ -23,6 +27,19 @@ events:
       Consumers that gate behaviour on a person's status (e.g. library loans, hostel allocation)
       react to this.
     payload: { organisation_id: uuid, person_id: uuid, status: string, previous_status: string, reason: string, effective_date: date }
+  - name: student-information.person.account-linked
+    description: >-
+      The person's platform/identity sign-in account was set, changed or cleared (identity_user_id on the Person;
+      one person per account in an organisation). Published in the transaction of the write: on creation with an
+      account, and on every update that changes the account. identity_user_id is the account linked now and null once
+      the link is cleared (linked is then false); previous_identity_user_id is the account it replaced, null when there
+      was none. Modules that key data on person_id keep a person-to-account lookup from this event to resolve a
+      student's own /me reads. Apply it per person by the envelope occurred_at (a later link replaces an earlier one;
+      delivery is unordered), and when two persons claim one account, the later link wins. POST
+      /account-links/republish announces every current link again (previous_identity_user_id null), the backfill for
+      links made before this event existed; applying a republished link twice changes nothing.
+    payload: { organisation_id: uuid, person_id: uuid, identity_user_id: "uuid?", linked: boolean, previous_identity_user_id: "uuid?" }
+    consumers: [lms, timetable-attendance]
   - name: student-information.id-card.issued
     description: An ID card was issued to a person.
     payload: { organisation_id: uuid, person_id: uuid, card_id: uuid, card_number: string }
