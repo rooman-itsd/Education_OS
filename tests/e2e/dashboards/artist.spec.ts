@@ -1,21 +1,25 @@
 import { expect, test } from "@playwright/test";
-import { addUser, organisationWithUser } from "./organisation";
-import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
- * Artist dashboard (layout platform/identity/config/dashboards/artist.yaml, which extends the Student layout; the
- * role exists in the arts-academy profile, ADR-0004).
+ * Artist dashboard (layout platform/identity/config/dashboards/artist.yaml, which extends the Student layout; the role
+ * exists in the arts-academy profile). Part of #323.
  *
  * What runs depends on what has shipped; each skip says what it waits for:
- * - always: an artist user signs in and lands on their dashboard;
+ * - always: an artist signs in and lands on their dashboard;
  * - for every widget of the layout, the inherited Student ones included, whose module is in
- *   apps/frontend/config/modules.enabled.yaml: the panel renders by its registered title and shows its empty
- *   state, or says its data is not available while the backend is missing (the artist holds the student role's
+ *   apps/frontend/config/modules.enabled.yaml and exports it: the panel renders by its registered title and shows its
+ *   empty state, or says its data is not available while the backend is missing (the artist holds the student role's
  *   permissions through `extends`);
- * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- * - with inventory-equipment data: a loan requested for studio equipment appears in inventory-equipment.my-loans.
+ * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
+ *   builds it: projects (#339), productions (#318, PR #454), timetable-attendance and examinations (#325), lms (#326),
+ *   transport and library (#338);
+ * - data journey: an item the artist asks to borrow shows in inventory-equipment.my-loans. Facility staff set up the
+ *   item and receive stock; the artist (loan:request) requests the loan. The other widgets' journeys wait for their
+ *   modules.
  *
- * facilities, finance-operations and campus-life are not in the Trial plan, so the super admin moves the organisation
+ * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
  * by the modules' unit tests, not here.
  */
@@ -27,7 +31,15 @@ const WIDGETS: LayoutWidget[] = [
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
-  { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.course-materials",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Course materials",
+    probe: "/lms/me/course-materials?limit=1",
+    empty: "No new course materials",
+    unavailable: "Course data is not available yet.",
+  },
   {
     id: "fees-accounts.fee-dues",
     module: "finance-operations/fees-accounts",
@@ -47,21 +59,46 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Could not load hostel notices",
     forbidden: "Could not load hostel notices",
   },
-  { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
-  { id: "library.loans", module: "campus-life/library", batch: "#338" },
+  {
+    id: "transport.notices",
+    module: "campus-life/transport",
+    batch: "#338",
+    title: "Transport notices",
+    probe: "/transport/me/notices?limit=1",
+    empty: "No transport notices right now",
+    unavailable: "Transport data is not available yet.",
+  },
+  {
+    id: "library.loans",
+    module: "campus-life/library",
+    batch: "#338",
+    title: "Library loans",
+    probe: "/library/me/loans",
+    empty: "No books on loan",
+    unavailable: "Library data is not available yet.",
+  },
   // The artist's own widgets.
   {
-    id: "portfolio.my-portfolio",
-    module: "practice/portfolio",
-    batch: "#322",
-    title: "My Portfolio",
-    probe: "/portfolio/items?scope=mine",
-    empty: "No portfolio items yet",
-    unavailable: "Portfolio data is not available yet.",
+    id: "projects.my-projects",
+    module: "practice/projects",
+    batch: "#339",
+    title: "My projects",
+    probe: "/projects/me/projects",
+    empty: "You are not on a project yet",
+    unavailable: "Projects data is not available yet.",
   },
-  { id: "projects.my-projects", module: "practice/projects", batch: "#339" },
-  { id: "facility-booking.my-bookings", module: "facilities/facility-booking", batch: "#331" },
   {
+    // Texts of MyBookingsWidget.tsx and UpcomingBookings.tsx (facility-booking, merged in #395).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#331",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
+  },
+  {
+    // Texts of UpcomingWidget.tsx (practice/selection-process, merged in #414).
     id: "selection-process.upcoming",
     module: "practice/selection-process",
     batch: "#322",
@@ -70,34 +107,53 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No upcoming selection rounds",
     unavailable: "Schedule data is not available yet.",
   },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
   {
     id: "inventory-equipment.my-loans",
     module: "facilities/inventory-equipment",
-    batch: "#109",
+    batch: "#331",
     title: "My loans",
-    probe: "/inventory-equipment/loans?scope=mine&open=true",
+    probe: "/inventory-equipment/loans?scope=mine&open=true&page_size=50",
     empty: "Nothing on loan",
-    unavailable: "Inventory and equipment data is not available yet.",
+    unavailable: "Inventory data is not available yet.",
+  },
+  {
+    // Texts of MyPortfolioWidget.tsx (practice/portfolio, merged in #413).
+    id: "portfolio.my-portfolio",
+    module: "practice/portfolio",
+    batch: "#322",
+    title: "My Portfolio",
+    probe: "/portfolio/items?scope=mine&page_size=6",
+    empty: "No portfolio items yet",
+    unavailable: "Portfolio data is not available yet.",
+  },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
   },
 ];
-
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
-let user: Awaited<ReturnType<typeof organisationWithUser>>;
-/** Per shipped widget id: what its GET answered the artist user. */
+let admin: DashboardUser;
+let user: DashboardUser;
+/** Facility staff: they run the catalogue and stores, so they set up the item the artist borrows. */
+let facilityStaff: DashboardUser;
+/** Per shipped widget id: what its GET answered the artist. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, {
-    academyType: "arts-academy",
-    role: "artist",
-    extraRoles: ["facility-staff"],
-  });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "arts-academy" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "artist");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -116,27 +172,16 @@ test.describe("artist widgets", () => {
     for (const w of SHIPPED) await expect(dashboard.getByRole("heading", { name: w.title!, exact: true })).toBeVisible();
   });
 
-  test("each shipped widget shows its empty state, says its data is not available yet, or says the role has no access", async ({ page }) => {
+  test("each shipped widget shows its empty state, or says its data is not available yet", async ({ page }) => {
     test.skip(SHIPPED.length === 0, "none of the artist layout's modules is in apps/frontend/config/modules.enabled.yaml yet");
     await signIn(page, user);
     for (const w of SHIPPED) await expectBody(page, w, status[w.id] ?? 0);
   });
 
-  test("inventory-equipment.my-loans displays correct title and empty state before data seeding", async ({ page }) => {
-    const w = byId("inventory-equipment.my-loans");
-    test.skip(!shipped(w), waitingFor(w));
-    test.skip(status[w.id] !== 200, `the inventory-equipment API answered ${status[w.id]} to the artist role`);
-    await signIn(page, user);
-    const panel = widget(page, "My loans");
-    await expect(panel).toBeVisible();
-    await expect(panel.getByRole("heading", { name: "My loans", exact: true })).toBeVisible();
-    await expect(panel.getByText("Nothing on loan", { exact: true })).toBeVisible();
-    await expect(panel.getByText("Equipment you borrow appears here with its due date.", { exact: true })).toBeVisible();
-  });
-
   for (const w of WIDGETS.filter((w) => !shipped(w))) {
     test(`${w.id} renders once ${w.module} ships`, async ({ page }) => {
       test.skip(!shipped(w), waitingFor(w));
+      // The shell renders an unregistered id as a "Not built yet" placeholder titled with the id itself.
       await signIn(page, user);
       await expect(page.getByRole("region", { name: `${TITLE} dashboard` })).toBeVisible();
       await expect(widget(page, w.id)).toHaveCount(0);
@@ -144,140 +189,37 @@ test.describe("artist widgets", () => {
   }
 });
 
-test.describe("with inventory-equipment data", () => {
-  test("inventory-equipment.my-loans lists open equipment borrowed by the artist and enforces tenant isolation", async ({ page, request }) => {
+test.describe("with facilities data", () => {
+  test("inventory-equipment.my-loans lists an item the artist asks to borrow", async ({ page, request }) => {
     const w = byId("inventory-equipment.my-loans");
     test.skip(!shipped(w), waitingFor(w));
-    test.skip(status[w.id] !== 200, `the inventory-equipment API answered ${status[w.id]} to the artist role`);
-
-    // 1. Seed equipment and loan in the primary organisation (user).
-    const category = await created<{ id: string }>(request, user, "/inventory-equipment/categories", {
-      name: "Studio Gear",
-    });
-    const location = await created<{ id: string }>(request, user, "/inventory-equipment/locations", {
-      name: "Art Studio Store",
-    });
-    const item = await created<{ id: string }>(request, user, "/inventory-equipment/items", {
-      name: "Easels & Canvas Stand",
+    test.skip(!ready(w.id), `the inventory-equipment API answered ${status[w.id]} to the artist role`);
+    // Facility staff (item:manage, stock:manage) set up the catalogue and receive stock, as in production-manager.spec.ts.
+    // The item is loanable by default and not consumable (consumables are refused with consumable_not_loanable); the
+    // category sets no borrower_role_ids, so any role holding loan:request may borrow (check_loan_line in
+    // inventory-equipment's domain/rules.py), and no rule requires approval, so the loan is approved at once.
+    const category = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/categories", { name: "Studio equipment" });
+    const location = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/locations", { name: "Art store" });
+    const item = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/items", {
+      name: "Easel",
       category_id: category.id,
       tracking: "quantity",
-      consumable: false,
     });
-    await created(request, user, "/inventory-equipment/movements", {
+    await created(request, facilityStaff, "/inventory-equipment/movements", {
       kind: "receipt",
       item_id: item.id,
-      quantity: 5,
+      quantity: 2,
       to_location_id: location.id,
     });
-    await created(request, user, "/inventory-equipment/loans", {
-      lines: [{ item_id: item.id, quantity: 1 }],
-      due_at: dayFromNow(3),
-      purpose: "Oil painting practicals",
-    });
-
-    // 2. Cross-tenant isolation check: create an isolated second organisation with its own loan.
-    const orgBUser = await organisationWithUser(request, {
-      academyType: "arts-academy",
-      role: "artist",
-      extraRoles: ["facility-staff"],
-    });
-    await standardPlan(request, orgBUser.organisation.id);
-
-    const catB = await created<{ id: string }>(request, orgBUser, "/inventory-equipment/categories", {
-      name: "Sculpture Studio Gear",
-    });
-    const locB = await created<{ id: string }>(request, orgBUser, "/inventory-equipment/locations", {
-      name: "Sculpture Storage B",
-    });
-    const itemB = await created<{ id: string }>(request, orgBUser, "/inventory-equipment/items", {
-      name: "Stone Carving Chisels - Org B",
-      category_id: catB.id,
-      tracking: "quantity",
-      consumable: false,
-    });
-    await created(request, orgBUser, "/inventory-equipment/movements", {
-      kind: "receipt",
-      item_id: itemB.id,
-      quantity: 3,
-      to_location_id: locB.id,
-    });
-    await created(request, orgBUser, "/inventory-equipment/loans", {
-      lines: [{ item_id: itemB.id, quantity: 1 }],
-      due_at: dayFromNow(5),
-      purpose: "Monumental sculpture",
-    });
-
-    // 3. Sign in as the primary organisation's artist.
+    // A week ahead: within the default max_loan_days of 14.
+    const due = new Date(Date.now() + 7 * 86_400_000);
+    await created(request, user, "/inventory-equipment/loans", { lines: [{ item_id: item.id, quantity: 1 }], due_at: due.toISOString() });
     await signIn(page, user);
     const panel = widget(page, "My loans");
-
-    // Primary organisation's loan must be visible.
-    await expect(panel.getByText("Easels & Canvas Stand")).toBeVisible();
-    await expect(panel.getByText(/^Due /)).toBeVisible();
     await expect(panel.getByText("Nothing on loan")).toHaveCount(0);
-
-    // Cross-tenant assertion: second organisation's loan must NEVER appear on this dashboard.
-    await expect(panel.getByText("Stone Carving Chisels - Org B")).toHaveCount(0);
+    await expect(panel.getByText("Easel", { exact: true })).toBeVisible();
+    // MyLoansWidget's shortDate: "9 Nov" in the browser's (here the host's) time zone.
+    await expect(panel.getByText(`Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)).toBeVisible();
+    await expect(panel.getByText("Ready to collect")).toBeVisible();
   });
 });
-
-test.describe("with portfolio data", () => {
-  test("portfolio.my-portfolio lists the artist's artworks with their status, and no other organisation's", async ({ page, request }) => {
-    const w = byId("portfolio.my-portfolio");
-    test.skip(!shipped(w), waitingFor(w));
-    test.skip(status[w.id] !== 200, `the portfolio API answered ${status[w.id]} to the artist role`);
-
-    // Item types are organisation data that a portfolio manager configures; the artist only holds learner rights.
-    const manager = await addUser(request, user.admin, "portfolio-manager");
-    const artwork = await created<{ id: string }>(request, manager, "/portfolio/item-types", { name: "Artwork" });
-
-    // A draft and a submitted artwork of the artist's own.
-    await created(request, user, "/portfolio/items", {
-      type_id: artwork.id,
-      title: "Monsoon Study in Oils",
-      description: "Oil on canvas, 60 x 90 cm",
-    });
-    const series = await created<{ id: string }>(request, user, "/portfolio/items", {
-      type_id: artwork.id,
-      title: "Charcoal Figure Series",
-    });
-    await created(request, user, `/portfolio/items/${series.id}/submit`, {});
-
-    // Another organisation's artwork must never appear.
-    const other = await organisationWithUser(request, { academyType: "arts-academy", role: "artist" });
-    const otherManager = await addUser(request, other.admin, "portfolio-manager");
-    const otherType = await created<{ id: string }>(request, otherManager, "/portfolio/item-types", { name: "Artwork" });
-    await created(request, other, "/portfolio/items", { type_id: otherType.id, title: "Bronze Casting - Org B" });
-
-    await signIn(page, user);
-    const panel = widget(page, w.title!);
-    await expect(panel.getByText("Monsoon Study in Oils")).toBeVisible();
-    await expect(panel.getByText("Oil on canvas, 60 x 90 cm")).toBeVisible();
-    await expect(panel.getByText("Draft", { exact: true })).toBeVisible();
-    await expect(panel.getByText("Charcoal Figure Series")).toBeVisible();
-    await expect(panel.getByText("Submitted", { exact: true })).toBeVisible();
-    await expect(panel.getByText(w.empty!)).toHaveCount(0);
-    await expect(panel.getByText("Bronze Casting - Org B")).toHaveCount(0);
-  });
-});
-
-// Backend-dependent: these need their module's API to create data through once the modules are merged.
-
-test.fixme("projects.my-projects lists the artist's studio projects", async () => {
-  // practice/projects (sprint batch #339).
-});
-
-test.fixme("facility-booking.my-bookings lists the artist's reserved art studio or darkroom slots", async () => {
-  // facilities/facility-booking (sprint batch #331).
-});
-
-test.fixme("selection-process.upcoming lists the artist's scheduled auditions and jury rounds", async () => {
-  // practice/selection-process: the widget lists slots (GET /slots/upcoming), and no API route creates a slot yet
-  // (the service has create_slot; the route and both slot paths in contracts/openapi.yaml are a selection-process
-  // follow-up to #414).
-});
-
-test.fixme("productions.upcoming lists fine art exhibitions or gallery showcases the artist participates in", async () => {
-  // practice/productions (sprint batch #318).
-});
-

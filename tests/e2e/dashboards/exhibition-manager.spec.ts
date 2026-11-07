@@ -1,22 +1,22 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
 import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
- * Exhibition & Gallery Manager dashboard (layout platform/identity/config/dashboards/exhibition-manager.yaml; the
- * role exists in the arts-academy profile, ADR-0004).
+ * Exhibition & Gallery Manager dashboard (layout platform/identity/config/dashboards/exhibition-manager.yaml; the role
+ * exists in the arts-academy profile). Part of #323.
  *
  * What runs depends on what has shipped; each skip says what it waits for:
- * - always: an exhibition-manager user signs in and lands on their dashboard;
- * - for every widget of the layout whose module is in apps/frontend/config/modules.enabled.yaml: the panel renders
- *   by its registered title and shows its empty state, or says its data is not available while the backend is missing;
- * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- * - with inventory-equipment data: consumable art or gallery supplies below reorder level appear in
- *   inventory-equipment.low-stock;
- * - with facility-booking data: today's reservations for galleries or exhibition spaces appear in
- *   facility-booking.bookings-today.
+ * - always: an exhibition manager signs in and lands on their dashboard;
+ * - for every widget whose module is in apps/frontend/config/modules.enabled.yaml and exports it: the panel renders by
+ *   its registered title and shows its empty state, or says its data is not available while the backend is missing;
+ * - productions.calendar and productions.upcoming are skipped until practice/productions ships (sprint batch #318);
+ * - data journeys: a supply item below its reorder level shows in inventory-equipment.low-stock, and a booking later
+ *   today on a gallery the exhibition manager approves in facility-booking.bookings-today. Facility staff create both
+ *   (the exhibition manager reads stock and approves bookings, but does not manage the stores or the resource
+ *   register).
  *
- * facilities, finance-operations and campus-life are not in the Trial plan, so the super admin moves the organisation
+ * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
  * by the modules' unit tests, not here.
  */
@@ -24,55 +24,72 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
 const TITLE = "Exhibition & Gallery Manager";
 
 const WIDGETS: LayoutWidget[] = [
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
-  { id: "productions.upcoming", module: "practice/productions", batch: "#318" },
   {
-    id: "facility-booking.bookings-today",
-    module: "facilities/facility-booking",
-    batch: "#287",
-    title: "Bookings today",
-    probe: "/facility-booking/summary",
-    empty: "No bookings today",
-    unavailable: "Facility booking data is not available yet.",
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
+  {
+    id: "productions.upcoming",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Upcoming productions",
+    probe: "/productions/upcoming",
+    empty: "Nothing coming up",
+    unavailable: "Production data is not available yet.",
   },
   {
     id: "inventory-equipment.low-stock",
     module: "facilities/inventory-equipment",
-    batch: "#109",
+    batch: "#331",
     title: "Low stock",
     probe: "/inventory-equipment/low-stock",
     empty: "Stock is healthy",
-    unavailable: "Inventory and equipment data is not available yet.",
+    unavailable: "Inventory data is not available yet.",
+  },
+  {
+    id: "facility-booking.bookings-today",
+    module: "facilities/facility-booking",
+    batch: "#331",
+    title: "Bookings today",
+    probe: "/facility-booking/summary?date=today",
+    empty: "No bookings today",
+    unavailable: "Booking data is not available yet.",
   },
 ];
-
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
+let admin: DashboardUser;
 let user: DashboardUser;
-/** Per shipped widget id: what its GET answered the exhibition manager user. */
+/** Facility staff: they run the stores and the resource register, so they create the data the journeys look for. */
+let facilityStaff: DashboardUser;
+/** Per shipped widget id: what its GET answered the exhibition manager. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, {
-    academyType: "arts-academy",
-    role: "exhibition-manager",
-    extraRoles: ["facility-staff"],
-  });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "arts-academy" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "exhibition-manager");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
-test(`an exhibition manager signs in and lands on the ${TITLE} dashboard`, async ({ page }) => {
+test(`a exhibition manager signs in and lands on the ${TITLE} dashboard`, async ({ page }) => {
   await signIn(page, user);
   await expect(page.getByRole("region", { name: `${TITLE} dashboard` })).toBeVisible();
   await expect(page.getByText(`${user.organisation.name} · ${TITLE} dashboard`)).toBeVisible();
   await expect(page.getByText("Preview mode")).toHaveCount(0);
 });
 
-test.describe("exhibition manager widgets", () => {
+test.describe("exhibition-manager widgets", () => {
   test("every shipped widget renders by its registered title", async ({ page }) => {
     test.skip(SHIPPED.length === 0, "none of the exhibition-manager layout's modules is in apps/frontend/config/modules.enabled.yaml yet");
     await signIn(page, user);
@@ -80,33 +97,16 @@ test.describe("exhibition manager widgets", () => {
     for (const w of SHIPPED) await expect(dashboard.getByRole("heading", { name: w.title!, exact: true })).toBeVisible();
   });
 
-  test("each shipped widget shows its empty state, says its data is not available yet, or says the role has no access", async ({ page }) => {
+  test("each shipped widget shows its empty state, or says its data is not available yet", async ({ page }) => {
     test.skip(SHIPPED.length === 0, "none of the exhibition-manager layout's modules is in apps/frontend/config/modules.enabled.yaml yet");
     await signIn(page, user);
     for (const w of SHIPPED) await expectBody(page, w, status[w.id] ?? 0);
   });
 
-  test("shipped facilities widgets display correct titles and empty states before data seeding", async ({ page }) => {
-    test.skip(SHIPPED.length === 0, "none of the exhibition-manager layout's modules is in apps/frontend/config/modules.enabled.yaml yet");
-    await signIn(page, user);
-
-    const lowStockPanel = widget(page, "Low stock");
-    await expect(lowStockPanel).toBeVisible();
-    await expect(lowStockPanel.getByRole("heading", { name: "Low stock", exact: true })).toBeVisible();
-    await expect(lowStockPanel.getByText("Stock is healthy", { exact: true })).toBeVisible();
-
-    const bookingsPanel = widget(page, "Bookings today");
-    await expect(bookingsPanel).toBeVisible();
-    await expect(bookingsPanel.getByRole("heading", { name: "Bookings today", exact: true })).toBeVisible();
-    await expect(bookingsPanel.getByText("No bookings today", { exact: true })).toBeVisible();
-    await expect(
-      bookingsPanel.getByText("Bookings on the spaces and equipment you look after appear here.", { exact: true }),
-    ).toBeVisible();
-  });
-
   for (const w of WIDGETS.filter((w) => !shipped(w))) {
     test(`${w.id} renders once ${w.module} ships`, async ({ page }) => {
       test.skip(!shipped(w), waitingFor(w));
+      // The shell renders an unregistered id as a "Not built yet" placeholder titled with the id itself.
       await signIn(page, user);
       await expect(page.getByRole("region", { name: `${TITLE} dashboard` })).toBeVisible();
       await expect(widget(page, w.id)).toHaveCount(0);
@@ -115,74 +115,64 @@ test.describe("exhibition manager widgets", () => {
 });
 
 test.describe("with facilities data", () => {
-  test("inventory-equipment.low-stock lists consumable items below reorder level", async ({ page, request }) => {
+  test("inventory-equipment.low-stock lists a supply item below its reorder level", async ({ page, request }) => {
     const w = byId("inventory-equipment.low-stock");
     test.skip(!shipped(w), waitingFor(w));
-    test.skip(status[w.id] !== 200, `the inventory-equipment API answered ${status[w.id]} to the exhibition-manager role`);
-
-    const category = await created<{ id: string }>(request, user, "/inventory-equipment/categories", {
-      name: "Gallery Mounting",
-    });
-    const location = await created<{ id: string }>(request, user, "/inventory-equipment/locations", {
-      name: "Gallery Storage",
-    });
-    const item = await created<{ id: string }>(request, user, "/inventory-equipment/items", {
-      name: "Picture Hanging Wire",
+    test.skip(!ready(w.id), `the inventory-equipment API answered ${status[w.id]} to the exhibition-manager role`);
+    // As in facility-staff.spec.ts, made by facility staff (stock:manage); the exhibition manager holds stock:read.
+    const category = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/categories", { name: "Framing supplies" });
+    const location = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/locations", { name: "Gallery store" });
+    const item = await created<{ id: string }>(request, facilityStaff, "/inventory-equipment/items", {
+      name: "Picture hooks",
       category_id: category.id,
       tracking: "quantity",
       consumable: true,
       reorder_level: 5,
     });
-    await created(request, user, "/inventory-equipment/movements", {
+    await created(request, facilityStaff, "/inventory-equipment/movements", {
       kind: "receipt",
       item_id: item.id,
       quantity: 2,
       to_location_id: location.id,
     });
-
     await signIn(page, user);
     const panel = widget(page, "Low stock");
-    await expect(panel.getByText("Picture Hanging Wire")).toBeVisible();
-    await expect(panel.getByText("2 piece left")).toBeVisible();
     await expect(panel.getByText("Stock is healthy")).toHaveCount(0);
+    await expect(panel.getByText("Picture hooks")).toBeVisible();
+    await expect(panel.getByText("2 piece left")).toBeVisible();
   });
 
-  test("facility-booking.bookings-today lists today's exhibition gallery reservation", async ({ page, request }) => {
+  test("facility-booking.bookings-today lists a booking later today on a gallery the exhibition manager approves", async ({ page, request }) => {
     const w = byId("facility-booking.bookings-today");
     test.skip(!shipped(w), waitingFor(w));
-    test.skip(status[w.id] !== 200, `the facility-booking API answered ${status[w.id]} to the exhibition-manager role`);
-
+    test.skip(!ready(w.id), `the facility-booking API answered ${status[w.id]} to the exhibition-manager role`);
+    // As in facility-staff.spec.ts: the default slot grid is 30 minutes and "today" is the organisation's date in
+    // FACILITY_BOOKING_TIMEZONE (UTC by default; the API inherits this process's environment), so book the next free
+    // half hour, unless that runs past midnight in that zone. The exhibition manager sees bookings on the resources
+    // whose approvers list them (scope=managed without booking:read-all).
     const zone = process.env.FACILITY_BOOKING_TIMEZONE || "UTC";
-    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone });
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone }); // YYYY-MM-DD
     const slot = 30 * 60_000;
     const start = new Date(Math.ceil((Date.now() + 5 * 60_000) / slot) * slot);
     const end = new Date(start.getTime() + slot);
     test.skip(day(end) !== day(new Date()), `too close to midnight in ${zone}`);
-
-    const type = await created<{ id: string }>(request, user, "/facility-booking/resource-types", {
-      name: "Exhibition Gallery",
-    });
-    const resource = await created<{ id: string }>(request, user, "/facility-booking/resources", {
-      name: "Main Gallery Wing A",
+    const type = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resource-types", { name: "Gallery" });
+    const resource = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resources", {
+      name: "Main gallery",
       type_id: type.id,
-      capacity: 100,
+      capacity: 150,
+      approver_user_ids: [user.id],
     });
-    await created(request, user, "/facility-booking/bookings", {
+    await created(request, facilityStaff, "/facility-booking/bookings", {
       resource_id: resource.id,
       start_at: start.toISOString(),
       end_at: end.toISOString(),
-      title: "Graduate Showcase Setup",
+      title: "Exhibition installation",
     });
-
     await signIn(page, user);
     const panel = widget(page, "Bookings today");
-    await expect(panel.getByText("Main Gallery Wing A · Graduate Showcase Setup")).toBeVisible();
-    await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
     await expect(panel.getByText("No bookings today")).toHaveCount(0);
+    await expect(panel.getByText("Main gallery · Exhibition installation")).toBeVisible();
+    await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
   });
-});
-
-// Backend-dependent: these need their module's API to create data through once the modules are merged.
-test.fixme("productions.calendar and productions.upcoming show upcoming exhibitions and dates", async () => {
-  // practice/productions (sprint batch #318); exhibition manager tracks scheduled exhibitions.
 });
