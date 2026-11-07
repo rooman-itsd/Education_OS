@@ -47,12 +47,14 @@ export async function login(request: APIRequestContext, email: string, password:
 /**
  * Register, verify (dev mode returns the token), approve as the super admin, then add a user with `role`.
  * `extraRoles` come after it: the dashboard follows the first role, and the token also carries the extra roles'
- * permissions, so a journey can create its data through the API as the same user.
+ * permissions, so a journey can create its data through the API as the same user. `admin` is the organisation's
+ * admin, for adding more users with addUser (a second role whose data the journey needs, without giving the
+ * dashboard user that role's permissions).
  */
 export async function organisationWithUser(
   request: APIRequestContext,
   { academyType, role, extraRoles = [] }: { academyType: string; role: string; extraRoles?: string[] },
-): Promise<DashboardUser> {
+): Promise<DashboardUser & { admin: OrganisationAdmin }> {
   const run = runId();
   const admin = { name: "E2E Admin", email: `admin@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
 
@@ -73,19 +75,25 @@ export async function organisationWithUser(
   await ok(await request.post(`/api/v1/tenancy/admin/organisations/${org.id}/approve`, { headers: root, data: { reason: "e2e" } }));
 
   const user = { name: "E2E User", email: `${role}@e2e-${run}.example.com`, password: "Passw0rd!e2e" };
-  const orgAdmin = { Authorization: `Bearer ${await login(request, admin.email, admin.password)}` };
+  const adminToken = await login(request, admin.email, admin.password);
+  const orgAdmin = { Authorization: `Bearer ${adminToken}` };
   const created = await ok<{ id: string }>(
     await request.post("/api/v1/identity/users", { headers: orgAdmin, data: { ...user, roles: [role, ...extraRoles] } }),
   );
 
+  const organisation = { id: org.id, name: org.name, slug: org.slug };
   return {
-    organisation: { id: org.id, name: org.name, slug: org.slug },
+    organisation,
     id: created.id,
     email: user.email,
     password: user.password,
     token: await login(request, user.email, user.password),
+    admin: { organisation, token: adminToken },
   };
 }
+
+/** What addUser needs of an organisation admin: the organisation and a token that may create its users. */
+export type OrganisationAdmin = Pick<DashboardUser, "organisation" | "token">;
 
 /**
  * Register and verify an organisation and leave it waiting for the super admin's approval (pending_approval):
@@ -130,7 +138,7 @@ export async function organisationAdmin(request: APIRequestContext, { academyTyp
 }
 
 /** Add a user with `role` to the admin's organisation and return them signed in. */
-export async function addUser(request: APIRequestContext, admin: DashboardUser, role: string): Promise<DashboardUser> {
+export async function addUser(request: APIRequestContext, admin: OrganisationAdmin, role: string): Promise<DashboardUser> {
   const user = { name: `E2E ${role}`, email: `${role}@${admin.organisation.slug}.example.com`, password: "Passw0rd!e2e" };
   const created = await ok<{ id: string }>(
     await request.post("/api/v1/identity/users", { headers: { Authorization: `Bearer ${admin.token}` }, data: { ...user, roles: [role] } }),
