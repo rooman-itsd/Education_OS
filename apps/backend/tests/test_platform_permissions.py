@@ -26,6 +26,13 @@ PUBLIC = {
     ("POST", "/api/v1/tenancy/register/resend"): "resend the verification email: the admin cannot sign in yet",
     ("GET", "/api/v1/billing/plans"): "published price list on the sign-up page",
     ("POST", "/api/v1/billing/webhooks/payment"): "signed by the payment adapter, not a user",
+    # integration-hub: providers call back here; the adapter's verify_inbound or the single-use OAuth state decides
+    ("GET", "/api/v1/integration-hub/oauth/callback/{adapter}"): "OAuth return: single-use state, PKCE, bound host",
+    ("POST", "/api/v1/integration-hub/inbound/{adapter}"): "provider webhook, verified by the adapter",
+    ("GET", "/api/v1/integration-hub/inbound/{adapter}"): "provider handshake, verified by the adapter",
+    ("POST", "/api/v1/integration-hub/inbound/{adapter}/{connection_key}"): "provider webhook, verified by the adapter",
+    ("GET", "/api/v1/integration-hub/inbound/{adapter}/{connection_key}"): "provider handshake or GET callback",
+    ("POST", "/api/v1/integration-hub/inbound/{adapter}/{connection_key}/{channel}"): "provider request, verified",
 }
 
 
