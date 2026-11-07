@@ -24,6 +24,10 @@ from eos_timetable_attendance.application.consumers import (  # noqa: E402
 from eos_timetable_attendance.infrastructure import repository as repo  # noqa: E402
 from eos_timetable_attendance.infrastructure.models import RegistrationRef, SectionMember  # noqa: E402
 
+# The `client` fixture builds the app and creates the tables; these tests use the database directly, so the file
+# passes when run on its own (module-standard: tests pass alone).
+pytestmark = pytest.mark.usefixtures("client")
+
 MODULE = Path(__file__).resolve().parents[2]
 T0 = datetime(2026, 11, 1, 9, tzinfo=UTC)
 

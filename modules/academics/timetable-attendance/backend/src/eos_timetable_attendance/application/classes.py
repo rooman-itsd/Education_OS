@@ -840,11 +840,22 @@ def teaching_schedule(db: Session, a: Actor, day: str | None) -> dict:
     return {"date": iso(on), "items": class_bodies(db, ar.classes_taught_on(db, a.user_id, on))}
 
 
+def my_student_ids(db: Session, a: Actor) -> tuple[str, ...]:
+    """The ids the caller's own allocations and attendance are kept under, the canonical one first. `section_member`
+    holds enrolment-registration's `person_id` (the student-information person, PRD Q3); a student signs in with their
+    identity user id. student-information's person.account-linked event (`person_account`) maps one to the other.
+    Until a link is known the user id itself is the student's id, so data keyed on it still reaches them."""
+    person = ar.person_for_user(db, a.user_id)
+    if person is None or person == a.user_id:
+        return (a.user_id,)
+    return (person, a.user_id)
+
+
 def my_schedule(db: Session, a: Actor, day: str | None) -> dict:
-    """GET /me/schedule (FR-6): the classes of the sections the caller is allocated to on the date. The caller's user
-    id is taken as the `student_id` of the allocation read model (provisional, PRD Q3)."""
+    """GET /me/schedule (FR-6): the classes of the sections the caller is allocated to on the date, found by the
+    caller's person id when their account is linked and by their user id otherwise (my_student_ids)."""
     on = day_or_today(day)
-    sections = ar.sections_of_student_on(db, a.user_id, on)
+    sections = ar.sections_of_student_on(db, my_student_ids(db, a), on)
     return {"date": iso(on), "items": class_bodies(db, ar.classes_of_sections_on(db, sections, on))}
 
 

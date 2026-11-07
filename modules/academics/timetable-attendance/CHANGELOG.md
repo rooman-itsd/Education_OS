@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- A student's own reads find them by person id (issue: students' "my" widgets empty in real use). `section_member`
+  holds enrolment-registration's `person_id`, but `/me/schedule`, `/me/attendance-summary` and `/me/attendance-history`
+  looked the caller up by identity user id. The module now consumes `student-information.person.account-linked` into
+  `person_account` (migration `tt_0004`, `organisation_id` and the forced `tenant_isolation` policy), and the three
+  reads map the caller's user id to their person id through it, falling back to the user id while no link is known.
+  The summary and history name the person id as `student_id` once linked. No contract change.
 - Automatic closing of open attendance sessions at their marking deadline (issue #325, FR-11): the scheduler job
   `timetable-attendance.close-expired-sessions` (`application/auto_close.py`), declared on the `eos.scheduler_jobs` entry
   point (organisation scope, idempotent) and run from `scheduler.job.due`, which the module now consumes for its own job
