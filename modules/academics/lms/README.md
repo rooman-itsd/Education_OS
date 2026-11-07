@@ -82,9 +82,14 @@ pnpm --filter @eos/lms typecheck && pnpm --filter @eos/lms test
 Where the PRD leaves a question open, the simplest reading was built; each is easy to change.
 
 1. **Who teaches and who learns (LQ4, LQ5, LQ6).** lms consumes academic-management `faculty-assignment.*` and
-   enrolment-registration `course-registration.*` / `section-allocation.changed`, and reads `faculty_id` and
-   `person_id` as identity user ids (the token subject), as academic-management reads `faculty_id`. An instructor
-   assigned to one section teaches the whole course space.
+   enrolment-registration `course-registration.*` / `section-allocation.changed`, and reads `faculty_id` as the
+   identity user id (the token subject), as academic-management reads it. A registration's `person_id` is the
+   student-information person. A learner signs in with their identity user id, so lms keeps `person_account` from
+   student-information's `person.account-linked` and maps the caller's user id to their person id for everything a
+   learner does: which course spaces they see, their submissions and quiz attempts, their grades and `/me` reads. New
+   learner work is recorded under the person id once the link is known. Until then the user id itself is the learner's
+   id, and work recorded under it stays theirs after the link arrives. An instructor assigned to one section teaches
+   the whole course space.
 2. **Department scope (LQ13).** The caller's department is not known, so `-department` keys widen nothing yet: a
    department head sees the spaces they teach or learn in. `GET /reports/coursework-activity` answers an empty
    report to a holder of `lms:report:read-department` only, and 403 `department_unverified` when they name a

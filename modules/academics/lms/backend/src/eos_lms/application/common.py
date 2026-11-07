@@ -110,13 +110,30 @@ class Viewer:
         return any(section_visible(visible_section_ids or [], s) for s in self.sections)
 
 
+def learner_ids(db: Session, a: Actor) -> tuple[str, ...]:
+    """The ids the caller's own learner records are kept under, the canonical one first. Registrations arrive keyed by
+    the student-information person id; a learner signs in with their identity user id. student-information's
+    person.account-linked event (person_account) maps one to the other. Until a link is known the user id is the
+    learner's id, so data keyed on it (dev and test data, work done before the link arrived) is still theirs."""
+    person = repo.person_for_user(db, a.user_id)
+    if person is None or person == a.user_id:
+        return (a.user_id,)
+    return (person, a.user_id)
+
+
+def learner_id(db: Session, a: Actor) -> str:
+    """The id new learner work is recorded under: the person id when the caller's account is linked, else the user id,
+    so an instructor sees a submission next to the registration it belongs to."""
+    return learner_ids(db, a)[0]
+
+
 def teaches(db: Session, a: Actor, space: CourseSpace) -> bool:
     return space.course_offering_id in repo.taught_offerings(db, a.user_id)
 
 
 def learner_sections(db: Session, a: Actor, space: CourseSpace) -> set[str | None] | None:
     """The caller's sections when they are a student of the space (registered, in a visible section), else None."""
-    sections = repo.registrations(db, a.user_id).get(space.course_offering_id)
+    sections = repo.registrations(db, learner_ids(db, a)).get(space.course_offering_id)
     if not sections:
         return None
     visible = {s for s in sections if section_visible(space.visible_section_ids or [], s)}

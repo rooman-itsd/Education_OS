@@ -9,9 +9,11 @@
 - `enrolment-registration.course-registration.confirmed` -> member_ref, active (who learns in a course space)
 - `enrolment-registration.course-registration.withdrawn` -> member_ref, withdrawn
 - `enrolment-registration.section-allocation.changed`    -> member_ref.section_id
+- `student-information.person.account-linked`            -> person_account (which person a sign-in account is)
 
-`faculty_id` and `person_id` are read as identity user ids, the token subject, as academic-management reads
-`faculty_id` (docs/prd.md LQ5, LQ6; README "Assumptions to revisit").
+`faculty_id` is read as the identity user id, the token subject, as academic-management reads it (docs/prd.md LQ5).
+A registration's `person_id` is the student-information person; a learner's own reads map their identity user id to
+it through person_account, and use the user id itself while no link is known (LQ6, common.learner_ids).
 
 Delivery is at-least-once and unordered (platform/event-bus/contracts/events.yaml), so:
 - each envelope id is recorded per organisation in `processed_event` before the event is applied, in the handler's
@@ -32,7 +34,7 @@ from eos_core.tenant import resolve_organisation
 from sqlalchemy.orm import Session
 
 from ..infrastructure import repository as repo
-from ..infrastructure.models import InstructorRef, MemberRef, OfferingRef, ProcessedEvent, as_utc
+from ..infrastructure.models import InstructorRef, MemberRef, OfferingRef, PersonAccount, ProcessedEvent, as_utc
 
 log = logging.getLogger("eos.lms")
 
@@ -44,6 +46,7 @@ ASSIGNMENT_ENDED = f"{AM}.faculty-assignment.ended"
 REGISTRATION_CONFIRMED = f"{ER}.course-registration.confirmed"
 REGISTRATION_WITHDRAWN = f"{ER}.course-registration.withdrawn"
 SECTION_CHANGED = f"{ER}.section-allocation.changed"
+ACCOUNT_LINKED = "student-information.person.account-linked"
 
 SUPPORTED_VERSION = 1
 APPLIED, DUPLICATE, IGNORED, STALE = "applied", "duplicate", "ignored", "stale"
@@ -217,6 +220,24 @@ def _section_changed(db: Session, org: str, p: dict, occurred_at: datetime) -> s
     return _registration(db, org, p, occurred_at, status, "to_section_id")
 
 
+# ---------------------------------------------------------------- student-information
+
+
+def _account_linked(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    """Set the person's sign-in account: the user id when linked, none when the link is cleared. One row per person,
+    replaced only by an event that occurred at or after the one that set it."""
+    person = _id(p, "person_id")
+    linked = p.get("linked")
+    if not isinstance(linked, bool):
+        raise ValueError("linked must be true or false")
+    user = _id(p, "identity_user_id") if linked else None
+    row = _row(db, PersonAccount, PersonAccount.person_id, person, org)
+    if row.linked_as_of is not None and occurred_at < as_utc(row.linked_as_of):
+        return STALE
+    row.identity_user_id, row.linked_as_of = user, occurred_at
+    return APPLIED
+
+
 def on_offering_created(db: Session, event) -> str:
     return _receive(db, event, _offering_created)
 
@@ -245,6 +266,10 @@ def on_section_changed(db: Session, event) -> str:
     return _receive(db, event, _section_changed)
 
 
+def on_account_linked(db: Session, event) -> str:
+    return _receive(db, event, _account_linked)
+
+
 # Registered in pyproject.toml under `eos.event_consumers`; module.yaml `consumes_events` lists the same names.
 CONSUMERS = {
     OFFERING_CREATED: on_offering_created,
@@ -254,4 +279,5 @@ CONSUMERS = {
     REGISTRATION_CONFIRMED: on_registration_confirmed,
     REGISTRATION_WITHDRAWN: on_registration_withdrawn,
     SECTION_CHANGED: on_section_changed,
+    ACCOUNT_LINKED: on_account_linked,
 }
