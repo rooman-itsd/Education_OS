@@ -1,11 +1,9 @@
 # Permission catalogue for api-gateway. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# No keys: the gateway mounts no routes. It is two middlewares in apps/backend (security headers, rate
+# limits) that run before any route and need no principal. Limits are configured by environment
+# (config/env.example), not by a permission.
 module: api-gateway
 permissions: []
-#  - key: api-gateway:record:read
-#    description: ...
-#  - key: api-gateway:record:write
-#    description: ...
 roles: []
-#  - name: api-gateway-admin
-#    grants: [api-gateway:record:read, api-gateway:record:write]

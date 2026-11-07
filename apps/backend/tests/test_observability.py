@@ -191,7 +191,12 @@ def test_the_gate_puts_its_verified_organisation_on_the_modules_lines(lines, mon
     from eos_tenancy.application import service as tenancy
 
     monkeypatch.setattr(observability, "_verified_organisation", lambda request: None)
-    monkeypatch.setattr(gateway, "decode_token", lambda token: {"org": "org-kc"})
+    import eos_api_gateway.api.claims as claims
+
+    async def realm_token(token):  # the gate decodes through the gateway's shared, once-per-request decoder
+        return {"org": "org-kc"}
+
+    monkeypatch.setattr(claims, "decode", realm_token)
     monkeypatch.setattr(gateway, "SessionLocal", lambda: type("Db", (), {"close": lambda self: None})())
     monkeypatch.setattr(tenancy, "entitlement", lambda db, org: {"status": "active"})
     monkeypatch.setattr(gateway, "module_entitled", lambda ent, module: True)
