@@ -26,6 +26,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/grievance
   - governance/regulatory-reports
   - governance/iqac-accreditation
   - practice/field-training
