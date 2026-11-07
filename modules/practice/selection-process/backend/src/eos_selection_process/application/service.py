@@ -21,6 +21,7 @@ from ..domain.models import (
     DecisionOutcome,
     DuplicateCandidateError,
     ForbiddenError,
+    InvalidSlotError,
     NoStagesError,
     NotFoundError,
     ProcessNotDraftError,
@@ -969,16 +970,28 @@ class SelectionProcessService:
         if not p:
             raise NotFoundError("Process not found")
 
+        starts_at, ends_at = data["starts_at"], data["ends_at"]
+        starts_at = datetime.fromisoformat(starts_at) if isinstance(starts_at, str) else starts_at
+        ends_at = datetime.fromisoformat(ends_at) if isinstance(ends_at, str) else ends_at
+        if ends_at <= starts_at:
+            raise InvalidSlotError("A slot must end after it starts")
+        if data.get("stage_id") and data["stage_id"] not in {
+            st.id for st in repo.list_stages_for_process(self.db, actor.organisation_id, process_id)
+        }:
+            raise InvalidSlotError("The stage does not belong to this process")
+        if data.get("candidate_id"):
+            cand = repo.get_candidate(self.db, actor.organisation_id, data["candidate_id"])
+            if not cand or cand.process_id != process_id:
+                raise InvalidSlotError("The candidate does not belong to this process")
+
         slot = SlotModel(
             organisation_id=actor.organisation_id,
             process_id=process_id,
             stage_id=data.get("stage_id"),
             candidate_id=data.get("candidate_id"),
             title=data["title"],
-            starts_at=datetime.fromisoformat(data["starts_at"])
-            if isinstance(data["starts_at"], str)
-            else data["starts_at"],
-            ends_at=datetime.fromisoformat(data["ends_at"]) if isinstance(data["ends_at"], str) else data["ends_at"],
+            starts_at=starts_at,
+            ends_at=ends_at,
             status=data.get("status", SlotStatus.SCHEDULED.value),
             location=data.get("location"),
             created_at=utcnow(),

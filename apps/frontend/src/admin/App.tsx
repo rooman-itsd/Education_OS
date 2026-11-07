@@ -13,6 +13,8 @@ import { ModulePage } from './pages/ModulePage';
 import { RoleDashboardsPage } from './pages/RoleDashboardsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AccessPage } from './pages/AccessPage';
+import { OrganisationsPage } from './pages/OrganisationsPage';
+import { SubscriptionsPage } from './pages/SubscriptionsPage';
 
 /** Waits for the session check; nothing renders until it is known. */
 const Gate: React.FC<{ signedIn: boolean; to: string }> = ({ signedIn, to }) => {
@@ -44,6 +46,8 @@ export const App: React.FC = () => {
           <Route path="/modules" element={<ModulesPage />} />
           <Route path="/modules/:moduleId" element={<ModulePage />} />
           <Route path="/audit-logs" element={<AuditPage />} />
+          <Route path="/organisations" element={<OrganisationsPage />} />
+          <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/access" element={<AccessPage />} />
 

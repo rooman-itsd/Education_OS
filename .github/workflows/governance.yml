@@ -45,7 +45,9 @@ jobs:
       - name: One module per PR
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'repo-wide')
         run: |
-          changed=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+          # Three dots: what the PR changes since it left main. Two dots would also list everything merged to main since
+          # then, so a branch that is behind main failed this check for modules it never touched (#492, #507).
+          changed=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }})
           mods=$(echo "$changed" | grep -E '^(modules/[^/]+/[^/]+|platform/[^/]+|integrations/[^/]+)/' | sed -E 's#^(modules/[^/]+/[^/]+|platform/[^/]+|integrations/[^/]+)/.*#\1#' | sort -u)
           n=$(echo "$mods" | grep -c . || true)
           echo "modules touched: $n"; echo "$mods"

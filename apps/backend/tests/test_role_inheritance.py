@@ -60,67 +60,10 @@ LEARNER_GAP = (
     "learner layouts list no selection-process role (#315)"
 )
 KNOWN_UNBACKED: dict[str, tuple[str, list[str]]] = {
-    # alumni: empty catalogue (alumni module, batch #337)
+    # alumni: backed now (alumni-mentee on management-student, #422); the empty entry goes after #424 (batch #337)
     "alumni": (
-        EMPTY,
-        [
-            "management-student alumni.mentoring",
-        ],
-    ),
-    # placement-career: empty catalogue (placement-career module, batch #337)
-    "placement-career": (
-        EMPTY,
-        [
-            "engineering-student placement-career.openings",
-            "hospitality-trainee placement-career.openings",
-            "industry-coordinator placement-career.openings",
-            "industry-liaison placement-career.openings",
-            "law-student placement-career.openings",
-            "management-student placement-career.openings",
-            "placement-officer placement-career.openings",
-            "placement-officer placement-career.drives",
-            "practicum-coordinator placement-career.openings",
-        ],
-    ),
-    # productions: empty catalogue (productions module, batch #318)
-    "productions": (
-        EMPTY,
-        [
-            "actor productions.my-roles",
-            "artist productions.upcoming",
-            "chef-instructor productions.in-preparation",
-            "choreographer productions.in-preparation",
-            "corporate-mentor productions.in-preparation",
-            "dancer productions.my-roles",
-            "designer productions.upcoming",
-            "director productions.in-preparation",
-            "engineering-student productions.upcoming",
-            "ensemble-director productions.in-preparation",
-            "ensemble-director productions.calendar",
-            "exhibition-manager productions.calendar",
-            "exhibition-manager productions.upcoming",
-            "filmmaker productions.upcoming",
-            "hospitality-trainee productions.upcoming",
-            "industry-coordinator productions.calendar",
-            "industry-liaison productions.calendar",
-            "law-student productions.upcoming",
-            "legal-mentor productions.in-preparation",
-            "management-student productions.upcoming",
-            "management productions.upcoming",
-            "moot-court-coordinator productions.calendar",
-            "moot-court-coordinator productions.upcoming",
-            "musician productions.upcoming",
-            "placement-officer productions.calendar",
-            "production-manager productions.calendar",
-            "production-manager productions.upcoming",
-            "production-supervisor productions.in-preparation",
-            "research-lead productions.upcoming",
-            "research-office productions.calendar",
-            "research-scholar productions.upcoming",
-            "stage-manager productions.calendar",
-            "stage-manager productions.upcoming",
-            "studio-instructor productions.in-preparation",
-        ],
+        "nothing unbacked: management-student holds alumni-mentee (#422)",
+        [],
     ),
 }
 KNOWN_UNBACKED_WIDGETS: dict[tuple[str, str], str] = {

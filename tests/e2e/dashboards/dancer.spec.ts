@@ -31,7 +31,16 @@ const WIDGETS: LayoutWidget[] = [
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
   { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
-  { id: "lms.course-materials", module: "academics/lms", batch: "#326" },
+  {
+    id: "lms.course-materials",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Course materials",
+    probe: "/lms/me/course-materials?limit=1",
+    empty: "No new course materials",
+    unavailable: "Course data is not available yet.",
+  },
+
   {
     id: "fees-accounts.fee-dues",
     module: "finance-operations/fees-accounts",
@@ -51,11 +60,46 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Could not load hostel notices",
     forbidden: "Could not load hostel notices",
   },
-  { id: "transport.notices", module: "campus-life/transport", batch: "#338" },
-  { id: "library.loans", module: "campus-life/library", batch: "#338" },
+  {
+    // Texts of NoticesWidget.tsx in PR #473 (sprint batch #338).
+    id: "transport.notices",
+    module: "campus-life/transport",
+    batch: "#338",
+    title: "Transport notices",
+    probe: "/transport/me/notices?limit=1",
+    empty: "No transport notices right now",
+    unavailable: "Transport data is not available yet.",
+  },
+  {
+    // Texts of LoansWidget.tsx in PR #476 (sprint batch #338).
+    id: "library.loans",
+    module: "campus-life/library",
+    batch: "#338",
+    title: "Library loans",
+    probe: "/library/me/loans",
+    empty: "No books on loan",
+    unavailable: "Library data is not available yet.",
+  },
   // The dancer's own widgets.
-  { id: "skill-progress.my-progress", module: "practice/skill-progress", batch: "#329" },
-  { id: "productions.my-roles", module: "practice/productions", batch: "#318" },
+  {
+    id: "skill-progress.my-progress",
+    module: "practice/skill-progress",
+    batch: "#329",
+    title: "My progress",
+    probe: "/skill-progress/me/progress",
+    empty: "No assessments yet",
+    unavailable: "Skill progress data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
+  {
+    id: "productions.my-roles",
+    module: "practice/productions",
+    batch: "#318",
+    title: "My parts",
+    probe: "/productions/my-roles",
+    empty: "No parts yet",
+    unavailable: "Production data is not available yet.",
+  },
   {
     // Texts of UpcomingWidget.tsx in PR #414 (feat/selection-process/module-build), not merged yet.
     id: "selection-process.upcoming",

@@ -1,0 +1,36 @@
+{
+  "batch_key": "cycle-2026-11:prog-bsc-phy:degree:revaluation",
+  "award_kind": "degree",
+  "template_code": "DEG-UG-01",
+  "programme": {
+    "code": "BSC-PHY",
+    "name": "B.Sc. Physics",
+    "level": "undergraduate",
+    "duration_terms": 6,
+    "mode_of_study": "full_time"
+  },
+  "session": "2025-26",
+  "reason": "Revaluation of PHY102 raised the marks",
+  "records": [
+    {
+      "learner": {
+        "person_id": "0b1b8f38-4a7e-4a54-9f0e-4f5b1c7a0001",
+        "apaar_id": "123456789012",
+        "enrolment_number": "EN-2023-0001",
+        "name": "Asha Rao",
+        "date_of_birth": "2004-01-01",
+        "gender": "F",
+        "mother_name": "Sunita Rao",
+        "father_name": "Mohan Rao"
+      },
+      "award_number": "DEG-2026-0001",
+      "result": {"cgpa": 8.6, "percentage": 86, "division": "First Class with Distinction", "result_status": "pass"},
+      "courses": [
+        {"code": "PHY101", "title": "Mechanics", "credits": 4, "grade": "A", "grade_point": 9, "max_marks": 100, "marks": 88},
+        {"code": "PHY102", "title": "Optics, Waves and Sound", "credits": 4, "grade": "A", "grade_point": 9, "max_marks": 100, "marks": 81}
+      ],
+      "term": "6",
+      "issued_on": "2026-11-04"
+    }
+  ]
+}

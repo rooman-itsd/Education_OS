@@ -20,9 +20,10 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Item | Contract | Implementation |
 |---|---|---|
-| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **not implemented**: no backend, migrations or tests |
+| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 28 operations (grading schemes, assessment schemes, exam cycles, papers, sessions, duties); the other 23 operations are not implemented. Migrations `ex_0001` to `ex_0003` and tests exist |
 | examinations widgets `schedule`, `hall-tickets-issued`, `results-pending` | declared in the contract | UI merged (PR #216); their endpoints are not served, so they show "not available" |
-| examinations widgets `exam-duties`, `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
+| examinations widget `exam-duties` | declared in the contract | UI built (frontend only); `GET /me/duties` is served by the exam duty APIs (section 12) |
+| examinations widgets `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
 | timetable-attendance `POST /reports/attendance-eligibility` | merged | **not implemented** (the timetable-attendance backend has timetables only) |
 | fees-accounts `GET /dues` and key `fees-accounts:dues:read` | merged (PR #243) | served by the fees-accounts backend; **not called** from examinations |
 | academic-management events (`term.*`, `course.*`, `offering.*`, `faculty-assignment.*`, `curriculum.published`) | merged (PR #168) | published by academic-management; **not consumed** by examinations (`consumes_events: []`) |
@@ -136,6 +137,74 @@ Found while building the domain rules and tables. None is decided; each is isola
 | Department-scoped keys (`*-department`) | No department is read or assumed; `Actor` has no department | Faizan (Q13) |
 | `offering_ref` | The table follows the PRD's columns, strictly (NOT NULL). It is not written yet; the consumer slice may need to relax it, as timetable-attendance's `offering_ref` had to be, because events arrive unordered and `offering.updated` carries no new values | The consumer slice, and the architectural decision in section 7 |
 | The identity of `staff_id` on duties | Stored as a plain external id (PRD 5.8); no identity lookup or mapping | Faizan (Q11) |
+
+## 10. Choices and gaps of the configuration and exam-cycle APIs
+
+Found while serving the 15 operations of grading schemes, assessment schemes and exam cycles. None is decided; each is
+applied literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| 401 and 403 are not declared (none declares a 401; a 403 only on the three assessment-scheme writes) | The API answers 401 and 403 as `api/deps.py` does. `test_api_contract.py` records the gap and fails when the contract changes | A contract change (Shivani, with Faizan where other modules use the contract) |
+| Statuses the API returns that the contract does not declare | 400 for a bad filter value on `listExamCycles` and `listAssessmentSchemes`, and for a bad `status` value on `changeExamCycleStatus`; 400 `unknown_grading_scheme` on `updateExamCycle` (which declares no 422) | A contract change |
+| A cycle's grading scheme when the request names none and the organisation has no default | 422 `no_grading_scheme`, nothing is chosen. The task text put this rule on assessment schemes, which take no grading scheme; it is applied where the scheme is chosen, on `createExamCycle` | Shivani, to confirm the reading |
+| Whether a cycle `code` is unique | No uniqueness: no constraint, no 409 | Shivani: a uniqueness rule (per period? per organisation?) |
+| Grading-band coverage of 0 to 100 | Each band is validated; coverage is not enforced (see section 8) | Shivani: the inclusive-boundary rule |
+| Locked marks block replacing an assessment scheme (FR-2) | **Not protected yet.** `ensure_editable` is called with `has_locked_marks=False` inline: no marks tables exist and the request is never trusted for it, so only its superseded check is effective. Only a draft can be replaced, so active and superseded schemes are never changed | Persistence-backed validation, deferred until marks management exists |
+| Department scope of `assessment-scheme:write-department` | A holder of `write-department` or `write-all` may write any scheme; no department is read | Faizan (Q13) |
+| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required and `offering_ref` is not filled | The consumer slice |
+| `weightage_percent` is `exclusiveMinimum: 0` in the contract | Enforced by the use case (400); the domain still accepts 0 | None |
+| Assessment components are returned ordered by code | There is no position column; the order of the request is not kept | A decision on component order |
+| A cycle with published results | `GradingScheme.in_use` is true for a cycle at `results_published` or `closed`; nothing sets `results_published` until publication exists | The results slice |
+| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the read models are not filled | The consumer slice |
+
+## 11. Choices and gaps of the paper and session APIs
+
+Found while serving listExamPapers, createExamPapers, getExamPaper, updateExamPaper, listExamSessions,
+scheduleExamSession, getExamSession, rescheduleExamSession and cancelExamSession. None is decided; each is applied
+literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| FR-5: a session falls within the cycle's dates | **Not enforced.** The domain's `ensure_within_cycle` needs the organisation's time zone, which has no source; guessing UTC would refuse valid local times. A test records that a session outside the cycle is accepted | Shivani, Faizan: where the organisation time zone comes from (the same gap exists in timetable-attendance) |
+| FR-5: a student in two overlapping sessions | Not implemented (needs candidates). Two sessions may overlap in time | Q1, Q2 |
+| `ExamPaper.title` and the `title` field of `updateExamPaper` | **Resolved.** Migration `ex_0002` adds a nullable `title` (String 200) to `examinations_exam_paper`: no new table, no policy change (the `ex_0001` policy covers the column), no backfill, no default. `updateExamPaper` stores and returns it, on a draft paper of a draft or scheduled cycle. The contract types `title` as a non-null string, so an untitled paper omits the field and a title can be replaced but not cleared (blank, null and over 200 characters are 400) | None |
+| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Not served: they come from `offering_ref`, which is not filled. The `department_id` filter reads `offering_ref`, so it matches nothing until it is | The consumer slice, and the architectural decision in section 7 |
+| FR-4: the course offering must exist in the local read model | Not checked: the read model is empty, which would make every create impossible. An active assessment scheme for the offering is required (422 `scheme_not_active`) | The consumer slice |
+| `ExamPaper.candidate_count` and `ExamSession.candidate_count` | The paper omits it (not required); the session serves 0 | Candidates (Q1, Q2) |
+| `ExamSession.invigilators_assigned` | Counts the session's `assigned` invigilation duties from `examinations_exam_duty`; no operation creates one yet | The duties slice |
+| A cancelled session's papers | A paper is in at most one session (unique index), so cancelling removes the links and the session is served with no papers; they are in the audit entry and the event | A decision on keeping a history of a session's papers |
+| Papers and sessions in a cycle that is past `scheduled` | Creating and editing papers, scheduling and rescheduling need a draft or scheduled cycle (FR-1, applied literally) | None |
+| Cancelling a session | **Resolved.** A scheduled session can be cancelled while its cycle is `draft`, `scheduled` or `in_progress` (an examination under way can lose a sitting); in `evaluation` or later it is refused (409 `cycle_not_cancellable`). The session must still be scheduled (409 `session_not_scheduled`) and a reason is mandatory (400). Audit and the `exam-session.cancelled` event are unchanged. Rescheduling stays limited to a draft or scheduled cycle | None |
+| Rescheduling | Only a change of time or venue publishes `exam-session.rescheduled`, as the event is defined; a change of `invigilators_required` alone is audited and publishes nothing | Shivani, if the event should cover it |
+| Listing by `date_from` and `date_to` | Days are read in UTC for the same missing time zone; a session is listed when it ends on or after `date_from` and starts on or before `date_to` | The time zone source |
+| Contract: statuses the API returns but the contract does not declare | 400 for a bad filter on `listExamPapers` and `listExamSessions`, and for a missing or blank `reason` on `cancelExamSession`. 401 is declared nowhere and 403 on none of these operations | A contract change |
+| `createExamPapers` unknown cycle, `scheduleExamSession` unknown cycle or paper | 422 (`unknown_exam_cycle`, `unknown_paper`): the contract's create and schedule declare no 404 | None |
+| The request body of `createExamPapers` | The contract names the operation `createExamPapers` (one request, several papers) | None |
+
+## 12. Choices and gaps of the exam duty APIs
+
+Found while serving listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties. The rules below were approved for this
+slice (the owner's answers to the audit's questions); the gaps are applied literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| Assigning: the target | Invigilation needs `exam_session_id`, evaluation and moderation need `exam_paper_id`, exactly one of them (the domain's `Duty`; 400). A session or paper that does not exist for the caller is 422 (`unknown_session`, `unknown_paper`): the contract declares no 404 for assign | None |
+| Assigning: cycle status | Allowed while the cycle is `draft`, `scheduled`, `in_progress` or `evaluation`; 409 `cycle_not_open_for_duties` in `results_published` and `closed` | None |
+| Assigning: session status | Only a `scheduled` session takes duties; a `cancelled` or `completed` one is 409 `session_not_scheduled` | None |
+| Assigning: paper status | Evaluation and moderation ignore the paper's pipeline status | None |
+| Over-assignment | More invigilators than `invigilators_required` may be assigned; `invigilators_assigned` can exceed it | None |
+| Duplicates | The same staff member, type and target while the earlier duty is `assigned` or `completed` is 409 `duty_exists`. A `cancelled` duty frees the target. Migration `ex_0003` adds two partial unique indexes (one for session duties, one for paper duties, over organisation, staff, type and target, only for those two statuses) so two concurrent requests cannot both win: the loser's integrity error becomes the same 409. The tests cover the index directly and the mapping by bypassing the application check; a true two-thread race is not tested because SQLite serialises writers. `ex_0003` fails on a database that already holds two live duties for one target; none can exist, since nothing wrote duties before this slice | None |
+| Overlapping invigilation | 409 `invigilation_overlap` with the clashing session id; back-to-back sessions are allowed; only `assigned` invigilation duties count, and a cancelled session never does | None |
+| Session cancellation | Does not cancel its duties (no cascade): they stay `assigned` and visible in `GET /duties`. They are left out of the clash check and of the default `/me/duties`, and are in `/me/duties?include_past=true` | A decision on cascading, if wanted |
+| Cancelling a duty | Needs a reason and an `assigned` duty (409 `duty_not_assigned` otherwise); works in any cycle status. A foreign or unknown id is 404 | None |
+| `staff_id` | **Stored as given, with no identity lookup.** Nothing checks that the user exists or belongs to the organisation: a made-up or foreign uuid is accepted, and `/me/duties` matches it to the token's user id. The identity SDK does not exist | Faizan (Q11), when the identity SDK ships |
+| Department scope of `listExamDuties` (Q13) | A holder of `duty:read-all` sees every duty of the organisation. `duty:read-department` alone gets an empty list (`{"items": [], "total": 0}`), not a 403, because the caller's department is unknown. The filters are checked first, so a bad one is still a 400 | Faizan (Q13) |
+| Fields of `ExamDuty` | `starts_at`, `ends_at` and `venue_label` are the session's, for invigilation, and null for evaluation and moderation. `course_code` is read from the offering read model for evaluation and moderation, and is null while it has no row (it is not filled yet). `department_id` is not part of the contract and is not served | The consumer slice |
+| `GET /me/duties` | The caller's `assigned` duties only. Default: invigilation duties whose session is scheduled and has not ended, plus every paper duty (no date). `include_past=true`: every assigned duty, including past and cancelled sessions'. Ordered by session start, the undated after them in the order assigned. The response is `{items}` with no total, as the contract says | None |
+| `GET /duties` order | Newest first; the contract gives none | None |
+| Roles | Unchanged: the controller holds `read-all`, `read-department` and `assign` but not `read-own` (so it gets 403 on `/me/duties`); the department head holds `read-department` (an empty list); faculty hold `read-own` (403 on `GET /duties`); student and viewer hold none | None |
+| Contract: undeclared statuses | 400 for a bad filter on `listExamDuties`, for a missing or blank `reason` on `cancelExamDuty` and for a bad `include_past` on `listMyDuties`; `listMyDuties` declares only 200. No 401, and no 403 on these operations. `test_api_contract.py` records them | A contract change |
 
 ## 9. Evidence limits
 

@@ -30,7 +30,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No open calls right now",
     unavailable: "Open calls are not available yet.",
   },
-  { id: "projects.active", module: "practice/projects", batch: "#339" },
+  {
+    id: "projects.active",
+    module: "practice/projects",
+    batch: "#339",
+    title: "Active projects",
+    probe: "/projects/projects?status=active&limit=1",
+    empty: "No active projects",
+    unavailable: "Projects data is not available yet.",
+  },
   {
     id: "budget-grants.budget-vs-spend",
     module: "finance-operations/budget-grants",
@@ -40,8 +48,25 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No grants to show",
     unavailable: "Budget data is not available yet.",
   },
-  { id: "productions.calendar", module: "practice/productions", batch: "#318" },
-  { id: "regulatory-reports.due", module: "governance/regulatory-reports", batch: "#343" },
+  {
+    id: "productions.calendar",
+    module: "practice/productions",
+    batch: "#318",
+    title: "Production calendar",
+    probe: "/productions/calendar",
+    empty: "Nothing scheduled",
+    unavailable: "Production data is not available yet.",
+  },
+  {
+    id: "regulatory-reports.due",
+    module: "governance/regulatory-reports",
+    batch: "#343",
+    title: "Regulatory filings due",
+    probe: "/regulatory-reports/stats/due?scope=mine",
+    empty: "Nothing due",
+    unavailable: "Regulatory report data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;

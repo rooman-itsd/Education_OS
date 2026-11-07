@@ -101,6 +101,11 @@ def check_stage_sequences(stages: list[dict]) -> None:
         raise DuplicateStageSequenceError(sorted(repeated))
 
 
+class InvalidSlotError(DomainError):
+    def __init__(self, message: str) -> None:
+        super().__init__("invalid_slot", message, status_code=422)
+
+
 class AlreadyDecidedError(DomainError):
     def __init__(self, message: str = "Decision already recorded by panelist for this stage") -> None:
         super().__init__("already_decided", message, status_code=409)

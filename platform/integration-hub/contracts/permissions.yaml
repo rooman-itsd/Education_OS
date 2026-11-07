@@ -1,11 +1,59 @@
 # Permission catalogue for integration-hub. Registered with platform/identity at startup.
 # Format: <module>:<resource>:<action>
+#
+# Modules use ports through packages/sdk under their own permission checks; no person needs a key of this catalogue to
+# have a certificate issued or a meeting created. These keys cover configuring connections, watching them, and a
+# person linking their own accounts. Role names are a proposal: docs/prd.md open question 8.
 module: integration-hub
-permissions: []
-#  - key: integration-hub:record:read
-#    description: ...
-#  - key: integration-hub:record:write
-#    description: ...
-roles: []
-#  - name: integration-hub-admin
-#    grants: [integration-hub:record:read, integration-hub:record:write]
+permissions:
+  - key: integration-hub:adapter:read
+    description: See the ports, the installed adapters and the providers each offers.
+  - key: integration-hub:connection:read
+    description: See the organisation's connections, which credentials are set (names and fingerprints only) and their health.
+  - key: integration-hub:connection:manage
+    description: >-
+      Create connections, change their settings, set and rotate credentials, authorise with a provider, enable and
+      disable them, switch between mock and sandbox.
+  - key: integration-hub:connection:go-live
+    description: Switch a connection to live mode, after which real people's data reaches the provider.
+  - key: integration-hub:delivery:read
+    description: See the delivery log (outbound operations and provider callbacks); never payloads.
+  - key: integration-hub:delivery:retry
+    description: Retry a failed or dead-lettered delivery.
+  - key: integration-hub:account-link:read
+    description: See which people linked which provider accounts, with status. No tokens and no collected data.
+  - key: integration-hub:account-link:revoke
+    description: Revoke a person's account link on their behalf, with a reason.
+  - key: integration-hub:self:link
+    description: Link, see and disconnect one's own accounts (a device, a document wallet).
+  - key: platform:integration-hub:admin
+    description: >-
+      Super admin only. The cross-organisation overview: connections by mode and health, missing platform
+      credentials, dead letters. Platform credentials themselves arrive as environment variables and are not
+      editable through the API.
+
+roles:
+  - name: org-admin
+    description: Configures and watches the organisation's integrations.
+    grants:
+      - integration-hub:adapter:read
+      - integration-hub:connection:read
+      - integration-hub:connection:manage
+      - integration-hub:connection:go-live
+      - integration-hub:delivery:read
+      - integration-hub:delivery:retry
+      - integration-hub:account-link:read
+      - integration-hub:account-link:revoke
+  # Every person in an organisation holds member (platform/identity), so everyone may link their own accounts. Whether
+  # a link is offered at all depends on the organisation having an enabled person-scope connection for that port.
+  - name: member
+    description: Every signed-in person of an organisation.
+    grants:
+      - integration-hub:self:link
+  # A super admin is handed only the platform: keys some role grants (eos_core.config.permissions_for); same pattern
+  # as platform/billing and messaging-providers.
+  - name: super-admin
+    description: Platform-wide overview of integrations.
+    grants:
+      - integration-hub:adapter:read
+      - platform:integration-hub:admin

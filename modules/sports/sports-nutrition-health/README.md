@@ -74,6 +74,10 @@ reassigned from user X to user Y stays linked to X here: X keeps seeing that ath
 and Y sees nothing. The fix is to add `user_id` to athlete-performance's `athlete.updated` event, then consume that
 event here and move the link.
 
+`sports/sports-nutrition-health` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts its router
+under `/api/v1/sports-nutrition-health` behind the entitlement gate, and in
+`apps/frontend/config/modules.enabled.yaml`, which registers its widgets.
+
 ## Layout
 | Path | Purpose |
 |---|---|

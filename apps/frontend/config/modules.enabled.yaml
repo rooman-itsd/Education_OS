@@ -12,26 +12,46 @@
 modules:
   - academics/academic-management
   - academics/examinations
+  - academics/lms
   - campus-life/hostel
+  - campus-life/library
+  - campus-life/transport
   - facilities/asset-management
   - facilities/facility-booking
   - facilities/inventory-equipment
   - facilities/maintenance
+  - facilities/sports-facilities
   - finance-operations/budget-grants
   - finance-operations/e-office
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/grievance
+  - governance/regulatory-reports
+  - governance/iqac-accreditation
+  - practice/field-training
   - practice/selection-process
   - practice/portfolio
+  - practice/productions
+  - practice/projects
+  - practice/skill-progress
+  - sports/athlete-performance
+  - sports/sports-nutrition-health
+  - sports/tournament-events
+  - sports/training-video-analysis
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
+  - support/amc-vendor-support
   - support/helpdesk
+  - support/sla-management
+  - support/incident-management
 platform:
   - billing
   - tenancy
   - identity
   - audit
+  - reporting
+  - workflow
 integrations:
   - payment-sbiepay

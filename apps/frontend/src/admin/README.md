@@ -85,3 +85,22 @@ trail, which the API itself records as a super admin action. The columns are wha
 current name (or "System"), module, action, entity and summary, with a badge on a redacted record; search and the
 module filter work on the records loaded. Records are append-only, so the page has no edit or delete. Export waits for
 `POST /records/export`, which the API does not serve yet. In preview mode the page shows labelled sample events.
+The Dashboard's **Recent Activity** panel shows the five newest of the same records (organisation admin: their
+organisation's; super admin: the platform's), with "View all" leading here; preview mode keeps its sample events.
+
+
+## Organisations and Subscriptions (super admin)
+
+`#/organisations` (`pages/OrganisationsPage.tsx`) lists every organisation from `GET /tenancy/admin/organisations`
+with its status, plan and trial, filtered on the page by status, plan, academy type and a search. Clicking a name shows
+its details (`GET /tenancy/admin/organisations/{id}`: status reason, subscription, entitled modules, scheduled deletion).
+A super admin can **suspend** an active organisation and **reactivate** a suspended one (`PUT …/{id}/status`); the
+reason is required, and tenancy records it in the audit trail (`infra/runbooks/suspend-a-tenant.md` says when).
+Registrations are approved on the Dashboard. Deleting, purging, exporting and impersonating stay API-only.
+
+`#/subscriptions` (`pages/SubscriptionsPage.tsx`) lists the organisations that have a plan, with the published plans
+from `GET /billing/plans`. A super admin can **change the plan** or **extend a trial** to the end of a chosen day
+(`PUT /billing/admin/subscriptions/{id}`), each with a required reason that billing records.
+
+Both pages and their sidebar entries are for a super admin only (an organisation admin sees neither; the API refuses
+them anyway). Preview mode shows labelled samples and calls nothing.

@@ -185,6 +185,122 @@ def test_the_lookup_is_found_on_the_entry_point_group(monkeypatch):
         organisations.reset_cache()
 
 
+# --- a refused registration (tenancy archives or suspends an organisation still pending) -------------------------
+
+
+def test_a_refused_registration_mails_the_reason_once():
+    """Replaces tenancy's eos_core.notify stub, which only logged this email (#316 follow-up)."""
+    o = Org.create(SessionLocal())
+    e = event(
+        "tenancy.organisation.archived",
+        o.id,
+        {"organisation_id": o.id, "reason": "Incomplete documentation", "previous_status": "pending_approval"},
+    )
+    deliver_status(e)
+    deliver_status(e)  # redelivered: nobody is mailed twice
+    (message,) = messages_of(o.id)
+    assert message.template_key == "tenancy.organisation.rejected" and message.status == "sent"
+    (mail,) = [m for m in transport_module.sent if m.get("to") == o.admin.email]
+    assert "was not approved" in mail["subject"] and NAME in mail["subject"]
+    assert "Incomplete documentation" in mail["body"]
+
+
+def test_suspending_a_pending_registration_is_also_a_rejection():
+    o = Org.create(SessionLocal())
+    deliver_status(
+        event("tenancy.organisation.suspended", o.id, {"reason": "spam", "previous_status": "pending_verification"})
+    )
+    assert [m.template_key for m in messages_of(o.id)] == ["tenancy.organisation.rejected"]
+
+
+def test_closing_an_active_organisation_is_not_a_rejection():
+    o = Org.create(SessionLocal())
+    deliver_status(event("tenancy.organisation.archived", o.id, {"reason": "closed", "previous_status": "active"}))
+    assert [m.template_key for m in messages_of(o.id)] == ["tenancy.organisation.closed"]
+
+
+def test_without_previous_status_nothing_is_guessed():
+    """An event from before tenancy contract 0.3.0 cannot say whether it was a rejection: no email rather than the
+    wrong one."""
+    o = Org.create(SessionLocal())
+    deliver_status(event("tenancy.organisation.archived", o.id, {"reason": "registration rejected"}))
+    assert messages_of(o.id) == []
+
+
+def deliver_status(e) -> None:
+    with organisation_scope(e.organisation_id), SessionLocal() as session:
+        consumers.CONSUMERS[e.name](session, e)
+        session.commit()
+
+
+# --- suspension, closure, reactivation and deletion of an active organisation ----------------------------------
+
+
+def _one_mail(o, e):
+    deliver_status(e)
+    deliver_status(e)  # redelivered: nobody is mailed twice
+    (message,) = messages_of(o.id)
+    (mail,) = [m for m in transport_module.sent if m.get("to") == o.admin.email]
+    return message, mail
+
+
+def test_suspending_an_active_organisation_mails_the_reason():
+    o = Org.create(SessionLocal())
+    message, mail = _one_mail(
+        o, event("tenancy.organisation.suspended", o.id, {"reason": "Unpaid invoice", "previous_status": "active"})
+    )
+    assert message.template_key == "tenancy.organisation.suspended"
+    assert "suspended" in mail["subject"] and "Unpaid invoice" in mail["body"]
+
+
+def test_closing_an_active_organisation_mails_the_reason():
+    o = Org.create(SessionLocal())
+    message, mail = _one_mail(
+        o, event("tenancy.organisation.archived", o.id, {"reason": "Contract ended", "previous_status": "active"})
+    )
+    assert message.template_key == "tenancy.organisation.closed" and "Contract ended" in mail["body"]
+
+
+def test_reactivating_a_suspended_organisation_mails_that_it_is_back():
+    o = Org.create(SessionLocal())
+    message, mail = _one_mail(
+        o, event("tenancy.organisation.activated", o.id, {"reason": "paid", "previous_status": "suspended"})
+    )
+    assert message.template_key == "tenancy.organisation.reactivated" and "active again" in mail["subject"]
+
+
+def test_a_first_activation_after_approval_sends_nothing_here():
+    """tenancy.organisation.approved already mails "your academy is live"; activated after it must not mail too."""
+    o = Org.create(SessionLocal())
+    deliver_status(event("tenancy.organisation.activated", o.id, {"organisation_id": o.id}))
+    deliver_status(event("tenancy.organisation.activated", o.id, {"previous_status": "pending_approval"}))
+    assert messages_of(o.id) == []
+
+
+def test_a_deletion_request_mails_the_date_the_data_goes():
+    o = Org.create(SessionLocal())
+    message, mail = _one_mail(
+        o,
+        event(
+            "tenancy.organisation.archived",
+            o.id,
+            {"reason": "deletion requested", "delete_after": "2026-12-02T10:00:00+00:00", "requested_by": "sa-1"},
+        ),
+    )
+    assert message.template_key == "tenancy.organisation.deletion_scheduled"
+    assert "2026-12-02" in mail["body"] and "T10:00" not in mail["body"]
+
+
+def test_every_status_event_is_routed_to_the_dispatcher():
+    assert set(consumers.STATUS_EVENTS) == {
+        "tenancy.organisation.archived",
+        "tenancy.organisation.suspended",
+        "tenancy.organisation.activated",
+    }
+    for name in consumers.STATUS_EVENTS:
+        assert consumers.CONSUMERS[name] is consumers.on_status_changed
+
+
 def test_an_approved_package_change_mails_the_admin_once_with_the_new_package():
     """Replaces tenancy's eos_core.notify stub, which only logged this email (#316 follow-up)."""
     o = Org.create(SessionLocal())

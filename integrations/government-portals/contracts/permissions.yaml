@@ -1,0 +1,15 @@
+# Permission catalogue for government-portals. Registered with platform/identity at startup.
+# Format: <module>:<resource>:<action>
+#
+# Preparing packages and recording filings is done by regulatory-reports and iqac-accreditation under their own
+# permissions, through the regulatory-submission port. This catalogue covers only the read-only views. Whether the
+# governance role should hold it too is docs/prd.md open question 6.
+module: government-portals
+permissions:
+  - key: government-portals:package:read
+    description: See the forms this adapter prepares and the organisation's prepared packages, files and filing records.
+roles:
+  - name: org-admin
+    description: Support view of submission packages.
+    grants:
+      - government-portals:package:read

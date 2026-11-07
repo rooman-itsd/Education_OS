@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/amc-vendor-support`) and
+  `apps/frontend/config/modules.enabled.yaml` (`amc-vendor-support.contracts-expiring` on the Support Staff
+  dashboard, the only dashboard that lists it).
 - Module scaffolded.
 - Contracts proposed: AMC contracts referencing procurement vendors, covered items, activation, renewal and
   termination, expiry worked out when read; engagements (breakdown calls and preventive visits); `GET /coverage`;
@@ -20,3 +23,5 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   migration test, settings test, row-level security on Postgres (opt-in).
 - Widget `amc-vendor-support.contracts-expiring` (GET /stats/contracts-expiring) with loading, empty and error states
   following the widget error convention; typed API client in `frontend/src/api/client.ts`; vitest widget tests.
+- NUL characters never reach the database: Postgres cannot store them in text, so a NUL in a request body is a 422
+  and in the URL a 404 (path ids) or 422 (query parameters), instead of a 500 (`api/deps.py` `no_nul`, `Strict`).

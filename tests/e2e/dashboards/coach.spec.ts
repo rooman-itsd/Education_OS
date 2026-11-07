@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { organisationWithUser, type DashboardUser } from "./organisation";
-import { dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Coach dashboard (layout platform/identity/config/dashboards/coach.yaml, which extends the Faculty layout; the role
@@ -13,11 +13,11 @@ import { dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFo
  *   state, or says its data is not available while the backend is missing (the coach holds the faculty role's
  *   permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- *   facility-booking is enabled but exports facility-booking.bookings-today, not the facility-booking.bookings the
- *   layout lists, so that widget skips until sprint batch #331; athlete-performance.session-plan and wearables.alerts
- *   are not built in v1 (see NOT_BUILT);
- * - the data journeys are fixme: each needs a sports module enabled, and the coach's scoping in tournament-events
- *   and training-video-analysis needs the athlete-performance.athlete.registered event.
+ *   facility-booking.bookings (upcoming bookings on the resources the coach approves) is checked by its empty state,
+ *   then by a booking facility staff make on a track the coach approves;
+ *   wearables.alerts is not built in v1 (see NOT_BUILT);
+ * - the sports data journeys are fixme: each needs a sports module enabled, and the coach's scoping in
+ *   tournament-events and training-video-analysis needs the athlete-performance.athlete.registered event.
  *
  * The sports suite is the profile's one specialized suite, so Trial includes it; facilities is not in Trial, so the
  * super admin moves the organisation to Standard first. The empty-state tests run before any data is created
@@ -30,8 +30,24 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
@@ -44,6 +60,16 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
   },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
+  },
   // The coach's own widgets.
   {
     id: "athlete-performance.squad-overview",
@@ -54,7 +80,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No athletes yet",
     unavailable: "Athlete performance data is not available yet.",
   },
-  { id: "athlete-performance.session-plan", module: "sports/athlete-performance", batch: "#330" },
+  {
+    id: "training-video-analysis.session-plan",
+    module: "sports/training-video-analysis",
+    batch: "#330",
+    title: "Session plan",
+    probe: "/training-video-analysis/sessions?status=scheduled&limit=1",
+    empty: "No sessions scheduled",
+    unavailable: "Training video data is not available yet.",
+  },
   {
     id: "training-video-analysis.reviews-pending",
     module: "sports/training-video-analysis",
@@ -65,13 +99,12 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Training video data is not available yet.",
   },
   {
-    // Texts of facility-booking.bookings-today, the widget the module exports today (BookingsTodayWidget.tsx).
     id: "facility-booking.bookings",
     module: "facilities/facility-booking",
     batch: "#331",
-    title: "Bookings today",
-    probe: "/facility-booking/summary",
-    empty: "No bookings today",
+    title: "Upcoming bookings",
+    probe: "/facility-booking/bookings?scope=managed&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
     unavailable: "Booking data is not available yet.",
   },
   // An integration, not a module: listed by its folder so the skip names where it lives.
@@ -92,23 +125,28 @@ const WIDGETS: LayoutWidget[] = [
  * (A local helper: widgets.ts has no notion of a widget that is not planned.)
  */
 const NOT_BUILT: Record<string, string> = {
-  "athlete-performance.session-plan":
-    "not built: training plans and sessions belong to training-video-analysis, and sprint batch #330 proposes moving this widget there",
   "wearables.alerts": "not built in v1: integrations/wearables is a placeholder for after launch (docs/team/sprint-v1.0.md)",
 };
 const why = (w: LayoutWidget) => NOT_BUILT[w.id] ?? waitingFor(w);
 
 const SHIPPED = WIDGETS.filter(shipped);
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
+let admin: DashboardUser;
 let user: DashboardUser;
+/** Facility staff: they run the resource register, so they set up the track the coach approves. */
+let facilityStaff: DashboardUser;
 /** Per shipped widget id: what its GET answered the coach. */
 const status: Record<string, number> = {};
+const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  user = await organisationWithUser(request, { academyType: "sports-college", role: "coach" });
-  await standardPlan(request, user.organisation.id);
+  admin = await organisationAdmin(request, { academyType: "sports-college" });
+  await standardPlan(request, admin.organisation.id);
+  user = await addUser(request, admin, "coach");
+  facilityStaff = await addUser(request, admin, "facility-staff");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -176,10 +214,39 @@ test.describe("with sports data", () => {
     // dates with its venue.
   });
 
-  test.fixme("facility-booking.bookings lists a booking made for later today", async () => {
-    // facilities/facility-booking is enabled, but the layout's facility-booking.bookings is not exported (the module
-    // exports facility-booking.bookings-today; sprint batch #331 builds or renames it). Then, as in
-    // facility-staff.spec.ts: a resource type and a resource the coach manages, a booking later today
-    // (POST /facility-booking/resource-types, /resources, /bookings), and expect its time window and resource name.
+});
+
+test.describe("with facility data", () => {
+  test("facility-booking.bookings lists a booking later today on a track the coach approves", async ({ page, request }) => {
+    const w = byId("facility-booking.bookings");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the facility-booking API answered ${status[w.id]} to the coach role`);
+    // As in facility-staff.spec.ts: the default slot grid is 30 minutes and "today" is the organisation's date in
+    // FACILITY_BOOKING_TIMEZONE (UTC by default; the API inherits this process's environment), so book the next free
+    // half hour, unless that runs past midnight in that zone. The coach sees bookings on the resources whose
+    // approvers list them (scope=managed).
+    const zone = process.env.FACILITY_BOOKING_TIMEZONE || "UTC";
+    const day = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone }); // YYYY-MM-DD
+    const slot = 30 * 60_000;
+    const start = new Date(Math.ceil((Date.now() + 5 * 60_000) / slot) * slot);
+    const end = new Date(start.getTime() + slot);
+    test.skip(day(end) !== day(new Date()), `too close to midnight in ${zone}`);
+    const type = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resource-types", { name: "Track" });
+    const resource = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resources", {
+      name: "Athletics track",
+      type_id: type.id,
+      capacity: 30,
+      approver_user_ids: [user.id],
+    });
+    await created(request, facilityStaff, "/facility-booking/bookings", {
+      resource_id: resource.id,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+      title: "Sprint session",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "Upcoming bookings");
+    await expect(panel.getByText("No upcoming bookings")).toHaveCount(0);
+    await expect(panel.getByText("Athletics track · Sprint session")).toBeVisible();
   });
 });

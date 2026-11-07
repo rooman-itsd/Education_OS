@@ -3,6 +3,19 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The Research Lead layout (agriculture-college) also holds `projects-guide`. It lists `projects.to-review`, whose
+  request needs `projects:guidance:read`, and `projects-coordinator` alone does not grant it, so the widget answered
+  403. Every other layout with that widget already held the role (found by the e2e journey in #537).
+- The Coach layout names `training-video-analysis.session-plan` and the Athlete layout
+  `training-video-analysis.training-schedule`, in place of the athlete-performance ids that module never built:
+  training plans and sessions belong to training-video-analysis (#330).
+- The Support Staff, Organisation Admin and Management layouts list the roles of the support modules
+  (knowledge-base, incident-management, sla-management, amc-vendor-support) that each module's catalogue names as its
+  default for that profile role. Support staff hold `knowledge-base-author` and `amc-vendor-support-coordinator`
+  instead of the two read-only roles (they keep every key those held and gain article writing and vendor calls);
+  the Organisation Admin layout holds the editor, contract-manager, incident viewer and SLA admin roles; Management
+  holds the four viewers. Roles of a module that is not built yet grant nothing, so the lists cost nothing until it
+  ships.
 - Every dashboard layout lists the module roles its profile role holds in `module_roles` (`projects-member`,
   `portfolio-learner`, `lms-instructor`, `field-training-coordinator`, ...), and the base `student` and `faculty`
   layouts list the roles of lms, library, transport, timetable-attendance and examinations. 221 of 278
