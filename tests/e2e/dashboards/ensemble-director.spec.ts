@@ -10,11 +10,14 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  * - always: an ensemble director signs in and lands on their dashboard;
  * - for every widget whose module is in apps/frontend/config/modules.enabled.yaml: the panel renders by its
  *   registered title and shows its empty state, or says its data is not available while the backend is missing;
- * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it:
- *   productions (#318) and selection-process (#322, PR #414);
- * - a data journey once inventory-equipment.low-stock has shipped and its API answers the ensemble-director role:
- *   an instrument the store staff stock below its reorder level shows in the director's low-stock panel (the
- *   director holds inventory-equipment:stock:read but not stock:manage, so a facility-staff user stocks it).
+ * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
+ * - data journeys, each once its widget has shipped and its API answers the ensemble-director role:
+ *   - an instrument the store staff stock below its reorder level shows in the low-stock panel (the director holds
+ *     inventory-equipment:stock:read but not stock:manage, so a facility-staff user stocks it);
+ *   - a recital the director puts into preparation shows in productions.in-preparation, and one they schedule
+ *     shows in productions.calendar (the music-academy profile role holds productions:production:manage);
+ *   - an orchestra audition the director opens shows in selection-process.open-calls (selection-process-coordinator
+ *     through module_roles).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the
  * organisation to Standard first. The empty-state tests run before any data is created (serial mode). Loading states
@@ -140,16 +143,63 @@ test.describe("with inventory-equipment data", () => {
   });
 });
 
-// Backend-dependent: these need their module's API to create the data through, so nothing here is faked.
 test.describe("with productions and selection data", () => {
-  test.fixme("productions.in-preparation and productions.calendar show a recital in rehearsal", async () => {
-    // practice/productions (sprint batch #318) has no frontend or API yet. Then: create a production ("Spring
-    // recital") with a performance date in the next weeks, move it into preparation, and expect it in both panels.
+  test("productions.in-preparation and productions.calendar show the director's recitals", async ({ page, request }) => {
+    const prep = byId("productions.in-preparation");
+    const cal = byId("productions.calendar");
+    test.skip(!shipped(prep), waitingFor(prep));
+    test.skip(!ready(prep.id), `the productions API answered ${status[prep.id]} to the ensemble-director role`);
+    test.skip(!ready(cal.id), `the productions API answered ${status[cal.id]} to the ensemble-director role`);
+    // A production is in one panel or the other: in-preparation lists planned and in-preparation ones, the calendar
+    // scheduled ones (PREPARING_STATUSES and CALENDAR_STATUSES in productions' domain/rules.py). So the director
+    // puts one recital into preparation and schedules another two weeks out, at 19:00 in this host's time zone,
+    // which the browser shares (CalendarWidget shows the venue and shortTime).
+    const spring = await created<{ id: string }>(request, user, "/productions/productions", { title: "Spring recital", kind: "recital" });
+    await created(request, user, `/productions/productions/${spring.id}/preparation`, {});
+    const evening = await created<{ id: string }>(request, user, "/productions/productions", { title: "Chamber evening", kind: "recital" });
+    const starts = new Date(Date.now() + 14 * 86_400_000);
+    starts.setHours(19, 0, 0, 0);
+    await created(request, user, `/productions/productions/${evening.id}/schedule`, {
+      starts_at: starts.toISOString(),
+      ends_at: new Date(starts.getTime() + 2 * 60 * 60_000).toISOString(),
+      venue: "Concert hall",
+    });
+    await signIn(page, user);
+
+    const preparing = widget(page, "In preparation");
+    await expect(preparing.getByText("Nothing in preparation")).toHaveCount(0);
+    const prepRow = preparing.getByRole("list", { name: "In preparation" }).getByRole("listitem").filter({ hasText: "Spring recital" });
+    await expect(prepRow).toContainText("ready to schedule");
+    await expect(prepRow).toContainText("No date");
+    await expect(preparing.getByText("Chamber evening")).toHaveCount(0);
+
+    const calendar = widget(page, "Production calendar");
+    await expect(calendar.getByText("Nothing scheduled")).toHaveCount(0);
+    const calRow = calendar.getByRole("list", { name: "What is on" }).getByRole("listitem").filter({ hasText: "Chamber evening" });
+    await expect(calRow).toContainText("Concert hall · 19:00");
+    await expect(calRow).toContainText("Recital");
+    await expect(calendar.getByText("Spring recital")).toHaveCount(0);
   });
 
-  test.fixme("selection-process.open-calls lists an audition opened for the orchestra", async () => {
-    // practice/selection-process (sprint batch #322, PR #414). As the ensemble director
-    // (selection-process-coordinator through module_roles) create a process with a stage and open it; expect
-    // "No open calls right now" gone and the row with its title, "1 stage" and "Open".
+  test("selection-process.open-calls lists an audition opened for the orchestra", async ({ page, request }) => {
+    const w = byId("selection-process.open-calls");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the selection-process API answered ${status[w.id]} to the ensemble-director role`);
+    // As in moot-court-coordinator.spec.ts: the director names the kind of selection, creates a process with one
+    // stage and opens it for registration.
+    const type = await created<{ id: string }>(request, user, "/selection-process/process-types", { name: "Orchestra audition" });
+    const audition = await created<{ id: string }>(request, user, "/selection-process/processes", {
+      type_id: type.id,
+      title: "Symphony orchestra auditions 2026",
+      stages: [{ name: "Prepared excerpt", sequence: 1 }],
+    });
+    await created(request, user, `/selection-process/processes/${audition.id}/open`, {});
+    await signIn(page, user);
+
+    const panel = widget(page, "Open Calls");
+    await expect(panel.getByText("No open calls right now")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "Open selection calls" }).getByRole("listitem").filter({ hasText: "Symphony orchestra auditions 2026" });
+    await expect(row).toContainText("1 stage");
+    await expect(row).toContainText("Open");
   });
 });
