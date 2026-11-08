@@ -2,7 +2,7 @@
 
 **Domain:** campus-life
 **Kind:** feature
-**Status:** in-progress (contract and backend; not enabled in `apps/backend` yet; widgets and pages to follow)
+**Status:** in-progress (contract, backend and the three widgets built; enabled in `apps/backend` and `apps/frontend`)
 
 Campus placement for jobs: company records, drives, job openings, applications and offers.
 
@@ -124,10 +124,10 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting, install and CI:** a `campus-life/placement-career` entry in `apps/backend/config/modules.enabled.yaml`
-  (a separate PR) mounts the router at `/api/v1/placement-career` (package `eos_placement_career`) behind the
+- **Mounting, install and CI:** the `campus-life/placement-career` entry in `apps/backend/config/modules.enabled.yaml`
+  mounts the router at `/api/v1/placement-career` (package `eos_placement_career`) behind the
   entitlement gate; `py-setup.sh`, the API image, CI and the auto-deploy then install it, run its tests and upgrade its
-  chain from that entry. Until then CI runs its suite with the disabled modules.
+  chain from that entry. `apps/frontend/config/modules.enabled.yaml` registers its three widgets.
 - **Identity:** tokens carry `sub`, `org` and `roles`; the layouts' `module_roles` and `extends` give the roles their
   keys (`eos_core.config.permissions_for`). The applicant's name is read from a `name` claim when the token has one.
 - **Notification:** every event is meant for notification, which has no handler for them yet. No module consumes them

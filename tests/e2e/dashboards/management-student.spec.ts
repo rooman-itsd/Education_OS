@@ -118,7 +118,16 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "Field training data is not available yet.",
   },
   // The learner view of openings (#424 keeps this id for learners and adds openings-summary for staff).
-  { id: "placement-career.openings", module: "campus-life/placement-career", batch: "#337" },
+  {
+    id: "placement-career.openings",
+    module: "campus-life/placement-career",
+    batch: "#337",
+    title: "Job openings",
+    probe: "/placement-career/me/openings?limit=1",
+    empty: "No openings right now",
+    unavailable: "Placement data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   { id: "alumni.mentoring", module: "campus-life/alumni", batch: "#337" },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
