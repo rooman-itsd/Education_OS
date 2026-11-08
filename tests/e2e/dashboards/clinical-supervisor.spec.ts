@@ -29,8 +29,24 @@ const TITLE = "Clinical Supervisor";
 
 const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
-  { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
+  {
+    id: "timetable-attendance.today-classes",
+    module: "academics/timetable-attendance",
+    batch: "#325",
+    title: "Teaching today",
+    probe: "/timetable-attendance/me/teaching-schedule",
+    empty: "No classes to teach today",
+    unavailable: "Timetable and attendance are not available yet.",
+  },
+  {
+    id: "timetable-attendance.attendance-to-mark",
+    module: "academics/timetable-attendance",
+    batch: "#325",
+    title: "Attendance to mark",
+    probe: "/timetable-attendance/me/attendance-to-mark",
+    empty: "No attendance waiting to be marked",
+    unavailable: "Timetable and attendance are not available yet.",
+  },
   {
     id: "lms.assignments-to-grade",
     module: "academics/lms",
@@ -40,7 +56,6 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing waiting to be graded",
     unavailable: "Course data is not available yet.",
   },
-
   {
     id: "examinations.exam-duties",
     module: "academics/examinations",

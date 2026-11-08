@@ -65,6 +65,15 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   id, order-independent, a repeated fact changes nothing, the latest name wins by `occurred_at`, and an event is applied
   only in its own organisation. `person_id` is stored as `student_id`. Opening an attendance session now snapshots
   real students.
+- Dashboard widgets (issue #325), exported from `frontend/src/widgets/index.ts` and enabled in
+  `apps/frontend/config/modules.enabled.yaml`: `today` ("Today's classes", student layouts, `GET /me/schedule`),
+  `attendance-summary` ("My attendance", student layouts, `GET /me/attendance-summary`), `today-classes` ("Teaching
+  today", faculty layouts, `GET /me/teaching-schedule`), `attendance-to-mark` ("Attendance to mark", faculty layouts,
+  `GET /me/attendance-to-mark`) and `department-attendance` ("Department attendance", department-admin,
+  `GET /reports/department-attendance`). Each has loading, empty, not-available, no-access and retry states and a
+  vitest suite (`frontend/tests`). The day widgets pass the viewer's own date. No active term (404
+  `active_term_not_found`) is the empty state, and `department_unknown` (PRD Q9) is explained in words. The dashboard
+  journeys in `tests/e2e/dashboards` name each widget's title, probe, empty and unavailable text.
 - Timetable API (issue #325, part 2): `GET`/`POST /timetables`, `GET`/`PATCH /timetables/{id}`,
   `PUT /timetables/{id}/slots` and `GET /timetables/{id}/conflicts`, as the contract declares them. Request bodies are
   checked by the use cases, so a malformed body is the contract's 400 with a code and the offending field. Slots are

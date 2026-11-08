@@ -49,7 +49,18 @@ const WIDGETS: LayoutWidget[] = [
     unavailable: "No active term",
     forbidden: "You do not have access to faculty load.",
   },
-  { id: "timetable-attendance.department-attendance", module: "academics/timetable-attendance", batch: "#325" },
+  {
+    id: "timetable-attendance.department-attendance",
+    module: "academics/timetable-attendance",
+    batch: "#325",
+    title: "Department attendance",
+    probe: "/timetable-attendance/reports/department-attendance",
+    empty: "No department attendance yet",
+    // No active term: timetable-attendance answers 404 active_term_not_found, which the widget shows as its empty state.
+    emptyCode: "active_term_not_found",
+    unavailable: "Timetable and attendance are not available yet.",
+    forbidden: "Your department is not known yet, so its attendance cannot be shown.",
+  },
   { id: "examinations.results-summary", module: "academics/examinations", batch: "#325" },
   {
     id: "reporting.department-reports",
