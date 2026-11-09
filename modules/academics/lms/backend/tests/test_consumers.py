@@ -30,13 +30,24 @@ def row(model, column, value):
         return db.scalars(select(model).where(column == value)).first()
 
 
+# student-information publishes person.account-linked from contract 0.2.0 (its own PR). This module may merge first: it
+# simply receives nothing until then. Once the producer's contract has the event, it is checked like every other.
+NOT_YET_UPSTREAM = {cons.ACCOUNT_LINKED}
+
+
 def test_consumers_are_the_manifests_and_exist_upstream():
     assert set(cons.CONSUMERS) == set(MANIFEST["consumes_events"])
     published = {}
-    for module in ("academics/academic-management", "student-lifecycle/enrolment-registration"):
+    for module in (
+        "academics/academic-management",
+        "student-lifecycle/enrolment-registration",
+        "student-lifecycle/student-information",
+    ):
         events = yaml.safe_load((ROOT / "modules" / module / "contracts" / "events.yaml").read_text(encoding="utf-8"))
         published |= {e["name"]: e for e in events["events"]}
     for name in cons.CONSUMERS:
+        if name not in published and name in NOT_YET_UPSTREAM:
+            continue
         assert name in published, name
         assert "lms" in published[name]["consumers"], name
 

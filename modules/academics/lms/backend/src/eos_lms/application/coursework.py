@@ -245,7 +245,8 @@ def submit(db: Session, a: Actor, assignment_id: str, body: dict) -> dict:
     c.check(rules.check_submission_content, x.submission_type, document_ids, text)
     now = c.clock()
     late = c.check(rules.submission_lateness, now, as_utc(x.due_at), x.accept_late, as_utc(x.late_cutoff_at))
-    earlier = repo.submissions(db, [x.id], student_id=a.user_id, include_superseded=True)
+    student = c.learner_id(db, a)
+    earlier = repo.submissions(db, [x.id], student_id=c.learner_ids(db, a), include_superseded=True)
     c.check(rules.check_attempts_left, len(earlier), x.max_attempts)
     for s in earlier:
         if s.status != "superseded":
@@ -255,7 +256,7 @@ def submit(db: Session, a: Actor, assignment_id: str, body: dict) -> dict:
         organisation_id=a.organisation_id,
         assignment_id=x.id,
         course_space_id=space.id,
-        student_id=a.user_id,
+        student_id=student,
         attempt=len(earlier) + 1,
         document_ids=document_ids,
         text=text,
@@ -275,7 +276,7 @@ def submit(db: Session, a: Actor, assignment_id: str, body: dict) -> dict:
             "submission_id": s.id,
             "assignment_id": x.id,
             "course_space_id": space.id,
-            "student_id": a.user_id,
+            "student_id": student,
             "attempt": s.attempt,
             "submitted_at": iso(s.submitted_at),
             "late": s.late,
@@ -296,7 +297,7 @@ def list_submissions(db: Session, a: Actor, assignment_id: str, filters: dict, l
 
 
 def my_submissions(db: Session, a: Actor, assignment_id: str | None, space_id: str | None) -> dict:
-    rows = repo.student_submissions(db, a.user_id)
+    rows = repo.student_submissions(db, c.learner_ids(db, a))
     if assignment_id:
         rows = [s for s in rows if s.assignment_id == assignment_id]
     if space_id:
