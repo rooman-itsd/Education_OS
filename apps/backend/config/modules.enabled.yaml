@@ -45,6 +45,7 @@ modules:
   - student-lifecycle/web-portal-cms
   - support/amc-vendor-support
   - support/helpdesk
+  - support/knowledge-base
   - support/sla-management
   - support/incident-management
 integrations: [messaging-providers, payment-sbiepay]
