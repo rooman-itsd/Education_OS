@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+
 import jwt
 from eos_core import events, oidc
+from eos_core.config import expand_roles
 from eos_core.db import SessionLocal, scoped
 from eos_core.security import create_token, hash_password, verify_password
 from eos_core.settings import settings
-from eos_core.tenant import get_current_organisation, platform_scope
-from sqlalchemy import select
+from eos_core.tenant import get_current_organisation, organisation_scope, platform_scope
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..domain.models import User
@@ -38,14 +41,26 @@ class RoleNotAssignableError(Exception):
     """A role no person may hold. Raised before anything is written."""
 
 
+class PlanLimitReachedError(Exception):
+    """The organisation's plan allows no more of something (`limit`: users). Raised before anything is written."""
+
+    def __init__(self, limit: str, allowed: int, used: int):
+        super().__init__(f"the plan allows {allowed} {limit}; {used} are active")
+        self.limit, self.allowed, self.used = limit, allowed, used
+
+
 class OrganisationHooks:
-    """How identity learns about organisations without importing tenancy (module standard rule 1).
-    apps/backend replaces these at startup with tenancy's implementations."""
+    """How identity learns about organisations and plans without importing tenancy or billing (module standard
+    rule 1). apps/backend replaces these at startup with tenancy's and billing's implementations."""
 
     def status(self, db: Session, organisation_id: str) -> str | None:  # noqa: ARG002
         return "active"
 
     def id_for_slug(self, db: Session, slug: str) -> str | None:  # noqa: ARG002
+        return None
+
+    def user_limit(self, db: Session, organisation_id: str) -> int | None:  # noqa: ARG002
+        """The plan's ceiling on active users of the organisation; None (the default) is no ceiling."""
         return None
 
 
@@ -65,6 +80,15 @@ def create_user(
     refused = NOT_A_PERSON_ROLES.intersection(roles or [])
     if refused:
         raise RoleNotAssignableError(f"{', '.join(sorted(refused))} is not a role a person can hold")
+    if organisation_id is not None and not is_learner(roles):
+        # The plan's `users` limit is on staff accounts; learners are the plan's `students`, never refused here.
+        limit = hooks.user_limit(db, organisation_id)
+        if limit is not None and limit > 0:
+            # Count and insert under the organisation's lock, or two requests at limit - 1 would both pass.
+            lock_user_seats(db, organisation_id)
+            used = count_staff_users(db, organisation_id)
+            if used >= limit:
+                raise PlanLimitReachedError("users", limit, used)
     user = User(
         organisation_id=organisation_id,
         email=email.lower(),
@@ -79,8 +103,45 @@ def create_user(
     return user
 
 
+# Namespace (first key) of the per-organisation advisory lock that serialises create_user's count-then-insert.
+USER_SEATS_LOCK = 0x454F5355  # "EOSU"
+
+
+def lock_user_seats(db: Session, organisation_id: str) -> None:
+    """Hold the organisation's seat lock until the transaction ends (pg_advisory_xact_lock): a second create_user
+    for the same organisation waits here, then counts the first one's user. Other organisations are not
+    blocked. SQLite (local dev and tests) has one writer at a time and no advisory locks: nothing to do."""
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    key = int.from_bytes(hashlib.sha256(organisation_id.encode("utf-8")).digest()[:4], "big", signed=True)
+    db.execute(text("SELECT pg_advisory_xact_lock(:space, :key)"), {"space": USER_SEATS_LOCK, "key": key})
+
+
 def list_users(db: Session) -> list[User]:
     return list(db.scalars(scoped(db, select(User), User).order_by(User.created_at)))
+
+
+# The roles of the people an organisation teaches, not employs. A role is a learner's when it is one of these or
+# its dashboard layout extends one, directly or through another (platform/identity/config/dashboards/*.yaml,
+# e.g. law-student extends student), as eos_core.config.expand_roles follows it.
+LEARNER_ROLES = frozenset({"student", "applicant"})
+
+
+def is_learner(roles: list[str] | None) -> bool:
+    """Whether a person with these roles is a learner (a student or an applicant): any of the roles is, or
+    extends, one of LEARNER_ROLES. Learners count against the plan's `students` limit, never its `users`."""
+    return bool(LEARNER_ROLES.intersection(expand_roles(list(roles or []))))
+
+
+def count_staff_users(db: Session, organisation_id: str) -> int:
+    """Active staff accounts of one organisation: what the plan's `users` limit counts (billing reads it for
+    usage). Learners (`is_learner`) are left out; they are the plan's `students`."""
+    # Filtered by the organisation itself, not only by scoped(): a caller running as the platform (bypass) must
+    # still get one organisation's count, never everyone's. Roles are a JSON list, so they are read and the
+    # learners told apart here, where the role tree is known.
+    with organisation_scope(organisation_id):
+        q = select(User.roles).where(User.organisation_id == organisation_id, User.status == "active")
+        return sum(1 for roles in db.scalars(q) if not is_learner(roles))
 
 
 def get_user(db: Session, user_id: str) -> User | None:

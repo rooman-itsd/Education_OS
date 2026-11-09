@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..application import service
 from ..application.reports import subscription_report
 from ..application.service import BillingError
+from ..domain.limits import PlanLimits
 
 router = APIRouter(tags=["billing"])
 
@@ -42,7 +43,7 @@ class PlanBody(BaseModel):
     modules: list[str] = []
     specialized_suites: int | str = 0
     integrations: list[str] = []
-    limits: dict = {}
+    limits: PlanLimits = PlanLimits()  # 422 for "unlimited", "50", -1 or an unknown key
     after_trial: str = "read_only"
     published: bool = True
 
@@ -68,6 +69,15 @@ def subscription(
     if not sub:
         raise HTTPException(404, "no subscription")
     return sub.to_dict()
+
+
+@router.get("/usage")
+def usage(
+    p: Principal = Depends(require("billing:subscription:read", organisation=True)), db: Session = Depends(get_db)
+):
+    """Usage against the plan's limits: users counted by identity; students and storage null until a module
+    counts them."""
+    return service.usage_vs_limits(db, p.organisation_id)
 
 
 @router.get("/invoices")
@@ -155,6 +165,7 @@ def admin_put_plan(
         if k == "id":
             continue
         setattr(plan, k, str(v) if k == "specialized_suites" else v)
+    plan.limits = body.limits.stored()
     db.add(plan)
     db.commit()
     return plan.to_dict()
