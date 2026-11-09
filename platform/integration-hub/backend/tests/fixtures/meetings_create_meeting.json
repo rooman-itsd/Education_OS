@@ -1,0 +1,11 @@
+{
+  "output": {
+    "meeting_id": "8c7e6a51-2f0b-4c55-9a43-0d0f3c1b2a10",
+    "provider_meeting_id": "85746065432",
+    "join_url": "https://meet.fake.example/j/85746065432",
+    "host_join_url": "https://meet.fake.example/s/85746065432?role=host",
+    "passcode": "731205",
+    "dial_in": []
+  },
+  "provider_reference": "85746065432"
+}

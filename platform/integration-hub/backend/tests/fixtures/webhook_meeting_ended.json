@@ -1,0 +1,2 @@
+{"event": "meeting.ended", "event_ts": 1762318800000, "event_id": "evt-ended-0001",
+ "payload": {"meeting_key": "class-session-1", "ended_at": "2026-11-05T05:00:00+00:00"}}

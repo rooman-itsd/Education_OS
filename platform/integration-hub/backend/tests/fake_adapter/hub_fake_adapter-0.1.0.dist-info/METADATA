@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: hub-fake-adapter
+Version: 0.1.0
+Summary: Test-only adapter for platform/integration-hub's own suite. Not a provider; never installed.
