@@ -2,7 +2,7 @@
 
 **Domain:** campus-life
 **Kind:** feature
-**Status:** in-progress (contracts and backend)
+**Status:** in-progress (contracts, backend and the `alumni.mentoring` widget built; enabled in `apps/backend` and `apps/frontend`)
 
 Alumni directory and mentoring.
 
@@ -99,11 +99,10 @@ alembic upgrade head                     # uses EOS_DATABASE_URL
 ```
 
 ### Needs from the host repo
-- **Mounting, install and CI:** a `campus-life/alumni` entry in `apps/backend/config/modules.enabled.yaml` mounts the
+- **Mounting, install and CI:** the `campus-life/alumni` entry in `apps/backend/config/modules.enabled.yaml` mounts the
   router at `/api/v1/alumni` (package `eos_alumni`) behind the entitlement gate, and makes `py-setup.sh`, the API
-  image, CI and the auto-deploy install it, run its tests and upgrade its chain. That entry is a separate PR; until
-  then CI runs this suite with the disabled modules (`tools/scripts/test-disabled-modules.sh`).
-- **Dashboard:** the widget `alumni.mentoring` (frontend, separate PR) reads `GET /me/mentoring`; the
+  image, CI and the auto-deploy install it, run its tests and upgrade its chain.
+- **Dashboard:** the widget `alumni.mentoring` (registered from `apps/frontend/config/modules.enabled.yaml`) reads `GET /me/mentoring`; the
   management-student layout places it.
 - **Identity:** `student_id` is not checked against identity until `packages/sdk` offers a user lookup (PRD open
   question 1); the coordinator's screen picks the student from identity's user list and sends `student_name` as a copy.
@@ -142,7 +141,7 @@ owner decision.
 
 `frontend/src/widgets/index.ts` exports the dashboard widget. The management-student layout in
 `platform/identity/config/dashboards/` places it and holds the module role `alumni-mentee`, which grants
-`alumni:self:read`; the module's entry in `apps/frontend/config/modules.enabled.yaml` registers it (not enabled yet).
+`alumni:self:read`; the module's entry in `apps/frontend/config/modules.enabled.yaml` registers it (enabled).
 
 | Widget | Title | Dashboard | Endpoint | Permission |
 |---|---|---|---|---|
