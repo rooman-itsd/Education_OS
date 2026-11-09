@@ -4,6 +4,7 @@ problems it reports, that it never shows a reading, and that it shows nothing of
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import timedelta
 
@@ -175,6 +176,8 @@ def test_the_response_never_carries_a_reading(client, org, adapter, transport):
     )
     make_link(org, "garmin", status="expired", status_since=NOW - DAY)
     body = json.dumps(get(client, org).json())
+    uid = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    body = re.sub(uid, "<id>", body)  # a random id can hold "152"
     for reading in ("8500", "152", "heart", "steps", "kcal", "weight", "sleep", "aQlC83"):
         assert reading not in body
 

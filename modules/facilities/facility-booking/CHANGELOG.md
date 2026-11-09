@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- PRD §7 (#421): `bookings` lists bookings on the resources the viewer approves; the viewer's own bookings are
+  in `my-bookings`, which instructors now see through the Faculty layout.
 - Module scaffolded.
 - Contract draft: resource-booking API, events and permissions; PRD (#65).
 - Backend (#108): domain rules (conflicts with buffer and concurrency, opening hours, closures, slot grid,

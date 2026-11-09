@@ -47,8 +47,15 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No departmental metrics",
     unavailable: "Reporting service is not available yet.",
   },
-
-  { id: "grievance.open", module: "governance/grievance", batch: "#343" },
+  {
+    id: "grievance.open",
+    module: "governance/grievance",
+    batch: "#343",
+    title: "Open grievances",
+    probe: "/grievance/stats/open",
+    empty: "No open cases",
+    unavailable: "Grievance data is not available yet.",
+  },
   {
     id: "regulatory-reports.compliance-calendar",
     module: "governance/regulatory-reports",

@@ -26,6 +26,7 @@ modules:
   - finance-operations/fees-accounts
   - finance-operations/hr-payroll
   - finance-operations/procurement
+  - governance/grievance
   - governance/regulatory-reports
   - governance/iqac-accreditation
   - practice/field-training
@@ -41,7 +42,9 @@ modules:
   - student-lifecycle/enrolment-registration
   - student-lifecycle/admissions
   - student-lifecycle/web-portal-cms
+  - support/amc-vendor-support
   - support/helpdesk
+  - support/sla-management
   - support/incident-management
 platform:
   - billing
