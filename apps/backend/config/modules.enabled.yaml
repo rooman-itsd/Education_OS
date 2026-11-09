@@ -29,6 +29,7 @@ modules:
   - governance/grievance
   - governance/regulatory-reports
   - governance/iqac-accreditation
+  - governance/rti
   - practice/field-training
   - practice/selection-process
   - practice/portfolio

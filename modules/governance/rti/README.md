@@ -2,7 +2,7 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** in-progress (backend and widget built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend and widget built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 RTI request intake, assignment, tracking and responses.
 
@@ -55,8 +55,8 @@ contract does not have (open question 2).
 
 ### Needs from the host repo
 - `packages/core` (`eos_core`); for tests, `packages/testing` (`eos_testing`).
-- `governance/rti` in `apps/backend/config/modules.enabled.yaml` and `apps/frontend/config/modules.enabled.yaml`, in a
-  later pull request of #343.
+- `governance/rti` in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/rti`) and
+  `apps/frontend/config/modules.enabled.yaml`.
 - Permissions come from the roles in the token. The Governance layout already grants its profile role `rti-officer` and
   lists the widget. The other profile roles the PRD proposes (management as `rti-appellate-authority`, department-admin
   and faculty as `rti-custodian`, org-admin as `rti-viewer`) are not in any layout yet; that is a `platform/identity`

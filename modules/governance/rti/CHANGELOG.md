@@ -23,3 +23,6 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `fee` too. Before, an `applicant` or `fee` object replaced the stored one, so correcting a name cleared the email,
   phone, address and person id, and correcting the fee status cleared its amount, mode and receipt reference. A key sent
   as null still clears that value. `name` and the fee `status` stay required whenever their object is sent.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/rti`) and
+  `apps/frontend/config/modules.enabled.yaml` (`rti.nearing-deadline` on the Governance dashboard). The Governance
+  e2e journey now checks the widget's title and empty state (#343).
