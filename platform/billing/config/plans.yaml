@@ -2,6 +2,11 @@
 # An organisation's entitlement = modules in its academy profile that its plan allows,
 # plus super-admin overrides. "suites" and "modules" accept suite names (every module in the
 # suite) or <domain>/<module> paths. "*" means everything.
+# limits: whole numbers >= 0; absent or 0 is no limit (domain/limits.py, PlanLimits; anything else stops
+# start-up). `users` are STAFF accounts only: a learner (role student or applicant, or any role whose
+# dashboard layout extends student, e.g. law-student) is never counted as a user and never refused on it.
+# `students` are the learners; nothing counts them yet, so usage reports null and nothing is refused on it.
+# `storage_gb` likewise, until documents count it.
 plans:
   - id: trial
     title: "Trial"

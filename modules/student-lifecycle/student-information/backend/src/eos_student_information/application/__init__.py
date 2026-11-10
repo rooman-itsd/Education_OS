@@ -15,6 +15,7 @@ from .service import (
     list_documents,
     list_id_cards,
     list_people,
+    republish_account_links,
     revoke_id_card,
     update_person,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "list_documents",
     "list_id_cards",
     "list_people",
+    "republish_account_links",
     "revoke_id_card",
     "update_person",
 ]
