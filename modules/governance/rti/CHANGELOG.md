@@ -19,3 +19,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   leak test, migration test, row-level security on Postgres (opt-in).
 - Widget `rti.nearing-deadline` (GET /stats/nearing-deadline) with loading, empty and error states following the widget
   error convention; typed API client; vitest widget tests. Test dev dependencies added to `frontend/package.json`.
+- Fix (found in the review of #515): `PATCH /requests/{id}` changes only the keys it sends, inside `applicant` and
+  `fee` too. Before, an `applicant` or `fee` object replaced the stored one, so correcting a name cleared the email,
+  phone, address and person id, and correcting the fee status cleared its amount, mode and receipt reference. A key sent
+  as null still clears that value. `name` and the fee `status` stay required whenever their object is sent.
