@@ -101,8 +101,9 @@ Where the PRD or the contract leaves a question open, the simplest reading was b
    decision for `appealed` (the `appeal.due_at`); other statuses are never overdue. The widget's `due_at` is that current
    deadline, and its list holds the soonest ten, with the counts covering all.
 6. **Closure** is set when a request becomes final (`closed` or `transferred`), not when the appeal is decided.
-7. **PATCH replaces the `applicant` and `fee` objects** as sent (what is left out is cleared; the contract makes `name` and
-   `status` required, so a partial object cannot be sent). A body that changes nothing is a 422.
+7. **PATCH changes only what it sends.** Inside `applicant` and `fee` too: the keys left out keep their stored value, and a
+   key sent as null clears it (a null `amount` also clears the currency). The contract still makes `name` and `status`
+   required, so they are sent with any `applicant` or `fee` object. A body that changes nothing is a 422.
 8. **Fee** is metadata only. A fee amount without a currency is in `RTI_DEFAULT_CURRENCY`; no rule links the status to the
    amount, and an amount has at most ten digits before the decimal point.
 9. **Dates cannot be in the future** (received, dispatched, transferred, appeal filed and decided), cannot precede the step

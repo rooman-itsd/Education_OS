@@ -283,7 +283,7 @@ def test_a_changed_setting_applies_to_requests_already_recorded(desk, settings):
 # ---------------------------------------------------------------- correcting
 
 
-def test_correcting_replaces_the_applicant_and_the_fee_and_is_audited(desk, org):
+def test_correcting_changes_what_is_sent_and_is_audited(desk, org):
     r = desk.request()
     patched = desk.ok(
         desk.patch(
@@ -295,14 +295,62 @@ def test_correcting_replaces_the_applicant_and_the_fee_and_is_audited(desk, org)
             },
         )
     )
-    assert patched["applicant"] == {"name": "Asha K. Verma", "email": "asha@example.org", "person_id": None}
-    assert patched["fee"] == {"status": "pending"}
+    assert patched["applicant"] == {**r["applicant"], "name": "Asha K. Verma", "email": "asha@example.org"}
+    assert patched["fee"] == {**r["fee"], "status": "pending"}
     assert patched["subject"] == "Admission records of 2024"
     assert patched["information_sought"] == r["information_sought"]  # not sent, not changed
     assert audit(org.id, r["id"]) == sorted(["request.recorded", "request.corrected"])
     assert desk.ok(desk.patch(f"/requests/{r['id']}", {"information_sought": "The cut-off marks."}))["subject"] == (
         "Admission records of 2024"
     )
+
+
+def test_correcting_the_name_keeps_the_rest_of_the_applicant(desk):
+    person = "6f1d1c52-2a3e-4d58-9a43-0a1b2c3d4e5f"
+    r = desk.request(applicant={**APPLICANT, "person_id": person})
+    patched = desk.ok(desk.patch(f"/requests/{r['id']}", {"applicant": {"name": "Asha K. Verma"}}))
+    assert patched["applicant"] == {**APPLICANT, "name": "Asha K. Verma", "person_id": person}
+    assert desk.ok(desk.get(f"/requests/{r['id']}"))["applicant"] == patched["applicant"]
+
+
+def test_a_value_sent_as_null_is_cleared_and_the_others_stay(desk):
+    r = desk.request()
+    patched = desk.ok(
+        desk.patch(f"/requests/{r['id']}", {"applicant": {"name": r["applicant"]["name"], "phone": None}})
+    )
+    assert "phone" not in patched["applicant"]
+    assert patched["applicant"]["email"] == APPLICANT["email"]
+    assert patched["applicant"]["address"] == APPLICANT["address"]
+
+
+def test_correcting_the_fee_status_keeps_the_amount_and_the_mode(desk):
+    r = desk.request(
+        fee={
+            "status": "paid",
+            "amount": {"amount": "10.00", "currency": "INR"},
+            "mode": "cash",
+            "receipt_reference": "R-1",
+        }
+    )
+    patched = desk.ok(desk.patch(f"/requests/{r['id']}", {"fee": {"status": "pending"}}))
+    assert patched["fee"] == {
+        "status": "pending",
+        "amount": {"amount": "10.00", "currency": "INR"},
+        "mode": "cash",
+        "receipt_reference": "R-1",
+    }
+
+
+def test_a_fee_amount_sent_as_null_clears_the_amount_and_its_currency(desk):
+    r = desk.request(fee={"status": "paid", "amount": {"amount": "10.00", "currency": "INR"}, "mode": "cash"})
+    patched = desk.ok(desk.patch(f"/requests/{r['id']}", {"fee": {"status": "exempt", "amount": None}}))
+    assert patched["fee"] == {"status": "exempt", "mode": "cash"}
+
+
+def test_a_new_fee_amount_without_a_currency_is_in_the_default_currency(desk):
+    r = desk.request(fee={"status": "pending"})
+    patched = desk.ok(desk.patch(f"/requests/{r['id']}", {"fee": {"status": "paid", "amount": {"amount": "25.50"}}}))
+    assert patched["fee"]["amount"] == {"amount": "25.50", "currency": "INR"}
 
 
 def test_a_correction_can_be_made_while_assigned_only(desk):
