@@ -12,10 +12,11 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   panel renders by its registered title and shows its empty state, or says its data is not available while the
  *   backend is missing;
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
- *   builds it: productions (#318, PR #454), projects (#339), timetable-attendance and examinations (#325) and lms (#326);
- * - data journey: a booking later today on a rehearsal room the director approves shows in
- *   facility-booking.bookings-today. Facility staff set up the room and make the booking (the director holds
- *   facility-booking-approver's grants, which do not include managing resources).
+ *   builds it: projects (#339), timetable-attendance and examinations (#325) and lms (#326);
+ * - data journeys: a booking later today on a rehearsal room the director approves shows in
+ *   facility-booking.bookings-today (facility staff set up the room and make the booking), and a production in
+ *   preparation with a preparation task shows in productions.in-preparation (the stage manager creates the production
+ *   and moves it into preparation; the director adds the task).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -117,6 +118,8 @@ let admin: DashboardUser;
 let user: DashboardUser;
 /** Facility staff: they run the resource register, so they set up the room the director approves. */
 let facilityStaff: DashboardUser;
+/** Stage manager: they create productions and move them into preparation (coordinator grants). */
+let stageManager: DashboardUser;
 /** Per shipped widget id: what its GET answered the director. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -128,6 +131,7 @@ test.beforeAll(async ({ request }) => {
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "director");
   facilityStaff = await addUser(request, admin, "facility-staff");
+  stageManager = await addUser(request, admin, "stage-manager");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -196,5 +200,32 @@ test.describe("with facility-booking data", () => {
     await expect(panel.getByText("No bookings today")).toHaveCount(0);
     await expect(panel.getByText("Rehearsal room 1 · Table read")).toBeVisible();
     await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
+  });
+});
+
+test.describe("with productions data", () => {
+  test("productions.in-preparation lists a production in preparation with a director task", async ({ page, request }) => {
+    const w = byId("productions.in-preparation");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the productions API answered ${status[w.id]} to the director role`);
+    // The stage manager (coordinator grants) creates the production and moves it into preparation; the director
+    // holds task:manage and adds a preparation task.
+    const production = await created<{ id: string }>(request, stageManager, "/productions/productions", {
+      title: "A Midsummer Night's Dream",
+      kind: "performance",
+    });
+    await created(request, stageManager, `/productions/productions/${production.id}/preparation`, {});
+    await created(request, user, `/productions/productions/${production.id}/tasks`, {
+      title: "Complete casting",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "In preparation");
+    await expect(panel.getByText("Nothing in preparation")).toHaveCount(0);
+    const row = panel
+      .getByRole("list", { name: "In preparation" })
+      .getByRole("listitem")
+      .filter({ hasText: "A Midsummer Night's Dream" });
+    await expect(row).toContainText("1 of 1 tasks open");
+    await expect(row).toContainText("No date");
   });
 });

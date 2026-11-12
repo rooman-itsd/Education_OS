@@ -12,11 +12,11 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   panel renders by its registered title and shows its empty state, or says its data is not available while the
  *   backend is missing;
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
- *   builds it: productions (#318, PR #454), timetable-attendance and examinations (#325), lms (#326), transport and
- *   library (#338);
- * - data journey: an item the actor asks to borrow shows in inventory-equipment.my-loans. Facility staff set up the
- *   item and receive stock; the actor (loan:request) requests the loan. The other widgets' journeys wait for their
- *   modules.
+ *   builds it: timetable-attendance and examinations (#325), lms (#326), transport and library (#338);
+ * - data journeys: an item the actor asks to borrow shows in inventory-equipment.my-loans (facility staff set up the
+ *   item and receive stock; the actor requests the loan), and a part offered to the actor on a production in
+ *   preparation shows in productions.my-roles (the stage manager creates the production, moves it into preparation and
+ *   offers the part).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -134,6 +134,8 @@ let admin: DashboardUser;
 let user: DashboardUser;
 /** Facility staff: they run the catalogue and stores, so they set up the item the actor borrows. */
 let facilityStaff: DashboardUser;
+/** Stage manager: they create the production, start preparation and offer the actor a part. */
+let stageManager: DashboardUser;
 /** Per shipped widget id: what its GET answered the actor. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -145,6 +147,7 @@ test.beforeAll(async ({ request }) => {
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "actor");
   facilityStaff = await addUser(request, admin, "facility-staff");
+  stageManager = await addUser(request, admin, "stage-manager");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -212,5 +215,31 @@ test.describe("with facilities data", () => {
     // MyLoansWidget's shortDate: "9 Nov" in the browser's (here the host's) time zone.
     await expect(panel.getByText(`Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)).toBeVisible();
     await expect(panel.getByText("Ready to collect")).toBeVisible();
+  });
+});
+
+test.describe("with productions data", () => {
+  test("productions.my-roles lists a part offered to the actor", async ({ page, request }) => {
+    const w = byId("productions.my-roles");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the productions API answered ${status[w.id]} to the actor role`);
+    // The stage manager (coordinator grants) creates the production, moves it into preparation and offers the actor
+    // a cast role (role:manage). MyRolesWidget lists invited/accepted parts on open productions.
+    const production = await created<{ id: string }>(request, stageManager, "/productions/productions", {
+      title: "The Tempest",
+      kind: "performance",
+    });
+    await created(request, stageManager, `/productions/productions/${production.id}/preparation`, {});
+    await created(request, stageManager, `/productions/productions/${production.id}/roles`, {
+      user_id: user.id,
+      role_name: "Miranda",
+      kind: "cast",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "My parts");
+    await expect(panel.getByText("No parts yet")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "Your parts" }).getByRole("listitem").filter({ hasText: "Miranda · The Tempest" });
+    await expect(row).toContainText("In preparation, no dates yet");
+    await expect(row).toContainText("Reply needed");
   });
 });

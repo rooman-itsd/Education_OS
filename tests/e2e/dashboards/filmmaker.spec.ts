@@ -12,11 +12,10 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   panel renders by its registered title and shows its empty state, or says its data is not available while the
  *   backend is missing;
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
- *   builds it: projects (#339), productions (#318, PR #454), timetable-attendance and examinations (#325), lms (#326),
- *   transport and library (#338);
- * - data journey: an item the filmmaker asks to borrow shows in inventory-equipment.my-loans. Facility staff set up
- *   the item and receive stock; the filmmaker (loan:request) requests the loan. The other widgets' journeys wait for
- *   their modules.
+ *   builds it: projects (#339), timetable-attendance and examinations (#325), lms (#326), transport and library (#338);
+ * - data journeys: an item the filmmaker asks to borrow shows in inventory-equipment.my-loans (facility staff set up
+ *   the item and receive stock; the filmmaker requests the loan), and a screening scheduled two weeks out shows in
+ *   productions.upcoming (a productions coordinator creates and schedules the screening).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -142,6 +141,8 @@ let admin: DashboardUser;
 let user: DashboardUser;
 /** Facility staff: they run the catalogue and stores, so they set up the item the filmmaker borrows. */
 let facilityStaff: DashboardUser;
+/** Productions coordinator: creates and schedules the screening (filmmaker only reads upcoming). */
+let productionsCoordinator: DashboardUser;
 /** Per shipped widget id: what its GET answered the filmmaker. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -153,6 +154,7 @@ test.beforeAll(async ({ request }) => {
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "filmmaker");
   facilityStaff = await addUser(request, admin, "facility-staff");
+  productionsCoordinator = await addUser(request, admin, "productions-coordinator");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -220,5 +222,30 @@ test.describe("with facilities data", () => {
     // MyLoansWidget's shortDate: "9 Nov" in the browser's (here the host's) time zone.
     await expect(panel.getByText(`Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)).toBeVisible();
     await expect(panel.getByText("Ready to collect")).toBeVisible();
+  });
+});
+
+test.describe("with productions data", () => {
+  test("productions.upcoming shows a scheduled screening", async ({ page, request }) => {
+    const w = byId("productions.upcoming");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the productions API answered ${status[w.id]} to the filmmaker role`);
+    // A productions coordinator creates and schedules the screening two weeks out at 19:00 in this host's time zone.
+    const screening = await created<{ id: string }>(request, productionsCoordinator, "/productions/productions", {
+      title: "Student short showcase",
+      kind: "screening",
+    });
+    const starts = new Date(Date.now() + 14 * 86_400_000);
+    starts.setHours(19, 0, 0, 0);
+    await created(request, productionsCoordinator, `/productions/productions/${screening.id}/schedule`, {
+      starts_at: starts.toISOString(),
+      ends_at: new Date(starts.getTime() + 2 * 60 * 60_000).toISOString(),
+      venue: "Screening room",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "Upcoming productions");
+    await expect(panel.getByText("Nothing coming up")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "Coming up" }).getByRole("listitem").filter({ hasText: "Student short showcase" });
+    await expect(row).toContainText("Screening · Screening room · 19:00");
   });
 });
