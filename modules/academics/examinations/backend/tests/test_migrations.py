@@ -3,6 +3,7 @@ table, and downgrades cleanly. Its Postgres output enables forced row-level secu
 
 import io
 import tempfile
+import uuid
 from pathlib import Path
 
 import pytest
@@ -31,9 +32,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_ex_0001_ex_0002_ex_0003_with_one_head():
+def test_the_chain_is_ex_0001_to_ex_0004_with_one_head():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["ex_0003"]
+    assert script.get_heads() == ["ex_0004"]
+    assert script.get_revision("ex_0004").down_revision == "ex_0003"
     assert script.get_revision("ex_0003").down_revision == "ex_0002"
     assert script.get_revision("ex_0002").down_revision == "ex_0001"
     assert script.get_revision("ex_0001").down_revision is None
@@ -215,15 +217,18 @@ def test_upgrade_matches_models_and_downgrade_removes_tables():
 def test_the_migration_creates_every_model_table_and_no_other():
     from importlib import util
 
-    path = next((DB_DIR / "migrations" / "versions").glob("*_0001_initial.py"))
-    spec = util.spec_from_file_location("ex_0001", path)
-    module = util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert sorted(module.TABLES) == sorted(t.name for t in TABLES)
+    created = []
+    for pattern, name in (("*_0001_initial.py", "ex_0001"), ("*_0004_offering_ref_consumers.py", "ex_0004")):
+        path = next((DB_DIR / "migrations" / "versions").glob(pattern))
+        spec = util.spec_from_file_location(name, path)
+        module = util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        created += module.TABLES if name == "ex_0001" else module.NEW_TABLES
+    assert sorted(created) == sorted(t.name for t in TABLES)
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 11
+    assert len(TABLES) == 12
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name
@@ -324,7 +329,7 @@ def test_ex_0003_downgrade_removes_only_its_two_indexes():
     command.downgrade(cfg, "ex_0002")
     with engine.connect() as conn:
         after = {i["name"] for i in inspect(conn).get_indexes(f"{PREFIX}exam_duty")}
-        other_tables = {t.name for t in TABLES}
+        other_tables = {t.name for t in TABLES} - {f"{PREFIX}processed_event"}  # ex_0004's table goes with it
         assert other_tables <= set(inspect(conn).get_table_names())
     assert before - after == DUTY_INDEXES and after <= before  # nothing else went, nothing came
 
@@ -353,3 +358,66 @@ def test_postgres_ex_0003_sql_creates_and_drops_exactly_the_two_partial_indexes(
         "DROP INDEX uq_examinations_duty_paper_live;",
         "DROP INDEX uq_examinations_duty_session_live;",
     ]
+
+
+def _columns(conn, table: str) -> dict:
+    return {c["name"]: c for c in inspect(conn).get_columns(table)}
+
+
+def test_ex_0004_relaxes_offering_ref_and_adds_processed_event_and_downgrades_cleanly():
+    cfg, engine = _upgraded()
+    with engine.connect() as conn:
+        columns = _columns(conn, f"{PREFIX}offering_ref")
+        for name in ("course_id", "academic_period_id", "course_code", "course_title", "credits", "department_id"):
+            assert columns[name]["nullable"], name
+        assert {"status", "status_as_of"} <= set(columns) and columns["status"]["nullable"]
+        assert {"event_id", "name", "organisation_id"} <= set(_columns(conn, f"{PREFIX}processed_event"))
+    command.downgrade(cfg, "ex_0003")
+    with engine.connect() as conn:
+        columns = _columns(conn, f"{PREFIX}offering_ref")
+        assert "status" not in columns and "status_as_of" not in columns
+        assert not any(columns[n]["nullable"] for n in ("course_id", "course_code", "credits", "department_id"))
+        assert f"{PREFIX}processed_event" not in inspect(conn).get_table_names()
+
+
+def test_ex_0004_downgrade_keeps_known_offerings_and_drops_only_rows_with_no_creation():
+    from sqlalchemy import text
+
+    cfg, engine = _upgraded()
+    known, partial, no_department = (str(i) for i in (uuid.uuid4(), uuid.uuid4(), uuid.uuid4()))
+    with engine.begin() as conn:
+        insert = text(
+            f"INSERT INTO {PREFIX}offering_ref (id, organisation_id, created_at, course_offering_id, course_id, "
+            "academic_period_id, course_code, course_title, credits, department_id, status) "
+            "VALUES (:id, :org, '2026-11-13 00:00:00', :id, :course, :period, :code, 'T', 4, :dept, :status)"
+        )
+        org = str(uuid.uuid4())
+        for row_id, code, dept, status in ((known, "K", known, "open"), (no_department, "N", None, None)):
+            conn.execute(
+                insert,
+                {
+                    "id": row_id,
+                    "org": org,
+                    "course": row_id,
+                    "period": row_id,
+                    "code": code,
+                    "dept": dept,
+                    "status": status,
+                },
+            )
+        conn.execute(
+            text(
+                f"INSERT INTO {PREFIX}offering_ref (id, organisation_id, created_at, course_offering_id, status) "
+                "VALUES (:id, :org, '2026-11-13 00:00:00', :id, 'open')"
+            ),
+            {"id": partial, "org": org},
+        )
+    command.downgrade(cfg, "ex_0003")
+    with engine.connect() as conn:
+        kept = {
+            r[0]: r[1:]
+            for r in conn.execute(
+                text(f"SELECT course_offering_id, course_code, department_id FROM {PREFIX}offering_ref")
+            )
+        }
+    assert kept == {known: ("K", known), no_department: ("N", "")}

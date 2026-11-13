@@ -135,7 +135,7 @@ Found while building the domain rules and tables. None is decided; each is isola
 | Candidates, hall tickets, marks, results, `registration_ref` | **No tables or code**: they carry `student_id` or depend on eligibility (the `student_id` mapping, supplementary and backlog candidacy, attendance minimum, dues) | Faizan (Q2), Praveen (Q1), Shivani (Q5) |
 | FR-5's rule that a student may not be a candidate in two overlapping sessions | Not implemented (needs candidates) | As above |
 | Department-scoped keys (`*-department`) | No department is read or assumed; `Actor` has no department | Faizan (Q13) |
-| `offering_ref` | The table follows the PRD's columns, strictly (NOT NULL). It is not written yet; the consumer slice may need to relax it, as timetable-attendance's `offering_ref` had to be, because events arrive unordered and `offering.updated` carries no new values | The consumer slice, and the architectural decision in section 7 |
+| `offering_ref` | Was strictly NOT NULL and never written. Written now by the two offering consumers; its creation columns were relaxed in `ex_0004` (section 13) | Section 13, and the architectural decision in section 7 |
 | The identity of `staff_id` on duties | Stored as a plain external id (PRD 5.8); no identity lookup or mapping | Faizan (Q11) |
 
 ## 10. Choices and gaps of the configuration and exam-cycle APIs
@@ -152,11 +152,11 @@ applied literally or left out, and none is worked around.
 | Grading-band coverage of 0 to 100 | Each band is validated; coverage is not enforced (see section 8) | Shivani: the inclusive-boundary rule |
 | Locked marks block replacing an assessment scheme (FR-2) | **Not protected yet.** `ensure_editable` is called with `has_locked_marks=False` inline: no marks tables exist and the request is never trusted for it, so only its superseded check is effective. Only a draft can be replaced, so active and superseded schemes are never changed | Persistence-backed validation, deferred until marks management exists |
 | Department scope of `assessment-scheme:write-department` | A holder of `write-department` or `write-all` may write any scheme; no department is read | Faizan (Q13) |
-| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required and `offering_ref` is not filled | The consumer slice |
+| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required. `offering_ref` is filled by the offering consumers since the consumer slice (section 13), but for offerings whose events were delivered to this module only | Section 13 (backfill and refresh limits) |
 | `weightage_percent` is `exclusiveMinimum: 0` in the contract | Enforced by the use case (400); the domain still accepts 0 | None |
 | Assessment components are returned ordered by code | There is no position column; the order of the request is not kept | A decision on component order |
 | A cycle with published results | `GradingScheme.in_use` is true for a cycle at `results_published` or `closed`; nothing sets `results_published` until publication exists | The results slice |
-| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the read models are not filled | The consumer slice |
+| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the offering read model is filled by the consumer slice (section 13) but is still not consulted by these operations | Not decided: whether to check an offering against it, given the backfill limit in section 13 |
 
 ## 11. Choices and gaps of the paper and session APIs
 
@@ -169,8 +169,8 @@ literally or left out, and none is worked around.
 | FR-5: a session falls within the cycle's dates | **Not enforced.** The domain's `ensure_within_cycle` needs the organisation's time zone, which has no source; guessing UTC would refuse valid local times. A test records that a session outside the cycle is accepted | Shivani, Faizan: where the organisation time zone comes from (the same gap exists in timetable-attendance) |
 | FR-5: a student in two overlapping sessions | Not implemented (needs candidates). Two sessions may overlap in time | Q1, Q2 |
 | `ExamPaper.title` and the `title` field of `updateExamPaper` | **Resolved.** Migration `ex_0002` adds a nullable `title` (String 200) to `examinations_exam_paper`: no new table, no policy change (the `ex_0001` policy covers the column), no backfill, no default. `updateExamPaper` stores and returns it, on a draft paper of a draft or scheduled cycle. The contract types `title` as a non-null string, so an untitled paper omits the field and a title can be replaced but not cleared (blank, null and over 200 characters are 400) | None |
-| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Not served: they come from `offering_ref`, which is not filled. The `department_id` filter reads `offering_ref`, so it matches nothing until it is | The consumer slice, and the architectural decision in section 7 |
-| FR-4: the course offering must exist in the local read model | Not checked: the read model is empty, which would make every create impossible. An active assessment scheme for the offering is required (422 `scheme_not_active`) | The consumer slice |
+| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Not served in the paper body. They come from `offering_ref`, which the offering consumers now fill (section 13). The `department_id` filter reads `offering_ref`, so it matches only offerings whose `offering.created` was delivered to this module | A later change to serve them; the backfill and refresh limits in section 13; the architectural decision in section 7 |
+| FR-4: the course offering must exist in the local read model | Not checked. When written, the read model was empty, which would have made every create impossible. The offering consumers now fill it (section 13), but only for offerings whose events were delivered to this module, so the check would still reject existing offerings until a backfill is confirmed. An active assessment scheme for the offering is required (422 `scheme_not_active`) | Not decided; depends on the backfill limit in section 13 |
 | `ExamPaper.candidate_count` and `ExamSession.candidate_count` | The paper omits it (not required); the session serves 0 | Candidates (Q1, Q2) |
 | `ExamSession.invigilators_assigned` | Counts the session's `assigned` invigilation duties from `examinations_exam_duty`; no operation creates one yet | The duties slice |
 | A cancelled session's papers | A paper is in at most one session (unique index), so cancelling removes the links and the session is served with no papers; they are in the audit entry and the event | A decision on keeping a history of a session's papers |
@@ -205,6 +205,48 @@ slice (the owner's answers to the audit's questions); the gaps are applied liter
 | `GET /duties` order | Newest first; the contract gives none | None |
 | Roles | Unchanged: the controller holds `read-all`, `read-department` and `assign` but not `read-own` (so it gets 403 on `/me/duties`); the department head holds `read-department` (an empty list); faculty hold `read-own` (403 on `GET /duties`); student and viewer hold none | None |
 | Contract: undeclared statuses | 400 for a bad filter on `listExamDuties`, for a missing or blank `reason` on `cancelExamDuty` and for a bad `include_past` on `listMyDuties`; `listMyDuties` declares only 200. No 401, and no 403 on these operations. `test_api_contract.py` records them | A contract change |
+
+## 13. Choices and gaps of the offering consumers
+
+`application/consumers.py` consumes academic-management's `offering.created` and `offering.status-changed` into
+`offering_ref`, using only fields the merged contract defines (`course_offering_id`, `course_id`, `academic_period_id`,
+`course_code`, `course_title`, `credits`, `department_id`; `to_status`). It follows timetable-attendance's consumers
+(idempotent on the envelope id in `processed_event`, organisation-checked, one transaction with the read-model write).
+
+| Choice | Why |
+|---|---|
+| `ex_0004` relaxes the creation columns of `offering_ref` and adds `status`, `status_as_of` | Events arrive unordered: a status change can arrive first and leaves a partial row, completed by the creation. `offering.created` carries no status, so `status` is NULL until a status event arrives |
+| A malformed event raises `ValueError` and writes nothing, marker included | The relay retries and then dead-letters; an event is never half applied |
+| A second `offering.created` for a known offering changes nothing | A creation does not overwrite what a later event set |
+| `department_id` may be absent in the event and is then stored as NULL | The contract lists it, but a missing value is not a reason to drop the whole offering |
+
+**Ordering key.** A status is ordered by the event envelope's `occurred_at` (`status_as_of`), not by the payload's
+`changed_at`. This follows the event-bus contract and timetable-attendance's consumers. The two instants are normally
+close, but `changed_at` is the publisher's business time and is not read at all.
+
+**Integration limitations (not resolved by this slice).**
+1. **Existing offerings may not be populated.** The read model is filled only by events delivered to this module after
+   it consumes them. An offering created in academic-management before that has no row, and so no `course_code`,
+   `department_id` or status here. Repository evidence on replay is limited: the event bus documents replay only for
+   dead-lettered events, re-running only the modules that failed (`platform/event-bus/README.md`,
+   `docs/outbox-relay.md`), and proposes 30-day retention of published rows. No mechanism was found that delivers
+   already-published events to a module that was not consuming them, and none is assumed. Whether a backfill
+   (for example reading academic-management's API once, or a replay) is available is **not confirmed**.
+2. **`offering.updated` is not consumed.** It carries only `changed_fields`, and no decision allows reading the owner's
+   API (section 7).
+3. **No deletion event exists** for an offering, so none is handled.
+4. **Offering changes after creation therefore leave the read model stale:** a changed code, title, credits or
+   department is not applied, and `course.*` events are not consumed either.
+5. A row created only by a status change (its creation never delivered) stays partial: `academic_period_id` is NULL
+   and the offering is *unknown*. A reader must treat such a row as not known.
+
+**Still not served:** the paper's `course_code`, `course_title` and `department_id` (the paper body is unchanged); the
+duty body's `course_code` and the paper `department_id` filter read this table and so start returning data.
+
+| Open point | Owner | Effect |
+|---|---|---|
+| Backfill or replay of offerings that existed before the consumers: whether it is possible, who owns it and how | Praveen, Faizan (not confirmed) | Existing offerings stay unpopulated until it is decided |
+| How an offering's later changes reach `offering_ref` (re-read the API, or an event with values) | Praveen, Faizan | Until decided, a changed code, title, credits or department after creation is not reflected |
 
 ## 9. Evidence limits
 
