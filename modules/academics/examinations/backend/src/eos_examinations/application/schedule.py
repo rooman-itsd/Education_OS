@@ -11,8 +11,11 @@ Known gaps, not worked around here (docs/reviewer-decisions.md section 11):
 - A session is not checked against the cycle's dates (FR-5): there is no source for the organisation's time zone, the
   domain's `ensure_within_cycle` needs one, and no decision exists. Guessing UTC would refuse valid local times.
 - A candidate clash (FR-5) needs candidates, which wait on the `student_id` mapping. `candidate_count` is 0.
-- `course_code`, `course_title` and `department_id` of a paper come from the offering read model, which is not filled,
-  so they are not served.
+- `course_code`, `course_title` and `department_id` of a paper come from the offering read model (`offering_ref`,
+  filled by application/consumers.py). A paper is served with each of them only when the read model has a value: an
+  offering with no row (one created before the consumers, or whose events were never delivered) or a row only a status
+  change created has none, and the field is then omitted, as an untitled paper omits `title`. Later changes to an
+  offering are not applied (`offering.updated` carries no values), so the values are those of its creation.
 - A cancelled session keeps no paper links (a paper is in at most one session, enforced by a unique index), so it is
   served with no papers; the cancelled papers are in the audit entry and the event."""
 
@@ -78,12 +81,32 @@ UPDATE_PAPER_FIELDS = ("title", "duration_minutes")
 TITLE_MAX = 200  # the column
 
 
+def _offering_fields(ref: OfferingRef | None) -> dict:
+    """The offering facts of a paper that the read model has: `course_code`, `course_title` and `department_id`. The
+    contract types them as strings (not nullable), so a missing offering row, or a column the row has no value for,
+    omits the field. Nothing is made up."""
+    if ref is None:
+        return {}
+    facts = (
+        ("course_code", ref.course_code),
+        ("course_title", ref.course_title),
+        ("department_id", ref.department_id),
+    )
+    return {name: value for name, value in facts if value is not None}
+
+
 def _paper_bodies(db: Session, rows: list[ExamPaperRow]) -> list[dict]:
-    """components.schemas.ExamPaper for each row. `candidate_count`, `course_code`, `course_title` and
-    `department_id` are not served (see the module docstring)."""
+    """components.schemas.ExamPaper for each row. `candidate_count` is not served (see the module docstring);
+    `course_code`, `course_title` and `department_id` are served when the offering read model has them."""
     if not rows:
         return []
     ids = [r.id for r in rows]
+    offerings = {
+        o.course_offering_id: o
+        for o in db.scalars(
+            repo.q(db, OfferingRef).where(OfferingRef.course_offering_id.in_({r.course_offering_id for r in rows}))
+        )
+    }
     components = {
         c.id: c
         for c in db.scalars(
@@ -110,6 +133,7 @@ def _paper_bodies(db: Session, rows: list[ExamPaperRow]) -> list[dict]:
             "status": r.status,
             # the contract types `title` as a string (not nullable), so an untitled paper omits it
             **({"title": r.title} if r.title is not None else {}),
+            **_offering_fields(offerings.get(r.course_offering_id)),
         }
         for r in rows
     ]

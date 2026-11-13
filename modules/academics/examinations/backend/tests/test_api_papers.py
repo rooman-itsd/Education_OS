@@ -1,6 +1,9 @@
 """listExamPapers, createExamPapers, getExamPaper, updateExamPaper."""
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 pytest.importorskip("eos_core", reason="needs eos_core on PYTHONPATH (see conftest.py)")
 
@@ -20,10 +23,13 @@ from conftest import (  # noqa: E402
     make_papers,
     make_session,
     ok,
+    session_for,
     set_row,
     uid,
 )
-from eos_examinations.infrastructure.models import ExamCycleRow, ExamPaperRow  # noqa: E402
+from eos_core.db import engine  # noqa: E402
+from eos_examinations.infrastructure.models import ExamCycleRow, ExamPaperRow, OfferingRef  # noqa: E402
+from sqlalchemy import event  # noqa: E402
 
 URL = f"{BASE}/papers"
 
@@ -178,7 +184,10 @@ def test_list_filters_and_pages(client, org, h, cycle):
     assert page["total"] == 3 and len(page["items"]) == 1
     assert ok(client.get(f"{URL}?status=draft", headers=h))["total"] == 4
     assert ok(client.get(f"{URL}?status=locked", headers=h))["total"] == 0
-    assert ok(client.get(f"{URL}?department_id={uid()}", headers=h)) == {"items": [], "total": 0}  # read model empty
+    assert ok(client.get(f"{URL}?department_id={uid()}", headers=h)) == {
+        "items": [],
+        "total": 0,
+    }  # no offering has that department
     err(client.get(f"{URL}?status=bogus", headers=h), 400, "invalid_choice")
     err(client.get(f"{URL}?department_id=x", headers=h), 400, "invalid_id")
     err(client.get(f"{URL}?exam_cycle_id=x", headers=h), 400, "invalid_id")
@@ -320,3 +329,160 @@ def test_a_scheme_used_by_papers_can_be_superseded_without_touching_them(client,
     v2 = make_assessment(client, h, offering, [component("END", 100, max_marks=30)])
     ok(client.post(f"{BASE}/assessment-schemes/{v2['id']}/activate", headers=h))
     assert ok(client.get(f"{URL}/{papers[0]['id']}", headers=h))["max_marks"] == 100.0
+
+
+# ---------------------------------------------------------------- course_code, course_title, department_id (offering_ref)
+
+OFFERING_FIELDS = ("course_code", "course_title", "department_id")
+CONTRACT = Path(__file__).resolve().parents[2] / "contracts" / "openapi.yaml"
+
+
+def add_offering(org_id: str, offering_id: str, **fields) -> None:
+    """A row of the offering read model. Defaults describe a known offering; pass `None` for what the row lacks."""
+    values = {
+        "course_id": uid(),
+        "academic_period_id": uid(),
+        "course_code": "CS101",
+        "course_title": "Programming",
+        "credits": 4,
+        "department_id": uid(),
+        **fields,
+    }
+    with session_for(org_id) as db:
+        db.add(OfferingRef(organisation_id=org_id, course_offering_id=offering_id, **values))
+        db.commit()
+
+
+def offering_facts(paper: dict) -> dict:
+    return {k: paper[k] for k in OFFERING_FIELDS if k in paper}
+
+
+def test_a_paper_with_no_offering_row_omits_the_three_fields_and_changes_nothing_else(client, org, h, cycle):
+    paper = make_papers(client, h, cycle["id"], codes=["END"])[0]
+    assert not set(OFFERING_FIELDS) & set(paper)  # omitted, never null or empty
+    for body in (
+        ok(client.get(f"{URL}/{paper['id']}", headers=h)),
+        ok(client.get(f"{URL}?exam_cycle_id={cycle['id']}", headers=h))["items"][0],
+    ):
+        assert body == paper
+
+
+def test_a_populated_offering_row_is_served_on_create_get_list_and_update(client, org, h, cycle):
+    offering, department = uid(), uid()
+    add_offering(org.id, offering, course_code="CS101", course_title="Programming", department_id=department)
+    expected = {"course_code": "CS101", "course_title": "Programming", "department_id": department}
+    created = make_papers(client, h, cycle["id"], offering, ["END"])[0]
+    assert offering_facts(created) == expected
+    assert ok(client.get(f"{URL}/{created['id']}", headers=h)) == created
+    [listed] = ok(client.get(f"{URL}?exam_cycle_id={cycle['id']}", headers=h))["items"]
+    assert listed == created
+    updated = ok(client.patch(f"{URL}/{created['id']}", json={"duration_minutes": 120}, headers=h))
+    assert updated == {**created, "duration_minutes": 120} and offering_facts(updated) == expected
+    # every field the paper had without the read model is unchanged
+    assert {k: v for k, v in created.items() if k not in OFFERING_FIELDS} == {
+        "id": created["id"],
+        "organisation_id": org.id,
+        "exam_cycle_id": cycle["id"],
+        "course_offering_id": offering,
+        "assessment_component_id": created["assessment_component_id"],
+        "component_code": "END",
+        "max_marks": 100.0,
+        "duration_minutes": None,
+        "exam_session_id": None,
+        "status": "draft",
+    }
+
+
+def test_a_row_only_a_status_change_created_serves_nothing(client, org, h, cycle):
+    offering = uid()
+    add_offering(
+        org.id,
+        offering,
+        course_id=None,
+        academic_period_id=None,
+        course_code=None,
+        course_title=None,
+        credits=None,
+        department_id=None,
+        status="open",
+    )
+    paper = make_papers(client, h, cycle["id"], offering, ["END"])[0]
+    assert not set(OFFERING_FIELDS) & set(paper)
+    assert not set(OFFERING_FIELDS) & set(ok(client.get(f"{URL}/{paper['id']}", headers=h)))
+
+
+def test_an_offering_without_a_department_serves_the_code_and_title_but_not_a_department(client, org, h, cycle):
+    offering = uid()
+    add_offering(org.id, offering, department_id=None)
+    paper = make_papers(client, h, cycle["id"], offering, ["END"])[0]
+    assert (paper["course_code"], paper["course_title"]) == ("CS101", "Programming")
+    assert "department_id" not in paper
+
+
+def test_another_organisations_offering_row_is_never_served(client, org, other_org, h, cycle):
+    offering = uid()
+    add_offering(other_org.id, offering, course_code="THEIRS", course_title="Not yours")
+    paper = make_papers(client, h, cycle["id"], offering, ["END"])[0]
+    assert not set(OFFERING_FIELDS) & set(paper)
+    add_offering(org.id, offering, course_code="MINE", course_title="Mine")
+    assert ok(client.get(f"{URL}/{paper['id']}", headers=h))["course_code"] == "MINE"
+
+
+def test_a_mixed_page_serves_each_paper_its_own_offering_and_costs_one_offering_query(client, org, h, cycle):
+    populated, partial, missing, no_department = uid(), uid(), uid(), uid()
+    department = uid()
+    add_offering(org.id, populated, course_code="POP", course_title="Populated", department_id=department)
+    add_offering(org.id, partial, course_code=None, course_title=None, department_id=None, status="open")
+    add_offering(org.id, no_department, course_code="NOD", course_title="No department", department_id=None)
+    for offering in (populated, partial, missing, no_department):
+        make_papers(client, h, cycle["id"], offering, ["END", "INT"])
+    statements: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        items = ok(client.get(f"{URL}?exam_cycle_id={cycle['id']}", headers=h))["items"]
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    assert len(items) == 8
+    by_offering: dict[str, list[dict]] = {}
+    for paper in items:
+        by_offering.setdefault(paper["course_offering_id"], []).append(paper)
+    assert {o: {tuple(sorted(offering_facts(p))) for p in ps} for o, ps in by_offering.items()} == {
+        populated: {("course_code", "course_title", "department_id")},
+        partial: {()},
+        missing: {()},
+        no_department: {("course_code", "course_title")},
+    }
+    assert {p["course_code"] for p in by_offering[populated]} == {"POP"}
+    assert {p["department_id"] for p in by_offering[populated]} == {department}
+    assert len([s for s in statements if "examinations_offering_ref" in s]) == 1  # one batched read, no N+1
+
+
+def test_the_served_fields_match_the_contracts_optional_read_only_strings(client, org, h, cycle):
+    schema = yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))["components"]["schemas"]["ExamPaper"]
+    for name in OFFERING_FIELDS:
+        assert schema["properties"][name]["type"] == "string" and schema["properties"][name]["readOnly"] is True
+        assert name not in schema["required"]  # so omitting it is valid, and null would not be
+    assert schema["properties"]["department_id"]["format"] == "uuid"
+    offering = uid()
+    add_offering(org.id, offering)
+    paper = make_papers(client, h, cycle["id"], offering, ["END"])[0]
+    assert set(paper) <= set(schema["properties"]) and set(schema["required"]) <= set(paper)
+    assert all(isinstance(paper[name], str) for name in OFFERING_FIELDS)
+
+
+def test_the_department_filter_still_finds_papers_by_the_read_models_department(client, org, h, cycle):
+    department, offering, other, partial = uid(), uid(), uid(), uid()
+    add_offering(org.id, offering, department_id=department)
+    add_offering(org.id, other, department_id=uid())
+    add_offering(org.id, partial, course_code=None, course_title=None, department_id=None, status="open")
+    mine = make_papers(client, h, cycle["id"], offering, ["END"])
+    make_papers(client, h, cycle["id"], other, ["END"])
+    make_papers(client, h, cycle["id"], partial, ["END"])
+    found = ok(client.get(f"{URL}?department_id={department}", headers=h))
+    assert [p["id"] for p in found["items"]] == [p["id"] for p in mine] and found["total"] == 1
+    assert found["items"][0]["department_id"] == department
+    assert ok(client.get(f"{URL}?department_id={uid()}", headers=h)) == {"items": [], "total": 0}
