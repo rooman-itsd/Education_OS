@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Offering read model consumers (issue #325), registered under `eos.event_consumers` and listed in `module.yaml`:
+  academic-management `offering.created` fills `offering_ref` (course, period, code, title, credits, department from the
+  event's snapshot) and `offering.status-changed` sets its `status`. Migration `ex_0004` adds `processed_event` (with
+  `organisation_id` and the forced `tenant_isolation` policy), makes the creation-event columns of `offering_ref`
+  nullable and adds `status` and `status_as_of`, because an event can arrive before its creation. Idempotent on the
+  envelope id, in the handler's own transaction, in the event's organisation only. `offering.updated` and `course.*`
+  are not consumed: they carry no new values (docs/reviewer-decisions.md, section 13). No route, contract or enablement
+  change; the paper and duty bodies already read `course_code` and the department filter already reads `department_id`
+  from this table, so they now return data for offerings whose events have been delivered.
 - Faculty dashboard widget `examinations.exam-duties` (frontend, issue #325): the caller's upcoming exam duties from
   `GET /me/duties` (permission `examinations:duty:read-own`) with loading, empty, error and "not available" states, as
   the Examination Staff widgets. Typed client function `listMyDuties` and `ExamDuty` types from the contract; only fields

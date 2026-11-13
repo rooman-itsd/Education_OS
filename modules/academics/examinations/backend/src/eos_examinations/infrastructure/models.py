@@ -244,20 +244,41 @@ class ExamDutyRow(Base, TenantMixin, TimestampMixin):
 
 class OfferingRef(Base, TenantMixin, TimestampMixin):
     """Read model of an academic-management course offering (PRD section 9), for the papers of an offering and the
-    reports that group by department. Not written yet: the consumer is a later slice, and `course.updated` /
-    `offering.updated` carry no new values (docs/reviewer-decisions.md)."""
+    reports that group by department. Written by the `offering.created` and `offering.status-changed` consumers
+    (application/consumers.py). `offering.updated` and `course.*` carry no new values, so they are not consumed
+    (docs/reviewer-decisions.md).
+
+    Events are delivered unordered, so a status change can arrive before the creation: the row then exists with only
+    its id and status, and the creation-event columns stay NULL until the creation arrives. A row is *known* only once
+    `academic_period_id` is set. `status` is NULL until an event reports it: `offering.created` carries none.
+    `status_as_of` is the envelope `occurred_at` of the event that set `status`, so an older status change never
+    replaces a newer one. `department_id` is NULL when the event carried none."""
 
     __tablename__ = f"{PREFIX}offering_ref"
     __table_args__ = (UniqueConstraint("organisation_id", "course_offering_id", name="uq_examinations_offering_ref"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     course_offering_id: Mapped[str] = mapped_column(String(36))
-    course_id: Mapped[str] = mapped_column(String(36))
-    academic_period_id: Mapped[str] = mapped_column(String(36))
-    course_code: Mapped[str] = mapped_column(String(40))
-    course_title: Mapped[str] = mapped_column(String(200))
-    credits: Mapped[Decimal] = mapped_column(CREDITS)
-    department_id: Mapped[str] = mapped_column(String(36))
+    course_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    academic_period_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    course_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    course_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    credits: Mapped[Decimal | None] = mapped_column(CREDITS, nullable=True)
+    department_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProcessedEvent(Base, TenantMixin, TimestampMixin):
+    """The envelope ids this module has already applied, per organisation: delivery is at-least-once, so a handler
+    that finds its event id here does nothing (platform/event-bus/contracts/events.yaml, idempotency)."""
+
+    __tablename__ = f"{PREFIX}processed_event"
+    __table_args__ = (UniqueConstraint("organisation_id", "event_id", name="uq_examinations_processed_event"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    event_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(120))
 
 
 class AuditEntry(Base, TenantMixin):
@@ -297,6 +318,7 @@ TABLES = [
         ExamSessionPaperRow,
         ExamDutyRow,
         OfferingRef,
+        ProcessedEvent,
         AuditEntry,
     )
 ]

@@ -9,7 +9,8 @@ Examination Staff widgets (their endpoints are not served yet) and the Faculty w
 assessment schemes, exam cycles, exam papers, exam sessions and exam duties (`api/router.py`), mounted under
 `/api/v1/examinations` because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other
 23 operations, candidates and eligibility, hall tickets,
-marks, results, the event consumers, and the widgets `upcoming-assessments` and `results-summary`. Open
+marks, results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
+`application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`. Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
@@ -36,7 +37,7 @@ most one session, and the rule that a duty names a session (invigilation) or a p
 
 Deliberately not built, because they depend on decisions not yet taken: candidates, hall tickets, mark entries, results and the
 registration read model (the `student_id` mapping and the eligibility inputs), grading-band coverage (whether `max_percent` is
-inclusive), department-scoped authorisation, and every event consumer. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+inclusive), department-scoped authorisation, and every event consumer except the two offering ones. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 ## Tests
 Backend, from `modules/academics/examinations/backend` (a throwaway SQLite database, never a real one):

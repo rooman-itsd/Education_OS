@@ -149,7 +149,8 @@ def list_exam_papers(
     if (offering := base._optional_id(course_offering_id, "course_offering_id")) is not None:
         query = query.where(ExamPaperRow.course_offering_id == offering)
     if (department := base._optional_id(department_id, "department_id")) is not None:
-        # The department comes from the offering read model, which is not filled yet: until it is, this matches nothing.
+        # The department comes from the offering read model, filled by the offering consumers: an offering whose
+        # `offering.created` has not been delivered has no department and is not matched.
         offerings = repo.q(db, OfferingRef).where(OfferingRef.department_id == department)
         query = query.where(
             ExamPaperRow.course_offering_id.in_(offerings.with_only_columns(OfferingRef.course_offering_id))
