@@ -8,10 +8,11 @@ Examination Staff widgets (their endpoints are not served yet) and the Faculty w
 `GET /me/duties`, which the API serves). The API serves 28 of 51 operations: grading schemes,
 assessment schemes, exam cycles, exam papers, exam sessions and exam duties (`api/router.py`), mounted under
 `/api/v1/examinations` because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other
-23 operations, candidates and eligibility, hall tickets,
+23 operations, candidate creation and eligibility, hall tickets,
 marks, results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
 `application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`, and papers serve `course_code`, `course_title` and `department_id` from it when it has them (omitted otherwise; an offering created before the consumers may have no row until a backfill, and later offering changes are not applied). Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+The `examinations_candidate` table exists (migration `ex_0005`, schema only): nothing creates, reads or serves candidates yet.
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
 
@@ -35,8 +36,8 @@ Tables: `grading_scheme`, `grading_band`, `exam_cycle`, `assessment_scheme`, `as
 scheme per organisation, one active assessment scheme per course offering, one paper per component and cycle, a paper in at
 most one session, and the rule that a duty names a session (invigilation) or a paper (evaluation, moderation), never both.
 
-Deliberately not built, because they depend on decisions not yet taken: candidates, hall tickets, mark entries, results and the
-registration read model (the `student_id` mapping and the eligibility inputs), grading-band coverage (whether `max_percent` is
+Deliberately not built, because they depend on decisions not yet taken: candidate creation, hall tickets, mark entries, results and the
+registration read model (which registrations make a candidate, and the eligibility inputs), grading-band coverage (whether `max_percent` is
 inclusive), department-scoped authorisation, and every event consumer except the two offering ones. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 ## Tests

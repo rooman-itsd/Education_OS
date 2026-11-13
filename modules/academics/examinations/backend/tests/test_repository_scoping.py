@@ -142,6 +142,16 @@ def seed(org: str) -> dict:
     s = session(org, c.id)
     link = m.ExamSessionPaperRow(id=new(), organisation_id=org, exam_session_id=s.id, exam_paper_id=p.id)
     d = duty(org, c.id, new(), session_id=s.id)
+    cand = m.CandidateRow(
+        id=new(),
+        organisation_id=org,
+        exam_cycle_id=c.id,
+        exam_paper_id=p.id,
+        course_offering_id=offering,
+        student_id=new(),
+        eligibility_status="pending",
+        eligibility_reasons=[],
+    )
     ref = m.OfferingRef(
         id=new(),
         organisation_id=org,
@@ -166,7 +176,7 @@ def seed(org: str) -> dict:
         summary="created",
         occurred_at=NOW,
     )
-    rows = [g, band, a, comp, c, p, s, link, d, ref, marker, audit]
+    rows = [g, band, a, comp, c, p, s, link, d, cand, ref, marker, audit]
     with _db(org) as db:
         for row in rows:  # parents first, committed one by one so a foreign key never points at nothing
             db.add(row)
