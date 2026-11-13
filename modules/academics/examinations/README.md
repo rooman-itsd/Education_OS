@@ -10,7 +10,7 @@ assessment schemes, exam cycles, exam papers, exam sessions and exam duties (`ap
 `/api/v1/examinations` because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other
 23 operations, candidates and eligibility, hall tickets,
 marks, results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
-`application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`. Open
+`application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`, and papers serve `course_code`, `course_title` and `department_id` from it when it has them (omitted otherwise; an offering created before the consumers may have no row until a backfill, and later offering changes are not applied). Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.

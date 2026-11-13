@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Paper offering fields (issue #325): an exam paper's `course_code`, `course_title` and `department_id` (the contract's optional, read-only strings) are now served from `offering_ref` in `listExamPapers`, `createExamPapers`, `getExamPaper` and `updateExamPaper`, with one batched, organisation-scoped read per response. A field is present only when the read model holds a value and is omitted otherwise (an offering with no row, a row only a status change created, or an offering without a department), as an untitled paper omits `title`; nothing is made up. All other paper fields, `candidate_count` (still not served), the department filter and the duty body are unchanged. No migration, contract or enablement change. **Limits:** an offering created before the consumers shipped may have no row until a backfill (owner and mechanism not confirmed with Praveen or Faizan), and later offering changes are not reflected because `offering.updated` is not consumed (docs/reviewer-decisions.md, section 13).
 - Offering read model consumers (issue #325), registered under `eos.event_consumers` and listed in `module.yaml`:
   academic-management `offering.created` fills `offering_ref` (course, period, code, title, credits, department from the
   event's snapshot) and `offering.status-changed` sets its `status`. Migration `ex_0004` adds `processed_event` (with
@@ -10,7 +11,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   nullable and adds `status` and `status_as_of`, because an event can arrive before its creation. Idempotent on the
   envelope id, in the handler's own transaction, in the event's organisation only. `offering.updated` and `course.*`
   are not consumed: they carry no new values (docs/reviewer-decisions.md, section 13). No route, contract or enablement
-  change; the paper and duty bodies already read `course_code` and the department filter already reads `department_id`
+  change; the duty body already reads `course_code` and the paper department filter already reads `department_id`
   from this table, so they now return data for offerings whose events have been delivered.
 - Faculty dashboard widget `examinations.exam-duties` (frontend, issue #325): the caller's upcoming exam duties from
   `GET /me/duties` (permission `examinations:duty:read-own`) with loading, empty, error and "not available" states, as
