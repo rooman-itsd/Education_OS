@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
-import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { FARM, LOGGED_HOURS, REQUIRED_HOURS, seedPlacement } from "./field-training-data";
+import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Field Trainee dashboard (layout platform/identity/config/dashboards/field-trainee.yaml, which extends the Student
@@ -16,8 +17,11 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   (projects and field-training #339, and the inherited timetable-attendance, examinations and lms ones, and
  *   transport and library until they are enabled). The projects and field-training entries already carry the texts
  *   of their open pull requests (#506, #504), so the journey starts checking them the day the module is enabled;
- * - data journey: a booking the trainee makes for a resource facility staff set up shows in
- *   facility-booking.my-bookings (the trainee has booking:create). The other widgets' journeys wait for their modules.
+ * - data journeys: a booking the trainee makes for a resource facility staff set up shows in
+ *   facility-booking.my-bookings (the trainee has booking:create); a farm placement the coordinator assigns and starts,
+ *   with an entry the trainee logs and the farm supervisor verifies, shows in `field-training.my-placement` and
+ *   `field-training.hours-logged`; a research trial the trainee proposes shows in `projects.my-projects`. Each skips
+ *   until its module is enabled. skill-progress and the inherited Student widgets get their data journeys with their modules.
  *
  * facilities, finance-operations and campus-life are not in the Trial plan (platform/billing/config/plans.yaml), so
  * the super admin moves the organisation to Standard first. The empty-state tests run before any data is created
@@ -140,6 +144,13 @@ const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 let user: DashboardUser;
 /** Facility staff set up the bookable resource; the trainee only books it. */
 let staff: DashboardUser;
+/**
+ * Who sets up the trainee's placement: no agriculture-college profile role holds field-training-coordinator, so the
+ * coordinator is a user with that module role itself (the profile does not restrict which roles an organisation
+ * grants); the farm supervisor is named on the site and the opening and verifies the entry.
+ */
+let coordinator: DashboardUser;
+let supervisor: DashboardUser;
 /** Per shipped widget id: what its GET answered the field trainee. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -151,6 +162,8 @@ test.beforeAll(async ({ request }) => {
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "field-trainee");
   staff = await addUser(request, admin, "facility-staff");
+  coordinator = await addUser(request, admin, "field-training-coordinator");
+  supervisor = await addUser(request, admin, "farm-supervisor");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -216,5 +229,49 @@ test.describe("with facility-booking data", () => {
     const panel = widget(page, "My bookings");
     await expect(panel.getByText("No upcoming bookings")).toHaveCount(0);
     await expect(panel.getByRole("list", { name: "My bookings" }).getByText("Demonstration farm · Soil sampling practical")).toBeVisible();
+  });
+});
+
+test.describe("with field-training and projects data", () => {
+  test("field-training.my-placement and hours-logged show the placement the coordinator assigns and the hours the farm supervisor verifies", async ({ page, request }) => {
+    for (const id of ["field-training.my-placement", "field-training.hours-logged"]) {
+      test.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test.skip(!ready(id), `the field-training API answered ${status[id]} to the field-trainee role`);
+    }
+    // The coordinator records the farm and the opening and assigns and starts the placement; the trainee logs today's
+    // hours and the supervisor named on the opening verifies them. Only verified hours count.
+    await seedPlacement(request, { coordinator, supervisor, trainee: user }, { start: true, log: true, verify: true, names: FARM });
+    await signIn(page, user);
+
+    const placement = widget(page, "My placement");
+    await expect(placement.getByText("No placement yet")).toHaveCount(0);
+    const row = placement.getByRole("list", { name: "Your placements" }).getByRole("listitem").filter({ hasText: FARM.opening });
+    await expect(row).toContainText(FARM.site);
+    await expect(row).toContainText(`${LOGGED_HOURS} of ${REQUIRED_HOURS} h verified`);
+    await expect(row).toContainText("Active");
+
+    const hours = widget(page, "Hours logged");
+    await expect(hours.getByText("No hours to show yet")).toHaveCount(0);
+    await expect(hours).toContainText(`${LOGGED_HOURS} of ${REQUIRED_HOURS} hours verified`);
+    await expect(hours.getByText("Awaiting verification: 0 h")).toBeVisible();
+  });
+
+  test("projects.my-projects lists a research trial the trainee proposes", async ({ page, request }) => {
+    const w = byId("projects.my-projects");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the projects API answered ${status[w.id]} to the field-trainee role`);
+    // projects:self:propose (projects-member): the project starts as proposed with the trainee as its lead.
+    await created(request, user, "/projects/projects", {
+      title: "Soil moisture trial",
+      kind: "Research",
+      starts_on: dayFromNow(0),
+      ends_on: dayFromNow(90),
+    });
+    await signIn(page, user);
+    const panel = widget(page, "My projects");
+    await expect(panel.getByText("You are not on a project yet")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "My projects" }).getByRole("listitem").filter({ hasText: "Soil moisture trial" });
+    await expect(row).toContainText("Lead · No milestones yet");
+    await expect(row).toContainText("Proposed");
   });
 });

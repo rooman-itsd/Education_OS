@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { FARM, seedPlacement } from "./field-training-data";
+import { seedProject, TRIAL } from "./projects-data";
 import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -17,6 +19,9 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  * - data journeys: a consumable below its reorder level shows in inventory-equipment.low-stock, and a booking later
  *   today on a field the farm supervisor approves in facility-booking.bookings-today. Facility staff create both (the
  *   farm supervisor reads stock and approves bookings, but does not manage the stores or the resource register).
+ *   A trainee the coordinator places on a farm and starts, whose log entry waits for the supervisor, shows in
+ *   `field-training.trainees-to-assess`, and a research trial the research lead sets up with the supervisor as guide
+ *   shows in `projects.active`; each skips until its module is enabled.
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -108,6 +113,14 @@ const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 let user: DashboardUser;
 /** Facility staff: they run the stores and the resource register, so they create the data the journeys look for. */
 let facilityStaff: DashboardUser;
+/**
+ * Who sets up the supervisor's data: the field-training coordinator (a module role no agriculture-college profile role
+ * holds, so the user has it directly), the research lead (projects-coordinator, who creates the trial and names the
+ * supervisor as guide) and the field trainee on the placement and the trial.
+ */
+let coordinator: DashboardUser;
+let researchLead: DashboardUser;
+let trainee: DashboardUser;
 /** Per shipped widget id: what its GET answered the farm supervisor. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -119,6 +132,9 @@ test.beforeAll(async ({ request }) => {
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "farm-supervisor");
   facilityStaff = await addUser(request, admin, "facility-staff");
+  coordinator = await addUser(request, admin, "field-training-coordinator");
+  researchLead = await addUser(request, admin, "research-lead");
+  trainee = await addUser(request, admin, "field-trainee");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -214,5 +230,38 @@ test.describe("with facilities data", () => {
     await expect(panel.getByText("No bookings today")).toHaveCount(0);
     await expect(panel.getByText("North field · Irrigation inspection")).toBeVisible();
     await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
+  });
+});
+
+test.describe("with field-training and projects data", () => {
+  test("field-training.trainees-to-assess lists a trainee whose entry waits for the farm supervisor", async ({ page, request }) => {
+    const w = byId("field-training.trainees-to-assess");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the field-training API answered ${status[w.id]} to the farm-supervisor role`);
+    // The coordinator places the trainee on a farm opening and starts it; the trainee logs today's hours and the entry
+    // waits for the supervisor named on the site and the opening (the farm supervisor).
+    await seedPlacement(request, { coordinator, supervisor: user, trainee }, { start: true, log: true, names: FARM });
+    await signIn(page, user);
+    const panel = widget(page, "Trainees to assess");
+    await expect(panel.getByText("Nothing to assess right now")).toHaveCount(0);
+    // No identity lookup gives the module the trainee's name yet, so the row is titled "Trainee".
+    const row = panel.getByRole("list", { name: "Trainees to assess" }).getByRole("listitem").filter({ hasText: FARM.opening });
+    await expect(row).toContainText(FARM.site);
+    await expect(row).toContainText("1 entry to verify");
+  });
+
+  test("projects.active lists a research trial the farm supervisor guides", async ({ page, request }) => {
+    const w = byId("projects.active");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the projects API answered ${status[w.id]} to the farm-supervisor role`);
+    // projects:guidance:read: a guide sees the projects they guide. The research lead (projects:project:manage) creates
+    // the trial active, with the trainee as lead and the farm supervisor as guide.
+    await seedProject(request, { coordinator: researchLead, guide: user, lead: trainee });
+    await signIn(page, user);
+    const panel = widget(page, "Active projects");
+    await expect(panel.getByText("No active projects")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "Active projects" }).getByRole("listitem").filter({ hasText: TRIAL });
+    await expect(row).toContainText("Research · 1 member");
+    await expect(row.getByLabel("Milestones accepted")).toHaveText("0/0");
   });
 });
