@@ -2,6 +2,7 @@
 table, and downgrades cleanly. Its Postgres output enables forced row-level security on every table."""
 
 import io
+import re
 import tempfile
 import uuid
 from pathlib import Path
@@ -32,9 +33,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_ex_0001_to_ex_0004_with_one_head():
+def test_the_chain_is_ex_0001_to_ex_0005_with_one_head():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["ex_0004"]
+    assert script.get_heads() == ["ex_0005"]
+    assert script.get_revision("ex_0005").down_revision == "ex_0004"
     assert script.get_revision("ex_0004").down_revision == "ex_0003"
     assert script.get_revision("ex_0003").down_revision == "ex_0002"
     assert script.get_revision("ex_0002").down_revision == "ex_0001"
@@ -218,17 +220,22 @@ def test_the_migration_creates_every_model_table_and_no_other():
     from importlib import util
 
     created = []
-    for pattern, name in (("*_0001_initial.py", "ex_0001"), ("*_0004_offering_ref_consumers.py", "ex_0004")):
+    for pattern, name, attribute in (  # the migration's own list of the tables it creates
+        ("*_0001_initial.py", "ex_0001", "TABLES"),
+        ("*_0004_offering_ref_consumers.py", "ex_0004", "NEW_TABLES"),
+        ("*_0005_candidate_table.py", "ex_0005", "TABLE"),
+    ):
         path = next((DB_DIR / "migrations" / "versions").glob(pattern))
         spec = util.spec_from_file_location(name, path)
         module = util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        created += module.TABLES if name == "ex_0001" else module.NEW_TABLES
+        listed = getattr(module, attribute)
+        created += [listed] if isinstance(listed, str) else listed
     assert sorted(created) == sorted(t.name for t in TABLES)
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 12
+    assert len(TABLES) == 13
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name
@@ -236,13 +243,16 @@ def test_every_model_table_is_prefixed_and_tenant_scoped():
 
 
 def test_no_table_for_a_decision_that_is_not_taken():
-    """Candidates, hall tickets, marks, results and the registration read model carry `student_id` or depend on
-    eligibility, whose rules are unresolved; they are a later slice."""
+    """Hall tickets, marks, results and the registration read model depend on eligibility, whose rules are unresolved;
+    they are a later slice. The candidate table is schema only and is the one table that carries `student_id` (the
+    canonical `person_id`)."""
     names = {t.name for t in TABLES}
-    for blocked in ("candidate", "hall_ticket", "mark_entry", "result", "registration_ref"):
+    for blocked in ("hall_ticket", "mark_entry", "result", "registration_ref"):
         assert f"{PREFIX}{blocked}" not in names
+    assert f"{PREFIX}candidate" in names
     for table in TABLES:
-        assert "student_id" not in table.columns, table.name
+        if table.name != f"{PREFIX}candidate":
+            assert "student_id" not in table.columns, table.name
 
 
 def test_no_foreign_key_leaves_the_module():
@@ -329,7 +339,8 @@ def test_ex_0003_downgrade_removes_only_its_two_indexes():
     command.downgrade(cfg, "ex_0002")
     with engine.connect() as conn:
         after = {i["name"] for i in inspect(conn).get_indexes(f"{PREFIX}exam_duty")}
-        other_tables = {t.name for t in TABLES} - {f"{PREFIX}processed_event"}  # ex_0004's table goes with it
+        # the tables of ex_0004 and ex_0005 go with them
+        other_tables = {t.name for t in TABLES} - {f"{PREFIX}processed_event", f"{PREFIX}candidate"}
         assert other_tables <= set(inspect(conn).get_table_names())
     assert before - after == DUTY_INDEXES and after <= before  # nothing else went, nothing came
 
@@ -421,3 +432,103 @@ def test_ex_0004_downgrade_keeps_known_offerings_and_drops_only_rows_with_no_cre
             )
         }
     assert kept == {known: ("K", known), no_department: ("N", "")}
+
+
+# ------------------------------------------------------------------------------------------------ ex_0005: candidate
+
+CANDIDATE = f"{PREFIX}candidate"
+CANDIDATE_COLUMNS = {  # name: (type name, length or None, nullable)
+    "id": ("VARCHAR", 36, False),
+    "organisation_id": ("VARCHAR", 36, False),  # NOT NULL on this table only
+    "created_at": ("DATETIME", None, False),
+    "exam_cycle_id": ("VARCHAR", 36, False),
+    "exam_paper_id": ("VARCHAR", 36, False),
+    "course_offering_id": ("VARCHAR", 36, False),
+    "student_id": ("VARCHAR", 36, False),
+    "eligibility_status": ("VARCHAR", 20, False),
+    "eligibility_reasons": ("JSON", None, False),
+    "overridden_by": ("VARCHAR", 36, True),
+    "override_reason": ("VARCHAR", 500, True),
+    "determined_at": ("DATETIME", None, True),
+}
+
+
+def test_ex_0005_creates_only_the_candidate_table_with_the_approved_columns():
+    cfg, engine = _upgraded()
+    with engine.connect() as conn:
+        columns = _columns(conn, CANDIDATE)
+        assert set(columns) == set(CANDIDATE_COLUMNS)  # no pending_inputs, registration id or type, updated_at
+        for name, (type_name, length, nullable) in CANDIDATE_COLUMNS.items():
+            column = columns[name]
+            assert type(column["type"]).__name__.upper() == type_name, name
+            assert getattr(column["type"], "length", None) == length, name
+            assert column["nullable"] is nullable, name
+            # no database default on any column, least of all the eligibility ones
+            assert column["default"] is None, name
+        assert inspect(conn).get_pk_constraint(CANDIDATE)["constrained_columns"] == ["id"]
+    command.downgrade(cfg, "ex_0004")
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+        assert CANDIDATE not in names
+        assert {t.name for t in TABLES} - {CANDIDATE} <= names  # nothing else went
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert CANDIDATE in inspect(conn).get_table_names()
+
+
+def test_ex_0005_keys_and_indexes_follow_the_approved_schema():
+    _, engine = _upgraded()
+    with engine.connect() as conn:
+        inspector = inspect(conn)
+        uniques = {u["name"]: u["column_names"] for u in inspector.get_unique_constraints(CANDIDATE)}
+        assert uniques == {
+            "uq_examinations_candidate_paper_student": ["organisation_id", "exam_paper_id", "student_id"]
+        }
+        foreign_keys = {
+            fk["constrained_columns"][0]: (fk["referred_table"], fk["referred_columns"])
+            for fk in inspector.get_foreign_keys(CANDIDATE)
+        }
+        assert foreign_keys == {
+            "exam_cycle_id": (f"{PREFIX}exam_cycle", ["id"]),
+            "exam_paper_id": (f"{PREFIX}exam_paper", ["id"]),
+        }  # inside the module; student_id, course_offering_id and overridden_by are external ids
+        indexes = {i["name"]: i["column_names"] for i in inspector.get_indexes(CANDIDATE)}
+        assert indexes == {
+            f"ix_{CANDIDATE}_organisation_id": ["organisation_id"],
+            f"ix_{CANDIDATE}_exam_cycle_id": ["exam_cycle_id"],
+        }  # no filter indexes yet; the unique key serves paper lookups
+
+
+def test_the_candidate_model_has_the_columns_and_no_defaults_of_the_migration():
+    table = next(t for t in TABLES if t.name == CANDIDATE)
+    assert set(table.columns.keys()) == set(CANDIDATE_COLUMNS)
+    assert table.columns["organisation_id"].nullable is False
+    for column in table.columns:
+        assert column.server_default is None, column.name
+        if column.name not in {"id", "created_at"}:
+            assert column.default is None, column.name  # the writer sets eligibility_status and eligibility_reasons
+    assert type(table.columns["eligibility_reasons"].type).__name__ == "JSON"
+    assert table.columns["eligibility_reasons"].type.none_as_null is True  # None is SQL NULL, so NOT NULL rejects it
+
+
+def test_postgres_ex_0005_sql_creates_the_candidate_table_with_rls_and_drops_only_it():
+    pytest.importorskip("psycopg")
+    up, down = io.StringIO(), io.StringIO()
+    for buffer, run in (
+        (up, lambda c: command.upgrade(c, "ex_0004:ex_0005", sql=True)),
+        (down, lambda c: command.downgrade(c, "ex_0005:ex_0004", sql=True)),
+    ):
+        cfg = _config("postgresql+psycopg://offline/offline")
+        cfg.output_buffer = buffer
+        run(cfg)
+    created, dropped = up.getvalue(), down.getvalue()
+    tables = [n for n in re.findall(r"CREATE TABLE (\w+)", created) if "alembic" not in n]
+    assert tables == [CANDIDATE]  # only the candidate table (the version table is not counted)
+    assert "organisation_id VARCHAR(36) NOT NULL" in created
+    assert (
+        "CONSTRAINT uq_examinations_candidate_paper_student UNIQUE (organisation_id, exam_paper_id, student_id)"
+        in created
+    )
+    assert f"ALTER TABLE {CANDIDATE} FORCE ROW LEVEL SECURITY;" in created
+    assert f"CREATE POLICY tenant_isolation ON {CANDIDATE}" in created and created.count("CREATE POLICY") == 1
+    assert [n for n in re.findall(r"DROP TABLE (\w+)", dropped) if "alembic" not in n] == [CANDIDATE]

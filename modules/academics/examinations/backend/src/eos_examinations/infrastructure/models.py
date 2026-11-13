@@ -4,9 +4,10 @@ no foreign key leaves this module. academic_period_id, course_offering_id, cours
 (academic-management) and staff_id (platform/identity) are external ids, stored as plain strings.
 
 This is the foundation: the configuration side of the PRD's data model (cycles, grading and assessment schemes, papers,
-sessions, duties, the offering read model and the audit entry). Not here, because they depend on decisions that are not
-taken (docs/reviewer-decisions.md): `candidate`, `hall_ticket`, `mark_entry`, `result` (they carry `student_id`, whose
-mapping is unconfirmed, and eligibility) and `registration_ref`."""
+sessions, duties, the offering read model and the audit entry), and the `candidate` table (schema only: nothing writes
+or reads it yet). Not here, because they depend on decisions that are not taken (docs/reviewer-decisions.md):
+`hall_ticket`, `mark_entry`, `result` (they depend on eligibility) and `registration_ref`. `student_id` carries the
+canonical `person_id` (decided on issue #325)."""
 
 from __future__ import annotations
 
@@ -242,6 +243,40 @@ class ExamDutyRow(Base, TenantMixin, TimestampMixin):
     cancel_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class CandidateRow(Base, TenantMixin, TimestampMixin):
+    """One student's candidacy for one exam paper (PRD 5.6): schema only, nothing creates or reads these rows yet.
+
+    The unique key implements the PRD rule "One per (exam paper, student)" within an organisation: `organisation_id` is
+    part of the key. Nothing yet ties a candidate's organisation to its paper's organisation (no composite foreign
+    key), so future candidate-creation logic must set the candidate's organisation from the paper. `organisation_id`
+    is NOT NULL on this table only (the TenantMixin column is nullable): a unique key with a NULL member lets
+    duplicates through on Postgres and SQLite alike. `student_id` carries the canonical `person_id` and is an external
+    id (no foreign key). The cycle and course offering are copies of the paper's, as the contract and the PRD list
+    them; nothing here keeps them equal.
+    `eligibility_status` and `eligibility_reasons` have no default: the writer sets them. `eligibility_reasons` is the
+    contract's list of `{code, detail}`; `JSON(none_as_null=True)` stores a Python None as SQL NULL, which NOT NULL
+    rejects. `pending_inputs` (contract) is not stored: it belongs to the eligibility workstream."""
+
+    __tablename__ = f"{PREFIX}candidate"
+    __table_args__ = (
+        UniqueConstraint(
+            "organisation_id", "exam_paper_id", "student_id", name="uq_examinations_candidate_paper_student"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    organisation_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)  # NOT NULL here only
+    exam_cycle_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}exam_cycle.id"), index=True)
+    exam_paper_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}exam_paper.id"))
+    course_offering_id: Mapped[str] = mapped_column(String(36))
+    student_id: Mapped[str] = mapped_column(String(36))
+    eligibility_status: Mapped[str] = mapped_column(String(20))
+    eligibility_reasons: Mapped[list] = mapped_column(JSON(none_as_null=True), nullable=False)
+    overridden_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    override_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    determined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class OfferingRef(Base, TenantMixin, TimestampMixin):
     """Read model of an academic-management course offering (PRD section 9), for the papers of an offering and the
     reports that group by department. Written by the `offering.created` and `offering.status-changed` consumers
@@ -317,6 +352,7 @@ TABLES = [
         ExamSessionRow,
         ExamSessionPaperRow,
         ExamDutyRow,
+        CandidateRow,
         OfferingRef,
         ProcessedEvent,
         AuditEntry,
