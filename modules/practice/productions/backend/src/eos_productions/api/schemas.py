@@ -41,7 +41,7 @@ class ProductionIn(Strict):
     summary: str | None = Field(default=None, max_length=2000)
     venue: str | None = Field(default=None, max_length=200)
     resource_id: str | None = Field(default=None, max_length=36)
-    lead_user_id: str | None = None
+    lead_user_id: str | None = Field(default=None, max_length=36)
     starts_at: Moment | None = None
     ends_at: Moment | None = None
     call_time: Moment | None = None
@@ -61,7 +61,7 @@ class ProductionPatch(Strict):
     summary: str | None = Field(default=None, max_length=2000)
     venue: str | None = Field(default=None, max_length=200)
     resource_id: str | None = Field(default=None, max_length=36)
-    lead_user_id: str | None = None
+    lead_user_id: str | None = Field(default=None, max_length=36)
 
     @model_validator(mode="before")
     @classmethod
