@@ -108,6 +108,10 @@ def test_credentials_are_used_only_when_both_are_configured(smtp):
         (smtplib.SMTPRecipientsRefused({"p@x.com": (451, b"try later")}), THROTTLED, True),
         (smtplib.SMTPRecipientsRefused({"p@x.com": (421, b"too busy")}), THROTTLED, True),
         (smtplib.SMTPSenderRefused(553, b"bad sender", "no-reply@example.invalid"), REJECTED, False),
+        # A 4xx reply to MAIL FROM is temporary (the file header: 4xx means retry); only 5xx is our identity refused.
+        (smtplib.SMTPSenderRefused(452, b"insufficient storage", "no-reply@example.invalid"), THROTTLED, True),
+        (smtplib.SMTPSenderRefused(421, b"too busy", "no-reply@example.invalid"), THROTTLED, True),
+        (smtplib.SMTPSenderRefused(454, b"temporary failure", "no-reply@example.invalid"), TRANSPORT_UNAVAILABLE, True),
         (smtplib.SMTPAuthenticationError(535, b"bad credentials"), TRANSPORT_UNAVAILABLE, True),
         (smtplib.SMTPResponseException(452, b"insufficient storage"), THROTTLED, True),
         (smtplib.SMTPResponseException(554, b"transaction failed"), REJECTED, False),
@@ -129,6 +133,16 @@ def test_every_provider_failure_maps_to_a_port_reason_code(error, reason, retrya
     assert result.reason == reason
     assert result.retryable is retryable
     assert result.provider_message_id is None
+
+
+def test_a_failure_while_closing_after_the_server_accepted_the_mail_is_still_accepted():
+    """smtplib's __exit__ raises when the QUIT reply is not 221. By then the server has answered 250 to DATA, so
+    reporting a failure would re-send a delivered message (or mark a delivered one failed)."""
+    for quit_error in (smtplib.SMTPResponseException(451, b"bye"), smtplib.SMTPResponseException(554, b"bye")):
+        server = FakeSmtp(raise_on_exit=quit_error)
+        result = provider(server).send(**request())
+        assert result.accepted, quit_error
+        assert len(server.sent) == 1
 
 
 def test_attachments_are_refused_rather_than_silently_dropped(smtp):
