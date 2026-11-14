@@ -59,8 +59,24 @@ export class AcademicManagementApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The server's error code (`detail.code`), when the body carried one. */
+    public code?: string,
   ) {
     super(message);
+  }
+}
+
+/** 404 `active_term_not_found`: the one 404 the widgets treat as "nothing to show yet". Any other 404 (a route that
+ * is not mounted, a renamed path) is a failure and must say so rather than read as "no active term". */
+const noActiveTerm = (e: unknown): boolean =>
+  e instanceof AcademicManagementApiError && e.status === 404 && e.code === "active_term_not_found";
+
+async function errorCode(res: Response): Promise<string | undefined> {
+  try {
+    const body = (await res.json()) as { detail?: { code?: unknown } };
+    return typeof body?.detail?.code === "string" ? body.detail.code : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -77,7 +93,9 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   const t = token();
   if (t) headers.Authorization = `Bearer ${t}`;
   const res = await fetch(`${API_BASE}/academic-management${path}`, { headers, signal });
-  if (!res.ok) throw new AcademicManagementApiError(res.status, res.statusText || `HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new AcademicManagementApiError(res.status, res.statusText || `HTTP ${res.status}`, await errorCode(res));
+  }
   return (await res.json()) as T;
 }
 
@@ -90,7 +108,7 @@ export async function getMyOfferings(signal?: AbortSignal): Promise<MyOfferings>
   try {
     return await get<MyOfferings>("/me/offerings", signal);
   } catch (e) {
-    if (e instanceof AcademicManagementApiError && e.status === 404) return { academic_period_id: null, items: [] };
+    if (noActiveTerm(e)) return { academic_period_id: null, items: [] };
     throw e;
   }
 }
@@ -123,15 +141,16 @@ export interface FacultyLoadReport {
 
 /**
  * GET /faculty-load: teaching load per faculty member for the active term, over-load first. Permission
- * academic-management:faculty-load:read. For a department admin the server narrows it to their department, so the
- * widget sends no department_id. The contract answers 404 `active_term_not_found` when no term is active; for the
+ * academic-management:faculty-load:read. The widget sends no department_id, and the server does not narrow a
+ * department admin to their department yet (no trusted department claim exists), so it lists the whole
+ * organisation's faculty. The contract answers 404 `active_term_not_found` when no term is active; for the
  * widget that is "nothing to show yet", not a failure, so it becomes `null`.
  */
 export async function getFacultyLoad(signal?: AbortSignal): Promise<FacultyLoadReport | null> {
   try {
     return await get<FacultyLoadReport>("/faculty-load", signal);
   } catch (e) {
-    if (e instanceof AcademicManagementApiError && e.status === 404) return null;
+    if (noActiveTerm(e)) return null;
     throw e;
   }
 }
