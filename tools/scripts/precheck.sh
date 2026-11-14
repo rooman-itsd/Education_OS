@@ -23,7 +23,12 @@ echo "== migrations";       "$PY" tools/scripts/check-migrations.py
 # failing `ruff check` through and still printed "precheck ok".
 echo "== ruff";             $RUFF check $CFG .
 echo "== ruff format";      $RUFF format $CFG --check .
+# The commit-message check needs origin/main. Without it the check cannot run: say so, and do not claim the push is
+# safe (CI will check the messages).
 if git rev-parse --verify -q origin/main >/dev/null; then
   echo "== commit messages"; tools/scripts/check-commits.sh "$(git merge-base origin/main HEAD)" HEAD
+  echo "precheck ok: safe to push"
+else
+  echo "== commit messages: SKIPPED, there is no origin/main here (run: git fetch origin main)"
+  echo "precheck ok, but commit messages NOT checked: fetch origin/main and run it again before you push"
 fi
-echo "precheck ok: safe to push"

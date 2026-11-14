@@ -71,7 +71,11 @@ def test_without_a_venv_it_says_to_run_the_setup(tmp_path):
 
 @pytest.mark.parametrize(
     "failure",
-    [{"ruff_check": 1}, {"ruff_format": 1}, *({"failing_check": name} for name in CHECKS)],
+    [
+        {"ruff_check": 1},
+        {"ruff_format": 1},
+        *({"failing_check": name} for name in CHECKS),
+    ],
     ids=["ruff-check", "ruff-format", *CHECKS],
 )
 @pytest.mark.parametrize("venv_dir", ["bin", "Scripts"])
@@ -79,3 +83,42 @@ def test_any_failing_check_fails_the_script(tmp_path, failure, venv_dir):
     result = _run(_layout(tmp_path, venv_dir=venv_dir, **failure))
     assert result.returncode != 0
     assert "precheck ok" not in result.stdout
+
+
+def test_a_skipped_commit_message_check_is_said_not_hidden(tmp_path):
+    """Outside a checkout, or without origin/main, the commit-message step cannot run. The script used to skip it
+    in silence and still print an unqualified "precheck ok: safe to push"."""
+    result = _run(_layout(tmp_path))
+    assert result.returncode == 0
+    assert "commit messages NOT checked" in result.stdout
+    assert "precheck ok: safe to push" not in result.stdout
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+
+
+def test_check_commits_fails_when_git_log_fails(tmp_path):
+    """The loop read `git log` through a process substitution, whose exit status bash ignores: an unknown base
+    printed no commits, and the script said "commit messages ok" having checked nothing."""
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "-c", "user.email=a@b.c", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "oops")
+    script = ROOT / "tools" / "scripts" / "check-commits.sh"
+    unknown = "0" * 40
+    result = subprocess.run(["bash", str(script), unknown, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "commit messages ok" not in result.stdout
+
+
+def test_check_commits_still_flags_a_bad_message_and_passes_a_good_one(tmp_path):
+    script = ROOT / "tools" / "scripts" / "check-commits.sh"
+    _git(tmp_path, "init", "-q")
+    ident = ("-c", "user.email=a@b.c", "-c", "user.name=a")
+    _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "feat(repo): the first commit")
+    base = _git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "fix(repo): a properly scoped message")
+    ok = subprocess.run(["bash", str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    assert ok.returncode == 0 and "commit messages ok" in ok.stdout
+    _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "fixed stuff")
+    bad = subprocess.run(["bash", str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    assert bad.returncode != 0 and "bad commit message: fixed stuff" in bad.stdout
