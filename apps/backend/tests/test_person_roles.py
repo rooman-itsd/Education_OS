@@ -131,3 +131,36 @@ def test_login_never_mints_a_token_carrying_the_service_role(client):
     assert r.status_code == 200, r.text
     claims = jwt.decode(r.json()["token"], options={"verify_signature": False})
     assert claims["roles"] == ["student"]
+
+
+def test_impersonation_never_mints_a_token_carrying_the_service_role(client):
+    """Impersonation is the other place a token is minted for a person (tenancy.impersonate). It must drop `service`
+    like login does, or a super admin impersonating a legacy row would hand the 60-minute token every key that
+    feature modules grant `service` (they read the claim directly, not through current_principal)."""
+    a = register_and_login(client, slug="roles-impersonate")
+    org = a["org"]["id"]
+    with organisation_scope(org), SessionLocal() as db:
+        row = User(
+            organisation_id=org,
+            email="imp@roles.example.com",
+            name="I",
+            password_hash=hash_password("Passw0rd!x"),
+            roles=["student", "service"],
+        )
+        db.add(row)
+        db.commit()
+        user_id = row.id
+    sa = auth(
+        client.post(
+            "/api/v1/identity/auth/login",
+            json={"email": "root@platform.example.com", "password": "RootPassw0rd!"},
+        ).json()["token"]
+    )
+    r = client.post(
+        f"/api/v1/tenancy/admin/organisations/{org}/impersonate",
+        json={"user_id": user_id, "reason": "support ticket 7"},
+        headers=sa,
+    )
+    assert r.status_code == 201, r.text
+    claims = jwt.decode(r.json()["token"], options={"verify_signature": False})
+    assert claims["roles"] == ["student"]

@@ -439,7 +439,7 @@ def impersonate(db: Session, *, organisation_id: str, user_id: str, super_admin_
     token = create_token(
         user_id=user.id,
         organisation_id=org.id,
-        roles=list(user.roles or []),
+        roles=identity.person_roles(user.roles),  # no person may carry `service`, impersonated or not
         impersonated_by=super_admin_id,
         ttl_minutes=60,
     )
