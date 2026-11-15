@@ -223,3 +223,25 @@ def test_deleting_the_latest_version_makes_the_previous_one_current_again(client
     assert [d["id"] for d in listed["items"]] == [v1]
     assert client.get(f"{BASE}/{v1}", headers=org.student_headers).json()["superseded_by"] is None
     assert _new_version(client, db, org, org.student_headers, v1, b"%PDF-1.7 third").status_code == 201
+
+
+def test_deleting_a_middle_version_keeps_the_chain_to_the_newest(client, db, org):
+    """Found by the review bot on #645: clearing superseded_by on the predecessor was only right when the deleted
+    version was the latest. Deleting v2 of v1->v2->v3 freed v1 while v3 was live, so the default listing showed
+    both and v1 could take a new version, forking the history. v1 must now point at v3."""
+    v1 = _upload(client, db, org, org.student_headers)
+    ids = [v1]
+    for data in (b"%PDF-1.7 second version", b"%PDF-1.7 third version"):
+        nxt = _new_version(client, db, org, org.student_headers, ids[-1], data).json()["document"]["id"]
+        _put(db, org, nxt, data)
+        assert client.post(f"{BASE}/{nxt}/confirm", headers=org.student_headers).status_code == 200
+        ids.append(nxt)
+    v1, v2, v3 = ids
+
+    assert client.delete(f"{BASE}/{v2}", headers=org.admin_headers).status_code == 200
+
+    listed = client.get(f"{BASE}/", headers=org.student_headers).json()
+    assert [d["id"] for d in listed["items"]] == [v3]  # one entry: the newest, not v1 as well
+    assert client.get(f"{BASE}/{v1}", headers=org.student_headers).json()["superseded_by"] == v3
+    assert _new_version(client, db, org, org.student_headers, v1, b"%PDF-1.7 fork").status_code == 409
+    assert _new_version(client, db, org, org.student_headers, v3, b"%PDF-1.7 fourth").status_code == 201

@@ -453,12 +453,13 @@ def delete_document(
 
     doc.status = STATUS_DELETED
     doc.updated_at = utcnow()
-    # The version before this one was superseded by it. Without this the document would vanish from the default
-    # listing and no new version could follow (only the latest confirmed version can be followed).
+    # The version before this one was superseded by it. Hand it on to whatever superseded this one: None when this
+    # was the latest (so the previous version is current again and can be followed), or the newer version when this
+    # was in the middle (so v1 -> v2 -> v3 becomes v1 -> v3, never two live heads).
     for earlier in db.execute(
         select(Document).where(Document.organisation_id == organisation_id, Document.superseded_by == doc.id)
     ).scalars():
-        earlier.superseded_by = None
+        earlier.superseded_by = doc.superseded_by
 
     # Publish outbox event
     events.publish(
