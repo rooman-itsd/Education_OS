@@ -183,3 +183,65 @@ def test_a_new_version_intent_is_idempotent_on_its_client_token(client, db, org)
     again = _new_version(client, db, org, org.student_headers, v1, b"%PDF two", token="v2-tok")
     assert first.status_code == 201 and again.status_code == 200
     assert first.json()["document"]["id"] == again.json()["document"]["id"]
+
+
+# --- delete -----------------------------------------------------------------------------------------------------
+
+
+def test_a_delete_that_storage_refuses_deletes_nothing(client, db, org, monkeypatch):
+    """The row used to be marked deleted (and documents.document.deleted published) even when the bytes could not
+    be removed, so the file stayed in the bucket and nothing recorded or retried it. For erasure that is a lie."""
+    doc_id = _upload(client, db, org, org.student_headers)
+    store = service.get_storage()
+
+    def unreachable(bucket, key):
+        raise ConnectionError("minio is down")
+
+    monkeypatch.setattr(store, "delete_object", unreachable)
+    r = client.delete(f"{BASE}/{doc_id}", headers=org.admin_headers)
+    assert r.status_code == 503, r.text
+
+    assert _doc(org, doc_id).status == "available"  # still there, so the delete can simply be retried
+    assert _stored(db, org, doc_id) == PDF
+    monkeypatch.undo()
+    assert client.delete(f"{BASE}/{doc_id}", headers=org.admin_headers).status_code == 200
+    assert not [k for (_, k) in store.objects if doc_id in k]
+
+
+def test_deleting_the_latest_version_makes_the_previous_one_current_again(client, db, org):
+    """superseded_by on v1 pointed at the deleted v2 for good: the document vanished from the default listing and
+    no new version could ever follow v1 (409 'only the latest')."""
+    v1 = _upload(client, db, org, org.student_headers)
+    v2_data = b"%PDF-1.7 second version"
+    v2 = _new_version(client, db, org, org.student_headers, v1, v2_data).json()["document"]["id"]
+    _put(db, org, v2, v2_data)
+    assert client.post(f"{BASE}/{v2}/confirm", headers=org.student_headers).status_code == 200
+
+    assert client.delete(f"{BASE}/{v2}", headers=org.admin_headers).status_code == 200
+
+    listed = client.get(f"{BASE}/", headers=org.student_headers).json()
+    assert [d["id"] for d in listed["items"]] == [v1]
+    assert client.get(f"{BASE}/{v1}", headers=org.student_headers).json()["superseded_by"] is None
+    assert _new_version(client, db, org, org.student_headers, v1, b"%PDF-1.7 third").status_code == 201
+
+
+def test_deleting_a_middle_version_keeps_the_chain_to_the_newest(client, db, org):
+    """Found by the review bot on #645: clearing superseded_by on the predecessor was only right when the deleted
+    version was the latest. Deleting v2 of v1->v2->v3 freed v1 while v3 was live, so the default listing showed
+    both and v1 could take a new version, forking the history. v1 must now point at v3."""
+    v1 = _upload(client, db, org, org.student_headers)
+    ids = [v1]
+    for data in (b"%PDF-1.7 second version", b"%PDF-1.7 third version"):
+        nxt = _new_version(client, db, org, org.student_headers, ids[-1], data).json()["document"]["id"]
+        _put(db, org, nxt, data)
+        assert client.post(f"{BASE}/{nxt}/confirm", headers=org.student_headers).status_code == 200
+        ids.append(nxt)
+    v1, v2, v3 = ids
+
+    assert client.delete(f"{BASE}/{v2}", headers=org.admin_headers).status_code == 200
+
+    listed = client.get(f"{BASE}/", headers=org.student_headers).json()
+    assert [d["id"] for d in listed["items"]] == [v3]  # one entry: the newest, not v1 as well
+    assert client.get(f"{BASE}/{v1}", headers=org.student_headers).json()["superseded_by"] == v3
+    assert _new_version(client, db, org, org.student_headers, v1, b"%PDF-1.7 fork").status_code == 409
+    assert _new_version(client, db, org, org.student_headers, v3, b"%PDF-1.7 fourth").status_code == 201

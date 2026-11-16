@@ -440,15 +440,26 @@ def delete_document(
     if doc.status == STATUS_DELETED:
         return True
 
+    # Remove the binary first. If storage refuses, nothing is marked deleted and nothing is published: the caller
+    # can retry, and no row claims an erasure that did not happen. A pending upload's staged object goes too, so its
+    # presigned PUT cannot leave a file behind a deleted document.
+    keys = [k for k in (doc.storage_path, doc.upload_path) if k]
+    try:
+        for key in keys:
+            store.delete_object(doc.bucket, key)
+    except Exception as exc:
+        logger.warning("Failed to delete object from storage %s: %s", doc.storage_path, exc)
+        raise DocumentError("Storage is unavailable; the document was not deleted", status=503) from exc
+
     doc.status = STATUS_DELETED
     doc.updated_at = utcnow()
-
-    # Remove binary from storage
-    try:
-        store.delete_object(doc.bucket, doc.storage_path)
-    except Exception as exc:
-        # Even if storage delete raises, metadata is marked deleted
-        logger.warning("Failed to delete object from storage %s: %s", doc.storage_path, exc)
+    # The version before this one was superseded by it. Hand it on to whatever superseded this one: None when this
+    # was the latest (so the previous version is current again and can be followed), or the newer version when this
+    # was in the middle (so v1 -> v2 -> v3 becomes v1 -> v3, never two live heads).
+    for earlier in db.execute(
+        select(Document).where(Document.organisation_id == organisation_id, Document.superseded_by == doc.id)
+    ).scalars():
+        earlier.superseded_by = doc.superseded_by
 
     # Publish outbox event
     events.publish(
