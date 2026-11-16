@@ -21,13 +21,14 @@ Python package `eos_core`. The only shared code a backend module may import besi
 from eos_core import workflow
 
 req = workflow.submit(
-    db, organisation_id,                    # the caller's own session and organisation
-    chain_code="examinations.results",      # the organisation's chain; its admin creates it (POST /chains)
+    db,
+    organisation_id,  # the caller's own session and organisation
+    chain_code="examinations.results",  # the organisation's chain; its admin creates it (POST /chains)
     entity_type="examinations.result_set",  # what workflow's events will carry back, with entity_id
     entity_id=result_set.id,
     title="Semester 1 results, B.Sc. Physics",
-    requested_by=principal.user_id,         # the requester: idempotency is per requester, and they cannot approve it
-    context={"students": 42},               # optional, shown to approvers
+    requested_by=principal.user_id,  # the requester: idempotency is per requester, and they cannot approve it
+    context={"students": 42},  # optional, shown to approvers
     client_token=f"results:{result_set.id}",  # optional; a replay returns the first request
 )
 # {"id": ..., "status": "pending", "current_step_order": 1, "created": True}

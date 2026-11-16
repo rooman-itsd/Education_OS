@@ -18,10 +18,16 @@ A feature module may not import workflow (module standard: itself and `packages/
 ```python
 from eos_core import workflow
 
-req = workflow.submit(db, organisation_id, chain_code="examinations.results",
-                      entity_type="examinations.result_set", entity_id=result_set.id,
-                      title="Semester 1 results", requested_by=principal.user_id,
-                      client_token=f"results:{result_set.id}")
+req = workflow.submit(
+    db,
+    organisation_id,
+    chain_code="examinations.results",
+    entity_type="examinations.result_set",
+    entity_id=result_set.id,
+    title="Semester 1 results",
+    requested_by=principal.user_id,
+    client_token=f"results:{result_set.id}",
+)
 # {"id": ..., "status": "pending", "current_step_order": 1, "created": True}
 ```
 
