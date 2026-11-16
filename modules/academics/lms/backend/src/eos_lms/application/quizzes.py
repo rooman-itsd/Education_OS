@@ -70,7 +70,7 @@ def attempt_dict(t: QuizAttempt, show_scores: bool = True) -> dict:
     }
 
 
-def _released_quizzes(db: Session, student_id: str) -> set[str]:
+def _released_quizzes(db: Session, student_id: str | tuple[str, ...]) -> set[str]:
     return {g.item_id for g in repo.grades(db, item_type="quiz", student_id=student_id, status="released")}
 
 
@@ -221,7 +221,7 @@ def start_attempt(db: Session, a: Actor, quiz_id: str) -> dict:
         raise forbidden("only students of the course space attempt quizzes", "not_a_student")
     if not visible_to(view, quiz, published_units(db, space.id)):
         raise not_found("quiz")
-    mine = repo.attempts(db, [quiz.id], student_id=a.user_id)
+    mine = repo.attempts(db, [quiz.id], student_id=c.learner_ids(db, a))
     if scoring.settle(db, mine):
         db.commit()  # what settling submitted stands, whatever this request decides
     now = c.clock()
@@ -237,7 +237,7 @@ def start_attempt(db: Session, a: Actor, quiz_id: str) -> dict:
         organisation_id=a.organisation_id,
         quiz_id=quiz.id,
         course_space_id=space.id,
-        student_id=a.user_id,
+        student_id=c.learner_id(db, a),
         attempt_number=len(mine) + 1,
         started_at=now,
         must_submit_by=rules.must_submit_by(now, quiz.time_limit_minutes, as_utc(quiz.closes_at)),
@@ -258,7 +258,7 @@ def start_attempt(db: Session, a: Actor, quiz_id: str) -> dict:
 
 def _own_attempt(db: Session, a: Actor, attempt_id: str) -> tuple[QuizAttempt, Quiz]:
     t = c.get(db, QuizAttempt, attempt_id, "quiz attempt", for_update=True)
-    if t.student_id != a.user_id:
+    if t.student_id not in c.learner_ids(db, a):
         raise not_found("quiz attempt")
     return t, c.get(db, Quiz, t.quiz_id, "quiz")
 
@@ -297,7 +297,7 @@ def submit_attempt(db: Session, a: Actor, attempt_id: str) -> dict:
     space = c.space_of(db, quiz.course_space_id)
     scoring.finish(db, a, t, quiz, space, c.clock(), by_system=False)
     db.commit()
-    return attempt_dict(t, show_scores=quiz.id in _released_quizzes(db, a.user_id))
+    return attempt_dict(t, show_scores=quiz.id in _released_quizzes(db, c.learner_ids(db, a)))
 
 
 def score_attempt(db: Session, a: Actor, attempt_id: str, scores: list[dict]) -> dict:
@@ -342,12 +342,12 @@ def list_attempts(db: Session, a: Actor, quiz_id: str, state: str | None, limit:
 
 
 def my_attempts(db: Session, a: Actor, quiz_id: str | None, space_id: str | None) -> dict:
-    rows = repo.student_attempts(db, a.user_id)
+    rows = repo.student_attempts(db, c.learner_ids(db, a))
     if scoring.settle(db, rows):
         db.commit()
     if quiz_id:
         rows = [t for t in rows if t.quiz_id == quiz_id]
     if space_id:
         rows = [t for t in rows if t.course_space_id == space_id]
-    released = _released_quizzes(db, a.user_id)
+    released = _released_quizzes(db, c.learner_ids(db, a))
     return {"items": [attempt_dict(t, show_scores=t.quiz_id in released) for t in rows]}

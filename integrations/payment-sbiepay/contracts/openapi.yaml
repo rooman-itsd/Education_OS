@@ -62,7 +62,17 @@ paths:
       security: []
       parameters: [{ $ref: "#/components/parameters/Reference" }]
       responses:
-        "200": { description: Auto-submitting form to the gateway, content: { text/html: { schema: { type: string } } } }
+        "200":
+          description: >-
+            Auto-submitting form to the gateway. Served with its own Content-Security-Policy (`default-src
+            'none'; script-src 'nonce-<per page>'; form-action 'self' https: [plain-HTTP return_url or gateway
+            origin]; base-uri 'none'; frame-ancestors 'none'`) and `Referrer-Policy:
+            strict-origin-when-cross-origin`, which the API host keeps in place of its defaults. form-action
+            also governs the redirects after the POST (return_url, bank and 3-D Secure pages).
+          headers:
+            Content-Security-Policy: { schema: { type: string } }
+            Referrer-Policy: { schema: { type: string, enum: [strict-origin-when-cross-origin] } }
+          content: { text/html: { schema: { type: string } } }
         "410": { description: Session expired or payment already finished }
   /payments/{reference}/verify:
     post:

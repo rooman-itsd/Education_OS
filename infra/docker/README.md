@@ -111,7 +111,8 @@ cd infra/docker && cp .env.api.example .env.api && chmod 600 .env.api
 sed -i "s|^EOS_DB_PASSWORD=.*|EOS_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
 sed -i "s|^EOS_APP_DB_PASSWORD=.*|EOS_APP_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
 sed -i "s|^EOS_JWT_SECRET=.*|EOS_JWT_SECRET=$(openssl rand -hex 32)|" .env.api
-nano .env.api   # set EOS_SUPER_ADMIN_EMAIL (a real address with a dot after @) and EOS_SUPER_ADMIN_PASSWORD
+nano .env.api   # set EOS_SUPER_ADMIN_EMAIL (a real address with a dot after @) and EOS_SUPER_ADMIN_PASSWORD,
+                # and EOS_TRUSTED_PROXIES to the nginx container's LAN address (rate limits, below)
 cd /opt/education-os
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps
@@ -183,6 +184,22 @@ production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_P
   applies on the next `up -d`.
 - The super admin is created at the first start and never updated: a new `EOS_SUPER_ADMIN_PASSWORD`
   is ignored, and a new `EOS_SUPER_ADMIN_EMAIL` adds a second super admin beside the first.
+
+**Rate limits and the emergency switch.** The API rate-limits requests and sets security headers
+(`platform/api-gateway`, whose README explains the limits). Compose passes every setting from `.env.api`
+(`EOS_RATE_LIMIT_*`, `EOS_SECURITY_HEADERS`, `EOS_HSTS_MAX_AGE`, `EOS_TRUSTED_PROXIES`, `EOS_REDIS_URL`), with
+the defaults in `.env.api.example`. Two matter on the server:
+
+- `EOS_TRUSTED_PROXIES` must be the nginx container's address as the API container sees it, so the API
+  believes the proxy's `X-Forwarded-For`. Left empty (the example's value) or at loopback, every visitor
+  counts as the proxy and shares one bucket, and the API logs a warning at start-up.
+  `tools/scripts/deploy-api-lxc.sh` writes it (the `PROXY_CTID` container's address), replacing an empty or
+  loopback value; a value naming another address is kept.
+- If the limits refuse legitimate traffic, switch them off without a code change: set
+  `EOS_RATE_LIMIT_ENABLED=false` in `.env.api`, then
+  `docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d`
+  (recreates the API container, no rebuild). Raise the limit that was hit (the log says `rate limited
+  scope=...`) and set it back to `true` the same way.
 
 Before any real organisation has registered, the clean way to change either is to start over:
 `docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api down -v`

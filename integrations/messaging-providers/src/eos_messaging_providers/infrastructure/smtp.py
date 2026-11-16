@@ -99,11 +99,21 @@ class SmtpEmailProvider:
             log.error("smtp credentials are configured without TLS for %s: refusing to send", self._config.describe())
             return self._refuse(message_id, TRANSPORT_UNAVAILABLE, "credentials need TLS", retryable=True)
 
+        accepted = False
         try:
-            with self._connect() as client:
-                if self._config.authenticated:
-                    client.login(self._config.username, self._config.password)
-                client.send_message(message)
+            try:
+                with self._connect() as client:
+                    if self._config.authenticated:
+                        client.login(self._config.username, self._config.password)
+                    client.send_message(message)
+                    accepted = True
+            except (smtplib.SMTPException, OSError):
+                # smtplib's __exit__ raises when the QUIT reply is not 221. The server has answered 250 to DATA by
+                # then, so the message is delivered: reporting a failure would re-send it (4xx) or mark a delivered
+                # message failed (5xx). Only an error before that point is a failure of this send.
+                if not accepted:
+                    raise
+                log.warning("smtp session for %s ended with an error after the message was accepted", message_id)
         except smtplib.SMTPRecipientsRefused as e:
             # One recipient, so one code. 4xx here is the mailbox being temporarily unavailable, not a bad address.
             code = _first_code(e.recipients)
@@ -114,7 +124,13 @@ class SmtpEmailProvider:
                                     f"recipient temporarily refused ({code})", retryable=True)  # fmt: skip
             return self._refuse(message_id, INVALID_RECIPIENT, f"recipient refused ({code})")
         except smtplib.SMTPSenderRefused as e:
-            # Our own sending identity was refused: a configuration problem, and retrying will not fix it.
+            # smtplib raises this for any non-250 reply to MAIL FROM. 4xx is temporary (the relay is busy or out of
+            # space), so it is retried like every other 4xx here; only 5xx is our own sending identity refused, a
+            # configuration problem that retrying will not fix.
+            code = int(e.smtp_code or 0)
+            if code in _THROTTLE_CODES or 400 <= code < 500:
+                return self._refuse(message_id, THROTTLED if code in _THROTTLE_CODES else TRANSPORT_UNAVAILABLE,
+                                    f"sender temporarily refused ({code})", retryable=True)  # fmt: skip
             return self._refuse(message_id, REJECTED, f"sender refused ({e.smtp_code})")
         except smtplib.SMTPAuthenticationError:
             # Credentials are wrong or expired. Retryable because an operator fixing the secret makes the next

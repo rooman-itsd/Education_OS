@@ -2,7 +2,7 @@
 
 **Domain:** governance
 **Kind:** feature
-**Status:** in-progress (backend and widgets built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend and widgets built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 SGRC, anti-ragging and POSH-ICC complaint intake and resolution.
 

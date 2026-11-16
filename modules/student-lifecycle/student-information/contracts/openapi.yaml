@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: student-information API
-  version: 0.1.0
+  version: 0.2.0
   description: >-
     Student master record (SIS): the Person system of record for Education OS. Profiles,
     documents, ID cards, status history. Person records are created only by an authorised staff
@@ -52,6 +52,20 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: An identity document number already in use in this organisation, content: { application/json: { schema: { $ref: "#/components/schemas/ConflictError" } } } }
+
+  /account-links/republish:
+    post:
+      summary: >
+        Publish student-information.person.account-linked again for every person in the caller's organisation who has
+        a linked platform/identity account. The backfill for links made before the event existed, and a repair for a
+        consumer that lost its lookup; consumers apply it idempotently, so calling it twice is harmless. Persons
+        without an account are skipped. Permission student-information:person:write.
+      responses:
+        "200":
+          description: The number of links announced.
+          content:
+            application/json:
+              schema: { type: object, required: [published], properties: { published: { type: integer, minimum: 0 } } }
 
   /people/{id}/status:
     parameters: [{ $ref: "#/components/parameters/Id" }]

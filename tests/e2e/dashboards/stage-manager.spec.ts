@@ -11,11 +11,10 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  * - for every widget of the layout whose module is in apps/frontend/config/modules.enabled.yaml and exports it: the
  *   panel renders by its registered title and shows its empty state, or says its data is not available while the
  *   backend is missing;
- * - productions.calendar and productions.upcoming are skipped until practice/productions ships (sprint batch #318,
- *   PR #454);
- * - data journeys: a consumable below its reorder level shows in inventory-equipment.low-stock, and a booking later
- *   today on a stage the stage manager approves in facility-booking.bookings-today. Facility staff create both (the
- *   stage manager reads stock and approves bookings, but does not manage the stores or the resource register).
+ * - data journeys: a consumable below its reorder level shows in inventory-equipment.low-stock, a booking later
+ *   today on a stage the stage manager approves in facility-booking.bookings-today (facility staff create both, as the
+ *   stage manager reads stock and approves bookings without managing the stores or resource register), and a production
+ *   scheduled two weeks out shows in both productions.calendar and productions.upcoming.
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -175,5 +174,40 @@ test.describe("with facilities data", () => {
     await expect(panel.getByText("No bookings today")).toHaveCount(0);
     await expect(panel.getByText("Main stage · Technical rehearsal")).toBeVisible();
     await expect(panel.getByLabel("Booking counts")).toContainText("1 today");
+  });
+});
+
+test.describe("with productions data", () => {
+  test("productions.calendar and productions.upcoming show a scheduled performance", async ({ page, request }) => {
+    const cal = byId("productions.calendar");
+    const up = byId("productions.upcoming");
+    test.skip(!shipped(cal), waitingFor(cal));
+    test.skip(!ready(cal.id), `the productions API answered ${status[cal.id]} to the stage-manager role`);
+    test.skip(!ready(up.id), `the productions API answered ${status[up.id]} to the stage-manager role`);
+    // The stage manager holds coordinator grants, so they create and schedule the performance two weeks out at 19:00
+    // in this host's time zone, which the browser shares.
+    const show = await created<{ id: string }>(request, user, "/productions/productions", {
+      title: "The Crucible",
+      kind: "performance",
+    });
+    const starts = new Date(Date.now() + 14 * 86_400_000);
+    starts.setHours(19, 0, 0, 0);
+    await created(request, user, `/productions/productions/${show.id}/schedule`, {
+      starts_at: starts.toISOString(),
+      ends_at: new Date(starts.getTime() + 2 * 60 * 60_000).toISOString(),
+      venue: "Main stage",
+    });
+    await signIn(page, user);
+
+    const calendar = widget(page, "Production calendar");
+    await expect(calendar.getByText("Nothing scheduled")).toHaveCount(0);
+    const calRow = calendar.getByRole("list", { name: "What is on" }).getByRole("listitem").filter({ hasText: "The Crucible" });
+    await expect(calRow).toContainText("Main stage · 19:00");
+    await expect(calRow).toContainText("Performance");
+
+    const upcoming = widget(page, "Upcoming productions");
+    await expect(upcoming.getByText("Nothing coming up")).toHaveCount(0);
+    const upRow = upcoming.getByRole("list", { name: "Coming up" }).getByRole("listitem").filter({ hasText: "The Crucible" });
+    await expect(upRow).toContainText("Performance · Main stage · 19:00");
   });
 });

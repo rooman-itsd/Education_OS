@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: identity API
-  version: 0.1.0
+  version: 0.1.1
   description: "SSO (SAML / OAuth2 / OIDC), RBAC with fine-grained permissions, MFA, session management."
 servers:
   - url: /api/v1/identity
@@ -64,8 +64,26 @@ paths:
       summary: Create a user of own organisation (identity:user:manage).
       responses:
         "201": { description: the user }
+        "403": { description: A platform role, or a role no person may hold (`service`). }
+        "409":
+          description: >-
+            The organisation's plan allows no more active staff accounts. The plan's `users` limit counts staff
+            only: a learner (a role `student` or `applicant`, or one whose dashboard layout extends `student`) is
+            never counted and never refused here; learners are the plan's `students`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanLimitReached" }
 components:
   schemas:
+    PlanLimitReached:
+      type: object
+      required: [detail, code, limit, allowed, used]
+      properties:
+        detail: { type: string, examples: ["the plan allows 25 users; 25 are active"] }
+        code: { type: string, const: plan_limit_reached }
+        limit: { type: string, enum: [users], description: Which plan limit was reached. }
+        allowed: { type: integer, description: The plan's limit on staff accounts. }
+        used: { type: integer, description: Active staff accounts counted against it (learners are not). }
     LoginRequest:
       type: object
       required: [email, password]

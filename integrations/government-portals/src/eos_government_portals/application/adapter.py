@@ -108,8 +108,10 @@ class GovernmentPortalsAdapter:
     # ------------------------------------------------------------ plumbing
 
     def _guard(self, ctx: Any, *, needs_documents: bool = False, form_code: Any = None) -> Result | None:
-        """The checks every operation shares. A failure here is returned, never raised."""
-        if not isinstance(ctx, Context):
+        """The checks every operation shares. A failure here is returned, never raised. The hub's context is read as
+        attributes from here on; Context.of only checks it carries the context's fields."""
+        ctx = Context.of(ctx)
+        if ctx is None:
             return fail("invalid_request", "missing context")
         if not isinstance(ctx.organisation_id, str) or not UUID_RE.fullmatch(ctx.organisation_id):
             return fail("invalid_request", "organisation_id must be a uuid")

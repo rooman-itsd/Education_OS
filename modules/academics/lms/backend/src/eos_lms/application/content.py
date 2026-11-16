@@ -85,7 +85,7 @@ def _page(rows: list, limit: int, offset: int) -> dict:
 def _my_spaces(db: Session, a: Actor) -> list[CourseSpace]:
     """The spaces the caller teaches, and the active or archived spaces they learn in (visible section)."""
     taught = repo.taught_offerings(db, a.user_id)
-    registered = repo.registrations(db, a.user_id)
+    registered = repo.registrations(db, c.learner_ids(db, a))
     out = []
     for space in repo.spaces_for_offerings(db, taught | set(registered)):
         if space.course_offering_id in taught:

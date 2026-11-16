@@ -37,6 +37,7 @@ const localStack = [
       TENANCY_AUTO_APPROVE: "false", // the journey includes the super admin's approval
       BILLING_PAYMENT_ADAPTER: "none",
       EOS_CORS_ORIGINS: `http://localhost:${WEB_PORT}`,
+      EOS_RATE_LIMIT_ENABLED: "false", // every spec signs in from 127.0.0.1; the sign-in bucket would refuse them
     } as Record<string, string>,
   },
   {

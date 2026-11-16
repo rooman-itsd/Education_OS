@@ -110,9 +110,14 @@ def get_payment(reference: str, p: Principal = Depends(current_principal), db: S
 @router.get("/payments/{reference}/redirect", response_class=HTMLResponse)
 def redirect(reference: str, db: Session = Depends(get_db)):
     try:
-        return HTMLResponse(service.redirect_page(db, reference))
+        page = service.redirect_page(db, reference)
     except PaymentError as e:
         raise _err(e) from e
+    # Its own policies, kept by the host's security headers (they only fill in what a response lacks).
+    return HTMLResponse(
+        page.html,
+        headers={"Content-Security-Policy": page.content_security_policy, "Referrer-Policy": page.referrer_policy},
+    )
 
 
 @router.post("/payments/{reference}/verify")
