@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "@eos/ui-kit";
+import { OpenIncidentsWidget } from "./OpenIncidentsWidget";
 
 /**
  * Dashboard widgets exported by incident-management.
@@ -7,4 +8,14 @@ import type { DashboardWidget } from "@eos/ui-kit";
  * A widget imports only from this module and packages/, and fetches data
  * through this module's generated API client in ../api.
  */
-export const widgets: DashboardWidget[] = [];
+export const widgets: DashboardWidget[] = [
+  {
+    id: "incident-management.open",
+    title: "Open incidents",
+    permission: "incident-management:incident:read",
+    size: "1x1",
+    kind: "list",
+    subtitle: "By severity and status",
+    component: OpenIncidentsWidget,
+  },
+];

@@ -4,12 +4,15 @@
 **Kind:** feature
 **Status:** in progress (issue #325). Built: the backend domain rules and persistence foundation (exam cycles, grading
 and assessment schemes, papers, sessions, duties), the permission keys and the authentication guard, and the three
-Examination Staff widgets (their endpoints are not served yet). The API serves 24 of 51 operations: grading schemes,
-assessment schemes, exam cycles, exam papers and exam sessions (`api/router.py`), mounted under `/api/v1/examinations`
-because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other 27 operations, candidates
-and eligibility, hall tickets,
-marks, results, the event consumers, and the widgets `exam-duties`, `upcoming-assessments` and `results-summary`. Open
+Examination Staff widgets (their endpoints are not served yet) and the Faculty widget `exam-duties` (it reads
+`GET /me/duties`, which the API serves). The API serves 28 of 51 operations: grading schemes,
+assessment schemes, exam cycles, exam papers, exam sessions and exam duties (`api/router.py`), mounted under
+`/api/v1/examinations` because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other
+23 operations, candidate creation and eligibility, hall tickets,
+marks, results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
+`application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`, and papers serve `course_code`, `course_title` and `department_id` from it when it has them (omitted otherwise; an offering created before the consumers may have no row until a backfill, and later offering changes are not applied). Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+The `examinations_candidate` table exists (migration `ex_0005`, schema only): nothing creates, reads or serves candidates yet.
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
 
@@ -33,9 +36,9 @@ Tables: `grading_scheme`, `grading_band`, `exam_cycle`, `assessment_scheme`, `as
 scheme per organisation, one active assessment scheme per course offering, one paper per component and cycle, a paper in at
 most one session, and the rule that a duty names a session (invigilation) or a paper (evaluation, moderation), never both.
 
-Deliberately not built, because they depend on decisions not yet taken: candidates, hall tickets, mark entries, results and the
-registration read model (the `student_id` mapping and the eligibility inputs), grading-band coverage (whether `max_percent` is
-inclusive), department-scoped authorisation, and every event consumer. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
+Deliberately not built, because they depend on decisions not yet taken: candidate creation, hall tickets, mark entries, results and the
+registration read model (which registrations make a candidate, and the eligibility inputs), grading-band coverage (whether `max_percent` is
+inclusive), department-scoped authorisation, and every event consumer except the two offering ones. See [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 
 ## Tests
 Backend, from `modules/academics/examinations/backend` (a throwaway SQLite database, never a real one):
@@ -49,7 +52,7 @@ points at a throwaway PostgreSQL server as a superuser.
 ```
 cd modules/academics/examinations/db && alembic upgrade head
 ```
-The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`. The chain is `ex_0001` then `ex_0002` (the optional paper title), with its own
+The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade head`. The chain is `ex_0001`, `ex_0002` (the optional paper title) then `ex_0003` (one live duty per target), with its own
 version table `examinations_alembic_version`.
 
 ## Public surface

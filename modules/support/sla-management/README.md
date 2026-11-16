@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (backend, consumers and widget built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend, consumers and widget built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 SLA definitions, timers, escalation and breach tracking.
 

@@ -9,7 +9,7 @@ import yaml
 
 pytest.importorskip("eos_core", reason="needs eos_core on PYTHONPATH (see conftest.py)")
 
-from conftest import ADMIN, BASE, make_timetable, ok, slot  # noqa: E402
+from conftest import ADMIN, BASE, CLASSES_AND_ATTENDANCE, make_timetable, ok, slot  # noqa: E402
 from eos_timetable_attendance.api.router import router  # noqa: E402
 
 CONTRACT = yaml.safe_load(
@@ -33,6 +33,8 @@ IMPLEMENTED = {
     "updateTimetable": ("patch", "/timetables/{timetable_id}"),
     "replaceTimetableSlots": ("put", "/timetables/{timetable_id}/slots"),
     "listTimetableConflicts": ("get", "/timetables/{timetable_id}/conflicts"),
+    "publishTimetable": ("post", "/timetables/{timetable_id}/publish"),
+    "unpublishTimetable": ("post", "/timetables/{timetable_id}/unpublish"),
 }
 
 
@@ -95,7 +97,8 @@ def test_every_implemented_route_is_a_contract_operation_with_its_x_permission()
             for dep in route.dependant.dependencies:
                 keys |= set(getattr(dep.call, "permissions", ()))
             routes[(method.lower(), route.path)] = keys
-    assert set(routes) == set(IMPLEMENTED.values())
+    # the classes, attendance and reports operations are checked in test_api_contract_attendance.py
+    assert set(routes) == set(IMPLEMENTED.values()) | set(CLASSES_AND_ATTENDANCE.values())
     for operation_id, (method, path) in IMPLEMENTED.items():
         op = CONTRACT["paths"][path][method]
         assert op["operationId"] == operation_id
@@ -191,3 +194,38 @@ def test_the_contract_declares_no_401_or_403_for_these_operations_yet():
     for operation_id in IMPLEMENTED:
         declared = set(operation(operation_id)["responses"])
         assert not declared & {"401", "403"}, operation_id
+
+
+def test_publication_bodies_and_errors_match_the_contract(client, org):
+    from conftest import deliver, term_created
+    from eos_timetable_attendance.application.consumers import TERM_CREATED
+
+    _, h = org.user(ADMIN)
+    ids = org.academic()
+    deliver(org.id, TERM_CREATED, term_created(ids["period"]))
+    t = make_timetable(client, h, ids["period"], slots=[slot(ids)])
+    # 409 with the conflict list, then 404, before the happy path
+    clash = make_timetable(client, h, ids["period"], name="Clash", slots=[slot(ids), slot(ids, start="09:30:00")])
+    blocked = client.post(f"{BASE}/timetables/{clash['id']}/publish", headers=h)
+    missing = str(uuid.uuid4())
+    published = client.post(f"{BASE}/timetables/{t['id']}/publish", headers=h)
+    again = client.post(f"{BASE}/timetables/{t['id']}/publish", headers=h)
+    unpublished = client.post(f"{BASE}/timetables/{t['id']}/unpublish", json={"reason": "re-plan"}, headers=h)
+    not_published = client.post(f"{BASE}/timetables/{t['id']}/unpublish", headers=h)
+    calls = {
+        "publishTimetable": [(200, published), (409, blocked), (409, again)],
+        "unpublishTimetable": [(200, unpublished), (409, not_published)],
+    }
+    for operation_id, responses in calls.items():
+        for status, response in responses:
+            assert response.status_code == status, (operation_id, response.text)
+            assert str(status) in operation(operation_id)["responses"], (operation_id, status)
+            if status == 200:
+                check(response.json(), body_schema(operation_id, 200), operation_id)
+            else:
+                check(response.json()["detail"], SCHEMAS["ErrorResponse"], operation_id)
+    assert blocked.json()["detail"]["details"]["conflicts"]  # "Fails with 409 and the conflict list"
+    for operation_id, verb in (("publishTimetable", "publish"), ("unpublishTimetable", "unpublish")):
+        response = client.post(f"{BASE}/timetables/{missing}/{verb}", headers=h)
+        assert response.status_code == 404 and "404" in operation(operation_id)["responses"], operation_id
+        check(response.json()["detail"], SCHEMAS["ErrorResponse"], operation_id)

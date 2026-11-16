@@ -1,5 +1,4 @@
-// Response shapes from contracts/openapi.yaml (PR #183), for the endpoints the Examination Staff
-// widgets read. Written by hand until the generated client (openapi-typescript) is set up; keep
+// Response shapes from contracts/openapi.yaml (PR #183), for the endpoints the dashboard widgets read. Written by hand until the generated client (openapi-typescript) is set up; keep
 // them identical to the contract.
 
 export type SessionStatus = "scheduled" | "cancelled" | "completed";
@@ -68,4 +67,31 @@ export interface ResultsPendingReport {
       oldest_since?: string | null;
     }[];
   }[];
+}
+
+export type DutyType = "invigilation" | "evaluation" | "moderation";
+export type DutyStatus = "assigned" | "cancelled" | "completed";
+
+/** components.schemas.ExamDuty. `starts_at`, `ends_at` and `venue_label` are the session's, for invigilation;
+ *  `course_code` is the paper's course, for evaluation and moderation. All four are read-only and may be absent. */
+export interface ExamDuty {
+  id: string;
+  organisation_id: string;
+  exam_cycle_id: string;
+  /** Identity user id. */
+  staff_id: string;
+  duty_type: DutyType;
+  exam_session_id?: string | null;
+  exam_paper_id?: string | null;
+  status: DutyStatus;
+  cancel_reason?: string | null;
+  course_code?: string | null;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  venue_label?: string | null;
+}
+
+/** GET /me/duties: the caller's duties ordered by time. */
+export interface MyDutyPage {
+  items: ExamDuty[];
 }

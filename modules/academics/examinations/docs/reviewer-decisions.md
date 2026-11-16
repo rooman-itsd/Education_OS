@@ -10,7 +10,7 @@ is still open, with the evidence for each. It supports [prd.md](prd.md), which s
 - **Open** means no record of an answer was found in the sources inspected.
 - Times are UTC. A comment link looks like `https://github.com/rooman-itsd/Education_OS/pull/<n>#issuecomment-<id>`.
 
-Nothing below is decided by being written here. The student, staff and instructor identifiers, department
+Nothing below is decided by being written here. The staff and instructor identifiers (the student identifier is decided, see section 14), department
 authorisation, the minimum attendance, supplementary and backlog candidacy, result approval, and the
 transcript and regulatory reporting requirements are **not** resolved by this page.
 
@@ -20,9 +20,10 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Item | Contract | Implementation |
 |---|---|---|
-| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 24 operations (grading schemes, assessment schemes, exam cycles, papers, sessions); the other 27 operations are not implemented. Migrations `ex_0001` and `ex_0002` and tests exist |
+| examinations API (51 operations) and events (13) | merged (PR #183); the contracts lack 401/403 responses and `x-permission-any` (9 of 51 operations declare a 403, none declares a 401, and 9 permission keys appear in no `x-permission`) | **partly implemented**: backend foundation (PR #462) and 28 operations (grading schemes, assessment schemes, exam cycles, papers, sessions, duties); the other 23 operations are not implemented. Migrations `ex_0001` to `ex_0003` and tests exist |
 | examinations widgets `schedule`, `hall-tickets-issued`, `results-pending` | declared in the contract | UI merged (PR #216); their endpoints are not served, so they show "not available" |
-| examinations widgets `exam-duties`, `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
+| examinations widget `exam-duties` | declared in the contract | UI built (frontend only); `GET /me/duties` is served by the exam duty APIs (section 12) |
+| examinations widgets `upcoming-assessments`, `results-summary` | declared in the contract | **not built** |
 | timetable-attendance `POST /reports/attendance-eligibility` | merged | **not implemented** (the timetable-attendance backend has timetables only) |
 | fees-accounts `GET /dues` and key `fees-accounts:dues:read` | merged (PR #243) | served by the fees-accounts backend; **not called** from examinations |
 | academic-management events (`term.*`, `course.*`, `offering.*`, `faculty-assignment.*`, `curriculum.published`) | merged (PR #168) | published by academic-management; **not consumed** by examinations (`consumes_events: []`) |
@@ -34,7 +35,7 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 | # | Question | State | Evidence | Next step and owner |
 |---|---|---|---|---|
 | Q1 | Is candidacy derived entirely from registration? Who registers supplementary and backlog candidates? | **Open** | No record found in the sources inspected. `course-registration.confirmed` carries a string `registration_type`; the contract does not say whether it covers supplementary or backlog registration. | Praveen |
-| Q2 | What is `student_id`? Where do status and display name come from? | **Proposed** | Praveen proposed `student_id = person_id` from the enrolment events and asked for Faizan's confirmation ([PR #459, 2026-11-03T07:45Z](https://github.com/rooman-itsd/Education_OS/pull/459#issuecomment-6598201117)). Shivani's comment on PR #168 ([2026-10-10T15:53Z](https://github.com/rooman-itsd/Education_OS/pull/168#issuecomment-6099354051)) makes the canonical identifier for staff and person references, including instructors, pending Faizan's confirmation; `student_id` stays under C1, which that comment records as still open. Same question: timetable-attendance Q3, LMS LQ6. No record found in the sources inspected of an answer from Faizan. | Faizan, with Praveen |
+| Q2 | What is `student_id`? Where do status and display name come from? | **Decided for `student_id`** (section 14); the status-to-eligibility mapping is pending Praveen | **Decided:** the architecture decision recorded on #325 ([comment 6852967916](https://github.com/rooman-itsd/Education_OS/issues/325#issuecomment-6852967916)) establishes `person_id` as the canonical student identifier across module boundaries; the contract's `student_id` field keeps its name and holds that `person_id`. The earlier record follows as history. Praveen proposed `student_id = person_id` from the enrolment events and asked for Faizan's confirmation ([PR #459, 2026-11-03T07:45Z](https://github.com/rooman-itsd/Education_OS/pull/459#issuecomment-6598201117)). Shivani's comment on PR #168 ([2026-10-10T15:53Z](https://github.com/rooman-itsd/Education_OS/pull/168#issuecomment-6099354051)) makes the canonical identifier for staff and person references, including instructors, pending Faizan's confirmation; `student_id` stays under C1, which that comment records as still open. Same question: timetable-attendance Q3, LMS LQ6. When that evidence was collected no answer from Faizan had been found; the decision above was recorded afterwards. | Status-to-eligibility mapping: Praveen |
 | Q3 | Exam venues: free text or facility-booking resources? | **Open** | No record found in the sources inspected. The contract currently uses a free-text `venue_label`; that is not a confirmed decision. | Ashritha |
 | Q4 | Can dues withhold eligibility or hall tickets? How are dues read? Who raises the invoice? | **Confirmed in principle by both owners; contract merged; response shape not confirmed by Examinations** | Gokula suggested events ([2026-10-13T06:34Z](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6139782495)); Shivani chose a synchronous `GET /dues` read at the cut-off, with examinations deciding through `check_dues` ([06:45Z](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6139932633)); Gokula agreed ([07:12Z](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6140320875)). Both recorded it as a "proposed decision": Shivani asked for it to be recorded "as the proposed decision, subject to agreement on the endpoint contract and ownership", and Gokula answered "Agreed, recorded as the proposed decision." Contract merged in [PR #243](https://github.com/rooman-itsd/Education_OS/pull/243) (2026-10-23T06:46Z, Faizan approved 06:38Z). | Follow-ups below |
 | Q5 | Attendance for eligibility, and the minimum | **Partly decided** | The API part is confirmed: owner decision C7 ([Shivani, 2026-10-10T15:18Z](https://github.com/rooman-itsd/Education_OS/pull/183#issuecomment-6099000605)) and Praveen ([PR #459, 2026-11-03T07:45Z](https://github.com/rooman-itsd/Education_OS/pull/459#issuecomment-6598201117)): bulk read, excused classes excluded from the denominator, no threshold in the API. Where the minimum lives (owner decision C11) is unresolved. | Shivani (timetable-attendance), Akshata |
@@ -62,7 +63,7 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Proposal | Proposed by | Needs | Evidence |
 |---|---|---|---|
-| `student_id = person_id` from the enrolment events | Praveen, 2026-11-03T07:45Z | Faizan | PR #459 comment 6598201117 |
+| `student_id = person_id` from the enrolment events | Praveen, 2026-11-03T07:45Z | No longer pending: decided on #325 ([comment 6852967916](https://github.com/rooman-itsd/Education_OS/issues/325#issuecomment-6852967916), section 14) | PR #459 comment 6598201117 |
 | Rename the assignment person field `faculty_id` to `instructor_id` in all three academic modules | Shivani, 2026-10-10T15:53Z | Faizan | PR #168 comment 6099354051 |
 | `staff_id` is the identity user id (platform-wide staff identifier) | Shivani, 2026-10-13T06:45Z | Faizan | PR #183 comment 6139932633 |
 | The minimum attendance is set per exam cycle (`min_attendance_percent`) | the PRD | Shivani, Akshata | PRD Q5 |
@@ -71,7 +72,7 @@ A merged contract means the endpoint or event is defined. It does not mean any c
 
 | Decision | Owner |
 |---|---|
-| Canonical `student_id` (Q2), including student status and display name | Faizan, Praveen |
+| Student status and display name (Q2). `student_id` itself is decided (section 14); the status-to-eligibility mapping is pending | Praveen |
 | Canonical staff identifier and the `faculty_id` / `instructor_id` rename (Q8, Q11) | Faizan |
 | Department authorisation (Q13) | Faizan |
 | Where the minimum attendance lives (Q5; owner decision C11) | Shivani, Akshata |
@@ -131,10 +132,14 @@ Found while building the domain rules and tables. None is decided; each is isola
 | Cycle status moves other than the next one (PRD section 6 shows a line, and says the controller closes a cycle) | Only the next status is allowed, and `results_published` only by publication. Closing early, skipping and going back are refused | Shivani: whether a cycle may be closed or reopened from other statuses |
 | Whether a grading scheme or exam cycle `code` must be unique | No uniqueness rule: the contract declares no 409 for creating a cycle | Shivani |
 | What a cycle uses as grading scheme when the request names none and no default exists | `new_cycle` takes the scheme from the caller; the module does not choose one | Shivani |
-| Candidates, hall tickets, marks, results, `registration_ref` | **No tables or code**: they carry `student_id` or depend on eligibility (the `student_id` mapping, supplementary and backlog candidacy, attendance minimum, dues) | Faizan (Q2), Praveen (Q1), Shivani (Q5) |
+| The candidate table | **Implemented as a schema** (migration `ex_0005`, section 14): the table exists and nothing creates, reads or serves candidates | Shivani; Praveen reviews |
+| `registration_ref`, the registration event consumers and candidate creation | **No tables or code.** Pending Praveen's confirmation of the registration types and the candidate-creation rules (Q1), and the decision on recovering historical registration events | Praveen (Q1); Praveen or Faizan (recovery) |
+| Eligibility determination and overrides | **No code.** Pending the status-to-eligibility mapping, the attendance threshold ownership and the missing-threshold rule; dues are deferred | Praveen; Akshata and Praveen; the dues provider is not identified |
+| Marks | **No table or code.** Planned as a separate PR after the candidate table is merged | Shivani |
+| Hall tickets and results | **No tables or code.** They depend on eligibility and, for results, on marks and the approval workflow | Shivani; Praveen; Faizan (approval payload) |
 | FR-5's rule that a student may not be a candidate in two overlapping sessions | Not implemented (needs candidates) | As above |
 | Department-scoped keys (`*-department`) | No department is read or assumed; `Actor` has no department | Faizan (Q13) |
-| `offering_ref` | The table follows the PRD's columns, strictly (NOT NULL). It is not written yet; the consumer slice may need to relax it, as timetable-attendance's `offering_ref` had to be, because events arrive unordered and `offering.updated` carries no new values | The consumer slice, and the architectural decision in section 7 |
+| `offering_ref` | Was strictly NOT NULL and never written. Written now by the two offering consumers; its creation columns were relaxed in `ex_0004` (section 13) | Section 13, and the architectural decision in section 7 |
 | The identity of `staff_id` on duties | Stored as a plain external id (PRD 5.8); no identity lookup or mapping | Faizan (Q11) |
 
 ## 10. Choices and gaps of the configuration and exam-cycle APIs
@@ -151,11 +156,11 @@ applied literally or left out, and none is worked around.
 | Grading-band coverage of 0 to 100 | Each band is validated; coverage is not enforced (see section 8) | Shivani: the inclusive-boundary rule |
 | Locked marks block replacing an assessment scheme (FR-2) | **Not protected yet.** `ensure_editable` is called with `has_locked_marks=False` inline: no marks tables exist and the request is never trusted for it, so only its superseded check is effective. Only a draft can be replaced, so active and superseded schemes are never changed | Persistence-backed validation, deferred until marks management exists |
 | Department scope of `assessment-scheme:write-department` | A holder of `write-department` or `write-all` may write any scheme; no department is read | Faizan (Q13) |
-| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required and `offering_ref` is not filled | The consumer slice |
+| `department_id` on `AssessmentScheme` (readOnly, cached from the offering) | Not served; it is not required. `offering_ref` is filled by the offering consumers since the consumer slice (section 13), but for offerings whose events were delivered to this module only | Section 13 (backfill and refresh limits) |
 | `weightage_percent` is `exclusiveMinimum: 0` in the contract | Enforced by the use case (400); the domain still accepts 0 | None |
 | Assessment components are returned ordered by code | There is no position column; the order of the request is not kept | A decision on component order |
 | A cycle with published results | `GradingScheme.in_use` is true for a cycle at `results_published` or `closed`; nothing sets `results_published` until publication exists | The results slice |
-| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the read models are not filled | The consumer slice |
+| Course offerings are not checked | `course_offering_id` and `academic_period_id` are accepted as uuids; the offering read model is filled by the consumer slice (section 13) but is still not consulted by these operations | Not decided: whether to check an offering against it, given the backfill limit in section 13 |
 
 ## 11. Choices and gaps of the paper and session APIs
 
@@ -166,11 +171,11 @@ literally or left out, and none is worked around.
 | Point | What the code does | Needs |
 |---|---|---|
 | FR-5: a session falls within the cycle's dates | **Not enforced.** The domain's `ensure_within_cycle` needs the organisation's time zone, which has no source; guessing UTC would refuse valid local times. A test records that a session outside the cycle is accepted | Shivani, Faizan: where the organisation time zone comes from (the same gap exists in timetable-attendance) |
-| FR-5: a student in two overlapping sessions | Not implemented (needs candidates). Two sessions may overlap in time | Q1, Q2 |
+| FR-5: a student in two overlapping sessions | Not implemented (needs candidates). Two sessions may overlap in time | Q1 (Q2 is decided) |
 | `ExamPaper.title` and the `title` field of `updateExamPaper` | **Resolved.** Migration `ex_0002` adds a nullable `title` (String 200) to `examinations_exam_paper`: no new table, no policy change (the `ex_0001` policy covers the column), no backfill, no default. `updateExamPaper` stores and returns it, on a draft paper of a draft or scheduled cycle. The contract types `title` as a non-null string, so an untitled paper omits the field and a title can be replaced but not cleared (blank, null and over 200 characters are 400) | None |
-| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Not served: they come from `offering_ref`, which is not filled. The `department_id` filter reads `offering_ref`, so it matches nothing until it is | The consumer slice, and the architectural decision in section 7 |
-| FR-4: the course offering must exist in the local read model | Not checked: the read model is empty, which would make every create impossible. An active assessment scheme for the offering is required (422 `scheme_not_active`) | The consumer slice |
-| `ExamPaper.candidate_count` and `ExamSession.candidate_count` | The paper omits it (not required); the session serves 0 | Candidates (Q1, Q2) |
+| `course_code`, `course_title`, `department_id` of a paper; `department_id` filter | Served in the paper body when the offering read model has them (section 13): each field is present only when `offering_ref` holds a value, and omitted otherwise (an offering with no row, a row only a status change created, or a missing department), as an untitled paper omits `title`; the contract types them as optional, read-only strings. The `department_id` filter reads `offering_ref`, so it matches only offerings whose `offering.created` was delivered to this module | The backfill and refresh limits in section 13; the architectural decision in section 7 |
+| FR-4: the course offering must exist in the local read model | Not checked. When written, the read model was empty, which would have made every create impossible. The offering consumers now fill it (section 13), but only for offerings whose events were delivered to this module, so the check would still reject existing offerings until a backfill is confirmed. An active assessment scheme for the offering is required (422 `scheme_not_active`) | Not decided; depends on the backfill limit in section 13 |
+| `ExamPaper.candidate_count` and `ExamSession.candidate_count` | The paper omits it (not required); the session serves 0 | Candidates (Q1; Q2 is decided) |
 | `ExamSession.invigilators_assigned` | Counts the session's `assigned` invigilation duties from `examinations_exam_duty`; no operation creates one yet | The duties slice |
 | A cancelled session's papers | A paper is in at most one session (unique index), so cancelling removes the links and the session is served with no papers; they are in the audit entry and the event | A decision on keeping a history of a session's papers |
 | Papers and sessions in a cycle that is past `scheduled` | Creating and editing papers, scheduling and rescheduling need a draft or scheduled cycle (FR-1, applied literally) | None |
@@ -180,6 +185,94 @@ literally or left out, and none is worked around.
 | Contract: statuses the API returns but the contract does not declare | 400 for a bad filter on `listExamPapers` and `listExamSessions`, and for a missing or blank `reason` on `cancelExamSession`. 401 is declared nowhere and 403 on none of these operations | A contract change |
 | `createExamPapers` unknown cycle, `scheduleExamSession` unknown cycle or paper | 422 (`unknown_exam_cycle`, `unknown_paper`): the contract's create and schedule declare no 404 | None |
 | The request body of `createExamPapers` | The contract names the operation `createExamPapers` (one request, several papers) | None |
+
+## 12. Choices and gaps of the exam duty APIs
+
+Found while serving listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties. The rules below were approved for this
+slice (the owner's answers to the audit's questions); the gaps are applied literally or left out, and none is worked around.
+
+| Point | What the code does | Needs |
+|---|---|---|
+| Assigning: the target | Invigilation needs `exam_session_id`, evaluation and moderation need `exam_paper_id`, exactly one of them (the domain's `Duty`; 400). A session or paper that does not exist for the caller is 422 (`unknown_session`, `unknown_paper`): the contract declares no 404 for assign | None |
+| Assigning: cycle status | Allowed while the cycle is `draft`, `scheduled`, `in_progress` or `evaluation`; 409 `cycle_not_open_for_duties` in `results_published` and `closed` | None |
+| Assigning: session status | Only a `scheduled` session takes duties; a `cancelled` or `completed` one is 409 `session_not_scheduled` | None |
+| Assigning: paper status | Evaluation and moderation ignore the paper's pipeline status | None |
+| Over-assignment | More invigilators than `invigilators_required` may be assigned; `invigilators_assigned` can exceed it | None |
+| Duplicates | The same staff member, type and target while the earlier duty is `assigned` or `completed` is 409 `duty_exists`. A `cancelled` duty frees the target. Migration `ex_0003` adds two partial unique indexes (one for session duties, one for paper duties, over organisation, staff, type and target, only for those two statuses) so two concurrent requests cannot both win: the loser's integrity error becomes the same 409. The tests cover the index directly and the mapping by bypassing the application check; a true two-thread race is not tested because SQLite serialises writers. `ex_0003` fails on a database that already holds two live duties for one target; none can exist, since nothing wrote duties before this slice | None |
+| Overlapping invigilation | 409 `invigilation_overlap` with the clashing session id; back-to-back sessions are allowed; only `assigned` invigilation duties count, and a cancelled session never does | None |
+| Session cancellation | Does not cancel its duties (no cascade): they stay `assigned` and visible in `GET /duties`. They are left out of the clash check and of the default `/me/duties`, and are in `/me/duties?include_past=true` | A decision on cascading, if wanted |
+| Cancelling a duty | Needs a reason and an `assigned` duty (409 `duty_not_assigned` otherwise); works in any cycle status. A foreign or unknown id is 404 | None |
+| `staff_id` | **Stored as given, with no identity lookup.** Nothing checks that the user exists or belongs to the organisation: a made-up or foreign uuid is accepted, and `/me/duties` matches it to the token's user id. The identity SDK does not exist | Faizan (Q11), when the identity SDK ships |
+| Department scope of `listExamDuties` (Q13) | A holder of `duty:read-all` sees every duty of the organisation. `duty:read-department` alone gets an empty list (`{"items": [], "total": 0}`), not a 403, because the caller's department is unknown. The filters are checked first, so a bad one is still a 400 | Faizan (Q13) |
+| Fields of `ExamDuty` | `starts_at`, `ends_at` and `venue_label` are the session's, for invigilation, and null for evaluation and moderation. `course_code` is read from the offering read model for evaluation and moderation, and is null while it has no row (it is not filled yet). `department_id` is not part of the contract and is not served | The consumer slice |
+| `GET /me/duties` | The caller's `assigned` duties only. Default: invigilation duties whose session is scheduled and has not ended, plus every paper duty (no date). `include_past=true`: every assigned duty, including past and cancelled sessions'. Ordered by session start, the undated after them in the order assigned. The response is `{items}` with no total, as the contract says | None |
+| `GET /duties` order | Newest first; the contract gives none | None |
+| Roles | Unchanged: the controller holds `read-all`, `read-department` and `assign` but not `read-own` (so it gets 403 on `/me/duties`); the department head holds `read-department` (an empty list); faculty hold `read-own` (403 on `GET /duties`); student and viewer hold none | None |
+| Contract: undeclared statuses | 400 for a bad filter on `listExamDuties`, for a missing or blank `reason` on `cancelExamDuty` and for a bad `include_past` on `listMyDuties`; `listMyDuties` declares only 200. No 401, and no 403 on these operations. `test_api_contract.py` records them | A contract change |
+
+## 13. Choices and gaps of the offering consumers
+
+`application/consumers.py` consumes academic-management's `offering.created` and `offering.status-changed` into
+`offering_ref`, using only fields the merged contract defines (`course_offering_id`, `course_id`, `academic_period_id`,
+`course_code`, `course_title`, `credits`, `department_id`; `to_status`). It follows timetable-attendance's consumers
+(idempotent on the envelope id in `processed_event`, organisation-checked, one transaction with the read-model write).
+
+| Choice | Why |
+|---|---|
+| `ex_0004` relaxes the creation columns of `offering_ref` and adds `status`, `status_as_of` | Events arrive unordered: a status change can arrive first and leaves a partial row, completed by the creation. `offering.created` carries no status, so `status` is NULL until a status event arrives |
+| A malformed event raises `ValueError` and writes nothing, marker included | The relay retries and then dead-letters; an event is never half applied |
+| A second `offering.created` for a known offering changes nothing | A creation does not overwrite what a later event set |
+| `department_id` may be absent in the event and is then stored as NULL | The contract lists it, but a missing value is not a reason to drop the whole offering |
+
+**Ordering key.** A status is ordered by the event envelope's `occurred_at` (`status_as_of`), not by the payload's
+`changed_at`. This follows the event-bus contract and timetable-attendance's consumers. The two instants are normally
+close, but `changed_at` is the publisher's business time and is not read at all.
+
+**Integration limitations (not resolved by this slice).**
+1. **Existing offerings may not be populated.** The read model is filled only by events delivered to this module after
+   it consumes them. An offering created in academic-management before that has no row, and so no `course_code`,
+   `department_id` or status here. Repository evidence on replay is limited: the event bus documents replay only for
+   dead-lettered events, re-running only the modules that failed (`platform/event-bus/README.md`,
+   `docs/outbox-relay.md`), and proposes 30-day retention of published rows. No mechanism was found that delivers
+   already-published events to a module that was not consuming them, and none is assumed. Whether a backfill
+   (for example reading academic-management's API once, or a replay) is available is **not confirmed**.
+2. **`offering.updated` is not consumed.** It carries only `changed_fields`, and no decision allows reading the owner's
+   API (section 7).
+3. **No deletion event exists** for an offering, so none is handled.
+4. **Offering changes after creation therefore leave the read model stale:** a changed code, title, credits or
+   department is not applied, and `course.*` events are not consumed either.
+5. A row created only by a status change (its creation never delivered) stays partial: `academic_period_id` is NULL
+   and the offering is *unknown*. A reader must treat such a row as not known.
+
+**Served from this table:** the paper's `course_code`, `course_title` and `department_id` (one batched, organisation-scoped read per response; a field is omitted when the read model has no value), the duty body's `course_code`, and the paper `department_id` filter. Because of the limits above, a paper of an offering with no row omits the fields, and a paper of an offering that changed after its creation shows the values of its creation. No value is made up; the backfill and refresh owner (Praveen or Faizan) is not confirmed.
+
+| Open point | Owner | Effect |
+|---|---|---|
+| Backfill or replay of offerings that existed before the consumers: whether it is possible, who owns it and how | Praveen, Faizan (not confirmed) | Existing offerings stay unpopulated until it is decided |
+| How an offering's later changes reach `offering_ref` (re-read the API, or an event with values) | Praveen, Faizan | Until decided, a changed code, title, credits or department after creation is not reflected |
+
+## 14. Decisions recorded on 13 November 2026 (issue #325 closure and candidate-table planning)
+
+Recorded by the module owner (Shivani) from the closure-planning review of #325 (rows 1 to 9) and the candidate-table schema review
+(rows 10 to 12). Row 10 restates the decision already recorded on #325 and settles Q2 for `student_id`. Apart from that, this section
+resolves none of the questions above: a row marked pending stays pending until its owner answers in a recorded comment, and no
+default is assumed for it. The architecture direction posted on #325 ([comment 6852967916](https://github.com/rooman-itsd/Education_OS/issues/325#issuecomment-6852967916))
+is the context; this section does not replace it.
+
+| # | Topic | Label | Record |
+|---|---|---|---|
+| 1 | Examination candidate qualification | **Confirmed decision** (the rule); **pending external confirmation** (its details) | Candidacy is qualified by a configurable registration-type rule. The exact registration-type values, where the rule is configured and how candidates are created are pending Praveen's confirmation (Q1) |
+| 2 | Supplementary and backlog candidates | **Pending external confirmation** | Praveen's explicit confirmation of the registration types and the candidate-creation rules (Q1) |
+| 3 | Student status and eligibility | **Pending external confirmation** | Praveen's explicit mapping from student status to eligibility |
+| 4 | Ownership of the organisation, programme and course attendance thresholds | **Pending external confirmation** | Unresolved until Akshata and Praveen confirm (Q5) |
+| 5 | Missing attendance threshold | **Pending external confirmation** | The responsible owner's rule. No default is assumed |
+| 6 | Dues | **Deferred** | The integration waits until the authoritative provider and data source are identified. This does not change the Q4 record above, whose response shape Examinations has not confirmed |
+| 7 | Result approval | **Confirmed decision** (use the platform workflow); **pending external confirmation** (the details) | The request, the approval chain and the event payload are pending Faizan's confirmation. The Q10 row above stays open until he confirms |
+| 8 | Scheduled-class organisation timezone | **Pending external confirmation** | Faizan or the platform team confirms the authoritative timezone source. It concerns timetable-attendance's `generateScheduledClasses` |
+| 9 | Marks implementation sequence | **Approved implementation sequence** | First a separate PR that creates only the candidate table (schema only). After it is reviewed and merged, a separate PR implements the marks operations |
+| 10 | Student identifier | **Confirmed decision** (recorded on #325, [comment 6852967916](https://github.com/rooman-itsd/Education_OS/issues/325#issuecomment-6852967916)) | `person_id` is the canonical student identifier across module boundaries. The contract's `student_id` field keeps its name and holds that `person_id`; Examinations adds no separate student mapping. This restates the existing record and adds nothing to it |
+| 11 | Candidate table schema | **Approved implementation decision**; the schema is **implemented** (migration `ex_0005`, schema only) | Column names follow the contract's `Candidate` schema: `eligibility_reasons` and `overridden_by`. `UNIQUE (organisation_id, exam_paper_id, student_id)` is added; it implements the PRD rule "One per (exam paper, student)" (section 5.6) within an organisation: `organisation_id` is part of the key, and nothing yet ties a candidate's organisation to its paper's organisation, so future candidate-creation logic must set the candidate's organisation from the paper. It is a schema decision, not a ruling on supplementary or backlog candidacy. `eligibility_reasons` is NOT NULL with no database default. `override_reason` is nullable and uses `String(500)`. `organisation_id` is NOT NULL on this table only, so the unique key cannot be bypassed by a NULL organisation. `student_id` carries the canonical `person_id` and keeps its contract name. `pending_inputs` is deferred to the eligibility workstream. No registration id or type is stored. Not implemented: registration consumers, candidate creation, `listCandidates`, eligibility and overrides; the Marks operations are a separate later change |
+| 12 | Supplementary and backlog behaviour behind that constraint | **Pending external confirmation** | Praveen confirms, before any candidate-creation logic is written, whether supplementary and backlog attempts are always papers of a separate cycle or can sit a regular cycle's paper, whether one candidacy per (paper, student) always holds, and whether a candidate records the registration that created it (Q1) |
 
 ## 9. Evidence limits
 

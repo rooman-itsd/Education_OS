@@ -17,8 +17,10 @@ from .values import require_choice, require_id, require_instant, require_text
 PRESENT, ABSENT, LATE, EXCUSED = "present", "absent", "late", "excused"
 ATTENDANCE_STATUSES = (PRESENT, ABSENT, LATE, EXCUSED)  # contract AttendanceStatus
 ATTENDED = (PRESENT, LATE)  # FR-13: what counts as attended
-OPEN, CLOSED = "open", "closed"
-SESSION_STATUSES = (OPEN, CLOSED)  # contract AttendanceSessionStatus
+OPEN, CLOSED, SESSION_CANCELLED = "open", "closed", "cancelled"
+# contract AttendanceSessionStatus. `cancelled`: the class was cancelled while the session was open (reviewer decision,
+# docs/reviewer-decisions.md section A); its records stay as they were and are never counted.
+SESSION_STATUSES = (OPEN, CLOSED, SESSION_CANCELLED)
 
 REMARK_MAX = 500
 REASON_MAX = 500
@@ -96,6 +98,8 @@ def ensure_can_open(cls: ScheduledClass, existing: Session | None, now: datetime
     now = require_instant(now, "now")
     if existing is not None and existing.status == OPEN:
         return existing
+    if existing is not None and existing.status == SESSION_CANCELLED:
+        raise DomainRuleError("class_cancelled", "the class is cancelled", kind="conflict")
     if existing is not None:  # closing completes the class, so a closed session is reported before the class status
         raise DomainRuleError("session_closed", "the attendance session is already closed", kind="conflict")
     if cls.status != SCHEDULED:
@@ -118,6 +122,10 @@ def ensure_can_open(cls: ScheduledClass, existing: Session | None, now: datetime
 def ensure_can_mark(session: Session, now: datetime) -> None:
     """FR-9: records are written while the session is open and before its deadline; a closed one takes corrections.
     A session past its deadline is closed by the system, so until it is, marking it is refused the same way."""
+    if session.status == SESSION_CANCELLED:
+        raise DomainRuleError(
+            "session_cancelled", "the class and its attendance session are cancelled", kind="conflict"
+        )
     if session.status != OPEN:
         raise DomainRuleError("session_closed", "the session is closed; use the correction endpoint", kind="conflict")
     if require_instant(now, "now") > session.marking_deadline:
@@ -221,6 +229,10 @@ def plan_close(
 ) -> tuple[Session, list[str]]:
     """FR-11: close an open session. Returns the closed session and the ids of the eligible students who were never
     marked and so become `absent`. `closed_by` is None when the system closes it at the deadline."""
+    if session.status == SESSION_CANCELLED:
+        raise DomainRuleError(
+            "session_cancelled", "the class and its attendance session are cancelled", kind="conflict"
+        )
     if session.status == CLOSED:
         raise DomainRuleError("session_closed", "the attendance session is already closed", kind="conflict")
     if closed_by is not None:
@@ -238,6 +250,23 @@ def plan_close(
         closed_by=closed_by,
     )
     return closed, unmarked
+
+
+def plan_cancel_session(session: Session) -> Session:
+    """Reviewer decision (docs/reviewer-decisions.md, section A): cancelling a class whose session is open marks the
+    session cancelled. It is not closed, because closing would make the unmarked students absent; a cancelled class
+    never counts in any report. Only an open session is cancelled this way (a closed one forbids cancelling the
+    class, `classes.ensure_changeable`)."""
+    if session.status != OPEN:
+        raise DomainRuleError("session_not_open", "only an open attendance session can be cancelled", kind="conflict")
+    return Session(
+        id=session.id,
+        scheduled_class_id=session.scheduled_class_id,
+        opened_at=session.opened_at,
+        opened_by=session.opened_by,
+        marking_deadline=session.marking_deadline,
+        status=SESSION_CANCELLED,
+    )
 
 
 # Who is correcting, as the caller establishes it from the keys the caller holds (FR-10).
@@ -271,6 +300,10 @@ def plan_correction(
     require_choice(scope, "scope", CORRECTION_SCOPES)
     new_status = require_choice(to_status, "status", ATTENDANCE_STATUSES)
     text = require_text(reason, "reason", max_length=REASON_MAX)
+    if session.status == SESSION_CANCELLED:
+        raise DomainRuleError(
+            "session_cancelled", "the class and its attendance session are cancelled", kind="conflict"
+        )
     if session.status != CLOSED or session.closed_at is None:
         raise DomainRuleError("session_open", "the session is still open; mark attendance instead", kind="conflict")
     if scope == INSTRUCTOR and require_instant(now, "now") > session.closed_at + timedelta(

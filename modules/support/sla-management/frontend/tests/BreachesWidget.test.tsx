@@ -65,7 +65,9 @@ describe("sla-management.breaches widget", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<BreachesWidget role="support-staff" />);
     await screen.findByText("HD-000003 · Resolution");
-    fireEvent.click(screen.getByRole("tab", { name: "All tickets" }));
+    const all = screen.getByRole("button", { name: "All tickets" });
+    expect(all.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(all);
     await screen.findByText("HD-000003 · Resolution");
     expect((fetchMock.mock.calls[1] as [string])[0]).toBe("/api/v1/sla-management/stats/breaches?scope=all");
   });

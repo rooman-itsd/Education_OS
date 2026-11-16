@@ -215,6 +215,19 @@ def plan_publish(timetable: Timetable, *, blocking_conflicts: int) -> Publicatio
     return Publication(replace(timetable, status=PUBLISHED, version=timetable.version + 1))
 
 
+def ensure_known_term(timetable: Timetable, *, term_known: bool) -> None:
+    """Reviewer decision (docs/reviewer-decisions.md, section 2): a timetable is published only when its academic
+    period is a term the module knows (its `term_ref`, from `academic-management.term.created`), because the term's
+    dates bound the classes that publishing generates."""
+    if not term_known:
+        raise DomainRuleError(
+            "unknown_term",
+            f"academic period {timetable.academic_period_id} is not a known term, so the timetable cannot be published",
+            kind="conflict",
+            details={"academic_period_id": timetable.academic_period_id},
+        )
+
+
 def plan_unpublish(timetable: Timetable) -> Publication:
     """FR-3: only a published timetable can be unpublished. Its version stays; the next publication raises it."""
     if timetable.status != PUBLISHED:

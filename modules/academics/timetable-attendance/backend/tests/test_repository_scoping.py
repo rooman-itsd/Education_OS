@@ -83,3 +83,66 @@ def test_an_audit_token_is_unique_within_an_organisation_but_not_across_them():
         assert not repo.is_slot_date_conflict(caught.value)
         assert not repo.is_session_conflict(caught.value)
         assert not repo.is_record_conflict(caught.value)
+
+
+def test_the_publication_queries_see_only_their_own_organisations_rows():
+    from eos_timetable_attendance.infrastructure.models import AttendanceSessionRow, ScheduledClassRow, TermRef
+
+    period = str(uuid.uuid4())
+    shared_timetable_id = None
+    rows = {}
+    for org in (ORG_A, ORG_B):
+        with _db(org) as db:
+            t = _timetable(org)
+            db.add(t)
+            db.flush()
+            shared_timetable_id = shared_timetable_id or t.id
+            c = ScheduledClassRow(
+                organisation_id=org,
+                timetable_id=t.id,
+                academic_period_id=period,
+                course_offering_id=str(uuid.uuid4()),
+                section_id=str(uuid.uuid4()),
+                instructor_assignment_id=str(uuid.uuid4()),
+                instructor_id=str(uuid.uuid4()),
+                class_date=datetime(2026, 11, 10, tzinfo=UTC).date(),
+                starts_at=datetime(2026, 11, 10, 9, tzinfo=UTC),
+                ends_at=datetime(2026, 11, 10, 10, tzinfo=UTC),
+                status="scheduled",
+            )
+            db.add(c)
+            db.flush()
+            db.add(
+                AttendanceSessionRow(
+                    organisation_id=org,
+                    scheduled_class_id=c.id,
+                    status="open",
+                    opened_at=datetime(2026, 11, 10, 9, tzinfo=UTC),
+                    opened_by=str(uuid.uuid4()),
+                    marking_deadline=datetime(2026, 11, 11, 9, tzinfo=UTC),
+                )
+            )
+            db.add(
+                TermRef(
+                    organisation_id=org,
+                    academic_period_id=period,
+                    code="T",
+                    name="Term",
+                    starts_on=datetime(2026, 7, 1, tzinfo=UTC).date(),
+                    ends_on=datetime(2026, 11, 30, tzinfo=UTC).date(),
+                )
+            )
+            db.commit()
+            rows[org] = (t.id, c.id)
+    for org, other in ((ORG_A, ORG_B), (ORG_B, ORG_A)):
+        with _db(org) as db:
+            own_timetable, own_class = rows[org]
+            foreign_timetable, foreign_class = rows[other]
+            assert [r.id for r in repo.classes_of_timetable(db, own_timetable)] == [own_class]
+            assert repo.classes_of_timetable(db, foreign_timetable) == []  # another organisation's timetable
+            assert repo.class_ids_with_session(db, [own_class, foreign_class]) == {own_class}
+            assert repo.term_ref(db, period).organisation_id == org
+    with _db(None) as db:  # no organisation on the session: nothing matches
+        assert repo.term_ref(db, period) is None
+        assert repo.classes_of_timetable(db, rows[ORG_A][0]) == []
+        assert repo.class_ids_with_session(db, [rows[ORG_A][1]]) == set()

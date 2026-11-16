@@ -4,7 +4,8 @@ audit entry (`_audit`) in that same transaction, then commits once; any failure 
 keys are checked by the API layer (api/deps.require); the organisation is the caller's, taken from the verified token.
 
 This batch holds the timetable and slot use cases the contract describes: list, create, get, update the details,
-replace the slots and list conflicts. Publishing, class generation, scheduled classes and attendance follow.
+replace the slots and list conflicts, and publish and unpublish. Class generation (which needs the organisation's
+time zone, see publish_timetable), scheduled classes and attendance follow.
 
 Known dependencies, not worked around here:
 - The shared outbox has no `version` column yet (packages/core), so events are published without the envelope version
@@ -30,12 +31,13 @@ from eos_core.db import new_id, utcnow
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..domain import classes as cl
 from ..domain import conflicts as cf
 from ..domain import timetables as tt
 from ..domain.errors import DomainRuleError
-from ..domain.values import require_choice, require_id
+from ..domain.values import require_choice, require_id, require_text
 from ..infrastructure import repository as repo
-from ..infrastructure.models import AuditEntry, TimetableRow, TimetableSlotRow, iso
+from ..infrastructure.models import AuditEntry, ScheduledClassRow, TimetableRow, TimetableSlotRow, as_utc, iso
 from .access import MODULE, Actor
 from .errors import TimetableAttendanceError, from_domain, invalid, not_found
 
@@ -573,16 +575,157 @@ def _conflict_dict(c: cf.Conflict) -> dict:
     return body
 
 
-def timetable_conflicts(db: Session, timetable_id: str) -> dict:
-    """GET /timetables/{id}/conflicts (FR-4): the conflicts among the timetable's slots and with the slots of every other
-    published timetable of the same academic period. Nothing is changed."""
-    row = _timetable(db, timetable_id)
+def _found_conflicts(db: Session, row: TimetableRow) -> list[cf.Conflict]:
+    """The conflicts among the timetable's slots and with the slots of every other published timetable of the same
+    academic period."""
     mine = [_slot_domain(r) for r in repo.slots_of(db, row.id)]
     others = [(tid, _slot_domain(r)) for tid, r in repo.published_slots_in_period(db, row.academic_period_id, row.id)]
     assignment_ids = {s.instructor_assignment_id for s in mine} | {s.instructor_assignment_id for _, s in others}
     instructors = {aid: ref.instructor_id for aid, ref in repo.assignment_refs(db, assignment_ids).items()}
-    found = cf.find_conflicts(mine, instructors, others)
+    return cf.find_conflicts(mine, instructors, others)
+
+
+def timetable_conflicts(db: Session, timetable_id: str) -> dict:
+    """GET /timetables/{id}/conflicts (FR-4): the conflicts among the timetable's slots and with the slots of every other
+    published timetable of the same academic period. Nothing is changed."""
+    found = _found_conflicts(db, _timetable(db, timetable_id))
     return {"blocking": bool(cf.blocking(found)), "items": [_conflict_dict(c) for c in found]}
+
+
+# ---------------------------------------------------------------- publication
+
+
+@transactional
+def publish_timetable(db: Session, a: Actor, timetable_id: str) -> dict:
+    """POST /timetables/{id}/publish (FR-3): a draft or unpublished timetable becomes published and its version goes up
+    by one. Refused with 409 when it is already published, when a blocking conflict remains (the response lists them),
+    or when its academic period is not a known term. Publishes timetable.published and audits it.
+
+    NOT DONE HERE, by decision (docs/reviewer-decisions.md, section 10): the contract says publishing also generates
+    the scheduled classes. That needs the organisation's time zone to turn each slot's wall-clock times into instants,
+    and no source for it exists yet, so no class is generated and the event reports `scheduled_class_count: 0`.
+    `POST /timetables/{id}/generate-classes` is not served either."""
+    row = _timetable(db, timetable_id, lock=True)
+    timetable = _timetable_domain(row)
+    blocking = cf.blocking(_found_conflicts(db, row))
+    try:
+        plan = tt.plan_publish(timetable, blocking_conflicts=len(blocking))
+    except DomainRuleError as err:
+        refusal = from_domain(err)
+        if err.code == "blocking_conflicts":  # the contract: "Fails with 409 and the conflict list"
+            refusal.details["conflicts"] = [_conflict_dict(c) for c in blocking]
+        raise refusal from err
+    _domain(tt.ensure_known_term, timetable, term_known=repo.term_ref(db, row.academic_period_id) is not None)
+    published_at = clock()
+    before, after = _apply(
+        row, {"status": plan.timetable.status, "version": plan.timetable.version, "published_at": published_at}
+    )
+    _publish(
+        db,
+        a,
+        "timetable.published",
+        {
+            "timetable_id": row.id,
+            "academic_period_id": row.academic_period_id,
+            "department_id": row.department_id,
+            "version": row.version,
+            "published_at": iso(published_at),
+            "scheduled_class_count": 0,
+        },
+    )
+    _audit(db, a, "timetable.published", "timetable", row, before=before, after=after)
+    db.commit()
+    return _full_dict(db, row)
+
+
+def _class_domain(row: ScheduledClassRow) -> cl.ScheduledClass:
+    return cl.ScheduledClass(
+        id=row.id,
+        academic_period_id=row.academic_period_id,
+        course_offering_id=row.course_offering_id,
+        section_id=row.section_id,
+        instructor_assignment_id=row.instructor_assignment_id,
+        instructor_id=row.instructor_id,
+        class_date=row.class_date,
+        starts_at=as_utc(row.starts_at),
+        ends_at=as_utc(row.ends_at),
+        timetable_id=row.timetable_id,
+        slot_id=row.slot_id,
+        location_label=row.location_label,
+        status=row.status,
+        cancel_reason=row.cancel_reason,
+    )
+
+
+@transactional
+def unpublish_timetable(db: Session, a: Actor, timetable_id: str, body: object) -> dict:
+    """POST /timetables/{id}/unpublish (FR-3): a published timetable becomes unpublished; its version stays. Its future
+    scheduled classes that have no attendance session are cancelled, each with its own audit entry and
+    scheduled-class.cancelled event. Past classes, classes already started, and every class with a session are left
+    as they are. The optional `reason` is recorded on the audit entries and on each cancelled class. Publishes
+    timetable.unpublished."""
+    data = _object({} if body is None else body, "body", ("reason",))
+    reason = None if data.get("reason") is None else _domain(require_text, data["reason"], "reason", max_length=500)
+    row = _timetable(db, timetable_id, lock=True)
+    plan = _domain(tt.plan_unpublish, _timetable_domain(row))
+    now = clock()
+    class_rows = {r.id: r for r in repo.classes_of_timetable(db, row.id)}
+    with_session = repo.class_ids_with_session(db, list(class_rows))
+    to_cancel = cl.classes_to_cancel_on_unpublish([_class_domain(r) for r in class_rows.values()], with_session, now)
+    before, after = _apply(row, {"status": plan.timetable.status})
+    for planned in to_cancel:
+        cancelled = _domain(cl.plan_cancel, planned, has_closed_session=False, reason=reason)
+        class_row = class_rows[cancelled.id]
+        class_before, class_after = _apply(
+            class_row, {"status": cancelled.status, "cancel_reason": cancelled.cancel_reason}
+        )
+        _publish(
+            db,
+            a,
+            "scheduled-class.cancelled",
+            {
+                "scheduled_class_id": class_row.id,
+                "course_offering_id": class_row.course_offering_id,
+                "section_id": class_row.section_id,
+                "class_date": iso(class_row.class_date),
+                "reason": class_row.cancel_reason,
+                "cancelled_at": iso(now),
+            },
+        )
+        _audit(
+            db,
+            a,
+            "scheduled-class.cancelled",
+            "scheduled_class",
+            class_row,
+            before=class_before,
+            after=class_after,
+            reason=reason,
+        )
+    _publish(
+        db,
+        a,
+        "timetable.unpublished",
+        {
+            "timetable_id": row.id,
+            "academic_period_id": row.academic_period_id,
+            "version": row.version,
+            "unpublished_at": iso(now),
+            "cancelled_class_count": len(to_cancel),
+        },
+    )
+    _audit(
+        db,
+        a,
+        "timetable.unpublished",
+        "timetable",
+        row,
+        before=before,
+        after={**after, "cancelled_class_count": len(to_cancel)},
+        reason=reason,
+    )
+    db.commit()
+    return _full_dict(db, row)
 
 
 __all__ = [
@@ -590,7 +733,9 @@ __all__ = [
     "create_timetable",
     "get_timetable",
     "list_timetables",
+    "publish_timetable",
     "replace_slots",
     "timetable_conflicts",
+    "unpublish_timetable",
     "update_timetable",
 ]

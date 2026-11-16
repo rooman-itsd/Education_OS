@@ -13,13 +13,13 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   widget: the panel renders by its registered title and shows its empty state, or says its data is not available
  *   while the backend is missing;
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
- *   (field-training #339 and regulatory-reports #343 (governance is not enabled yet)). Entries whose module is already merged carry that widget's texts, so the journey starts checking them the
+ *   (field-training #339). Entries whose module is already merged carry that widget's texts, so the journey starts checking them the
  *   day the module is enabled;
  * - data journey: the coordinator records a site and an opening with two seats, assigns and starts a medical student's
  *   placement (whose entry the clinical supervisor verifies); it shows in `field-training.active-placements` with the
  *   verified hours and the opening in `field-training.placements-open` with one seat left. It skips until field-training
  *   is enabled. No data journey for facility-booking.bookings-today, which lists bookings of the resources the viewer
- *   approves (see clinical-supervisor.spec.ts), or for regulatory-reports, which waits for its module.
+ *   approves (see clinical-supervisor.spec.ts), or for regulatory-reports.due (an empty-state check only).
  *
  * facilities and practice are not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves
  * the organisation to Standard first. Loading states are covered by the modules' unit tests, not here.
@@ -55,7 +55,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "No bookings today",
     unavailable: "Booking data is not available yet.",
   },
-  { id: "regulatory-reports.due", module: "governance/regulatory-reports", batch: "#343" },
+  {
+    id: "regulatory-reports.due",
+    module: "governance/regulatory-reports",
+    batch: "#343",
+    title: "Regulatory filings due",
+    probe: "/regulatory-reports/stats/due?scope=mine",
+    empty: "Nothing due",
+    unavailable: "Regulatory report data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;

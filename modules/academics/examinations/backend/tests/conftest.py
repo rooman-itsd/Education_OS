@@ -211,3 +211,20 @@ if eos_core is not None:
             for key, value in values.items():
                 setattr(row, key, value)
             db.commit()
+
+    def make_duty(client, headers, staff_id: str, duty_type: str, *, session_id=None, paper_id=None) -> dict:
+        body = {"staff_id": staff_id, "duty_type": duty_type}
+        if session_id:
+            body["exam_session_id"] = session_id
+        if paper_id:
+            body["exam_paper_id"] = paper_id
+        return ok(client.post(f"{BASE}/duties", json=body, headers=headers), 201)
+
+    def make_session_for_duties(client, headers):
+        """A cycle with a default grading scheme, two draft papers of one offering and a session of the first paper.
+        Returns (cycle, session, the second paper, which is still a draft)."""
+        scheme = make_grading(client, headers)
+        ok(client.post(f"{BASE}/grading-schemes/{scheme['id']}/set-default", headers=headers))
+        cycle = make_cycle(client, headers)
+        first, second = make_papers(client, headers, cycle["id"])
+        return cycle, make_session(client, headers, cycle["id"], [first["id"]]), second

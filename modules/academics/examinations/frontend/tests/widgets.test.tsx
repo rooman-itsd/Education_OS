@@ -27,11 +27,12 @@ afterEach(() => {
 const calledUrl = () => new URL(fetchMock.mock.calls[0]![0] as string, "http://localhost");
 
 describe("widget declarations", () => {
-  it("export the three Examination Staff widgets with the contract's permission keys", () => {
+  it("export the Examination Staff widgets and the Faculty duties widget with the contract's permission keys", () => {
     expect(widgets.map((w) => [w.id, w.permission])).toEqual([
       ["examinations.schedule", "examinations:session:read"],
       ["examinations.hall-tickets-issued", "examinations:hall-ticket:read-all"],
       ["examinations.results-pending", "examinations:report:read-all"],
+      ["examinations.exam-duties", "examinations:duty:read-own"],
     ]);
   });
 });

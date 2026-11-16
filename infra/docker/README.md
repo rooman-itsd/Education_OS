@@ -111,7 +111,8 @@ cd infra/docker && cp .env.api.example .env.api && chmod 600 .env.api
 sed -i "s|^EOS_DB_PASSWORD=.*|EOS_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
 sed -i "s|^EOS_APP_DB_PASSWORD=.*|EOS_APP_DB_PASSWORD=$(openssl rand -hex 24)|" .env.api
 sed -i "s|^EOS_JWT_SECRET=.*|EOS_JWT_SECRET=$(openssl rand -hex 32)|" .env.api
-nano .env.api   # set EOS_SUPER_ADMIN_EMAIL (a real address with a dot after @) and EOS_SUPER_ADMIN_PASSWORD
+nano .env.api   # set EOS_SUPER_ADMIN_EMAIL (a real address with a dot after @) and EOS_SUPER_ADMIN_PASSWORD,
+                # and EOS_TRUSTED_PROXIES to the nginx container's LAN address (rate limits, below)
 cd /opt/education-os
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d --build
 docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api ps
@@ -184,6 +185,22 @@ production `.env.api` sets `NOTIFICATION_TRANSPORT=adapter` and the `MESSAGING_P
 - The super admin is created at the first start and never updated: a new `EOS_SUPER_ADMIN_PASSWORD`
   is ignored, and a new `EOS_SUPER_ADMIN_EMAIL` adds a second super admin beside the first.
 
+**Rate limits and the emergency switch.** The API rate-limits requests and sets security headers
+(`platform/api-gateway`, whose README explains the limits). Compose passes every setting from `.env.api`
+(`EOS_RATE_LIMIT_*`, `EOS_SECURITY_HEADERS`, `EOS_HSTS_MAX_AGE`, `EOS_TRUSTED_PROXIES`, `EOS_REDIS_URL`), with
+the defaults in `.env.api.example`. Two matter on the server:
+
+- `EOS_TRUSTED_PROXIES` must be the nginx container's address as the API container sees it, so the API
+  believes the proxy's `X-Forwarded-For`. Left empty (the example's value) or at loopback, every visitor
+  counts as the proxy and shares one bucket, and the API logs a warning at start-up.
+  `tools/scripts/deploy-api-lxc.sh` writes it (the `PROXY_CTID` container's address), replacing an empty or
+  loopback value; a value naming another address is kept.
+- If the limits refuse legitimate traffic, switch them off without a code change: set
+  `EOS_RATE_LIMIT_ENABLED=false` in `.env.api`, then
+  `docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d`
+  (recreates the API container, no rebuild). Raise the limit that was hit (the log says `rate limited
+  scope=...`) and set it back to `true` the same way.
+
 Before any real organisation has registered, the clean way to change either is to start over:
 `docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api down -v`
 (this **deletes the database**), fix `.env.api`, then `up -d --build` again. Never do that once real
@@ -239,6 +256,34 @@ Check: the live site's `/api/v1/health` still answers, SSH still works, and from
 `curl -m 5 http://<container-ip>:8000/api/v1/health` now times out. If SSH is lost, set
 `Firewall` back to `No` under Firewall → Options in the Proxmox UI.
 
+#### Behind the public proxy
+
+The public nginx sends every API request on with `X-Forwarded-For` (the visitor's address) and `X-Forwarded-Proto`
+(`https`) (`wire-api-proxy.sh`). `uvicorn` believes those headers only from the addresses in `FORWARDED_ALLOW_IPS`,
+which `docker-compose.api.yml` takes from `EOS_FORWARDED_ALLOW_IPS` in `.env.api`. Unset, that is this host only
+(`127.0.0.1,::1`), so the API sees every request as coming from the proxy, over `http`. Anything that counts or limits
+by caller then treats all visitors as one, for example the integration hub's limit on unverified callbacks (#554).
+
+Set it to the address the nginx container reaches the API from: the same `<nginx-container-ip>` as the firewall rule
+above. Only that address: whoever is trusted can claim any visitor address.
+
+```
+cd /opt/education-os
+nano infra/docker/.env.api        # EOS_FORWARDED_ALLOW_IPS=<nginx-container-ip>
+C="docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api"
+$C up -d api
+```
+
+**Check:** `$C exec -T api printenv FORWARDED_ALLOW_IPS` prints the address, and the live site's `/api/v1/health`
+still answers. The API's `request` log lines carry no visitor address on purpose (it is personal data), so the
+setting does not show there. To undo, remove the line and `$C up -d api`.
+
+#### Worker processes
+
+One `uvicorn` process unless `EOS_API_WORKERS` is set in `.env.api` (`docker-compose.api.yml` passes it as
+`WEB_CONCURRENCY`). When and how to raise it, and how to measure: `../runbooks/scale-the-api.md`, section 3. Switch
+the connection pooler (below) on first.
+
 ### Connection pooler (PgBouncer, #96)
 
 Off unless a host switches it on. With it on, the API, the relay and the scheduler reach Postgres through
@@ -286,6 +331,23 @@ $C exec -T db psql -U eos -d eos -c "SELECT client_addr IS NOT NULL AS via_pool,
 
 **Switch it off:** remove `pooler` from `COMPOSE_PROFILES` and the `EOS_DB_ADDRESS` line, then
 `$C up -d api relay scheduler && $C stop pgbouncer`, and take `pgbouncer` out of `EOS_MONITOR_SERVICES`.
+
+### Integration hub (secret store)
+
+platform/integration-hub keeps provider credentials and OAuth tokens as files, each AES-256-GCM encrypted under
+`INTEGRATION_HUB_SECRET_KEK`, under `/var/lib/eos/integration-hub/secrets`. `docker-compose.api.yml` mounts the named
+volume `eos-hub-secrets` there in the `api` and `relay` services (the relay runs the hub's scheduled jobs, which call
+providers with those credentials), so a redeploy keeps them. Set the key in `.env.api` before anyone stores a
+credential: outside dev mode the hub refuses to store or read one without it (503 `secret_store_unavailable`).
+
+- The volume is not in the database or its dump by design; back it up separately from the key, or accept that
+  credentials are re-entered after a loss (the key without the volume, or the volume without the key, recovers
+  nothing).
+- Rotating the key: new key in `INTEGRATION_HUB_SECRET_KEK`, old one in `INTEGRATION_HUB_SECRET_KEK_PREVIOUS`,
+  `docker compose ... up -d`, then `docker compose ... exec api python -m eos_integration_hub.rotate_kek` (it also
+  re-encrypts the hub's encrypted database columns, and exits 1 while anything is unreadable), then empty the old key.
+- Every other `INTEGRATION_HUB_*` setting has the hub's own default in the compose file
+  (`platform/integration-hub/config/env.example` says what each does).
 
 ### Keycloak (ADR-0006)
 

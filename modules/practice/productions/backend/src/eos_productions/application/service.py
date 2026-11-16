@@ -585,7 +585,7 @@ def withdraw_role(db: Session, actor: Actor, role_id: str, body: dict) -> dict:
         raise _not_found("part")
     production = _production(db, role.production_id)
     try:
-        check_withdrawal(role.status)
+        check_withdrawal(role.status, production.status)
     except RuleViolationError as e:
         raise _rule_error(e) from e
     reason = (body.get("reason") or "").strip() or None

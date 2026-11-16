@@ -3,6 +3,8 @@ the same rule underneath."""
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from eos_core.db import scoped
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
@@ -18,6 +20,7 @@ from .models import (
     InstructorRef,
     MemberRef,
     OfferingRef,
+    PersonAccount,
     Quiz,
     QuizAttempt,
     QuizQuestion,
@@ -27,6 +30,13 @@ from .models import (
 
 def q(db: Session, model) -> Select:
     return scoped(db, select(model), model)
+
+
+def _is(column, value: str | Collection[str]):
+    """column equals the id, or is one of the ids (a learner's person id and user id, common.learner_ids)."""
+    if isinstance(value, str):
+        return column == value
+    return column.in_(sorted(value))
 
 
 def get(db: Session, model, row_id: str):
@@ -70,10 +80,18 @@ def taught_offerings(db: Session, user_id: str) -> set[str]:
     return {r.course_offering_id for r in rows}
 
 
-def registrations(db: Session, user_id: str) -> dict[str, set[str | None]]:
+def person_for_user(db: Session, user_id: str) -> str | None:
+    """The student-information person a sign-in account is linked to, if a link is known. Two persons can briefly claim
+    one account when the events arrive out of order; the later link wins."""
+    query = q(db, PersonAccount).where(PersonAccount.identity_user_id == user_id)
+    row = db.scalars(query.order_by(PersonAccount.linked_as_of.desc(), PersonAccount.id)).first()
+    return row.person_id if row is not None else None
+
+
+def registrations(db: Session, student_ids: str | Collection[str]) -> dict[str, set[str | None]]:
     """Course offering -> the sections the student is registered in (None when no section is known)."""
     out: dict[str, set[str | None]] = {}
-    for r in db.scalars(q(db, MemberRef).where(MemberRef.student_id == user_id, MemberRef.status == "active")):
+    for r in db.scalars(q(db, MemberRef).where(_is(MemberRef.student_id, student_ids), MemberRef.status == "active")):
         out.setdefault(r.course_offering_id, set()).add(r.section_id)
     return out
 
@@ -189,7 +207,7 @@ def submissions(db: Session, assignment_ids: list[str], **filters) -> list[Submi
         return []
     query = q(db, Submission).where(Submission.assignment_id.in_(assignment_ids))
     if filters.get("student_id"):
-        query = query.where(Submission.student_id == filters["student_id"])
+        query = query.where(_is(Submission.student_id, filters["student_id"]))
     if filters.get("status"):
         query = query.where(Submission.status == filters["status"])
     if not filters.get("include_superseded"):
@@ -197,8 +215,8 @@ def submissions(db: Session, assignment_ids: list[str], **filters) -> list[Submi
     return list(db.scalars(query.order_by(Submission.submitted_at, Submission.id)))
 
 
-def student_submissions(db: Session, student_id: str) -> list[Submission]:
-    query = q(db, Submission).where(Submission.student_id == student_id)
+def student_submissions(db: Session, student_id: str | Collection[str]) -> list[Submission]:
+    query = q(db, Submission).where(_is(Submission.student_id, student_id))
     return list(db.scalars(query.order_by(Submission.submitted_at, Submission.attempt, Submission.id)))
 
 
@@ -207,7 +225,7 @@ def attempts(db: Session, quiz_ids: list[str], **filters) -> list[QuizAttempt]:
         return []
     query = q(db, QuizAttempt).where(QuizAttempt.quiz_id.in_(quiz_ids))
     if filters.get("student_id"):
-        query = query.where(QuizAttempt.student_id == filters["student_id"])
+        query = query.where(_is(QuizAttempt.student_id, filters["student_id"]))
     if filters.get("manual_grading_state"):
         query = query.where(QuizAttempt.manual_grading_state == filters["manual_grading_state"])
     if filters.get("status"):
@@ -215,8 +233,8 @@ def attempts(db: Session, quiz_ids: list[str], **filters) -> list[QuizAttempt]:
     return list(db.scalars(query.order_by(QuizAttempt.started_at, QuizAttempt.attempt_number, QuizAttempt.id)))
 
 
-def student_attempts(db: Session, student_id: str) -> list[QuizAttempt]:
-    query = q(db, QuizAttempt).where(QuizAttempt.student_id == student_id)
+def student_attempts(db: Session, student_id: str | Collection[str]) -> list[QuizAttempt]:
+    query = q(db, QuizAttempt).where(_is(QuizAttempt.student_id, student_id))
     return list(db.scalars(query.order_by(QuizAttempt.started_at, QuizAttempt.attempt_number, QuizAttempt.id)))
 
 
@@ -234,7 +252,7 @@ def grades(db: Session, **filters) -> list[Grade]:
     query = q(db, Grade)
     for column in ("item_type", "item_id", "student_id", "course_space_id", "status"):
         if filters.get(column):
-            query = query.where(getattr(Grade, column) == filters[column])
+            query = query.where(_is(getattr(Grade, column), filters[column]))
     if filters.get("item_ids") is not None:
         query = query.where(Grade.item_id.in_(filters["item_ids"] or [""]))
     return list(db.scalars(query.order_by(Grade.created_at, Grade.id)))

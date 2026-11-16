@@ -1,10 +1,72 @@
 openapi: 3.1.0
 info:
   title: api-gateway API
-  version: 0.1.0
-  description: "Edge routing, auth enforcement, rate limiting, request logging and monitoring."
+  version: 0.2.0
+  description: |
+    Edge of the API host. No paths of its own: two middlewares in apps/backend apply to every route of every
+    platform service and module, so the response headers and the 429 below belong to every operation in
+    every other contract.
+
+    **Security headers** (every response; `Strict-Transport-Security` only when the request arrived over
+    HTTPS, directly or as `X-Forwarded-Proto: https` from the reverse proxy):
+    `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+    `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`,
+    `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` (not on the interactive docs pages),
+    `Cache-Control: no-store` on `/api/` responses unless the route set its own.
+
+    **Rate limits** (token buckets): a request with a valid bearer token carrying an `org` claim draws from
+    its user's bucket (the `sub` claim), then its organisation's (the ceiling for all its users together),
+    never from its address's; any other request from its client address's bucket (an IPv6 address by its
+    /64). `POST /identity/auth/login`, `/identity/auth/oidc/callback`, `GET /identity/auth/oidc/config`,
+    `POST /tenancy/register` and every `/{module}/public/...` route also draw from a stricter bucket per
+    client address, and sign-in from one per account and address (the body's `email`; only a refused
+    sign-in, 401 or 403, uses up an attempt). A request one bucket refuses is given back to the buckets it
+    was already charged to. `GET /health` is exempt. Over the limit: `429` with `Retry-After` and the body
+    below.
+
+    **Body size on sign-in and sign-up:** the gateway reads at most 16 KiB of a body on the sign-in,
+    OIDC and sign-up paths and answers `413` with `{"detail", "code": "body_too_large"}` past it.
+
+    A route that serves a page sets its own `Content-Security-Policy` and `Referrer-Policy`, which are kept
+    (e.g. the SBI ePay hand-off page of payment-sbiepay).
 servers:
-  - url: /api/v1/api-gateway
+  - url: /api/v1
 paths: {}
 components:
-  schemas: {}
+  headers:
+    Retry-After:
+      description: Whole seconds until the next request from this client (or organisation) will be served.
+      schema: { type: integer, minimum: 1 }
+  responses:
+    BodyTooLarge:
+      description: A sign-in, OIDC or sign-up body larger than 16 KiB.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/BodyTooLarge" }
+    RateLimited:
+      description: >-
+        Too many requests from this address, this user, this organisation, or sign-in from this address or to
+        this account.
+      headers:
+        Retry-After: { $ref: "#/components/headers/Retry-After" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RateLimited" }
+  schemas:
+    RateLimited:
+      type: object
+      required: [detail, code, scope, retry_after]
+      properties:
+        detail: { type: string, examples: ["too many requests for this address; retry after 12 seconds"] }
+        code: { type: string, const: rate_limited }
+        scope:
+          type: string
+          enum: [ip, user, organisation, auth, login]
+          description: Which bucket refused the request.
+        retry_after: { type: integer, minimum: 1, description: The same value as the Retry-After header. }
+    BodyTooLarge:
+      type: object
+      required: [detail, code]
+      properties:
+        detail: { type: string, examples: ["the request body is larger than 16384 bytes"] }
+        code: { type: string, const: body_too_large }

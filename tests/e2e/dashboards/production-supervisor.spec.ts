@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Production Supervisor dashboard (layout platform/identity/config/dashboards/production-supervisor.yaml, which extends the Faculty layout; the role exists in the
@@ -12,9 +12,9 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  *   panel renders by its registered title and shows its empty state, or says its data is not available while the
  *   backend is missing;
  * - widgets of modules not enabled yet, or not exported yet, are skipped, naming the module and the sprint batch that
- *   builds it: projects (#339), productions (#318, PR #454), timetable-attendance and examinations (#325) and lms (#326);
- * - there is no data journey: every widget of this layout that has shipped needs a selection panel or a project guide
- *   to have something to show, and those modules' own journeys cover that. The empty states are what this checks.
+ *   builds it: projects (#339), timetable-attendance and examinations (#325) and lms (#326);
+ * - data journey: a festival screening in preparation with a preparation task shows in productions.in-preparation
+ *   (a productions coordinator creates the production and moves it into preparation; the supervisor adds the task).
  *
  * facilities is not in the Trial plan (platform/billing/config/plans.yaml), so the super admin moves the organisation
  * to Standard first. The empty-state tests run before any data is created (serial mode). Loading states are covered
@@ -27,8 +27,25 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Faculty layout (extends: faculty).
   { id: "timetable-attendance.today-classes", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-to-mark", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "lms.assignments-to-grade", module: "academics/lms", batch: "#326" },
-  { id: "examinations.exam-duties", module: "academics/examinations", batch: "#325" },
+  {
+    id: "lms.assignments-to-grade",
+    module: "academics/lms",
+    batch: "#326",
+    title: "Assignments to grade",
+    probe: "/lms/me/grading-queue",
+    empty: "Nothing waiting to be graded",
+    unavailable: "Course data is not available yet.",
+  },
+
+  {
+    id: "examinations.exam-duties",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "My exam duties",
+    probe: "/examinations/me/duties",
+    empty: "No upcoming exam duties.",
+    unavailable: "Examinations data is not available yet.",
+  },
   {
     id: "academic-management.course-roster",
     module: "academics/academic-management",
@@ -41,6 +58,16 @@ const WIDGETS: LayoutWidget[] = [
     emptyCode: "active_term_not_found",
     unavailable: "No courses this term",
     forbidden: "Could not load your courses",
+  },
+  {
+    // Inherited from the Faculty layout (#421): the instructor's own upcoming bookings (MyBookingsWidget.tsx).
+    id: "facility-booking.my-bookings",
+    module: "facilities/facility-booking",
+    batch: "#421",
+    title: "My bookings",
+    probe: "/facility-booking/bookings?scope=mine&from=now&status=pending,confirmed,checked_in&page_size=6",
+    empty: "No upcoming bookings",
+    unavailable: "Booking data is not available yet.",
   },
   // The production supervisor's own widgets.
   {
@@ -87,6 +114,8 @@ const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
 
 let admin: DashboardUser;
 let user: DashboardUser;
+/** Productions coordinator: creates productions and moves them into preparation (coordinator grants). */
+let productionsCoordinator: DashboardUser;
 /** Per shipped widget id: what its GET answered the production supervisor. */
 const status: Record<string, number> = {};
 const ready = (id: string) => shipped(byId(id)) && status[id] === 200;
@@ -97,6 +126,7 @@ test.beforeAll(async ({ request }) => {
   admin = await organisationAdmin(request, { academyType: "film-media-institute" });
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "production-supervisor");
+  productionsCoordinator = await addUser(request, admin, "productions-coordinator");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -130,4 +160,31 @@ test.describe("production-supervisor widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with productions data", () => {
+  test("productions.in-preparation lists a screening in preparation with a supervisor task", async ({ page, request }) => {
+    const w = byId("productions.in-preparation");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the productions API answered ${status[w.id]} to the production-supervisor role`);
+    // A productions coordinator creates the screening and moves it into preparation; the supervisor (task:manage) adds
+    // a preparation task.
+    const screening = await created<{ id: string }>(request, productionsCoordinator, "/productions/productions", {
+      title: "Graduation film festival",
+      kind: "screening",
+    });
+    await created(request, productionsCoordinator, `/productions/productions/${screening.id}/preparation`, {});
+    await created(request, user, `/productions/productions/${screening.id}/tasks`, {
+      title: "Confirm projection check",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "In preparation");
+    await expect(panel.getByText("Nothing in preparation")).toHaveCount(0);
+    const row = panel
+      .getByRole("list", { name: "In preparation" })
+      .getByRole("listitem")
+      .filter({ hasText: "Graduation film festival" });
+    await expect(row).toContainText("1 of 1 tasks open");
+    await expect(row).toContainText("No date");
+  });
 });

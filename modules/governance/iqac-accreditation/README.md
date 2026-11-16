@@ -3,7 +3,7 @@
 **Domain:** governance
 **Kind:** feature
 **Status:** in-progress (contracts proposed; backend, migrations, tests and the `iqac-accreditation.action-items`
-widget built; not yet enabled in `apps/backend` and `apps/frontend`)
+widget built; enabled in `apps/backend` and `apps/frontend`)
 
 IQAC data collection, NAAC/NBA metrics, evidence repository.
 

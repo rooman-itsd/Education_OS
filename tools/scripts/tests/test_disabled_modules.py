@@ -61,3 +61,15 @@ def test_the_real_repository_lists_no_enabled_entry():
     disabled = {ROOT / line for line in _run(ROOT, em.CONFIG)}
     assert disabled and not enabled & disabled
     assert all(any(p.rglob("test_*.py")) for p in disabled)
+
+
+def test_a_key_given_twice_is_refused(tmp_path):
+    """PyYAML would keep the second `platform:` and silently drop the first one's services from the install."""
+    config = tmp_path / "modules.enabled.yaml"
+    config.write_text("platform: [identity, api-gateway]\nplatform: [identity]\n")
+    done = subprocess.run(
+        [sys.executable, str(SCRIPT), "install", "--root", str(tmp_path), "--config", str(config)],
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode != 0 and "`platform` is given twice (line 2)" in done.stderr

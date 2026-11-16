@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (`platform:`, mounted at `/api/v1/reporting`) and
+  `apps/frontend/config/modules.enabled.yaml` (`reporting.department-reports` and
+  `reporting.attendance-and-results-by-department` on the Department Admin and Management dashboards).
 - MetricSnapshot ingestion through the event bus (#317 follow-up; sources agreed: admissions, academics,
   examinations, finance). `MetricSnapshot` had no writer, so every report and widget showed zeros.
   - `application/metrics.py`: versioned metric definitions (source events, unit, category, whitelisted

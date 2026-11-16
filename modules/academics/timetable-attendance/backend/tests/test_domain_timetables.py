@@ -13,6 +13,7 @@ from eos_timetable_attendance.domain.timetables import (
     Timetable,
     ensure_editable,
     ensure_known_references,
+    ensure_known_term,
     ensure_offerings_in_period,
     ensure_unique_slots,
     new_slot,
@@ -188,3 +189,11 @@ def test_every_offering_must_belong_to_the_timetables_period():
     ensure_offerings_in_period([s], {}, period)  # an unknown offering is ensure_known_references' business
     err = code(ensure_offerings_in_period, [s], {s.course_offering_id: other}, period)
     assert (err.code, err.kind, err.field) == ("offering_not_in_period", "unprocessable", "course_offering_id")
+
+
+def test_a_timetable_is_published_only_for_a_known_term():
+    t = timetable()
+    ensure_known_term(t, term_known=True)
+    err = code(ensure_known_term, t, term_known=False)
+    assert (err.code, err.kind) == ("unknown_term", "conflict")
+    assert err.details == {"academic_period_id": t.academic_period_id}

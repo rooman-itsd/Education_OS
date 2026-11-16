@@ -43,15 +43,48 @@ Write the old and new sizes in the team channel so the next person knows.
 
 ## 3. More worker processes
 
-Today the API starts one `uvicorn` process (`infra/docker/api.Dockerfile`). Starting more is a change to the
-repository, not something to edit on the host (auto-deploy resets the checkout to `main`), and it should wait for
-two things, because several processes mean several sets of database connections:
-- the **connection pooler** switched on (PgBouncer, #96: built, off by default; `../docker/README.md`, "Connection
-  pooler", says how), so many processes share a bounded number of Postgres connections; and
-- a **load test with the numbers** (#152), so the worker count is chosen from a measurement.
+Today the API runs one `uvicorn` process (`infra/docker/api.Dockerfile` gives no `--workers`). The load test
+(`tests/performance/`, #152) measured what that process can do, and what more processes add.
 
-This runbook is updated with the exact change when the load test lands. Until then, scale up (section 2) and keep one
-process.
+**What was measured** (5 Nov 2026, a laptop with Docker, 50 organisations, users with no pause between requests; the
+full table is in `../../tests/performance/README.md`):
+
+| At 50 simultaneous users | 1 process (as deployed) | 4 worker processes | 4 workers through PgBouncer |
+|---|---|---|---|
+| Dashboard requests per second | about 41 | about 73 | about 63 |
+| Dashboard p95 | 9.0 s | 5.2 s | 6.9 s |
+| Sign-ins per second | about 32 | about 46 | about 39 |
+| Errors | none | none | none |
+
+- **One process is the first limit.** It serves about 40 dashboard requests a second, whatever the load; beyond that,
+  requests queue and the response time grows with the number of users. A person opens a dashboard every half minute or
+  so, which is roughly 150 to 200 people working at the same moment per process on that machine. A real server
+  differs: measure it there before relying on the figure (below).
+- **Four workers gave about 1.7 times the throughput**, not four: on the laptop the API, Postgres and the load
+  generator shared the same CPUs. On the server, workers help as far as the container has cores for them.
+- **PgBouncer changed neither speed nor errors.** It matters once there are several processes: each process keeps up
+  to 15 Postgres connections (SQLAlchemy's default pool), so 4 workers plus the relay and the scheduler reach about 90
+  of the 100 Postgres allows, while through PgBouncer they share 20.
+
+**When to add workers.** The `api` CPU sits near 100 % of one core under load while the container has idle cores
+(`docker stats`, section 1), and section 2 has already given it the cores.
+
+**How.** Not on the host (auto-deploy resets the checkout to `main`); it is a pull request, with the lead's agreement:
+
+1. **Switch the pooler on first** (`../docker/README.md`, "Connection pooler"), so more processes don't exhaust
+   Postgres's connections, and check it as that section says.
+2. **Set the number of workers.** `uvicorn` starts `$WEB_CONCURRENCY` processes when `--workers` is not given, which
+   is the case in `api.Dockerfile`. The pull request passes it to the `api` service in `docker-compose.api.yml`
+   (for example `WEB_CONCURRENCY: ${EOS_API_WORKERS:-1}`, so every host keeps one process until it sets
+   `EOS_API_WORKERS`). Choose no more workers than the container's cores, and start with 2.
+3. **Measure before and after** on staging, with the lead's agreement (the test adds `load-…` organisations to its
+   database): run `tests/performance/load/run.py` there as `../../tests/performance/README.md`, "Run it", says, once
+   before the change and once after, and keep both `--out` files with the pull request.
+4. Watch the `slow` and `errors` checks for a day (below). If it got worse, set `EOS_API_WORKERS` back to 1.
+
+**What workers don't fix.** Each dashboard request takes only 10 to 15 ms inside the API, yet one process completes
+about 40 a second, so most of the time goes into the path around the endpoints (the middleware and the thread pool),
+not the database. Profiling that path is the bigger win, and is a code change, not an operation.
 
 ## The database
 

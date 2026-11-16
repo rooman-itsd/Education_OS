@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (`platform:`, mounted at `/api/v1/workflow`) and
+  `apps/frontend/config/modules.enabled.yaml` (`workflow.approvals-pending` on the Department Admin dashboard).
 - SLA monitoring (#317 follow-up). Deadlines were only computed when read, a step without `sla_hours` had none, and
   `WORKFLOW_DEFAULT_SLA_HOURS` was read by nothing. A step now gets its `sla_hours`, else the default; the scheduled
   platform job `workflow.sla-check` (`*/15 * * * *`, entry point `eos.scheduler_jobs`) records each pending step

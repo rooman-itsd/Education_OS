@@ -1,4 +1,4 @@
-import type { ExamSessionPage, HallTicketReport, ResultsPendingReport } from "./types";
+import type { ExamSessionPage, HallTicketReport, MyDutyPage, ResultsPendingReport } from "./types";
 
 // The examinations API (contracts/openapi.yaml, servers: /api/v1/examinations). A stand-in for the
 // generated client: same paths and shapes, no logic of its own.
@@ -68,4 +68,9 @@ export function getHallTicketReport(signal?: AbortSignal): Promise<HallTicketRep
 /** GET /reports/results-pending: per exam cycle, defaulting to cycles in evaluation. */
 export function getResultsPendingReport(signal?: AbortSignal): Promise<ResultsPendingReport> {
   return get("/reports/results-pending", {}, signal);
+}
+
+/** GET /me/duties: the caller's exam duties, upcoming by default; `includePast` adds the past ones. */
+export function listMyDuties(includePast = false, signal?: AbortSignal): Promise<MyDutyPage> {
+  return get("/me/duties", { include_past: includePast ? "true" : undefined }, signal);
 }

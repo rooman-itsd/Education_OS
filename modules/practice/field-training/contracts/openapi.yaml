@@ -6,6 +6,21 @@ info:
     Generic field training pattern: sites offer openings, trainees get placements, log hours that supervisors
     verify, and are assessed. Labels shown to users come from the academy profile vocabulary
     (keys field-training.placement, field-training.site, field-training.supervisor). See docs/prd.md.
+
+    Refusals carry a `code` in `detail`. Besides the generic ones, these are specific to this module:
+
+    - `own_placement` (403): nobody assigns, decides, starts, changes, completes or assesses their own placement,
+      whatever roles they hold (`POST /placements`, `/placements/{id}/decision`, `/start`, `PATCH /placements/{id}`,
+      `/complete`, `/assessments`).
+    - `placement_active` (403): a trainee cannot withdraw their own active placement; a coordinator does
+      (`/placements/{id}/withdraw`). `placement_active` (409): an opening with an active placement cannot be
+      cancelled (`/openings/{id}/cancel`).
+    - `invalid_supervisor` (422): a trainee cannot supervise their own placement (`POST /placements`,
+      `PATCH /placements/{id}`).
+    - `duplicate_supervisor` (409): a supervisor is listed twice on a site or an opening, including when two
+      requests race (`/sites`, `/openings`, and their PATCH).
+    - `overlapping_placement` (409): the trainee already has a requested, assigned or active placement for these
+      dates, including when two requests for different openings race.
 servers:
   - url: /api/v1/field-training
 paths:

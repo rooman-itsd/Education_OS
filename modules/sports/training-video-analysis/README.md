@@ -59,13 +59,19 @@ Requirements: [docs/prd.md](docs/prd.md). Tables: [docs/data-model.md](docs/data
 The contract has no review status on a video, so a video waits for review while it has no annotation.
 `GET /videos?annotated=false` lists those, most recently recorded first, and its `total` (every such video, not only
 the rows shown) is the "Waiting for review" count. The coach's `session-plan` and the athlete's
-`training-schedule` are not built here yet: their layout ids still name athlete-performance.
+`training-schedule` are built here: both list the coming sessions (`GET /sessions?status=scheduled&from_date=today`,
+earliest first, `total` counting every one); the server narrows an athlete to the sessions they attend. The Coach and
+Athlete layouts name `training-video-analysis.session-plan` and `.training-schedule` (they used to name athlete-performance).
 
 ## Dependencies
 See `module.yaml`. From the host it needs `packages/core` (database, tenant scoping, outbox, tokens) and, for its
 tests, `packages/testing`. The backend is `eos_training_video_analysis.api.router:router`; its Alembic chain is `db/`;
 its event handlers are on the `eos.event_consumers` entry point. This module must not import code from any other
 module under `modules/`.
+
+`sports/training-video-analysis` is listed in `apps/backend/config/modules.enabled.yaml`, which mounts its router
+under `/api/v1/training-video-analysis` behind the entitlement gate, and in
+`apps/frontend/config/modules.enabled.yaml`, which registers its widgets.
 
 ## Layout
 | Path | Purpose |

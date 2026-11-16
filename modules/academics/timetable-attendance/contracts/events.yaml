@@ -73,3 +73,11 @@ events:
     description: Attendance taking was closed; unmarked students became absent. closed_by is null when closed by the system at the deadline.
     consumers: [reporting]
     payload: { organisation_id: uuid, attendance_session_id: uuid, scheduled_class_id: uuid, course_offering_id: uuid, section_id: uuid, class_date: date, closed_by: "uuid?", closed_at: datetime, present: integer, absent: integer, late: integer, excused: integer }
+
+  - name: timetable-attendance.job.finished
+    description: >-
+      The outcome of a run of the scheduler job timetable-attendance.close-expired-sessions (FR-11), reported to
+      platform/scheduler, which closes the run (see platform/scheduler/contracts/events.yaml). The job is organisation
+      scoped, so this event carries the organisation. detail counts the sessions closed and any left open.
+    consumers: [scheduler]
+    payload: { run_id: uuid, outcome: string, detail: string }

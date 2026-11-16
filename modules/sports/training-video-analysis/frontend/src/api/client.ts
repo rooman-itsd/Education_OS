@@ -85,6 +85,33 @@ export function listVideos(query: { annotated?: boolean; limit: number }, signal
   return get("/videos", { annotated: query.annotated === undefined ? undefined : String(query.annotated), limit: query.limit }, signal);
 }
 
+/** contract TrainingSession (the fields the widgets read). */
+export interface TrainingSession {
+  id: string;
+  plan_id?: string | null;
+  coach_id: string;
+  title: string;
+  location?: string | null;
+  /** date-time */
+  scheduled_start: string;
+  /** date-time */
+  scheduled_end: string;
+  status: "scheduled" | "in_progress" | "completed" | "cancelled";
+  attendee_ids?: string[];
+}
+
+/**
+ * GET /sessions, earliest start first. `status: "scheduled"` with `from_date` (a local calendar day, YYYY-MM-DD) gives the
+ * sessions still to come; `total` counts every match. Staff see the organisation's sessions; an athlete sees only the
+ * sessions they attend. Permission training-video-analysis:session:read.
+ */
+export function listSessions(
+  query: { status?: TrainingSession["status"]; from_date?: string; limit: number },
+  signal?: AbortSignal,
+): Promise<Page<TrainingSession>> {
+  return get("/sessions", { status: query.status, from_date: query.from_date, limit: query.limit }, signal);
+}
+
 /** Words for a failed call, for the widget's error state. */
 export function errorMessage(e: unknown): string {
   if (e instanceof TrainingVideoApiError) {

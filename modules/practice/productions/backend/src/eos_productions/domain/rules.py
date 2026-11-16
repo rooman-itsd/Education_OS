@@ -152,9 +152,17 @@ def check_response(role_status: str, production_status: str) -> None:
         )
 
 
-def check_withdrawal(role_status: str) -> None:
+def check_withdrawal(role_status: str, production_status: str | None = None) -> None:
+    """Only a live part can be withdrawn, and not from a production that is finished (PRD rule 5: nothing changes
+    a completed or cancelled production; cancelling withdraws the parts itself)."""
     if role_status not in LIVE_ROLE_STATUSES:
         raise RuleViolationError("already_answered", f"this part is already {role_status}", status=role_status)
+    if production_status in (COMPLETED, CANCELLED):
+        raise RuleViolationError(
+            "wrong_status",
+            f"the production is {production_status}",
+            status=production_status,
+        )
 
 
 def is_overdue(due_at: datetime | None, now: datetime) -> bool:

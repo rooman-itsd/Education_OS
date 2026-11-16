@@ -217,3 +217,137 @@ if eos_core is not None:
                 .order_by(OutboxEvent.occurred_at, OutboxEvent.id)
             )
             return [r.payload for r in rows]
+
+    # ------------------------------------------------------------ scheduled classes and attendance
+
+    # The operations served by api/classes_attendance.py: operationId -> (method, path).
+    CLASSES_AND_ATTENDANCE = {
+        "listScheduledClasses": ("get", "/scheduled-classes"),
+        "createScheduledClass": ("post", "/scheduled-classes"),
+        "getScheduledClass": ("get", "/scheduled-classes/{scheduled_class_id}"),
+        "updateScheduledClass": ("patch", "/scheduled-classes/{scheduled_class_id}"),
+        "cancelScheduledClass": ("post", "/scheduled-classes/{scheduled_class_id}/cancel"),
+        "getAttendanceSessionForClass": ("get", "/scheduled-classes/{scheduled_class_id}/attendance-session"),
+        "openAttendanceSession": ("post", "/scheduled-classes/{scheduled_class_id}/attendance-session"),
+        "getAttendanceSession": ("get", "/attendance-sessions/{attendance_session_id}"),
+        "closeAttendanceSession": ("post", "/attendance-sessions/{attendance_session_id}/close"),
+        "listAttendanceRecords": ("get", "/attendance-sessions/{attendance_session_id}/records"),
+        "markAttendance": ("put", "/attendance-sessions/{attendance_session_id}/records"),
+        "correctAttendanceRecord": ("patch", "/attendance-records/{attendance_record_id}"),
+        "getAttendanceRecordHistory": ("get", "/attendance-records/{attendance_record_id}/history"),
+        "getStudentAttendanceSummary": ("get", "/reports/students/{student_id}/attendance-summary"),
+        "getStudentAttendanceHistory": ("get", "/reports/students/{student_id}/attendance-history"),
+        "getDepartmentAttendance": ("get", "/reports/department-attendance"),
+        "getAttendanceForEligibility": ("post", "/reports/attendance-eligibility"),
+        "getMyTeachingSchedule": ("get", "/me/teaching-schedule"),
+        "getMyAttendanceToMark": ("get", "/me/attendance-to-mark"),
+        "getMySchedule": ("get", "/me/schedule"),
+        "getMyAttendanceSummary": ("get", "/me/attendance-summary"),
+        "getMyAttendanceHistory": ("get", "/me/attendance-history"),
+    }
+
+    VIEWER = "timetable-attendance-viewer"  # report:read-all, no write
+    EXAMS = "timetable-attendance-exam-eligibility"
+
+    def make_class(client, headers, ids: dict, starts: str = "2026-11-03T09:00:00+00:00", **over) -> dict:
+        """An ad-hoc class through the API (class generation from a timetable is not built)."""
+        from datetime import datetime as _dt
+        from datetime import timedelta as _td
+
+        ends = over.pop("ends", None) or (_dt.fromisoformat(starts) + _td(hours=1)).isoformat()
+        body = {
+            "course_offering_id": ids["offering"],
+            "section_id": ids["section"],
+            "instructor_assignment_id": ids["assignment"],
+            "starts_at": starts,
+            "ends_at": ends,
+            **over,
+        }
+        return ok(client.post(f"{BASE}/scheduled-classes", json=body, headers=headers), 201)
+
+    def allocate(
+        org_id: str, section_id: str, student_id: str | None = None, *, since="2026-07-01", until=None, name=None
+    ):
+        """A student in a section's read model, written directly: its enrolment-registration consumer is not built,
+        because the student_id mapping is unconfirmed (docs/reviewer-decisions.md)."""
+        from datetime import date
+
+        from eos_timetable_attendance.infrastructure.models import SectionMember
+
+        student_id = student_id or new_id()
+        with SessionLocal() as db:
+            db.add(
+                SectionMember(
+                    organisation_id=org_id,
+                    section_id=section_id,
+                    student_id=student_id,
+                    student_name=name,
+                    allocated_from=date.fromisoformat(since),
+                    allocated_to=None if until is None else date.fromisoformat(until),
+                )
+            )
+            db.commit()
+        return student_id
+
+    def active_term(org_id: str, period_id: str, *, starts_on="2026-07-01", ends_on="2026-11-30") -> None:
+        from eos_timetable_attendance.application.consumers import TERM_CREATED
+
+        deliver(org_id, TERM_CREATED, term_created(period_id, starts_on=starts_on, ends_on=ends_on))
+
+    class Classroom:
+        """One organisation with a course offering, a section, its instructor and students, an admin, and helpers
+        that drive a class through the API."""
+
+        def __init__(self, client, org: Org, students: int = 3, department_id: str | None = None) -> None:
+            self.client, self.org = client, org
+            self.admin_id, self.admin = org.user(ADMIN)
+            self.instructor_id, self.faculty = org.user(FACULTY)
+            self.ids = org.academic(instructor_id=self.instructor_id)
+            if department_id is not None:
+                with SessionLocal() as db:
+                    from eos_timetable_attendance.infrastructure.models import OfferingRef
+
+                    db.info["organisation_id"] = org.id
+                    from eos_timetable_attendance.infrastructure import repository as repo
+
+                    ref = db.scalars(
+                        repo.q(db, OfferingRef).where(OfferingRef.course_offering_id == self.ids["offering"])
+                    ).one()
+                    ref.department_id = department_id
+                    db.commit()
+            self.students = [allocate(org.id, self.ids["section"], name=f"Student {i}") for i in range(students)]
+
+        def new_class(self, starts: str = "2026-11-03T09:00:00+00:00", **over) -> dict:
+            return make_class(self.client, self.admin, self.ids, starts, **over)
+
+        def open(self, class_id: str, headers=None, status: int = 201) -> dict:
+            r = self.client.post(
+                f"{BASE}/scheduled-classes/{class_id}/attendance-session", headers=headers or self.faculty
+            )
+            return ok(r, status)
+
+        def mark(self, session_id: str, statuses: dict, headers=None, status: int = 200) -> dict:
+            records = [{"student_id": s, "status": v} for s, v in statuses.items()]
+            r = self.client.put(
+                f"{BASE}/attendance-sessions/{session_id}/records",
+                json={"records": records},
+                headers=headers or self.faculty,
+            )
+            return ok(r, status)
+
+        def close(self, session_id: str, headers=None) -> dict:
+            return ok(
+                self.client.post(f"{BASE}/attendance-sessions/{session_id}/close", headers=headers or self.faculty)
+            )
+
+        def held(self, statuses: dict, starts: str = "2026-11-03T09:00:00+00:00") -> tuple[dict, dict]:
+            """A class taken from opening to closing: (class, closed session)."""
+            c = self.new_class(starts)
+            s = self.open(c["id"])
+            if statuses:
+                self.mark(s["id"], statuses)
+            return c, self.close(s["id"])
+
+    @pytest.fixture
+    def room(client, org) -> Classroom:
+        return Classroom(client, org)

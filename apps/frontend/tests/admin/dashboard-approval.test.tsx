@@ -27,7 +27,9 @@ function stubPending(orgs: unknown[]) {
   const f = vi.fn((url: string) =>
     url.endsWith("?status=pending_approval") || url.endsWith("?status=pending_verification")
       ? Promise.resolve({ ok: true, status: 200, statusText: "", json: async () => (url.endsWith("?status=pending_approval") ? orgs : []) } as Response)
-      : Promise.reject(new Error(`unexpected ${url}`)),
+      : url.includes("/audit/records?") // Recent Activity (dashboard-activity.test.tsx covers it)
+        ? Promise.resolve({ ok: true, status: 200, statusText: "", json: async () => ({ items: [], total: 0 }) } as Response)
+        : Promise.reject(new Error(`unexpected ${url}`)),
   );
   vi.stubGlobal("fetch", f);
   return f;
@@ -88,7 +90,8 @@ describe("Dashboard: Pending Approvals", () => {
     expect(screen.getByText("12 urgent")).toBeTruthy();
     expect(tile()).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Organisations awaiting approval" })).toBeNull();
-    expect(f).not.toHaveBeenCalled();
+    // No organisation queue request; Recent Activity's own audit request is the only one.
+    expect(f.mock.calls.map(([u]) => String(u)).filter((u) => u.includes("/tenancy/"))).toEqual([]);
   });
 
   it("preview (no API): keeps the sample tile even for a super admin, and calls nothing", () => {

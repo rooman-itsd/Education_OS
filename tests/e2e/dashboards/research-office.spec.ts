@@ -57,7 +57,16 @@ const WIDGETS: LayoutWidget[] = [
     empty: "Nothing scheduled",
     unavailable: "Production data is not available yet.",
   },
-  { id: "regulatory-reports.due", module: "governance/regulatory-reports", batch: "#343" },
+  {
+    id: "regulatory-reports.due",
+    module: "governance/regulatory-reports",
+    batch: "#343",
+    title: "Regulatory filings due",
+    probe: "/regulatory-reports/stats/due?scope=mine",
+    empty: "Nothing due",
+    unavailable: "Regulatory report data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;

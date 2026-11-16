@@ -72,10 +72,13 @@ def test_top_articles_by_views_and_by_helpful_share(desk, clock, monkeypatch):
 
 
 def test_support_staff_reads_articles_and_statistics_through_their_layout(client, org, clock):
-    """support-staff.yaml lists knowledge-base-viewer in module_roles, so the widget works with a real profile role."""
+    """support-staff.yaml lists knowledge-base-author in module_roles (#562), so the widget works with a real profile
+    role, and support staff write articles but do not publish them (publishing is the editor's)."""
     d = Desk(client, org)
     a = d.published()
     _, staff = org.user("support-staff")
     assert d.ok(d.get(f"/articles/{a['id']}", staff))["id"] == a["id"]
     assert d.get("/stats/top-articles", staff).status_code == 200
-    assert d.post("/articles", d.body(), staff).status_code == 403  # viewer: no write yet
+    drafted = d.post("/articles", d.body(), staff)
+    assert drafted.status_code == 201, drafted.text  # author: writes articles
+    assert d.post(f"/articles/{drafted.json()['id']}/publish", {}, staff).status_code == 403  # not an editor
