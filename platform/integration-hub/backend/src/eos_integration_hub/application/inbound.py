@@ -6,8 +6,9 @@
    handshake. A request that cannot be verified is rejected and never processed. Rejections are counted per source
    (the connection of the URL, or the caller's address on an app-level URL) and minute on one receipt, which with
    its rejected_inbound log row is kept INTEGRATION_HUB_INBOUND_REJECTED_RETENTION_DAYS, and audited once per source
-   and hour; past INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN a source gets 429 without the adapter being called
-   or anything being written.
+   and hour. Every request is verified, so a correctly signed callback is never refused because of someone else's junk
+   on the same URL; past INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN rejections a minute from one source, further
+   rejections from it are answered the same way but nothing is written (no count, receipt, log row or audit).
 3. A redelivery (same dedupe key for the same connection) is acknowledged and ignored. Another connection's event
    with the same id, in another organisation, is its own event.
 4. The request is acknowledged before any processing; parse_inbound, follow-up fetches and events run afterwards
@@ -123,23 +124,17 @@ def _window(now: datetime) -> datetime:
     return now.replace(second=0, microsecond=0)
 
 
-def _limited(db: Session, config: HubConfig, adapter: str, source: str) -> Answer | None:
-    """429 when this source already had its share of rejections this minute: nothing is called or written."""
-    now = clock()
+def _over_limit(db: Session, limit: int, adapter: str, source: str, window) -> bool:
+    """Whether this source already had its share of rejections this minute. Only rejections are limited, and only
+    what is written about them: the request is still verified and answered (a signed one is processed as usual)."""
     count = db.scalar(
         select(InboundReceipt.rejected_count).where(
             InboundReceipt.adapter == adapter,
             InboundReceipt.source == source,
-            InboundReceipt.window_start == _window(now),
+            InboundReceipt.window_start == window,
         )
     )
-    if count is None or count < config.inbound_reject_limit_per_min:
-        return None
-    db.rollback()
-    retry_after = 60 - now.second
-    answer = _json_answer(429, "rate_limited", "too many requests that could not be verified; retry later")
-    answer.headers["Retry-After"] = str(retry_after)
-    return answer
+    return count is not None and count >= limit
 
 
 def _count_rejection(db: Session, adapter: str, source: str, window, now) -> bool:
@@ -159,14 +154,24 @@ def _count_rejection(db: Session, adapter: str, source: str, window, now) -> boo
 
 
 def _reject(
-    db: Session, adapter: str, c: Connection | None, status: int, channel: str | None, note: str, source: str
+    db: Session,
+    adapter: str,
+    c: Connection | None,
+    status: int,
+    channel: str | None,
+    note: str,
+    source: str,
+    limit: int,
 ) -> Answer:
     """Count a request that could not be verified. It is never processed. The first rejection of a source in a
-    minute writes its receipt (and, for a connection, one rejected_inbound log row); the others only count. The
-    audit trail gets one record per source and hour, not one per request."""
+    minute writes its receipt (and, for a connection, one rejected_inbound log row); the others only count, up to
+    `limit` a minute, past which nothing more is written. The audit trail gets one record per source and hour."""
     answer = _json_answer(status, "signature_invalid", "the request could not be verified")
     now = clock()
     window = _window(now)
+    if _over_limit(db, limit, adapter, source, window):
+        db.rollback()
+        return answer
     if _count_rejection(db, adapter, source, window, now):
         db.commit()
         return answer
@@ -270,9 +275,7 @@ def _receive(db, config, info, connection_key, channel, method, query, headers, 
         if c is None:
             return _json_answer(404, *NOT_FOUND)
     source = source_of(c, client_ip)
-    limited = _limited(db, config, adapter, source)
-    if limited is not None:
-        return limited
+    limit = config.inbound_reject_limit_per_min
     timeout = config.provider_request_timeout_s
     ctx = _context(db, info, c, timeout)
     suffix = channel or ""  # what follows the connection key; the key itself is never handed to the adapter
@@ -315,12 +318,13 @@ def _receive(db, config, info, connection_key, channel, method, query, headers, 
             channel,
             "verification failed" if verify.ok else f"verify_inbound: {verify.error_code}",
             source,
+            limit,
         )
     link = None
     if c is None:
         c, link = _resolve(db, adapter, v.get("resolves_to"))
         if c is None:
-            return _reject(db, adapter, None, 401, channel, "the callback names no connection", source)
+            return _reject(db, adapter, None, 401, channel, "the callback names no connection", source, limit)
     dedupe = v.get("dedupe_key")
     dedupe = dedupe[:MAX_DEDUPE_KEY] if isinstance(dedupe, str) and dedupe else None
     if dedupe and db.scalar(

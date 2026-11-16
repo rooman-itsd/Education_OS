@@ -105,19 +105,23 @@ def _rejected_receipts(organisation_id: str | None, adapter_name: str = "fake-ad
         return list(db.scalars(q.order_by(InboundReceipt.window_start)))
 
 
-def test_unverified_requests_are_rate_limited_per_source_and_counted(client, org, adapter, monkeypatch, clock):
+def test_rejections_past_the_limit_are_not_written_and_signed_requests_are_never_refused(
+    client, org, adapter, monkeypatch, clock
+):
     monkeypatch.setenv("INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN", "3")
     c = authorised_meet(client, org, adapter)
     url = f"{BASE}/inbound/fake-adapter/{key_of(c)}"
     unsigned = {"content-type": "application/json"}
     clock.advance(seconds=-clock.now.second)  # the start of a minute
     assert [client.post(url, content=b"{}", headers=unsigned).status_code for _ in range(3)] == [401] * 3
-    verifies = len([x for x in adapter.CALLS if x[0] == "verify_inbound"])
-    r = client.post(url, content=b"{}", headers=unsigned)
-    assert r.status_code == 429 and r.json()["code"] == "rate_limited" and r.headers["retry-after"] == "60"
-    # over the limit: the adapter is not called and nothing is written
-    assert client.post(url, content=b"{}", headers=unsigned).status_code == 429
-    assert len([x for x in adapter.CALLS if x[0] == "verify_inbound"]) == verifies
+    # over the limit: still verified and answered as a rejection (never 429), but nothing more is written
+    over = [client.post(url, content=b"{}", headers=unsigned) for _ in range(5)]
+    assert [(r.status_code, r.json()["code"]) for r in over] == [(401, "signature_invalid")] * 5
+    assert _rejected_receipts(org.id) == [3]
+    # a correctly signed callback on the flooded URL, in the same minute, is accepted and processed
+    raw = _fixture("webhook_meeting_ended")
+    r = client.post(url, content=raw, headers=_signed(adapter, "meet-client-secret", raw))
+    assert r.status_code == 200
     assert _rejected_receipts(org.id) == [3]
     # another source is not held back by this one: the app-level URL, keyed by the caller's address
     assert client.post(f"{BASE}/inbound/fake-adapter", content=b"{}", headers=unsigned).status_code == 401
@@ -129,10 +133,6 @@ def test_unverified_requests_are_rate_limited_per_source_and_counted(client, org
     clock.advance(hours=2)
     assert client.post(url, content=b"{}", headers=unsigned).status_code == 401
     assert audit_actions(org.id).count("inbound.rejected") == 2
-    # a signed request on the same URL is still accepted while rejections are counted
-    raw = _fixture("webhook_meeting_ended")
-    r = client.post(url, content=raw, headers=_signed(adapter, "meet-client-secret", raw))
-    assert r.status_code == 200
 
 
 def test_rejected_requests_are_kept_briefly(client, org, adapter, clock):

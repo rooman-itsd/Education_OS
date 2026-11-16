@@ -314,7 +314,6 @@ paths:
         "200": { description: "Acknowledged, or a handshake answer in the provider's own format" }
         "204": { description: Acknowledged }
         "401": { description: "signature_invalid (the status may be another the provider expects, e.g. 404 for Fitbit)" }
-        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
     get:
@@ -342,7 +341,6 @@ paths:
         "202": { description: "Acknowledged (Graph expects 202)" }
         "204": { description: Acknowledged }
         "401": { description: signature_invalid }
-        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
     get:
@@ -372,7 +370,6 @@ paths:
       responses:
         "200": { description: "The adapter's answer, in the provider's format (XML or JSON)" }
         "401": { description: signature_invalid }
-        "429": { description: "rate_limited: too many requests from this source failed verification this minute (INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN); Retry-After says when to try again" }
         "404": { $ref: "#/components/responses/NotFound" }
         "413": { description: payload_too_large }
 

@@ -3,6 +3,11 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Review of #554 (Srujan, Himanshu): inbound callbacks are always verified. The reject limit no longer answers 429
+  before verification, which let anyone who knew a connection's callback URL block its signed webhooks with 30 junk
+  requests a minute. Past `INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN`, a request that fails verification is still
+  answered with its rejection status, but nothing more is written (no count, receipt, log row or audit); a signed
+  request is processed as usual. The inbound operations no longer list a 429 response.
 - Backend built on the draft contracts (0.2.0): connections per organisation with settings validated against the
   provider's schema; write-only credentials in a secret store (`file`: AES-256-GCM, one 0600 file per secret, key
   rotation; `env`: read only, development), never in the database; mock, sandbox and live with the separate go-live
