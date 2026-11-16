@@ -5,6 +5,7 @@ then act inside that payment's organisation scope."""
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from html import escape
@@ -383,7 +384,46 @@ def _by_reference(db: Session, reference: str) -> Payment | None:
     return p
 
 
-def redirect_page(db: Session, reference: str) -> str:
+@dataclass(frozen=True)
+class HandOffPage:
+    """The auto-submitting page that takes the payer's browser to the gateway, and the headers it must be served
+    with. The API host's default policy (`default-src 'none'`, platform/api-gateway) blocks every script and form,
+    which would leave the payer on a blank page; the host keeps a header the route set, so this page brings its
+    own Content-Security-Policy (its one inline script by nonce) and Referrer-Policy (see `HANDOFF_REFERRER`)."""
+
+    html: str
+    content_security_policy: str
+    referrer_policy: str
+
+
+# The host sends `Referrer-Policy: no-referrer`, which would make the cross-origin POST to the gateway carry no
+# Referer and `Origin: null`; payment aggregators may check either against the merchant's registered domain.
+# This sends the origin only (never the path, which holds the payment reference) to another origin.
+HANDOFF_REFERRER = "strict-origin-when-cross-origin"
+
+
+def _origin(url: str | None) -> str | None:
+    u = urlparse(url or "")
+    return f"{u.scheme}://{u.netloc}" if u.scheme in ("http", "https") and u.netloc else None
+
+
+def handoff_csp(action_url: str, nonce: str, return_url: str | None = None) -> str:
+    """`form-action` is enforced on every redirect that follows the form's POST, not only on its target
+    (Chromium does): the mock callback answers 303 to `return_url`, and the gateway's listener may redirect to a
+    bank or 3-D Secure page on yet another origin. So forms may go to this host ('self') and to any HTTPS origin;
+    an origin over plain HTTP (the gateway or `return_url` in local development) is named on its own. Injection
+    is still shut out by `default-src 'none'`, the nonce-only `script-src` and the escaped fields."""
+    sources = ["'self'", "https:"]
+    for origin in (_origin(action_url), _origin(return_url)):
+        if origin and origin.startswith("http://") and origin not in sources:
+            sources.append(origin)
+    return (
+        f"default-src 'none'; script-src 'nonce-{nonce}'; form-action {' '.join(sources)}; "
+        "base-uri 'none'; frame-ancestors 'none'"
+    )
+
+
+def redirect_page(db: Session, reference: str) -> HandOffPage:
     cfg = _config()
     p = _by_reference(db, reference)
     if p is None or p.status not in OPEN_STATUSES or _aware(p.expires_at) <= utcnow():
@@ -403,12 +443,14 @@ def redirect_page(db: Session, reference: str) -> str:
     inputs = "".join(
         f'<input type="hidden" name="{escape(k)}" value="{escape(v)}">' for k, v in sorted(form.fields.items())
     )
-    return (
-        '<!doctype html><html><head><meta charset="utf-8"><title>Redirecting to payment</title></head>'
-        '<body onload="document.forms[0].submit()">'
+    nonce = secrets.token_urlsafe(16)
+    html = (
+        '<!doctype html><html><head><meta charset="utf-8"><title>Redirecting to payment</title></head><body>'
         f'<form method="post" action="{escape(form.action_url)}">{inputs}'
-        '<noscript><button type="submit">Continue to payment</button></noscript></form></body></html>'
+        '<noscript><button type="submit">Continue to payment</button></noscript></form>'
+        f'<script nonce="{nonce}">document.forms[0].submit()</script></body></html>'
     )
+    return HandOffPage(html, handoff_csp(form.action_url, nonce, p.return_url), HANDOFF_REFERRER)
 
 
 def handle_callback(db: Session, form: dict[str, str]) -> str:

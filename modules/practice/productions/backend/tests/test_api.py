@@ -693,3 +693,44 @@ def test_each_widget_endpoint_refuses_a_caller_without_its_key(client, org):
     assert client.get(f"{BASE}/my-roles", headers=member).status_code == 200
     for path in ("/calendar", "/upcoming", "/my-roles", "/in-preparation"):
         assert client.get(f"{BASE}{path}", headers=nobody).status_code == 403
+
+
+def test_a_part_cannot_be_withdrawn_from_a_completed_production(client, org):
+    """PRD rule 5: nothing changes a completed or cancelled production. Withdrawing a part rewrote a finished
+    show's cast history and published productions.role.withdrawn for it."""
+    _, coordinator = org.user(COORDINATOR)
+    _, lead = org.user(LEAD)
+    performer_id, performer = org.user(MEMBER)
+    production = make_production(client, coordinator)
+    pid = production["id"]
+    role = client.post(
+        f"{BASE}/productions/{pid}/roles",
+        json={"user_id": performer_id, "role_name": "Feste"},
+        headers=lead,
+    ).json()
+    client.post(f"{BASE}/roles/{role['id']}/respond", json={"decision": "accept"}, headers=performer)
+    client.post(f"{BASE}/productions/{pid}/preparation", headers=coordinator)
+    client.post(
+        f"{BASE}/productions/{pid}/schedule", json={"starts_at": days(30), "ends_at": days(31)}, headers=coordinator
+    )
+    assert client.post(f"{BASE}/productions/{pid}/complete", headers=coordinator).status_code == 200
+
+    refused = client.request("DELETE", f"{BASE}/roles/{role['id']}", json={"reason": "recast"}, headers=lead)
+
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "wrong_status"
+
+
+def test_a_lead_user_id_longer_than_the_column_is_a_422_not_a_500(client, org):
+    """lead_user_id is String(36) and was the one unbounded id field: Postgres raised a DataError (500) on 40
+    characters, which SQLite never showed. resource_id and assignee_user_id were already capped."""
+    _, coordinator = org.user(COORDINATOR)
+    r = client.post(
+        f"{BASE}/productions",
+        json={"title": "Too long", "kind": "other", "lead_user_id": "x" * 40},
+        headers=coordinator,
+    )
+    assert r.status_code == 422, r.text
+    made = make_production(client, coordinator)
+    patched = client.patch(f"{BASE}/productions/{made['id']}", json={"lead_user_id": "y" * 40}, headers=coordinator)
+    assert patched.status_code == 422, patched.text

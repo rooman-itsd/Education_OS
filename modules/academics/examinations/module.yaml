@@ -20,13 +20,15 @@ exposes:
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
 
-# Events this module subscribes to (by name, from other modules' events.yaml).
-# Pending confirmation from owners (docs/prd.md section 12): academic period, course offering and
-# instructor assignment events from academic-management; course registration from
-# enrolment-registration; student status from student-information; attendance from
-# timetable-attendance and dues from fees-accounts if events are chosen (Q4, Q5).
+# Events this module subscribes to (by name, from other modules' events.yaml). Each is handled by
+# application/consumers.py, registered under the `eos.event_consumers` entry point in backend/pyproject.toml.
+# Not consumed yet (docs/prd.md section 12, docs/reviewer-decisions.md): academic-management term, course and
+# instructor-assignment events and `offering.updated` (it carries no new values); course registration from
+# enrolment-registration; student status from student-information (Q1, Q2).
 # platform/workflow is not a dependency until Q10 is decided.
-consumes_events: []
+consumes_events:
+  - academic-management.offering.created
+  - academic-management.offering.status-changed
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

@@ -36,7 +36,8 @@ Source of truth: `backend/src/eos_lms/infrastructure/models.py` and the Alembic 
 | `discussion_post` | Replies, `visible` or `hidden` (FR-15) | — |
 | `offering_ref` | Read model: course offerings from academic-management (code, title, department, period, status) | (organisation_id, course_offering_id) |
 | `instructor_ref` | Read model: instructor assignments from academic-management (`instructor_id` = identity user id) | (organisation_id, instructor_assignment_id) |
-| `member_ref` | Read model: course registrations from enrolment-registration (`student_id` = identity user id, section, name) | (organisation_id, registration_id) |
+| `member_ref` | Read model: course registrations from enrolment-registration (`student_id` = the event's `person_id`, section, name) | (organisation_id, registration_id) |
+| `person_account` | Read model: which student-information person a sign-in account is (`person_id`, `identity_user_id`, null once unlinked; `linked_as_of`), from `person.account-linked`. A learner's own reads map their user id to the person id through it | (organisation_id, person_id) |
 | `processed_event` | Envelope ids of consumed events, so a redelivered event is applied once | (organisation_id, event_id) |
 | `audit_entry` | Who changed what and when, one row per state change (FR-20), until the audit SDK ships. Ids and the action only, never content | — |
 

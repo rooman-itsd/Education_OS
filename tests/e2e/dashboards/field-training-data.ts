@@ -4,7 +4,8 @@ import { created, dayFromNow } from "./widgets";
 
 /**
  * What the field-training data journeys set up through the API, as the roles of a clinical programme would
- * (the same setup serves the medical-student, clinical-supervisor and hospital-coordinator journeys):
+ * (the same setup serves the medical-student, clinical-supervisor and hospital-coordinator journeys; the agriculture
+ * journeys pass their own `names`):
  * - the coordinator (field-training-coordinator) records a site, publishes an opening with two seats and assigns the
  *   trainee, which leaves one seat;
  * - with `start`, the coordinator starts the placement, the trainee logs hours for today and, with `verify`, the
@@ -17,6 +18,32 @@ export const SITE = "City General Hospital";
 export const OPENING = "Ward rotation";
 export const REQUIRED_HOURS = 40;
 export const LOGGED_HOURS = 4;
+
+/** The words of one academy's setup: the site and its kind, the opening and its discipline, the trainee's log entry. */
+export interface Names {
+  site: string;
+  siteKind: string;
+  opening: string;
+  discipline: string;
+  activities: string;
+}
+
+const CLINICAL: Names = {
+  site: SITE,
+  siteKind: "Hospital",
+  opening: OPENING,
+  discipline: "Medicine",
+  activities: "Observed ward rounds and assisted with patient intake",
+};
+
+/** The agriculture-college setup: a farm site and a rotation on it. */
+export const FARM: Names = {
+  site: "Demonstration Farm",
+  siteKind: "Farm",
+  opening: "Crop husbandry rotation",
+  discipline: "Agronomy",
+  activities: "Sowed a trial plot and recorded germination counts",
+};
 
 export interface Seeded {
   siteId: string;
@@ -34,17 +61,22 @@ interface Who {
 export async function seedPlacement(
   request: APIRequestContext,
   { coordinator, supervisor, trainee }: Who,
-  { start = false, log = false, verify = false }: { start?: boolean; log?: boolean; verify?: boolean } = {},
+  {
+    start = false,
+    log = false,
+    verify = false,
+    names = CLINICAL,
+  }: { start?: boolean; log?: boolean; verify?: boolean; names?: Names } = {},
 ): Promise<Seeded> {
   const site = await created<{ id: string }>(request, coordinator, "/field-training/sites", {
-    name: SITE,
-    kind: "Hospital",
+    name: names.site,
+    kind: names.siteKind,
     supervisor_ids: [supervisor.id],
   });
   const opening = await created<{ id: string }>(request, coordinator, "/field-training/openings", {
     site_id: site.id,
-    title: OPENING,
-    discipline: "Medicine",
+    title: names.opening,
+    discipline: names.discipline,
     starts_on: dayFromNow(-2),
     ends_on: dayFromNow(60),
     seats: 2,
@@ -63,7 +95,7 @@ export async function seedPlacement(
   const entry = await created<{ id: string }>(request, trainee, `/field-training/placements/${placement.id}/logs`, {
     date: dayFromNow(0),
     hours: LOGGED_HOURS,
-    activities: "Observed ward rounds and assisted with patient intake",
+    activities: names.activities,
   });
   seeded.logId = entry.id;
   if (verify) await created(request, supervisor, `/field-training/logs/${entry.id}/verify`, {});

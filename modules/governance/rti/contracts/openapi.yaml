@@ -163,6 +163,9 @@ components:
         fee: { $ref: "#/components/schemas/Fee" }
     RequestUpdateInput:
       type: object
+      description: >-
+        Only what is sent changes, inside `applicant` and `fee` as well: a key left out keeps its stored value, and a key
+        sent as null clears it. `name` and the fee `status` are required whenever their object is sent.
       properties:
         applicant: { $ref: "#/components/schemas/Applicant" }
         subject: { type: string, minLength: 3, maxLength: 200 }

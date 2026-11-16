@@ -22,7 +22,11 @@ academic records (`academics/*`), or fee invoices (`finance-operations/fees-acco
 
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
-- Events: [contracts/events.yaml](contracts/events.yaml)
+- Events: [contracts/events.yaml](contracts/events.yaml). `person.account-linked` maps a person to their sign-in
+  account (`identity_user_id`) so modules that key data on `person_id` can answer a student's own `/me` reads; see
+  [docs/integration-points.md](docs/integration-points.md#the-account-link-and-its-backfill).
+- Backfill: `POST /account-links/republish` announces every existing link again. Run it once per organisation after
+  deploying 0.2.0 (links made before the event existed are otherwise unknown to consumers).
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 - Dashboard widgets: None yet (`frontend/src/widgets/index.ts` exports `widgets = []`)
 
@@ -68,7 +72,7 @@ $env:STUDENT_INFORMATION_TEST_POSTGRES_URL = "postgresql+psycopg://eos_test:<tes
 # Dedicated RLS test suite (2 tests):
 .venv\Scripts\python.exe -m pytest modules/student-lifecycle/student-information/backend/tests/test_rls_postgres.py -v
 
-# Complete module test suite (62 tests):
+# Complete module test suite (88 tests):
 .venv\Scripts\python.exe -m pytest modules/student-lifecycle/student-information/backend/tests -v
 
 # Clear the environment variable after testing:

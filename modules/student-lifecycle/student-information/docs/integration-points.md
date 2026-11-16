@@ -7,11 +7,21 @@
 | `student-information.person.created` | Any module that caches a person's name/status against its own `person_id` reference once that reference starts being used (e.g. academics, finance-operations, campus-life — as their own contracts are written) |
 | `student-information.person.updated` | Same consumers, to refresh cached name/contact fields |
 | `student-information.person.status-changed` | Modules that gate behaviour on status (e.g. library loans, hostel allocation, fee waivers for withdrawn students) |
+| `student-information.person.account-linked` | Modules that key data on `person_id` but answer a student's own `/me` reads by the caller's identity user id (timetable-attendance, lms; any other that stores enrolment-registration's `person_id`). Each keeps a small person-to-account lookup from this event and maps the caller's user id to the person id |
 | `student-information.id-card.issued` / `.revoked` | `platform/notification` (card ready/revoked email), facilities access-control integrations, if/when they exist |
 
 No consumer is hard-coded or assumed in this module's code or contracts; `module.yaml`'s
 `consumes_events` for *other* modules is each consuming module's own declaration, not something
 this module controls.
+
+### The account link and its backfill
+
+`person.account-linked` is published in the transaction of every write that sets, changes or clears a person's
+`identity_user_id` (creation with an account, or `PATCH /people/{id}`). Links made before the event existed are
+announced by `POST /account-links/republish` (permission `student-information:person:write`), which publishes the
+current link of every linked person in the caller's organisation and returns how many. Run it once per organisation
+after this release is deployed, and again whenever a consumer has lost its lookup; consumers apply links per person by
+the envelope `occurred_at`, so a republish never overrides a later change and running it twice is harmless.
 
 ## Events consumed
 

@@ -33,6 +33,12 @@ def get(db: Session, model, row_id: str):
     return db.scalars(q(db, model).where(model.id == row_id)).first()
 
 
+def ref_row(db: Session, model, column, value: str, organisation_id: str):
+    """The read-model row with this key in this organisation, or None. The organisation is named as well as scoped, so
+    a handler never reads a row of another organisation even if the session scope were wrong."""
+    return db.scalars(q(db, model).where(column == value, model.organisation_id == organisation_id)).first()
+
+
 # Constraint name -> (table, columns), for telling a conflict the module answers with 409 from any other integrity error.
 CONSTRAINTS = {
     "default_grading_scheme": {
