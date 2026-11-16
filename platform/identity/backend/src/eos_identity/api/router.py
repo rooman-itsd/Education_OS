@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from eos_core.db import get_db
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -107,5 +108,11 @@ def create_user(
         )
     except service.RoleNotAssignableError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
+    except service.PlanLimitReachedError as e:
+        # the same shape as the entitlement gate's refusals: `code` beside `detail`
+        return JSONResponse(
+            {"detail": str(e), "code": "plan_limit_reached", "limit": e.limit, "allowed": e.allowed, "used": e.used},
+            status_code=status.HTTP_409_CONFLICT,
+        )
     db.commit()
     return user.to_dict()

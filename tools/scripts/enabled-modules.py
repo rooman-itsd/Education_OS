@@ -29,6 +29,22 @@ NAME = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 FORMS = {"platform": rf"^{NAME}$", "modules": rf"^{NAME}/{NAME}$", "integrations": rf"^{NAME}$"}
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """safe_load that refuses a key given twice: PyYAML keeps the last one silently, so a merge that kept both
+    sides of a `platform:` line would drop one side's services from the install, the migrations and the image."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise SystemExit(
+                    f"`{key}` is given twice (line {key_node.start_mark.line + 1}); merge them into one list"
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 @dataclass(frozen=True)
 class Entry:
     kind: str
@@ -68,7 +84,7 @@ class Entry:
 
 
 def entries(config: Path = CONFIG, root: Path = ROOT) -> list[Entry]:
-    data = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+    data = yaml.load(config.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader) or {}  # noqa: S506 (a SafeLoader)
     found: list[Entry] = []
     for kind in ("platform", "modules", "integrations"):
         for raw in data.get(kind) or []:

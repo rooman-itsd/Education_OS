@@ -259,22 +259,34 @@ def detail_dict(db: Session, r: RtiRequest, tl: dl.Timelines, on: date) -> dict:
 
 
 def _apply_applicant(r: RtiRequest, a: dict) -> None:
-    """The applicant object replaces the stored one: what it leaves out is cleared."""
-    r.applicant_name = a["name"]
-    r.applicant_address = a.get("address")
-    r.applicant_email = a.get("email")
-    r.applicant_phone = a.get("phone")
-    r.applicant_person_id = a.get("person_id")
+    """Only the keys in `a` change: a create carries all five, a PATCH only what the caller sent, so what it leaves out
+    stays. A key sent as null clears that value (the name cannot be null)."""
+    if "name" in a:
+        r.applicant_name = a["name"]
+    for key, column in (
+        ("address", "applicant_address"),
+        ("email", "applicant_email"),
+        ("phone", "applicant_phone"),
+        ("person_id", "applicant_person_id"),
+    ):
+        if key in a:
+            setattr(r, column, a[key])
 
 
 def _apply_fee(r: RtiRequest, fee: dict, settings: ModuleSettings) -> None:
-    """The fee object replaces the stored one. A fee amount without a currency is in RTI_DEFAULT_CURRENCY."""
-    r.fee_status = fee["status"]
-    amount = fee.get("amount")
-    r.fee_amount = Decimal(amount["amount"]) if amount else None
-    r.fee_currency = (amount.get("currency") or settings.default_currency) if amount else None
-    r.fee_mode = fee.get("mode")
-    r.fee_receipt_reference = fee.get("receipt_reference")
+    """Only the keys in `fee` change, as for the applicant: a create carries them all, a PATCH what the caller sent. A
+    key sent as null clears it (a null amount also clears the currency). A fee amount without a currency is in
+    RTI_DEFAULT_CURRENCY."""
+    if "status" in fee:
+        r.fee_status = fee["status"]
+    if "amount" in fee:
+        amount = fee["amount"]
+        r.fee_amount = Decimal(amount["amount"]) if amount else None
+        r.fee_currency = (amount.get("currency") or settings.default_currency) if amount else None
+    if "mode" in fee:
+        r.fee_mode = fee["mode"]
+    if "receipt_reference" in fee:
+        r.fee_receipt_reference = fee["receipt_reference"]
 
 
 def list_requests(
@@ -365,7 +377,7 @@ def create_request(db: Session, actor: Actor, data: dict) -> dict:
 
 def update_request(db: Session, actor: Actor, request_id: str, data: dict) -> dict:
     """PATCH /requests/{id}: correct applicant, subject, information sought or fee while received or assigned. An
-    applicant or fee object replaces the stored one. A body that changes nothing is 422."""
+    applicant or fee object changes only the keys it carries. A body that changes nothing is 422."""
     settings = load_settings()
     on = today()
     r = _request(db, request_id, lock=True)

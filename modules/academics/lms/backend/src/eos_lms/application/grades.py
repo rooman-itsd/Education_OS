@@ -207,7 +207,7 @@ def gradebook(db: Session, a: Actor, space_id: str) -> dict:
 
 
 def my_grades(db: Session, a: Actor, space_id: str | None) -> dict:
-    released = repo.grades(db, student_id=a.user_id, status="released", course_space_id=space_id)
+    released = repo.grades(db, student_id=c.learner_ids(db, a), status="released", course_space_id=space_id)
     by_space: dict[str, list[Grade]] = {}
     for g in released:
         by_space.setdefault(g.course_space_id, []).append(g)

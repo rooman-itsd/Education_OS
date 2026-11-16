@@ -4,7 +4,7 @@ name: student-information
 kind: feature              # feature | platform | integration
 domain: student-lifecycle
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
+version: 0.2.0
 status: in-progress       # planned | in-progress | stable | deprecated
 description: "Student master record (SIS): profiles, documents, ID cards, status history."
 owners: [praveen-rooman]  # GitHub handles. Keep in sync with CODEOWNERS.

@@ -12,12 +12,11 @@ import { created, expectBody, probe, shipped, signIn, standardPlan, waitingFor, 
  *   apps/frontend/config/modules.enabled.yaml: the panel renders by its registered title and shows its empty
  *   state, or says its data is not available while the backend is missing (the musician holds the student role's
  *   permissions through `extends`);
- * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it:
- *   selection-process (#322, PR #414), productions (#318) and skill-progress (#329);
- *   facility-booking is enabled but exports facility-booking.my-bookings only once PR #395 (sprint batch #331) merges;
- * - data journey: an instrument the musician asks to borrow shows in inventory-equipment.my-loans. Facility staff
- *   set up the item and receive stock; the musician (loan:request) requests the loan. The my-bookings journey is
- *   fixme until facility-booking exports that widget.
+ * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
+ * - data journeys: an instrument the musician asks to borrow shows in inventory-equipment.my-loans (facility staff
+ *   set up the item and receive stock; the musician, holding loan:request, requests the loan), and a practice room
+ *   the musician books shows in facility-booking.my-bookings (facility staff add the room; the musician, holding
+ *   booking:create, books it for tomorrow).
  *
  * facilities, finance-operations and campus-life are not in the Trial plan (platform/billing/config/plans.yaml), so
  * the super admin moves the organisation to Standard first. The empty-state tests run before any data is created
@@ -228,11 +227,35 @@ test.describe("with facilities data", () => {
     await expect(panel.getByText("Ready to collect")).toBeVisible();
   });
 
-  // Backend-dependent: needs facility-booking.my-bookings exported, so nothing here is faked.
-  test.fixme("facility-booking.my-bookings lists a practice room the musician books", async () => {
-    // facilities/facility-booking exports facility-booking.my-bookings once PR #395 (sprint batch #331) merges. Then:
-    // a facility-staff user adds a resource type and a resource (POST /facility-booking/resource-types, /resources),
-    // the musician (booking:create) books it for tomorrow (POST /facility-booking/bookings), and the panel shows
-    // "Tomorrow · <time window>" with the resource name and its status in words.
+  test("facility-booking.my-bookings lists a practice room the musician books", async ({ page, request }) => {
+    const w = byId("facility-booking.my-bookings");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the facility-booking API answered ${status[w.id]} to the musician role`);
+    // Facility staff (resource:manage) add a practice room with no approvers and no opening hours, so a booking is
+    // confirmed at once and any slot on the 30-minute grid is free. The musician (booking:create through the
+    // music-academy profile role) books it for 10:00 to 11:00 tomorrow in this host's time zone, which the browser
+    // shares, so the row reads "Tomorrow · 10:00–11:00" (UpcomingBookings: dayLabel and timeWindow).
+    const type = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resource-types", { name: "Practice room" });
+    const room = await created<{ id: string }>(request, facilityStaff, "/facility-booking/resources", {
+      name: "Practice room 1",
+      type_id: type.id,
+      capacity: 2,
+    });
+    const start = new Date();
+    start.setDate(start.getDate() + 1);
+    start.setHours(10, 0, 0, 0);
+    const end = new Date(start.getTime() + 60 * 60_000);
+    await created(request, user, "/facility-booking/bookings", {
+      resource_id: room.id,
+      start_at: start.toISOString(),
+      end_at: end.toISOString(),
+      title: "Scales and arpeggios",
+    });
+    await signIn(page, user);
+    const panel = widget(page, "My bookings");
+    await expect(panel.getByText("No upcoming bookings")).toHaveCount(0);
+    const row = panel.getByRole("list", { name: "My bookings" }).getByRole("listitem").filter({ hasText: "Practice room 1 · Scales and arpeggios" });
+    await expect(row).toContainText("Tomorrow · 10:00–11:00");
+    await expect(row).toContainText("Confirmed");
   });
 });

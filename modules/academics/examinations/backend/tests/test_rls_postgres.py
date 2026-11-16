@@ -92,8 +92,8 @@ def as_role(engine, role: str, organisation_id: str | None):
         yield c
 
 
-# The tables that need no parent row: the grading scheme, the offering read model and the audit entry. The others hang
-# off these by foreign keys, and every table has its policy checked below.
+# The tables that need no parent row: the grading scheme, the offering read model, the processed-event marker and the
+# audit entry. The others hang off these by foreign keys, and every table has its policy checked below.
 INSERTS = {
     "examinations_grading_scheme": (
         "INSERT INTO examinations_grading_scheme (id, organisation_id, created_at, name, is_default) "
@@ -103,6 +103,10 @@ INSERTS = {
         "INSERT INTO examinations_offering_ref (id, organisation_id, created_at, course_offering_id, course_id, "
         "academic_period_id, course_code, course_title, credits, department_id) "
         "VALUES (:id, :org, now(), :id, :id, :id, 'C', 'T', 4, :id)"
+    ),
+    "examinations_processed_event": (
+        "INSERT INTO examinations_processed_event (id, organisation_id, created_at, event_id, name) "
+        "VALUES (:id, :org, now(), :id, 'probe')"
     ),
     "examinations_audit_entry": (
         "INSERT INTO examinations_audit_entry (id, organisation_id, client_token, action, entity_type, entity_id, "

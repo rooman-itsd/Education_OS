@@ -6,6 +6,8 @@ Implements all core use cases:
 - Attached document reference metadata
 - Logical ID card issuance and revocation with collision-resistant card numbers
 - Contract-compliant transactional outbox event publishing
+- The person-to-sign-in-account link (`person.account-linked`), published whenever identity_user_id is set, changed
+  or cleared, and republished on request for links made before the event existed
 """
 
 from __future__ import annotations
@@ -70,6 +72,14 @@ def _assert_user_unlinked(db: Session, org_id: str, identity_user_id: str | None
         raise _conflict("duplicate_identity_user", "This identity user is already linked to another person")
 
 
+def _clean_user_id(value: Any) -> str | None:
+    """A blank identity user id means "no account linked" (None), so '' is never stored or announced as a link."""
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
 def _like(term: str) -> str:
     """A contains-pattern for ilike with the user's % _ \\ taken literally."""
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -98,6 +108,28 @@ def _publish(db: Session, actor: Actor | None, name: str, organisation_id: str, 
     )
 
 
+ACCOUNT_LINKED = "student-information.person.account-linked"
+
+
+def _publish_account_link(db: Session, actor: Actor, person: Person, previous: str | None) -> None:
+    """Announce the person's current sign-in account (contracts/events.yaml `person.account-linked`). Other modules key
+    their data on the person id but resolve a student's own `/me` reads by the caller's identity user id; this event is
+    how they map one to the other. `identity_user_id` is the link now (null once cleared); `previous_identity_user_id`
+    is the one it replaced. Published in the transaction of the write, so a rolled-back change announces nothing."""
+    _publish(
+        db,
+        actor,
+        ACCOUNT_LINKED,
+        person.organisation_id,
+        {
+            "person_id": person.id,
+            "identity_user_id": person.identity_user_id,
+            "linked": person.identity_user_id is not None,
+            "previous_identity_user_id": previous,
+        },
+    )
+
+
 def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
     """Creates a new person record in 'pending' status, writes initial status history,
 
@@ -116,7 +148,8 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
                 "duplicate_identity_number",
                 f"An identity document number '{identity_num}' already in use in this organisation",
             )
-    _assert_user_unlinked(db, org_id, data.get("identity_user_id"), None)
+    user_id = _clean_user_id(data.get("identity_user_id"))
+    _assert_user_unlinked(db, org_id, user_id, None)
 
     person = Person(
         id=new_id(),
@@ -129,7 +162,7 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
         identity_number=identity_num,
         contact=data.get("contact"),
         guardians=data.get("guardians") or [],
-        identity_user_id=data.get("identity_user_id"),
+        identity_user_id=user_id,
         status=PersonStatus.PENDING.value,
         status_effective_date=date.today(),
         source=data.get("source"),
@@ -165,8 +198,11 @@ def create_person(db: Session, actor: Actor, data: dict[str, Any]) -> Person:
             "email": email or None,
             "status": person.status,
             "source": person.source,
+            "identity_user_id": person.identity_user_id,
         },
     )
+    if person.identity_user_id is not None:
+        _publish_account_link(db, actor, person, None)
 
     db.flush()
     return person
@@ -262,8 +298,11 @@ def update_person(db: Session, actor: Actor, person_id: str, updates: dict[str, 
                 "duplicate_identity_number",
                 f"An identity document number '{new_identity}' already in use in this organisation",
             )
+    if "identity_user_id" in updates:
+        updates = {**updates, "identity_user_id": _clean_user_id(updates["identity_user_id"])}
     if updates.get("identity_user_id") and updates["identity_user_id"] != person.identity_user_id:
         _assert_user_unlinked(db, actor.organisation_id, updates["identity_user_id"], person_id)
+    previous_user = person.identity_user_id
 
     # Apply permitted fields
     for field_name in (
@@ -296,9 +335,30 @@ def update_person(db: Session, actor: Actor, person_id: str, updates: dict[str, 
             "email": email or None,
         },
     )
+    if person.identity_user_id != previous_user:
+        _publish_account_link(db, actor, person, previous_user)
 
     db.flush()
     return person
+
+
+def republish_account_links(db: Session, actor: Actor) -> int:
+    """Announce every linked person in the caller's organisation again (`person.account-linked` with the current link).
+
+    The backfill for links made before the event existed, and the repair for a consumer that lost its copy. Consumers
+    apply the link by occurred_at per person, so a republished link never overrides a later change, and republishing
+    twice changes nothing. Persons with no account are skipped: a consumer that never saw a link has nothing to clear.
+    Returns how many events were published."""
+    people = (
+        db.query(Person)
+        .filter(Person.organisation_id == actor.organisation_id, Person.identity_user_id.isnot(None))
+        .order_by(Person.created_at.asc(), Person.id.asc())
+        .all()
+    )
+    for person in people:
+        _publish_account_link(db, actor, person, None)
+    db.flush()
+    return len(people)
 
 
 def change_status(

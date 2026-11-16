@@ -4,7 +4,7 @@ name: lms
 kind: feature              # feature | platform | integration
 domain: academics
 tier: common        # core (platform) | common (every institution) | specialized (one field)
-version: 0.1.0
+version: 0.1.1
 status: in-progress       # planned | in-progress | stable | deprecated
 description: "Learning management: content, assignments, quizzes, discussions, grading."
 owners: [shivanisinghrooman-09]  # GitHub handles. Keep in sync with CODEOWNERS.
@@ -23,8 +23,10 @@ exposes:
 # Events this module subscribes to (by name, from other modules' events.yaml). Each is handled by
 # application/consumers.py, registered under the `eos.event_consumers` entry point in backend/pyproject.toml, and
 # fills a read model (docs/data-model.md): offerings, instructor assignments (who teaches a course space) and course
-# registrations (who learns in it). faculty_id and person_id are read as identity user ids (README, "Assumptions to
-# revisit"; docs/prd.md LQ4, LQ5, LQ6). No scheduled-class events are consumed (owner decision C19). search,
+# registrations (who learns in it), and the person-to-account link (person_account). faculty_id is read as the
+# identity user id; a registration's person_id is the student-information person, which a learner's own reads reach
+# from their user id through person.account-linked (README, "Assumptions to revisit"; docs/prd.md LQ4, LQ5, LQ6).
+# No scheduled-class events are consumed (owner decision C19). search,
 # scheduler and notification are not dependencies in week 1 (LQ14).
 consumes_events:
   - academic-management.offering.created
@@ -34,6 +36,7 @@ consumes_events:
   - enrolment-registration.course-registration.confirmed
   - enrolment-registration.course-registration.withdrawn
   - enrolment-registration.section-allocation.changed
+  - student-information.person.account-linked
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

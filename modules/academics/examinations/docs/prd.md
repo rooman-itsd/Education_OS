@@ -318,7 +318,7 @@ The module has its own schema, `examinations`. Every table has `organisation_id`
 | `exam_duty` | id, organisation_id, exam_cycle_id, staff_id, duty_type, exam_session_id?, exam_paper_id?, status, cancel_reason |
 | `mark_entry` | id, organisation_id, candidate_id, marks_obtained, absent, entered_by, entered_at, moderation_delta, moderation_reason, moderated_by, status |
 | `result` | id, organisation_id, exam_cycle_id, student_id, course_offering_id, version, weighted_percent, grade, grade_point, passed, status, approved_by, published_at, revision_reason |
-| `offering_ref` (read model) | organisation_id, course_offering_id, course_id, academic_period_id, course_code, course_title, credits, department_id. `course_id` is kept so that course changes from academic-management can be applied to every offering of that course (PR #168) |
+| `offering_ref` (read model) | organisation_id, course_offering_id, course_id, academic_period_id, course_code, course_title, credits, department_id, status, status_as_of. `course_id` is kept so that course changes from academic-management can be applied to every offering of that course (PR #168). The creation columns are nullable and `status` is NULL until a status event arrives, because events are unordered; `status_as_of` is the envelope `occurred_at` of the event that set `status`. See docs/reviewer-decisions.md, section 13 |
 | `registration_ref` (read model) | organisation_id, student_id, course_offering_id, status (pending Q1) |
 
 Read-model tables are refreshed only from consumed events (section 12). They are local
@@ -367,7 +367,8 @@ the one stored by `packages/core` (`eos_core.events.OutboxEvent`): `id`, `name`,
 
 The academic-management and enrolment-registration contracts are merged. Per owner decision C4, each
 consumer declares the events it uses in its own `consumes_events` in a follow-up PR; this module's
-`module.yaml` still declares none, and no consumer is implemented. The events below are the ones
+`module.yaml` declares only the two offering events, which `application/consumers.py` handles (docs/reviewer-decisions.md,
+section 13); no other consumer is implemented. The events below are the ones
 whose published `consumers` list includes examinations (names and payload fields as in those
 modules' `contracts/events.yaml`, checked on 2026-11-03):
 
