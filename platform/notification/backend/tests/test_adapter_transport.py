@@ -216,6 +216,20 @@ def test_a_channel_with_no_provider_fails_that_message_only(monkeypatch):
     assert not result.accepted and result.reason == "rejected" and not result.retryable
 
 
+def test_a_provider_that_cannot_be_built_from_its_settings_is_retried_not_failed_for_good(monkeypatch):
+    """messaging-providers builds its SMTP provider from the environment per message and raises ValueError for a bad
+    combination (both TLS flags set). That is an operator mistake: once it is fixed the next attempt works, so the
+    message must stay retryable. Failing it permanently dropped every trial reminder and status email sent while the
+    setting was wrong, with nothing able to recover them."""
+
+    def factory(channel):
+        raise ValueError("MESSAGING_PROVIDERS_SMTP_USE_TLS and MESSAGING_PROVIDERS_SMTP_SSL are exclusive: pick one")
+
+    points(monkeypatch, FakeEntryPoint("a", loads=factory))
+    result = t.get_transport(config(transport="adapter", adapter="a")).send(message())
+    assert not result.accepted and result.reason == "transport_error" and result.retryable
+
+
 # --- reply_to capability gate ------------------------------------------------------------------------
 
 

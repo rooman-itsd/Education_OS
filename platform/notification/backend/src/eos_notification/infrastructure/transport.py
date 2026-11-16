@@ -161,6 +161,12 @@ class AdapterTransport:
     def send(self, message: OutboundMessage) -> SendResult:
         try:
             provider = self._factory(message.channel)
+        except ValueError as e:
+            # The provider could not be built from its settings (a bad combination of environment variables). That
+            # is an operator mistake, not a property of this message: once it is fixed the next attempt works, so
+            # the message stays retryable instead of failing for good.
+            log.error("adapter %s could not be built for channel %s (%s)", self._name, message.channel, e)
+            return SendResult(accepted=False, reason="transport_error", retryable=True)
         except Exception as e:  # noqa: BLE001 - the adapter's own exception types are not imported here
             # No provider for this channel: permanent for this message, not a transport outage.
             log.warning("adapter %s has no provider for channel %s (%s)", self._name, message.channel, type(e).__name__)
