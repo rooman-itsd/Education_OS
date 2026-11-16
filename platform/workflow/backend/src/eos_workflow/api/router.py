@@ -191,6 +191,10 @@ def list_pending_approvals(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
+    # Like GET /requests and GET /requests/{id}: only someone who may act on an approval sees what waits for one.
+    # The role named on a step is not enough (faculty and student read requests but hold no approval:action).
+    if not _reads_everything(p) and not p.can(APPROVAL_ACTION):
+        return {"items": [], "total": 0}
     items, total = service.list_pending(
         db,
         p.organisation_id,

@@ -176,3 +176,34 @@ def test_duplicate_chain_code_after_trimming_returns_409(workflow_client, workfl
         headers=org.headers(org.admin),
     )
     assert res.status_code == 409
+
+
+def test_pending_queue_needs_the_approval_permission_like_every_other_read(workflow_client, workflow_db):
+    """`GET /requests/pending` matched a non-admin on the step's role name alone. A role that may read requests but
+    holds no `workflow:approval:action` (faculty, student) therefore listed the current-step requests of any chain
+    that names it as approver, while `GET /requests/{id}` answered 404 for the same request."""
+    org = Org(workflow_db)
+    _chain(
+        workflow_client,
+        org,
+        "peer-review",
+        [{"step_order": 1, "name": "Peer", "approver_role": "faculty", "is_final": True}],
+    )
+    sent = _submit(workflow_client, org, org.student, "peer-review", context={"about": "private"}).json()
+
+    faculty = org.headers(org.faculty)
+    assert workflow_client.get(f"{PREFIX}/requests/{sent['id']}", headers=faculty).status_code == 404
+    pending = workflow_client.get(f"{PREFIX}/requests/pending", headers=faculty)
+    assert pending.status_code == 200, pending.text
+    assert pending.json() == {"items": [], "total": 0}
+
+    # An approver who does hold the permission still sees what is routed to their role.
+    chain_for_dept = _chain(
+        workflow_client,
+        org,
+        "leave2",
+        [{"step_order": 1, "name": "HoD", "approver_role": "department-admin", "is_final": True}],
+    )
+    assert chain_for_dept
+    leave = _submit(workflow_client, org, org.student, "leave2").json()
+    assert _ids(workflow_client.get(f"{PREFIX}/requests/pending", headers=org.headers(org.dept_admin))) == {leave["id"]}
