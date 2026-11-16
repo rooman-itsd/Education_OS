@@ -39,7 +39,28 @@ The database URL comes from `EOS_DATABASE_URL`, or `alembic -x url=... upgrade h
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
 - Events: [contracts/events.yaml](contracts/events.yaml)
+- Backfill: `POST /offerings/republish` (permission `academic-management:offering:write`). **Run it once per
+  organisation after deploy.** See [Backfill](#backfill-run-once-per-organisation-after-deploy).
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
+
+## Backfill: run once per organisation after deploy
+A module that consumes offering or section events (timetable-attendance, examinations, lms, enrolment-registration)
+has no row for offerings created before it started consuming. `POST /api/v1/academic-management/offerings/republish`,
+called as an organisation admin or department admin of the organisation, announces every offering and section of
+that organisation again and returns `{"offerings": n, "sections": n, "published": n}`:
+
+- per offering, `offering.created` (course details as they are now) and `offering.status-changed` with `from_status`
+  equal to `to_status`, the current status (`offering.created` carries none);
+- per section, `section.created` and `section.updated` (current capacity and status).
+
+Each is a new event (new envelope id, `occurred_at` now). Consumers apply a creation once and a status by
+`occurred_at`, so a consumer that already has an offering keeps it and the call is safe to repeat; run it again
+whenever a consumer has lost its copy, or if a status changed while it was running. It changes nothing and writes no
+audit entry. Faculty assignments, terms, programmes and courses are not republished.
+
+Before running it where platform/reporting ingests events: reporting counts each `offering.created` as a new
+offering (`academics.course_offerings`), so until it ignores a second fact for the same offering a republish
+inflates that metric.
 
 ## Dependencies
 See `module.yaml`. This module must not import code from any other module under `modules/`.

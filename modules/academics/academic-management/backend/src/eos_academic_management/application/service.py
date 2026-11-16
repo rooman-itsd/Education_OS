@@ -836,6 +836,29 @@ def archive_course(db: Session, a: Actor, course_id: str) -> dict:
 # ---------------------------------------------------------------- offerings and sections (FR-8, FR-9, FR-10)
 
 
+def _offering_created_payload(o: OfferingRow, course: CourseRow) -> dict:
+    """contracts/events.yaml offering.created, from the offering and its course as they are now."""
+    return {
+        "course_offering_id": o.id,
+        "course_id": course.id,
+        "academic_period_id": o.academic_period_id,
+        "programme_ids": list(o.programme_ids or []),
+        "course_code": course.code,
+        "course_title": course.title,
+        "credits": _number(course.credits),
+        "course_type": course.course_type,
+        "department_id": course.department_id,
+    }
+
+
+def _section_created_payload(s: SectionRow) -> dict:
+    return {"section_id": s.id, "course_offering_id": s.course_offering_id, "code": s.code, "capacity": s.capacity}
+
+
+def _section_updated_payload(s: SectionRow) -> dict:
+    return {"section_id": s.id, "course_offering_id": s.course_offering_id, "capacity": s.capacity, "status": s.status}
+
+
 def list_offerings(db: Session, filters: dict, limit: int, offset: int) -> dict:
     query = repo.q(db, OfferingRow).order_by(OfferingRow.created_at, OfferingRow.id)
     for field in ("academic_period_id", "course_id", "status"):
@@ -899,22 +922,7 @@ def create_offering(db: Session, a: Actor, body: dict) -> dict:
     )
     db.add(row)
     db.flush()
-    _publish(
-        db,
-        a,
-        "offering.created",
-        {
-            "course_offering_id": row.id,
-            "course_id": course.id,
-            "academic_period_id": row.academic_period_id,
-            "programme_ids": row.programme_ids,
-            "course_code": course.code,
-            "course_title": course.title,
-            "credits": _number(course.credits),
-            "course_type": course.course_type,
-            "department_id": course.department_id,
-        },
-    )
+    _publish(db, a, "offering.created", _offering_created_payload(row, course))
     after = _fields(row, "course_id", "academic_period_id", "programme_ids", "status")
     _audit(db, a, "offering.created", "offering", row, after=after)
     for s, shape in zip(sections, shapes, strict=True):
@@ -932,12 +940,7 @@ def _add_section(db: Session, a: Actor, offering: OfferingRow, code: str, capaci
         status=off.SECTION_OPEN,
     )
     _insert_coded(db, section)
-    _publish(
-        db,
-        a,
-        "section.created",
-        {"section_id": section.id, "course_offering_id": offering.id, "code": code, "capacity": capacity},
-    )
+    _publish(db, a, "section.created", _section_created_payload(section))
     after = _fields(section, "course_offering_id", "code", "capacity", "status")
     _audit(db, a, "section.created", "section", section, after=after)
     return section
@@ -1013,21 +1016,44 @@ def update_section(db: Session, a: Actor, section_id: str, body: dict) -> dict:
     )
     before, after = _apply(section, {"capacity": shape.capacity, "status": shape.status})
     if after:
-        _publish(
-            db,
-            a,
-            "section.updated",
-            {
-                "section_id": section.id,
-                "course_offering_id": section.course_offering_id,
-                "capacity": section.capacity,
-                "status": section.status,
-            },
-        )
+        _publish(db, a, "section.updated", _section_updated_payload(section))
         _audit(db, a, "section.updated", "section", section, before=before, after=after)
     db.commit()
     counts = repo.enrolled_counts(db, section.course_offering_id)
     return section_dict(section, counts.get(section.id, 0))
+
+
+def republish_offerings(db: Session, a: Actor) -> dict:
+    """The backfill for consumers that started after offerings were created (issue #325): announce the current state
+    of every offering and section in the caller's organisation again, with the normal events, in one transaction.
+
+    For each offering, in creation order: `offering.created` (its course details as they are now) and
+    `offering.status-changed` with `from_status` equal to `to_status`, the offering's current status (no creation event
+    carries a status, so a consumer that starts now needs it, planned included); then for each section
+    `section.created` and `section.updated` (current capacity and status, which `section.created` does not carry).
+    Each is a new event with a new envelope id, stamped now: consumers apply a creation only once, so a consumer that
+    already knows the offering keeps what it has, and the status is the current one, so it is the latest a consumer
+    can hold. Running it twice is harmless. Nothing is changed and no audit entry is written: a republish changes no
+    state. Faculty assignments, terms, programmes and courses are not republished."""
+    offerings = list(db.scalars(repo.q(db, OfferingRow).order_by(OfferingRow.created_at, OfferingRow.id)))
+    courses = repo.courses_by_id(db, (o.course_id for o in offerings))
+    published = sections = 0
+    for o in offerings:
+        _publish(db, a, "offering.created", _offering_created_payload(o, courses[o.course_id]))
+        _publish(
+            db,
+            a,
+            "offering.status-changed",
+            {"course_offering_id": o.id, "from_status": o.status, "to_status": o.status, "changed_at": iso(clock())},
+        )
+        published += 2
+        for s in repo.sections_of(db, o.id):
+            _publish(db, a, "section.created", _section_created_payload(s))
+            _publish(db, a, "section.updated", _section_updated_payload(s))
+            published += 2
+            sections += 1
+    db.commit()
+    return {"offerings": len(offerings), "sections": sections, "published": published}
 
 
 # ---------------------------------------------------------------- faculty assignment (FR-11, FR-12)
