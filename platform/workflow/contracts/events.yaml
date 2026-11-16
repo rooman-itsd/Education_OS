@@ -1,19 +1,69 @@
 # Domain events published by workflow.
 # Naming: <module>.<entity>.<past-tense-verb>
 # Every event carries: id, occurred_at, actor, tenant, version, payload.
+# The envelope is platform/event-bus's; each `payload` below lists exactly the keys the service publishes
+# (backend/tests/test_workflow_events_contract.py fails if the two drift). A trailing `?` marks a value that may
+# be null. Consumers filter on entity_type (and chain_code), then use entity_id to find their own record.
 module: workflow
 version: 1
 events:
   - name: workflow.request.submitted
     description: A workflow request was submitted into an approval chain.
+    payload:
+      request_id: uuid
+      chain_id: uuid
+      chain_code: string
+      entity_type: string
+      entity_id: string
+      requester_id: uuid
+      step_order: integer
+      step_name: string
+      approver_role: string
   - name: workflow.step.advanced
     description: An intermediate approval step was approved and the request advanced to the next step.
+    payload:
+      request_id: uuid
+      chain_id: uuid
+      chain_code: string
+      entity_type: string
+      entity_id: string
+      previous_step_order: integer
+      current_step_order: integer
+      current_step_name: string
+      approver_role: string
   - name: workflow.request.approved
     description: A workflow request received final approval and completed successfully.
+    payload:
+      request_id: uuid
+      chain_id: uuid
+      chain_code: string
+      entity_type: string
+      entity_id: string
+      approved_by: uuid
+      comments: string?
   - name: workflow.request.rejected
     description: A workflow request was rejected at an approval step.
+    payload:
+      request_id: uuid
+      chain_id: uuid
+      chain_code: string
+      entity_type: string
+      entity_id: string
+      rejected_by: uuid
+      step_order: integer
+      step_name: string
+      comments: string?
   - name: workflow.request.delegated
-    description: An approval step was delegated to another user.
+    description: >-
+      An approval step was delegated to another user. Unlike the other request events, the payload carries no
+      chain or entity: a consumer that needs them keeps them from workflow.request.submitted (same request_id).
+    payload:
+      request_id: uuid
+      delegated_by: uuid
+      delegated_to: uuid
+      step_order: integer
+      step_name: string
+      comments: string?
   - name: workflow.step.overdue
     description: >-
       The request's current step passed its SLA deadline (its sla_hours, else WORKFLOW_DEFAULT_SLA_HOURS) while

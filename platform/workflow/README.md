@@ -21,6 +21,18 @@ Configurable workflow and approval engine (state machines, SLAs, delegation).
   `workflow.sla-check` escalates a pending step past its deadline once: a `workflow_escalation` row and a
   `workflow.step.overdue` event (retried by the relay until delivered).
 
+## Reacting to a decision (consumers)
+Subscribe to the events in [contracts/events.yaml](contracts/events.yaml); each declares its payload.
+- **Filter on `entity_type`** (the kind of record the request is about, e.g. `examinations.result_set`), and on
+  `chain_code` if you submit to more than one chain; ignore every other event. Then use **`entity_id`** to find
+  your own record. Never act on an event from an organisation other than the envelope's `organisation_id`.
+- `workflow.request.approved` (final approval: `approved_by`, `comments`) and `workflow.request.rejected`
+  (`rejected_by`, the deciding `step_order` and `step_name`, `comments`) are the outcomes; `workflow.step.advanced`
+  and `workflow.step.overdue` are progress. `comments` may be null.
+- `workflow.request.delegated` carries `request_id` but no chain or entity: keep the mapping from
+  `workflow.request.submitted` (same `request_id`) if you need it.
+- Delivery is at-least-once: deduplicate on the envelope `id`, and make the reaction idempotent.
+
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
 - Events: [contracts/events.yaml](contracts/events.yaml)
