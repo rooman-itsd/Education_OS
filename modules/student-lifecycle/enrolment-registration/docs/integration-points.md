@@ -19,6 +19,30 @@ The three course-registration events carry every field academic-management's ros
 fields (`academic_period_id`, `registration_type`, `effective_on`, `student_name`, `roll_number`) are optional for
 that consumer, which tolerates unknown fields.
 
+### Backfill: `POST /registrations/republish` (run once per organisation after deploy)
+
+A consumer that started after registrations were confirmed has no copy of them. `POST /registrations/republish`
+(permission `enrolment-registration:registration:manage`) publishes `course-registration.confirmed` again for every
+registration of the caller's organisation that is confirmed now, and returns `{"published": n}`. Run it once per
+organisation after deploying 0.2.0, and again whenever a consumer has lost its copy.
+
+- **What is published.** Only `course-registration.confirmed`, with the registration as it is now: current
+  `section_id`, original `confirmed_at`, the enrolment's current `student_name` and `roll_number`. It is a new
+  event: new envelope id, `occurred_at` the time of the republish.
+- **Not published.** Withdrawn registrations and `section-allocation.changed`. A consumer that never saw a
+  withdrawn registration holds no row for it, which is already the right state. The confirmation names the current
+  section, so a consumer needs no move to reach it. This module keeps no move history to replay, so a consumer that
+  starts late places the student in the current section from `confirmed_at`.
+- **Consumers already holding the registration.** They apply a confirmation once per `registration_id`
+  (timetable-attendance ignores a second one, and academic-management's roster keeps the section it has). lms
+  orders by `occurred_at`, so it takes the current section and the active status, which are both true. A
+  withdrawal made after the republish occurred later and wins in either arrival order.
+- **Safe to repeat.** The call changes nothing and writes no audit row.
+
+academic-management's roster admits a confirmation only into an open offering and an open section with room. When
+it is wired to the relay, a republished registration of an offering that is `in_progress` or a full section is
+recorded there as rejected. Its owner decides whether a replayed confirmation should bypass those checks.
+
 ## Answers to questions other modules addressed to this module
 
 | Module and question | Answer in this contract |

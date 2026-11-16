@@ -204,6 +204,13 @@ def register_bulk(
     )
 
 
+@router.post("/registrations/republish")
+def republish_registrations(actor: Actor = Depends(require(PERM_REGISTRATION_MANAGE)), db: Session = Depends(get_db)):
+    """The backfill (issue #325): course-registration.confirmed again for every confirmed registration of the
+    organisation. Run once per organisation after deploy."""
+    return {"published": _run(db, svc.republish_registrations, actor)}
+
+
 @router.get("/registrations/{registration_id}")
 def get_registration(
     registration_id: str, actor: Actor = Depends(require(PERM_REGISTRATION_READ)), db: Session = Depends(get_db)

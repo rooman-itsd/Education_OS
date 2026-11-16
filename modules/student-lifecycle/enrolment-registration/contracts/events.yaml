@@ -26,7 +26,11 @@ events:
   - name: enrolment-registration.course-registration.confirmed
     description: >-
       An enrolled student was registered for a course offering, in a section. registration_id stays the same for
-      the life of the registration.
+      the life of the registration. POST /registrations/republish publishes it again for every registration that is
+      confirmed now (the backfill, issue #325), with a new envelope id and occurred_at the time of the republish: the
+      payload then names the registration's current section (a section move made before is not replayed), its
+      original confirmed_at, and the current student_name and roll_number. Apply a confirmation once per
+      registration_id: a consumer that already knows the registration keeps what it has.
     version: 1
     consumers: [academic-management, examinations, lms, timetable-attendance]
     payload: { registration_id: uuid, person_id: uuid, course_offering_id: uuid, section_id: uuid, academic_period_id: uuid, registration_type: string, student_name: string, roll_number: string, confirmed_at: datetime }

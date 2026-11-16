@@ -33,7 +33,7 @@ def required_permission(route: APIRoute) -> str | None:
 
 def test_router_and_contract_have_the_same_routes():
     assert set(ROUTES) == set(CONTRACT_OPS)
-    assert len(ROUTES) == 14
+    assert len(ROUTES) == 15
 
 
 def test_each_route_needs_exactly_its_x_permission():

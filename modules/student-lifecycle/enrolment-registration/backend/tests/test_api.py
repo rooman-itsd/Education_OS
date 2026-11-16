@@ -39,6 +39,7 @@ MANAGES = [
     ("post", "/registrations/bulk", {**REGISTRATION_BODY, "programme_enrolment_ids": [UUID]}),
     ("post", "/registrations/{id}/withdraw", {"reason": "r"}),
     ("post", "/registrations/{id}/change-section", {"to_section_id": UUID, "effective_on": "2026-11-02"}),
+    ("post", "/registrations/republish", None),
 ]
 
 
