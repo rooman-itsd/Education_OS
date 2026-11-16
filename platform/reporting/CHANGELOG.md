@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- One fact per source entity: an event that names a `source_ref` already counted for that metric (the same offering,
+  faculty assignment or payment under a new event id, as a producer's republish for late consumers sends, #651) adds
+  nothing. The fact stays in the month it first happened. Reversals are unchanged.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (`platform:`, mounted at `/api/v1/reporting`) and
   `apps/frontend/config/modules.enabled.yaml` (`reporting.department-reports` and
   `reporting.attendance-and-results-by-department` on the Department Admin and Management dashboards).
