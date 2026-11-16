@@ -230,6 +230,24 @@ def test_a_provider_that_cannot_be_built_from_its_settings_is_retried_not_failed
     assert not result.accepted and result.reason == "transport_error" and result.retryable
 
 
+def test_a_provider_that_cannot_be_built_logs_the_error_type_not_its_text(monkeypatch, caplog):
+    """The ValueError's text is whatever the adapter wrote, and a misconfiguration is exactly when it may quote the
+    settings it rejected (a host, a user name, a password). The log line names the exception type only, like the
+    other log lines of this module."""
+    secret = "hunter2-smtp-password"
+
+    def factory(channel):
+        raise ValueError(f"bad settings: password={secret}")
+
+    points(monkeypatch, FakeEntryPoint("a", loads=factory))
+    with caplog.at_level(logging.DEBUG, logger="eos.notification"):
+        result = t.get_transport(config(transport="adapter", adapter="a")).send(message())
+    assert not result.accepted and result.retryable
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert secret not in logged
+    assert "ValueError" in logged
+
+
 # --- reply_to capability gate ------------------------------------------------------------------------
 
 
