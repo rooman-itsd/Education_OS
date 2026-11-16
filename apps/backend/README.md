@@ -14,7 +14,10 @@ signed-in requests, per client address for the rest, and for sign-in/sign-up (42
 once and the gate reuses it (`eos_api_gateway.token_claims`, `request.state.token_claims`). Settings and the
 proxy requirements: [platform/api-gateway/README.md](../../platform/api-gateway/README.md).
 The plan's user limit (staff accounts; learners are not counted) is enforced by identity through a hook wired
-here to billing (`409 plan_limit_reached`).
+here to billing (`409 plan_limit_reached`). When `workflow` is enabled, startup also wires
+`eos_core.workflow.hooks.submit` to workflow's create-request use case (`eos_backend.workflow_hook`), so a module
+submits a record for approval without importing workflow
+([platform/workflow/README.md](../../platform/workflow/README.md#calling-workflow-from-a-module)).
 
 ## What it mounts: `config/modules.enabled.yaml`
 
