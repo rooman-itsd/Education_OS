@@ -55,7 +55,7 @@ describe("academic-management.faculty-load widget", () => {
     expect(within(rows[2]!).getByText("1 offering")).toBeTruthy();
     expect(screen.getByText("Odd semester 2026 · 1 of 3 over the 16 h weekly maximum")).toBeTruthy();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/v1/academic-management/faculty-load"); // the server narrows to the caller's department
+    expect(url).toBe("/api/v1/academic-management/faculty-load"); // no department_id is sent: the server does not narrow by department yet
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
   });
 
@@ -71,6 +71,13 @@ describe("academic-management.faculty-load widget", () => {
     render(<FacultyLoad role="department-admin" />);
     expect(await screen.findByText("No active term")).toBeTruthy();
     expect(screen.queryByText("Could not load faculty load")).toBeNull();
+  });
+
+  it("shows a failure, not 'No active term', for a 404 that is not active_term_not_found", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(404, { detail: "Not Found" })));
+    render(<FacultyLoad role="department-admin" />);
+    expect(await screen.findByText("Could not load faculty load")).toBeTruthy();
+    expect(screen.queryByText("No active term")).toBeNull();
   });
 
   it("offers a retry after a failure (the 503 directory outage included), and the retry loads again", async () => {
