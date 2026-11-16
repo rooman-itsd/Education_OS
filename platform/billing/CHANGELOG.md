@@ -3,6 +3,18 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Plan limits (contract 0.4.0, additive): `plan_limits`, `user_limit` and `usage_vs_limits` in the application service,
+  and `GET /usage` (permission `billing:subscription:read`) reporting usage against the plan's limits: users
+  counted by identity (a declared dependency), students and storage `null` until a module counts them.
+  apps/backend wires `user_limit` into identity's `hooks.user_limit`, so creating a user past the limit
+  answers `409 plan_limit_reached`.
+- Second review of PR 363: plan limits are typed (`domain/limits.py`, `PlanLimits`: optional whole numbers
+  >= 0 for `users`, `students`, `storage_gb`; absent, null or 0 is no limit, the one rule everywhere).
+  `PUT /admin/plans/{id}` answers 422 for "unlimited", "50", -1 or an unknown key; config/plans.yaml is
+  validated when seeded. A value stored before this that does not validate reads as no limit, with a
+  warning in the log, instead of a 500 on `POST /users` and `GET /usage`. `users` means staff accounts:
+  usage counts them with identity's `count_staff_users` (learners left out); `students` stays null until
+  counted.
 - GST tax invoices (contract 0.3.0, additive; #155, batch #337). Each invoice written when a paid plan is activated
   now carries: a number `PREFIX/YY-YY/NNNNNN` (at most 16 characters, one series per financial year, 1 April to
   31 March read in Indian time, no gaps: the counter row is locked and written in the invoice's own transaction, so

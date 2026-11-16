@@ -9,6 +9,9 @@ os.environ.setdefault("EOS_SUPER_ADMIN_PASSWORD", "RootPassw0rd!")
 os.environ.setdefault("BILLING_PAYMENT_ADAPTER", "none")
 os.environ.setdefault("TENANCY_AUTO_APPROVE", "true")
 os.environ.setdefault("EOS_REPO_ROOT", str(Path(__file__).resolve().parents[3]))
+# The shared client below makes every request from one address; the limiter would start refusing them part way
+# through the suite. test_gateway.py builds its own app with the limiter on and small limits.
+os.environ.setdefault("EOS_RATE_LIMIT_ENABLED", "false")
 
 import pytest
 from eos_backend.main import create_app

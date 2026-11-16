@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Learners whose registrations arrive keyed by the student-information person id now see their course spaces,
+  materials, submissions, quiz attempts and grades. lms consumes `student-information.person.account-linked` into a new
+  `lms_person_account` read model (migration `lms_0002`, `organisation_id` and the forced `tenant_isolation` policy)
+  and maps the caller's identity user id to their person id (`common.learner_ids`), falling back to the user id while
+  no link is known. New submissions and quiz attempts are recorded under the person id once the account is linked, so
+  they sit next to the registration in the instructor's gradebook. Module 0.1.1; no contract change.
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/lms`) and
   `apps/frontend/config/modules.enabled.yaml` (`lms.assignments-to-grade` and `lms.course-materials` on the Faculty and
   Student dashboards).

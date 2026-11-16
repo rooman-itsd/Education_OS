@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { created, expectBody, probe, shipped, signIn, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Department Admin / HoD dashboard (issue #318; layout platform/identity/config/dashboards/department-admin.yaml).
@@ -63,14 +63,17 @@ const WIDGETS: LayoutWidget[] = [
 ];
 const SHIPPED = WIDGETS.filter(shipped);
 
+let admin: DashboardUser;
 let user: DashboardUser;
 /** Per shipped widget id: what its GET answered the department-admin user. */
 const status: Record<string, number> = {};
+const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
+const ready = (id: string) => (status[id] ?? 0) === 200;
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ request }) => {
-  const admin = await organisationAdmin(request, { academyType: "engineering-college" });
+  admin = await organisationAdmin(request, { academyType: "engineering-college" });
   user = await addUser(request, admin, "department-admin");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
@@ -113,10 +116,77 @@ test.describe("department admin widgets", () => {
   }
 });
 
-// Backend-dependent: these need their module's API to create the data through, so nothing here is faked.
-test.fixme("workflow.approvals-pending lists a request waiting for this head of department", async () => {
-  // platform/workflow, once it is in both modules.enabled.yaml (waits on PR #430). Raise a request whose first
-  // step the department-admin role approves; expect it in the panel with its age.
+test.describe("with workflow and reporting data", () => {
+  test("workflow.approvals-pending lists a request waiting for this head of department", async ({ page, request }) => {
+    const w = byId("workflow.approvals-pending");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the workflow API answered ${status[w.id]} to the department-admin role`);
+
+    // Org admin configures a simple approval chain where step 1 is assigned to department-admin
+    const chainCode = "hod-syllabus-approval";
+    const createChain = await request.post("/api/v1/workflow/chains", {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {
+        code: chainCode,
+        title: "Syllabus Review Chain",
+        description: "Departmental syllabus approval process",
+        steps: [
+          {
+            step_order: 1,
+            name: "HoD Approval",
+            approver_role: "department-admin",
+            is_final: true,
+          },
+        ],
+      },
+    });
+    expect([201, 409]).toContain(createChain.status());
+
+    // Submit a request into the chain waiting for this department admin
+    const reqTitle = "CS101 Syllabus Revision";
+    await created(request, admin, "/workflow/requests", {
+      chain_code: chainCode,
+      entity_type: "syllabus",
+      entity_id: "cs-101",
+      title: reqTitle,
+      description: "Semester 1 syllabus update awaiting HoD sign-off",
+    });
+
+    await signIn(page, user);
+    const panel = widget(page, w.title!);
+    await expect(panel.getByText("No pending approvals")).toHaveCount(0);
+    await expect(panel.getByText(reqTitle)).toBeVisible();
+    await expect(panel.getByText(/Syllabus ·/)).toBeVisible();
+  });
+
+  test("reporting.department-reports lists the academic reports the head of department may run", async ({ page, request }) => {
+    const w = byId("reporting.department-reports");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the reporting API answered ${status[w.id]} to the department-admin role`);
+
+    // Query standard report definitions as admin
+    const defsRes = await request.get("/api/v1/reporting/definitions", {
+      headers: { Authorization: `Bearer ${admin.token}` },
+    });
+    expect(defsRes.ok(), await defsRes.text()).toBeTruthy();
+    const defs = (await defsRes.json()) as Array<{ id: string; code: string; name: string; category: string }>;
+
+    // Find the standard academic department attendance report definition
+    const academicDef = defs.find((d) => d.code === "department-attendance") ?? defs.find((d) => d.category === "academic");
+    expect(academicDef, "standard academic report definition must be available").toBeDefined();
+
+    // Execute the academic report
+    const runRes = await request.post(`/api/v1/reporting/definitions/${academicDef!.id}/run`, {
+      headers: { Authorization: `Bearer ${admin.token}` },
+      data: {},
+    });
+    expect(runRes.ok(), await runRes.text()).toBeTruthy();
+
+    await signIn(page, user);
+    const panel = widget(page, w.title!);
+    await expect(panel.getByText("No department reports")).toHaveCount(0);
+    await expect(panel.getByText(academicDef!.name)).toBeVisible();
+  });
 });
 
 test.fixme("academic-management.faculty-load shows the teaching load of the department's faculty", async () => {
@@ -130,10 +200,4 @@ test.fixme("timetable-attendance.department-attendance shows this week's attenda
 
 test.fixme("examinations.results-summary shows the department's pass rate for the last session", async () => {
   // modules/academics/examinations (sprint batch #325); the module has widgets but no backend.
-});
-
-test.fixme("reporting.department-reports lists the academic reports the head of department may run", async () => {
-  // platform/reporting, once ingestion (PR #452) and its permissions are merged and the service is enabled.
-  // The layout's role holds reporting:report:read, so only academic and administrative reports appear —
-  // a financial one answers 404 (#433).
 });

@@ -126,6 +126,15 @@ def update_person(
     return _run(svc.update_person, db, actor, id, s.dump(body)).to_dict()
 
 
+@router.post("/account-links/republish", status_code=200)
+def republish_account_links(
+    actor: Actor = Depends(require(PERM_PERSON_WRITE)),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Publishes person.account-linked again for every linked person in the organisation (the backfill)."""
+    return {"published": _run(svc.republish_account_links, db, actor)}
+
+
 # ---------------------------------------------------------------- Status History & Transition
 
 

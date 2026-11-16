@@ -2,7 +2,7 @@
 
 **Domain:** support
 **Kind:** feature
-**Status:** in-progress (backend and widget built and tested; not yet listed in `modules.enabled.yaml`)
+**Status:** in-progress (backend and widget built and tested; enabled in `apps/backend` and `apps/frontend`)
 
 Articles, FAQs and how-to guides for self-service.
 

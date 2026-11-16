@@ -3,6 +3,34 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/timetable-attendance`; its event consumers
+  now run). Not listed in `apps/frontend/config/modules.enabled.yaml`: no widget is built yet.
+- Automatic closing of open attendance sessions at their marking deadline (issue #325, FR-11): the scheduler job
+  `timetable-attendance.close-expired-sessions` (`application/auto_close.py`), declared on the `eos.scheduler_jobs` entry
+  point (organisation scope, idempotent) and run from `scheduler.job.due`, which the module now consumes for its own job
+  only. For the organisation, it closes each open session past its deadline as `closed_by = null`: unmarked eligible
+  students become absent, the class becomes completed, and `attendance-session.closed` (with the contract's null
+  `closed_by`) and one audit entry with no actor are written in the same transaction as the close, each session in its
+  own savepoint so one failure leaves nothing of that session and does not stop the others. It reports the run with the
+  new `timetable-attendance.job.finished` event. Idempotent: a session that is not open is never selected, is re-checked
+  under its row lock, and a repeated delivery is recorded in `processed_event`. **No default schedule:** the scheduler
+  seeds one only for platform jobs and none is invented, so the job runs once an operator schedules it per organisation.
+  `classes.close_session` is unchanged (it needs an actor and sets `closed_by` to them). No migration or enablement change;
+  `module.yaml` lists `scheduler` and `scheduler.job.due`, and `contracts/events.yaml` adds `job.finished`.
+- Publish and unpublish (issue #325): `POST /timetables/{id}/publish` and `/unpublish`, key `timetable:publish`. Publishing
+  takes a draft or unpublished timetable to `published` and raises its version by one; it is refused with 409 when the
+  timetable is already published, when a blocking conflict remains (the response lists them in `details.conflicts`,
+  including conflicts with the other published timetables of the period), or when its academic period is not a known
+  term (`unknown_term`, from the `term_ref` the `term.created` consumer fills). Unpublishing takes a published
+  timetable to `unpublished`, keeps the version, and cancels the timetable's future scheduled classes that have no
+  attendance session, each with its own audit entry and `scheduled-class.cancelled` event, and records the optional
+  `reason`. Both publish `timetable.published` / `timetable.unpublished` and write an audit entry in the same
+  transaction. **Limit, by decision:** publishing does not generate classes yet, so the contract's "generates
+  scheduled classes" is not met and `scheduled_class_count` is 0; `POST /timetables/{id}/generate-classes` is not
+  served either, because turning a slot's wall-clock times into instants needs the organisation's time zone and no
+  source for it exists (`docs/reviewer-decisions.md`, section 10). The tests that unpublish classes seed them
+  directly, and the slots use assignment rows written directly, because the faculty-assignment consumer is not built.
+  No migration, contract or enablement change.
 - Event consumers (issue #325, part 3), registered under `eos.event_consumers` and listed in `module.yaml`:
   academic-management `term.created` into the new `term_ref` (a term's dates), `offering.created` and
   `offering.status-changed` into `offering_ref`, `section.created` and `section.updated` into `section_ref`. Migration

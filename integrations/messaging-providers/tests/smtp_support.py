@@ -26,8 +26,9 @@ CONFIG = SmtpConfig(
 class FakeSmtp:
     """Stands in for smtplib.SMTP. Used as a context manager, exactly as the adapter uses the real one."""
 
-    def __init__(self, raise_on_send=None, raise_on_login=None):
+    def __init__(self, raise_on_send=None, raise_on_login=None, raise_on_exit=None):
         self.raise_on_send = raise_on_send
+        self.raise_on_exit = raise_on_exit  # what QUIT raises when the context manager closes
         self.raise_on_login = raise_on_login
         self.sent: list = []
         self.logins: list[tuple[str, str]] = []
@@ -39,6 +40,8 @@ class FakeSmtp:
 
     def __exit__(self, *exc):
         self.quit_called = True
+        if self.raise_on_exit and not exc[0]:
+            raise self.raise_on_exit
         return False
 
     def login(self, username, password):

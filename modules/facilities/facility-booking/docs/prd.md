@@ -127,9 +127,9 @@ plan):
 
 | Widget id | Layouts | Shows | API |
 |---|---|---|---|
-| `facility-booking.my-bookings` | 10 learner roles | The viewer's upcoming bookings, with cancel and check-in | `GET /bookings?scope=mine&from=now` |
+| `facility-booking.my-bookings` | 10 learner roles, and the Faculty layout with the 15 instructor layouts that extend it | The viewer's upcoming bookings, with cancel and check-in | `GET /bookings?scope=mine&from=now` |
 | `facility-booking.bookings-today` | 14 staff and instructor roles, incl. facility-staff | Today's bookings for the resources the viewer manages or approves, with counts | `GET /bookings?scope=managed&date=today`, `GET /summary` |
-| `facility-booking.bookings` | coach, medical-staff | Upcoming bookings the viewer made or approves, any date | `GET /bookings?scope=managed&from=now` |
+| `facility-booking.bookings` | coach, medical-staff | Upcoming bookings on the resources the viewer approves, any date (their own bookings are in `my-bookings`) | `GET /bookings?scope=managed&from=now` |
 
 Widget titles use the vocabulary term (for example "My practice room bookings" in a music academy).
 Each `Booking` carries a `can` list of the actions the viewer may take, so widgets need no
