@@ -90,10 +90,16 @@ def test_a_part_can_only_be_answered_once_and_only_while_the_production_is_alive
 
 def test_only_a_live_assignment_can_be_withdrawn():
     for live in r.LIVE_ROLE_STATUSES:
-        r.check_withdrawal(live)
+        r.check_withdrawal(live, r.SCHEDULED)
     for finished in (r.DECLINED, r.WITHDRAWN):
         with pytest.raises(r.RuleViolationError):
-            r.check_withdrawal(finished)
+            r.check_withdrawal(finished, r.SCHEDULED)
+
+
+def test_the_production_status_cannot_be_left_out_of_a_withdrawal_check():
+    """A caller that forgot it used to skip the finished-production guard without any sign; now it cannot."""
+    with pytest.raises(TypeError):
+        r.check_withdrawal(next(iter(r.LIVE_ROLE_STATUSES)))  # type: ignore[call-arg]
 
 
 def test_unknown_kinds_are_refused():
