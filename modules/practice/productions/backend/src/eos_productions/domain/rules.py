@@ -152,7 +152,7 @@ def check_response(role_status: str, production_status: str) -> None:
         )
 
 
-def check_withdrawal(role_status: str, production_status: str | None = None) -> None:
+def check_withdrawal(role_status: str, production_status: str) -> None:
     """Only a live part can be withdrawn, and not from a production that is finished (PRD rule 5: nothing changes
     a completed or cancelled production; cancelling withdraws the parts itself)."""
     if role_status not in LIVE_ROLE_STATUSES:
