@@ -13,6 +13,7 @@ from eos_core.settings import settings
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import directories
 from .gateway import EntitlementGate
 from .modules import enabled, middleware_only, router_for
 from .observability import REQUEST_ID, RequestContext, configure_logging, init_sentry
@@ -108,6 +109,7 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
         app.include_router(router, prefix=f"/api/v1/{name}")
     for name, router in (extra_routers or {}).items():
         app.include_router(router, prefix=f"/api/v1/{name}")
+    directories.wire(app, set(mounted))
     return app
 
 
