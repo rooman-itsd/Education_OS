@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from eos_api_gateway import GatewaySettings, RateLimit, SecurityHeaders
 from eos_core import oidc
+from eos_core import workflow as workflow_hooks
 from eos_core.db import SessionLocal, init_db
 from eos_core.http_errors import install_error_handlers
 from eos_core.settings import settings
@@ -44,6 +45,12 @@ async def lifespan(app: FastAPI):
     identity.hooks.user_limit = billing.user_limit
     # eos_core verifies a Keycloak realm token (ADR-0006); identity owns the mapping to a user
     oidc.hooks.resolve_claims = identity.resolve_oidc_claims
+    # A module submits a record for approval through eos_core.workflow.submit without importing workflow (rule 1).
+    # Only when workflow is enabled: otherwise submit() raises WorkflowUnavailableError rather than importing it.
+    if any(e.kind == "platform" and e.name == "workflow" for e in enabled()):
+        from .workflow_hook import submit_request
+
+        workflow_hooks.hooks.submit = submit_request
     seed_super_admin = identity.seed_super_admin
 
     db = SessionLocal()

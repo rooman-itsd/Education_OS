@@ -4,6 +4,13 @@ All notable changes to `eos-core`. Follows Keep a Changelog, semver per package.
 
 ## Unreleased
 
+### Added
+- `eos_core.workflow` (#325 Q10): `submit(db, organisation_id, *, chain_code, entity_type, entity_id, title,
+  requested_by, description=None, context=None, client_token=None) -> dict` sends a record for approval through
+  platform/workflow without importing it. It delegates to `hooks.submit`, None until the host wires it
+  (apps/backend does, to workflow's create-request use case); unwired it raises `WorkflowUnavailableError`, and a
+  refusal is `WorkflowRefusedError` with `code` `unknown_chain`, `chain_has_no_steps` or `invalid_request`.
+
 ### Fixed
 - A request body or query with `NaN`, `Infinity`, `-Infinity`, `1e999` or a lone surrogate answers 422, not 500.
   `eos_core.http_errors.install_error_handlers(app)` (called by `create_app`) quotes such an input back as text in
