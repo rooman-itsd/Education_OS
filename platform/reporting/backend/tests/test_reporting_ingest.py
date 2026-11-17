@@ -340,3 +340,24 @@ def test_every_source_event_is_one_its_module_publishes():
     for path in contracts.values():
         declared |= {e["name"] for e in yaml.safe_load(path.read_text())["events"]}
     assert set(metrics.source_events()) <= declared
+
+
+def test_a_republished_entity_is_counted_once_in_the_month_it_first_happened():
+    """academic-management's POST /offerings/republish (#651) re-announces every offering under a new event id, stamped
+    now, for consumers that started late. Each was counted again, in the republish month. One fact per source entity;
+    the same holds for a replayed payment, which must not add its amount twice."""
+    org = str(uuid.uuid4())
+    created = {"course_offering_id": "off-1", "course_id": "c", "academic_period_id": "t1", "department_id": "dept-cs"}
+    deliver(ev("academic-management.offering.created", org, created))
+    deliver(ev("academic-management.offering.created", org, created, at=NOV, event_id=str(uuid.uuid4())))
+    assert {(r.period_start, r.value) for r in cells(org, "academics.course_offerings")} == {(date(2026, 10, 1), 1)}
+
+    deliver(received(org, "pay-1", "100.00"))
+    deliver(received(org, "pay-1", "100.00", at=NOV, event_id=str(uuid.uuid4())))
+    assert sum(collected(org).values()) == Decimal("100.00")
+
+    # A new entity is still counted, and a reversal still applies to the one fact.
+    deliver(ev("academic-management.offering.created", org, {**created, "course_offering_id": "off-2"}, at=NOV))
+    assert sum(r.value for r in cells(org, "academics.course_offerings")) == 2
+    deliver(voided(org, "pay-1", "100.00", at=NOV))
+    assert sum(collected(org).values()) == Decimal("0.00")

@@ -107,6 +107,17 @@ def ingest(db: Session, event) -> int:
                 continue  # a second end or void of the same thing, under a new event id: it was taken back once
             # The reversal records what it reversed, so the lookup above finds it the next time.
             value, dims, source_ref = -original.value, dict(original.dimensions), contribution.reverses
+        elif source_ref is not None and db.scalar(
+            select(MetricFact.id).where(
+                MetricFact.organisation_id == organisation_id,
+                MetricFact.metric_key == metric.key,
+                MetricFact.source_ref == source_ref,
+                MetricFact.value > 0,
+            )
+        ):
+            # The same source entity again under a new event id: a producer's republish (backfill, #651) or a
+            # replay. One fact per entity, kept in the month it first happened, so nothing is counted twice.
+            continue
         if "course_offering_id" in dims:
             dims = {
                 "department_id": _department_of_offering(db, organisation_id, dims.pop("course_offering_id")),
