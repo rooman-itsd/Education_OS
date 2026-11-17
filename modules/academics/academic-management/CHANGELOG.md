@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `POST /offerings/republish` (contract 0.3.0, permission `academic-management:offering:write`): the backfill for
+  consumers that started after offerings were created (issue #325). Announces every offering of the caller's
+  organisation again (`offering.created` with the course as it is now, and `offering.status-changed` with
+  `from_status` equal to `to_status`, the current status) and every section (`section.created`, then
+  `section.updated` with current capacity and status); returns `{offerings, sections, published}`. New envelope ids,
+  `occurred_at` now; changes no state and writes no audit entry. Run once per organisation after deploy (README).
+  `contracts/events.yaml` describes the republished form of the four events; payloads are unchanged.
 - Searchable for platform/search: `contracts/searchable.yaml` (type `course`; `course.created` and `course.updated` upsert, `course.archived` deletes) and a document provider on the `eos.search_documents` entry point. Indexes title, code, description, status and credits of active courses.
 - Frontend: `academic-management.faculty-load` widget (Department Admin dashboard, `size: 2x2`, permission
   `academic-management:faculty-load:read`) over `GET /faculty-load`: each faculty member's weekly contact hours in the

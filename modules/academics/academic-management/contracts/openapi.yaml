@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: academic-management API
-  version: 0.2.3
+  version: 0.3.0
   description: |
     Programmes, curriculum, courses, credits, faculty-course assignment.
     Every request is scoped to the caller's organisation (row-level security on app.organisation_id).
@@ -633,6 +633,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /offerings/republish:
+    post:
+      tags: [offerings]
+      summary: Announce every offering and section again (backfill)
+      description: |
+        The backfill for consumers that started after offerings were created (issue #325). Run it once per
+        organisation after deploy, and again whenever a consumer has lost its copy.
+        For every offering in the caller's organisation, in creation order, publishes
+        academic-management.offering.created (course details as they are now) and
+        academic-management.offering.status-changed with from_status equal to to_status, the current status; then for
+        each of its sections academic-management.section.created and academic-management.section.updated (current
+        capacity and status). Each is a new event (new envelope id, occurred_at now). Consumers apply a creation once
+        and a status by occurred_at, so a consumer that already has the offering keeps it and calling this twice is
+        harmless. Changes nothing and writes no audit entry. Faculty assignments, terms, programmes and courses are not
+        republished.
+      operationId: republishOfferings
+      x-permission: academic-management:offering:write
+      responses:
+        "200":
+          description: What was announced
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [offerings, sections, published]
+                properties:
+                  offerings:
+                    type: integer
+                    minimum: 0
+                    description: Offerings announced
+                  sections:
+                    type: integer
+                    minimum: 0
+                    description: Sections announced
+                  published:
+                    type: integer
+                    minimum: 0
+                    description: Events published (two per offering, two per section)
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /offerings/{course_offering_id}:
     parameters:

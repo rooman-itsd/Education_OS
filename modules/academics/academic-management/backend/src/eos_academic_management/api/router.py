@@ -246,6 +246,13 @@ def create_offering(
     return _run(svc.create_offering, db, a, s.dump(body))
 
 
+@router.post("/offerings/republish")
+def republish_offerings(a: Actor = Depends(require(k.OFFERING_WRITE)), db: Session = Depends(get_db)):
+    """The backfill (issue #325): every offering and section of the organisation announced again. Run once per
+    organisation after deploy."""
+    return _run(svc.republish_offerings, db, a)
+
+
 @router.get("/offerings/{course_offering_id}")
 def get_offering(course_offering_id: str, _: Actor = Depends(require(k.OFFERING_READ)), db: Session = Depends(get_db)):
     return _run(svc.get_offering, db, course_offering_id)

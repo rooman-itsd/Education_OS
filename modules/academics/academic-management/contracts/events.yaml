@@ -64,7 +64,10 @@ events:
     payload: { course_id: uuid, archived_at: datetime }
 
   - name: academic-management.offering.created
-    description: A course was offered in a term.
+    description: >-
+      A course was offered in a term. POST /offerings/republish publishes it again for every offering of the
+      organisation, with the course details as they are now (the backfill, issue #325): apply a creation once, so a
+      consumer that already has the offering keeps what it has.
     version: 1
     consumers: [timetable-attendance, lms, examinations, enrolment-registration]
     payload: { course_offering_id: uuid, course_id: uuid, academic_period_id: uuid, programme_ids: "uuid[]", course_code: string, course_title: string, credits: number, course_type: string, department_id: uuid }
@@ -76,19 +79,27 @@ events:
     payload: { course_offering_id: uuid, changed_fields: "string[]" }
 
   - name: academic-management.offering.status-changed
-    description: An offering moved between planned, open, in_progress, completed and cancelled.
+    description: >-
+      An offering moved between planned, open, in_progress, completed and cancelled. POST /offerings/republish
+      announces every offering's current status with from_status equal to to_status (changed_at is then the time of
+      the republish); offering.created carries no status, so this is how a consumer that starts late learns it. Apply
+      a status by the envelope occurred_at, never by arrival order.
     version: 1
     consumers: [timetable-attendance, lms, examinations, enrolment-registration]
     payload: { course_offering_id: uuid, from_status: string, to_status: string, changed_at: datetime }
 
   - name: academic-management.section.created
-    description: A section was added to an offering.
+    description: >-
+      A section was added to an offering. POST /offerings/republish publishes it again for every section (code and
+      current capacity), followed by section.updated with its current status.
     version: 1
     consumers: [timetable-attendance, lms, enrolment-registration]
     payload: { section_id: uuid, course_offering_id: uuid, code: string, capacity: integer }
 
   - name: academic-management.section.updated
-    description: A section's capacity or status changed.
+    description: >-
+      A section's capacity or status changed. Also published by POST /offerings/republish for every section, with its
+      current capacity and status, whether or not it ever changed.
     version: 1
     consumers: [timetable-attendance, lms, enrolment-registration]
     payload: { section_id: uuid, course_offering_id: uuid, capacity: integer, status: string }

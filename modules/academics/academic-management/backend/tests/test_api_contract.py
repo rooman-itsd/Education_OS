@@ -99,6 +99,7 @@ def bodies(client, org):
         ("/offerings/{course_offering_id}/roster", "get", 200, get(f"/offerings/{o}/roster", teacher_h)),
         ("/me/offerings", "get", 200, get("/me/offerings", teacher_h)),
         ("/faculty-load", "get", 200, get("/faculty-load")),
+        ("/offerings/republish", "post", 200, ok(client.post(f"{BASE}/offerings/republish", headers=admin))),
     ]
 
 
