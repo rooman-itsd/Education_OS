@@ -265,7 +265,10 @@ which `docker-compose.api.yml` takes from `EOS_FORWARDED_ALLOW_IPS` in `.env.api
 by caller then treats all visitors as one, for example the integration hub's limit on unverified callbacks (#554).
 
 Set it to the address the nginx container reaches the API from: the same `<nginx-container-ip>` as the firewall rule
-above. Only that address: whoever is trusted can claim any visitor address.
+above. Only that address: whoever is trusted can claim any visitor address. It is the same address as
+`EOS_TRUSTED_PROXIES` (the API gateway's own setting, under "Rate limits" above): two things read it, so both are set.
+`tools/scripts/deploy-api-lxc.sh` writes both from the `PROXY_CTID` container's address when a key is missing, empty or
+loopback, and keeps a value naming another address; set them by hand only when it could not read that address.
 
 ```
 cd /opt/education-os
