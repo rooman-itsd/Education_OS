@@ -25,13 +25,11 @@ TEXTS = ("title", "probe", "empty", "unavailable")
 # never fails this test; adding one does. Remove a line once its entry has texts (the list only shrinks).
 WAITING = {
     ("coach", "wearables.alerts"): "wearables enablement",
-    ("management", "grievance.open"): "#572",
     ("hospitality-trainee", "placement-career.openings"): "#542",
     ("management-student", "placement-career.openings"): "#542",
     ("industry-coordinator", "placement-career.openings-summary"): "#542",
     ("placement-officer", "placement-career.openings-summary"): "#542",
     ("placement-officer", "placement-career.drives"): "#542",
-    ("management-student", "alumni.mentoring"): "#543",
 }  # fmt: skip
 
 # One LayoutWidget literal: a flat object (no nested braces) with an id.
