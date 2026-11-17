@@ -9,7 +9,7 @@ the API container near its memory limit, or the host's CPU at 100 %. First find 
 
 | Part | Count | Scale it by |
 |---|---|---|
-| API (`api`, one `uvicorn` process) | 1 | Give the host more CPU and memory. More processes are a code change, see below |
+| API (`api`, one `uvicorn` process) | 1 | Give the host more CPU and memory. More processes: `EOS_API_WORKERS` in `.env.api`, section 3 |
 | Event-bus relay (`relay`) | 1 | One is enough; do not start a second by hand |
 | Scheduler (`scheduler`) | 1 | One per deployment; do not start a second by hand |
 | Postgres (`db`) | 1 | More memory for the host; see "The database" below |
@@ -69,14 +69,21 @@ full table is in `../../tests/performance/README.md`):
 **When to add workers.** The `api` CPU sits near 100 % of one core under load while the container has idle cores
 (`docker stats`, section 1), and section 2 has already given it the cores.
 
-**How.** Not on the host (auto-deploy resets the checkout to `main`); it is a pull request, with the lead's agreement:
+**How.** It is a setting in `.env.api`, with the lead's agreement. Auto-deploy resets the checkout to `main` but keeps
+`.env.api` (untracked), so the setting stays; do not edit tracked files on the host.
 
 1. **Switch the pooler on first** (`../docker/README.md`, "Connection pooler"), so more processes don't exhaust
    Postgres's connections, and check it as that section says.
 2. **Set the number of workers.** `uvicorn` starts `$WEB_CONCURRENCY` processes when `--workers` is not given, which
-   is the case in `api.Dockerfile`. The pull request passes it to the `api` service in `docker-compose.api.yml`
-   (for example `WEB_CONCURRENCY: ${EOS_API_WORKERS:-1}`, so every host keeps one process until it sets
-   `EOS_API_WORKERS`). Choose no more workers than the container's cores, and start with 2.
+   is the case in `api.Dockerfile`. `docker-compose.api.yml` passes `WEB_CONCURRENCY: ${EOS_API_WORKERS:-1}` to the
+   `api` service, so every host keeps one process until it sets `EOS_API_WORKERS`. Choose no more workers than the
+   container's cores, and start with 2: set `EOS_API_WORKERS=2` in `.env.api`, then `$C up -d api` (section 1 has `$C`).
+   **Rate limits are counted per process.** The API's rate limits (`platform/api-gateway`) keep their counters in each
+   process's memory unless `EOS_REDIS_URL` names a Redis, and compose has none. With N workers a visitor's requests
+   spread over N counters, so every limit is up to N times what `.env.api` says, the sign-in limit included
+   (`EOS_RATE_LIMIT_LOGIN_PER_MINUTE`, 10 by default, so up to 10 N attempts a minute). Either accept that, or divide
+   the limits you care about by N in `.env.api`, or provide a Redis and set `EOS_REDIS_URL` (the counters are then
+   shared by every process).
 3. **Measure before and after** on staging, with the lead's agreement (the test adds `load-…` organisations to its
    database): run `tests/performance/load/run.py` there as `../../tests/performance/README.md`, "Run it", says, once
    before the change and once after, and keep both `--out` files with the pull request.
