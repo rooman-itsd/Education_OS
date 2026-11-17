@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Event payloads declared (#325 Q10). `contracts/events.yaml` gave no payload for `workflow.request.submitted`,
+  `workflow.step.advanced`, `workflow.request.approved`, `workflow.request.rejected` or
+  `workflow.request.delegated`, although the service published concrete ones, so a consumer could rely on no field.
+  Each now lists exactly the keys the service publishes (nullable `comments` marked `string?`);
+  `backend/tests/test_workflow_events_contract.py` drives every event through the service and fails if a published
+  payload's keys or value types differ from the declaration. Nothing published changes, so the events stay at
+  version 1 (the event-bus rule bumps a version only for a change a consumer could not ignore).
 - Enabled in `apps/backend/config/modules.enabled.yaml` (`platform:`, mounted at `/api/v1/workflow`) and
   `apps/frontend/config/modules.enabled.yaml` (`workflow.approvals-pending` on the Department Admin dashboard).
 - SLA monitoring (#317 follow-up). Deadlines were only computed when read, a step without `sla_hours` had none, and
