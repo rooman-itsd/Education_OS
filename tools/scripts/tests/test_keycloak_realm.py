@@ -6,12 +6,16 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "keycloak-realm.sh"
+# The bash on PATH, by its full path: on Windows, subprocess with a bare "bash" finds System32's WSL launcher
+# before Git Bash (CreateProcess searches the system folder first), which cannot open a Windows path.
+BASH = shutil.which("bash") or "bash"
 PASSWORD = "s3cret pass&word"
 TOKEN = "admin-token-123"
 
@@ -134,6 +138,9 @@ FAKE_CURL = textwrap.dedent(
 def kc(tmp_path):
     if shutil.which("bash") is None:
         pytest.skip("bash not available")
+    if sys.platform == "win32":
+        # keycloak-realm.sh runs on the Linux API host and needs python3, which on Windows is a Store shortcut.
+        pytest.skip("keycloak-realm.sh runs on the Linux API host (it needs python3)")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     curl = bin_dir / "curl"
@@ -153,7 +160,7 @@ def kc(tmp_path):
     class KC:
         def run(self, *args, **extra_env):
             return subprocess.run(
-                ["bash", str(SCRIPT), *args],
+                [BASH, str(SCRIPT), *args],
                 env={**env, **extra_env},
                 capture_output=True,
                 text=True,
