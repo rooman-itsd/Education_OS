@@ -17,6 +17,9 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
+# The bash on PATH, by its full path: on Windows, subprocess with a bare "bash" finds System32's WSL launcher
+# before Git Bash (CreateProcess searches the system folder first), which cannot open a Windows path.
+BASH = shutil.which("bash") or "bash"
 CHECKS = ("check-root.py", "check-stack.py", "check-boundaries.py", "check-manifests.py", "check-migrations.py")
 
 
@@ -54,7 +57,7 @@ def _layout(
 def _run(script: Path) -> subprocess.CompletedProcess:
     # Not a git repository, so the commit-message step is skipped, as the script intends outside a checkout.
     env = {**os.environ, "GIT_CEILING_DIRECTORIES": str(script.parents[2].parent)}
-    return subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env, cwd=script.parents[2])
+    return subprocess.run([BASH, str(script)], capture_output=True, text=True, env=env, cwd=script.parents[2])
 
 
 @pytest.mark.parametrize("venv_dir", ["bin", "Scripts"])
@@ -105,7 +108,7 @@ def test_check_commits_fails_when_git_log_fails(tmp_path):
     _git(tmp_path, "-c", "user.email=a@b.c", "-c", "user.name=a", "commit", "-q", "--allow-empty", "-m", "oops")
     script = ROOT / "tools" / "scripts" / "check-commits.sh"
     unknown = "0" * 40
-    result = subprocess.run(["bash", str(script), unknown, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    result = subprocess.run([BASH, str(script), unknown, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
     assert result.returncode != 0
     assert "commit messages ok" not in result.stdout
 
@@ -117,8 +120,8 @@ def test_check_commits_still_flags_a_bad_message_and_passes_a_good_one(tmp_path)
     _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "feat(repo): the first commit")
     base = _git(tmp_path, "rev-parse", "HEAD").stdout.strip()
     _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "fix(repo): a properly scoped message")
-    ok = subprocess.run(["bash", str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    ok = subprocess.run([BASH, str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
     assert ok.returncode == 0 and "commit messages ok" in ok.stdout
     _git(tmp_path, *ident, "commit", "-q", "--allow-empty", "-m", "fixed stuff")
-    bad = subprocess.run(["bash", str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+    bad = subprocess.run([BASH, str(script), base, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
     assert bad.returncode != 0 and "bad commit message: fixed stuff" in bad.stdout
