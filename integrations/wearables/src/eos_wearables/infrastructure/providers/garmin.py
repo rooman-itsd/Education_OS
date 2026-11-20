@@ -7,6 +7,8 @@ until the program approves Rooman a push is trusted only as far as that match go
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import urlencode
@@ -22,6 +24,7 @@ from .base import (
     Provider,
     accept,
     body_hash,
+    hex_equal,
     integer,
     json_any,
     num,
@@ -57,7 +60,7 @@ class GarminProvider(Provider):
     push = True
     backfill_mode = "request"
     rate_limit = "not published; data is pushed, so it costs no calls"
-    platform_credential_names = ("GARMIN_CLIENT_ID", "GARMIN_CLIENT_SECRET")
+    platform_credential_names = ("GARMIN_CLIENT_ID", "GARMIN_CLIENT_SECRET", "GARMIN_WEBHOOK_SIGNATURE_KEY")
 
     def capabilities(self, ctx: Context | None) -> dict:
         caps = super().capabilities(ctx)
@@ -264,8 +267,15 @@ class GarminProvider(Provider):
                         yield key, text(item["userId"], 80), item
 
     def verify_inbound(self, req: InboundRequest, link_of: Callable[[str], dict | None]) -> dict:
+        key = self.cfg.garmin_webhook_signature_key
+        sig = req.header("garmin-webhook-signature") or req.header("x-garmin-signature")
+        if not key or not sig or req.method.upper() != "POST":
+            return reject()
+        expected = hmac.new(key.encode(), req.raw_body, hashlib.sha256).hexdigest()
+        if not hex_equal(expected, sig):
+            return reject()
         body = json_any(req.raw_body)
-        if req.method.upper() != "POST" or not isinstance(body, dict):
+        if not isinstance(body, dict):
             return reject()
         subjects = {s for _k, s, _i in self._entries(body)}
         known = {s: link_of(s) for s in subjects}

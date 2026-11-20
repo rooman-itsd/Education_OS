@@ -49,6 +49,7 @@ class LinkState(Base, TenantMixin):
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
     failing_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tokens: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class Record(Base, TenantMixin):

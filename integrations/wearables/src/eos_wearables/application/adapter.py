@@ -23,6 +23,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from eos_core import settings as core_settings
 from eos_core.db import SessionLocal, scoped
 from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import delete, select
@@ -37,7 +38,13 @@ from ..infrastructure.config import Config
 from ..infrastructure.http import Http
 from ..infrastructure.models import AuditEntry, LinkState, ReadLog, Record, aware, iso
 from ..infrastructure.providers import PROVIDERS
-from ..infrastructure.providers.base import InboundEvent, InboundRequest, Normal, Provider, utcnow
+from ..infrastructure.providers.base import (
+    InboundEvent,
+    InboundRequest,
+    Normal,
+    Provider,
+    utcnow,
+)
 from ..infrastructure.providers.mock import MockProvider
 
 log = logging.getLogger("eos.wearables")
@@ -102,6 +109,8 @@ class WearablesAdapter:
             raise AdapterError("not_configured", "this adapter has no such provider")
         provider: Provider = cls(cfg, Http(self._client_factory, cfg.http_timeout_s), self.clock)
         if (ctx.mode or cfg.mode) == "mock":
+            if not core_settings.settings.dev_mode:
+                raise AdapterError("not_configured", "mock mode is refused unless EOS_DEV_MODE=true")
             provider = MockProvider(provider)
         return provider, cfg
 
@@ -207,6 +216,7 @@ class WearablesAdapter:
                     row = LinkState(organisation_id=c.organisation_id, connection_id=c.connection_id, account_link_id=link_id, person_id=person_id,
                                     provider=c.provider, data_types=self._types_for(provider, c, []))  # fmt: skip
                     db.add(row)
+                row.tokens = out.get("secrets")
                 self._activate(row, out["provider_subject"])
                 db.flush()
                 self._audit(db, c, c.organisation_id, "link.connected", "link", row.account_link_id)
@@ -233,7 +243,20 @@ class WearablesAdapter:
         def run(c: Context):
             provider, _ = self._provider(c)
             try:
-                return provider.refresh_authorisation(c)
+                out = provider.refresh_authorisation(c)
+                if out.get("secrets") and c.account_link and c.account_link.get("id"):
+                    with self._db(c.organisation_id) as db:
+                        row = db.scalar(
+                            scoped(
+                                db,
+                                select(LinkState).where(LinkState.account_link_id == str(c.account_link["id"])),
+                                LinkState,
+                            )
+                        )
+                        if row is not None:
+                            row.tokens = out["secrets"]
+                            db.commit()
+                return out
             except AdapterError as e:
                 if e.code == "consent_required" and c.account_link and c.account_link.get("id"):
                     self._set_status(c, str(c.account_link["id"]), "expired", e.code)  # the link can no longer fetch
@@ -765,7 +788,30 @@ class WearablesAdapter:
             row = db.scalar(scoped(db, select(LinkState).where(LinkState.account_link_id == link_id), LinkState))
             if row is None:
                 return []
+            link_ctx = (
+                replace(c, secrets=row.tokens or {})
+                if c
+                else Context(
+                    organisation_id=org,
+                    connection_id=row.connection_id,
+                    provider=provider.id,
+                    mode=cfg.mode,
+                    secrets=row.tokens or {},
+                    account_link={
+                        "id": row.account_link_id,
+                        "person_id": row.person_id,
+                        "provider_subject": row.provider_subject,
+                    },
+                )
+            )
             if ev.kind == "revoked":
+                deauthorized, new_tokens = provider.is_deauthorized(link_ctx)
+                if not deauthorized:
+                    if new_tokens:
+                        row.tokens = new_tokens
+                        db.commit()
+                    log.warning("wearables: unconfirmed deauthorisation for subject %s ignored", ev.subject)
+                    return []
                 self._revoke_row(db, c, row, "link.revoked_by_provider")
                 return [_note("link_revoked_by_provider", {"account_link_subject": ev.subject})]
             if ev.kind == "narrowed":
@@ -773,11 +819,14 @@ class WearablesAdapter:
                 self._audit(db, c, org, "link.narrowed", "link", link_id)
                 db.commit()
             elif ev.kind == "deleted":
+                confirmed_ids = [rid for rid in ev.record_ids if provider.is_activity_deleted(link_ctx, rid)]
+                if not confirmed_ids:
+                    return []
                 db.execute(
                     delete(Record).where(
                         Record.account_link_id == link_id,
                         Record.organisation_id == org,
-                        Record.provider_record_id.in_([i[:200] for i in ev.record_ids]),
+                        Record.provider_record_id.in_([i[:200] for i in confirmed_ids]),
                     )
                 )
                 self._audit(db, c, org, "records.deleted", "link", link_id)

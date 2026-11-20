@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from eos_core import settings as core_settings
+
 from ..domain.context import MODES
 from ..domain.errors import AdapterError
 
@@ -54,6 +56,7 @@ class Config:
     http_timeout_s: int
     garmin_client_id: str = ""
     garmin_client_secret: str = field(default="", repr=False)
+    garmin_webhook_signature_key: str = field(default="", repr=False)
     polar_client_id: str = ""
     polar_client_secret: str = field(default="", repr=False)
     polar_webhook_signature_key: str = field(default="", repr=False)
@@ -65,9 +68,11 @@ class Config:
 
     @classmethod
     def load(cls) -> Config:
-        mode = _env("MODE", "mock").lower()
+        mode = _env("MODE", "sandbox").lower()
         if mode not in MODES:
             raise AdapterError("not_configured", "WEARABLES_MODE must be mock, sandbox or live")
+        if mode == "mock" and not core_settings.settings.dev_mode:
+            raise AdapterError("not_configured", "WEARABLES_MODE=mock is refused unless EOS_DEV_MODE=true")
         strava_base = _env("STRAVA_API_BASE_URL", "https://www.strava.com/api/v3").rstrip("/")
         strava_site = strava_base.rsplit("/api/", 1)[0]
         return cls(
@@ -95,6 +100,7 @@ class Config:
             http_timeout_s=_int("HTTP_TIMEOUT_S", 15, 1, 120),
             garmin_client_id=_env("GARMIN_CLIENT_ID"),
             garmin_client_secret=_env("GARMIN_CLIENT_SECRET"),
+            garmin_webhook_signature_key=_env("GARMIN_WEBHOOK_SIGNATURE_KEY"),
             polar_client_id=_env("POLAR_CLIENT_ID"),
             polar_client_secret=_env("POLAR_CLIENT_SECRET"),
             polar_webhook_signature_key=_env("POLAR_WEBHOOK_SIGNATURE_KEY"),
@@ -107,7 +113,11 @@ class Config:
 
     def missing_credentials(self, provider: str) -> list[str]:
         needed = {
-            "garmin": {"GARMIN_CLIENT_ID": self.garmin_client_id, "GARMIN_CLIENT_SECRET": self.garmin_client_secret},
+            "garmin": {
+                "GARMIN_CLIENT_ID": self.garmin_client_id,
+                "GARMIN_CLIENT_SECRET": self.garmin_client_secret,
+                "GARMIN_WEBHOOK_SIGNATURE_KEY": self.garmin_webhook_signature_key,
+            },
             "polar": {
                 "POLAR_CLIENT_ID": self.polar_client_id,
                 "POLAR_CLIENT_SECRET": self.polar_client_secret,
