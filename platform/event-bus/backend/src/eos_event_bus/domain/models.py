@@ -35,6 +35,8 @@ class Event:
     actor: str | None
     occurred_at: datetime
     payload: dict
+    # The super admin behind `actor` when the change was made while impersonating them (security review N3).
+    impersonated_by: str | None = None
 
     @classmethod
     def of(cls, row: OutboxEvent) -> Event:
@@ -46,6 +48,7 @@ class Event:
             actor=row.actor,
             occurred_at=row.occurred_at,
             payload=dict(row.payload or {}),
+            impersonated_by=row.impersonated_by,
         )
 
 

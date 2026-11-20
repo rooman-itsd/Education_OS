@@ -6,6 +6,9 @@ The table's DDL belongs to platform/event-bus's Alembic chain; this model must m
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text
@@ -21,6 +24,9 @@ class OutboxEvent(Base):
     organisation_id: Mapped[str | None] = mapped_column(String(36), index=True, nullable=True)
     name: Mapped[str] = mapped_column(String(120), index=True)
     actor: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The super admin who was really acting when `actor` is a user being impersonated (security review N3). Null
+    # for every other event. Set by publish() from the request's impersonation context, never from a payload.
+    impersonated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     published: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -33,6 +39,27 @@ class OutboxEvent(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+# Who is really acting while a super admin impersonates an organisation user: the token's `imp` claim. The API host
+# sets it for the whole request (apps/backend, eos_backend.actor), before any route or dependency runs, so every
+# event the request publishes carries it whichever module publishes and however it names `actor`.
+_impersonated_by: ContextVar[str | None] = ContextVar("eos_impersonated_by", default=None)
+
+
+def current_impersonator() -> str | None:
+    """The super admin impersonating the request's user, or None when nobody is impersonating."""
+    return _impersonated_by.get()
+
+
+@contextmanager
+def impersonation(super_admin_id: str | None) -> Iterator[None]:
+    """Run a block as `super_admin_id` impersonating the token's user (None: nobody is impersonating)."""
+    token = _impersonated_by.set(super_admin_id or None)
+    try:
+        yield
+    finally:
+        _impersonated_by.reset(token)
+
+
 def publish(
     session: Session,
     name: str,
@@ -41,6 +68,15 @@ def publish(
     actor: str | None = None,
     version: int = 1,
 ) -> OutboxEvent:
-    ev = OutboxEvent(name=name, organisation_id=organisation_id, payload=payload, actor=actor, version=version)
+    """`actor` stays the user the request acted as (impersonated or not: their permissions applied); the
+    envelope's `impersonated_by` names the super admin behind it, from the request context."""
+    ev = OutboxEvent(
+        name=name,
+        organisation_id=organisation_id,
+        payload=payload,
+        actor=actor,
+        version=version,
+        impersonated_by=current_impersonator(),
+    )
     session.add(ev)
     return ev

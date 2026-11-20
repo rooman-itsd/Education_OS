@@ -2,7 +2,7 @@
 #
 # THE ENVELOPE IS DEFINED HERE AND NOWHERE ELSE.
 # Every module's contracts/events.yaml describes only the `payload` of its events.
-# The six envelope fields below are added by the publisher and must not be repeated in a payload.
+# The envelope fields below are added by the publisher and must not be repeated in a payload.
 #
 # Naming: <module>.<entity>.<past-tense-verb>   e.g. admissions.application.submitted
 module: event-bus
@@ -45,6 +45,15 @@ envelope:
     description: >-
       The user who caused the change. Null when the cause was the system (a scheduled job,
       a relay retry, an inbound webhook).
+  impersonated_by:
+    type: uuid
+    required: false
+    description: >-
+      The super admin who was really acting when `actor` is an organisation user being
+      impersonated (tenancy's impersonation token, `imp` claim). `actor` stays that user: their
+      permissions applied. Null for every event not raised under impersonation. Set by
+      eos_core.events.publish() from the request, never by a module or a payload. Added
+      20 November 2026 (security review N3); optional, so consumers that ignore it are unaffected.
   occurred_at:
     type: datetime
     required: true

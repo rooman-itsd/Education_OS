@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Impersonated actions name the super admin (security review N3, #672). The consumer records the envelope's
+  `impersonated_by` as `context.impersonated_by`, as `POST /records` already did from the token: until now a record
+  written from an event under impersonation named only the impersonated user.
 - Records identity's new user events: `identity.user.updated`, `identity.user.disabled`, `identity.user.enabled` and
   `identity.user.erased` (DPDP gap D10, #148). Their payloads carry ids and field names only, never a name or address.
 - Contact details never reach an immutable record (review of #434). `tenancy.organisation.registered` carries
