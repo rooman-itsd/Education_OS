@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Security review N6 (#673): a module's entity types (`<module>.<type>`) are reserved for
+  `eos_core.workflow.submit`. `POST /requests` refuses an entity type containing a dot with
+  `403 reserved_entity_type` (students and faculty hold `workflow:request:create`, so they could make up a request
+  whose approval a module would take for its own record); `submit()` accepts only such namespaced types. Consumers
+  match an outcome's `request_id` to the id `submit()` returned. Contract 0.3.0; README "Calling workflow from a
+  module" and "Reacting to a decision" updated.
 - Event payloads declared (#325 Q10). `contracts/events.yaml` gave no payload for `workflow.request.submitted`,
   `workflow.step.advanced`, `workflow.request.approved`, `workflow.request.rejected` or
   `workflow.request.delegated`, although the service published concrete ones, so a consumer could rely on no field.

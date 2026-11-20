@@ -32,7 +32,10 @@ events:
       current_step_name: string
       approver_role: string
   - name: workflow.request.approved
-    description: A workflow request received final approval and completed successfully.
+    description: >-
+      A workflow request received final approval and completed successfully. A module acts on it only for its own
+      namespaced entity_type (`<module>.<type>`, which only eos_core.workflow.submit creates; POST /requests refuses
+      it) and only when request_id is the id submit() returned for that record (security review N6).
     payload:
       request_id: uuid
       chain_id: uuid
@@ -42,7 +45,9 @@ events:
       approved_by: uuid
       comments: string?
   - name: workflow.request.rejected
-    description: A workflow request was rejected at an approval step.
+    description: >-
+      A workflow request was rejected at an approval step. Matched by a module as workflow.request.approved is: its
+      own namespaced entity_type and the request_id submit() returned.
     payload:
       request_id: uuid
       chain_id: uuid

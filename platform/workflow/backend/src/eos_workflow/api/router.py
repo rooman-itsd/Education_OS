@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from eos_core.db import get_db
+from eos_core.workflow import is_module_entity_type
 from eos_identity.api.deps import Principal, require
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -155,6 +156,17 @@ def create_request(
 ):
     if not p.organisation_id:
         raise HTTPException(400, "organisation_id required")
+    if is_module_entity_type(body.entity_type):
+        # Security review N6: a module's entity types (`<module>.<type>`) are created only in-process through
+        # eos_core.workflow.submit, by the module itself. Otherwise anyone holding workflow:request:create could make
+        # up a request whose approval event a module would take for its own record.
+        return JSONResponse(
+            {
+                "detail": f"entity_type {body.entity_type!r} is reserved: only its module submits it for approval",
+                "code": "reserved_entity_type",
+            },
+            status_code=403,
+        )
     try:
         req, created = service.create_request(
             db,

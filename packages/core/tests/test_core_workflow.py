@@ -73,3 +73,17 @@ def test_no_organisation_or_requester_is_refused_before_the_hook(monkeypatch, mi
     with pytest.raises(WorkflowRefusedError) as e:
         workflow.submit(None, "" if missing == "organisation_id" else "org-1", **args)
     assert e.value.code == INVALID_REQUEST
+
+
+@pytest.mark.parametrize("entity_type", ["result_set", "", ".result_set", "examinations.", " .x"])
+def test_an_entity_type_that_is_not_a_modules_namespaced_one_is_refused_before_the_hook(monkeypatch, entity_type):
+    """Security review N6: submit() creates only `<module>.<type>` requests, the types POST /requests refuses."""
+    monkeypatch.setattr(workflow.hooks, "submit", lambda *a, **k: pytest.fail("hook called"))
+    with pytest.raises(WorkflowRefusedError) as e:
+        workflow.submit(None, "org-1", **{**ARGS, "entity_type": entity_type})
+    assert e.value.code == INVALID_REQUEST
+
+
+def test_is_module_entity_type():
+    assert workflow.is_module_entity_type("examinations.result_set")
+    assert not workflow.is_module_entity_type("leave") and not workflow.is_module_entity_type(None)

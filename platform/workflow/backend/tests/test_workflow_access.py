@@ -207,3 +207,17 @@ def test_pending_queue_needs_the_approval_permission_like_every_other_read(workf
     assert chain_for_dept
     leave = _submit(workflow_client, org, org.student, "leave2").json()
     assert _ids(workflow_client.get(f"{PREFIX}/requests/pending", headers=org.headers(org.dept_admin))) == {leave["id"]}
+
+
+def test_a_modules_entity_type_cannot_be_created_over_http(workflow_client, workflow_db):
+    """Security review N6 (#673): `<module>.<type>` entity types are reserved for eos_core.workflow.submit, so the
+    approval of a request a student made up can never be taken by a module for its own record. Nothing is written."""
+    org = Org(workflow_db)
+    _chain(workflow_client, org, "leave", sample_chain()["steps"])
+    for user in (org.student, org.faculty, org.admin):
+        res = _submit(workflow_client, org, user, "leave", entity_type="examinations.result_set")
+        assert res.status_code == 403, res.text
+        assert res.json()["code"] == "reserved_entity_type"
+    listed = workflow_client.get(f"{PREFIX}/requests", headers=org.headers(org.admin))
+    assert listed.status_code == 200 and listed.json()["total"] == 0
+    assert _submit(workflow_client, org, org.student, "leave").status_code == 201  # a plain type is still filed

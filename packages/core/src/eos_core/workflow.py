@@ -20,7 +20,19 @@ from typing import Any
 # WorkflowRefusedError.code values
 UNKNOWN_CHAIN = "unknown_chain"  # no active chain with that code in this organisation (its admin creates it)
 CHAIN_HAS_NO_STEPS = "chain_has_no_steps"  # the chain exists but has no approval step
-INVALID_REQUEST = "invalid_request"  # a field is missing, blank or too long
+INVALID_REQUEST = "invalid_request"  # a field is missing, blank or too long, or entity_type is not a module's
+
+# A module's entity types are namespaced `<module>.<type>` (e.g. `examinations.result_set`) and are RESERVED: only
+# `submit()`, in-process, creates a request for one. platform/workflow's `POST /requests` refuses them (403
+# `reserved_entity_type`), so a user holding `workflow:request:create` (students and faculty do) cannot make up a
+# request whose approval a module would take for its own record (security review N6). An entity type without a dot
+# (`leave`, `expense`) is a free-standing request people file through the API; no module acts on its outcome.
+ENTITY_TYPE_SEPARATOR = "."
+
+
+def is_module_entity_type(entity_type: str | None) -> bool:
+    """Whether `entity_type` is reserved for a module (`<module>.<type>`): created only through `submit()`."""
+    return ENTITY_TYPE_SEPARATOR in (entity_type or "")
 
 
 class WorkflowError(Exception):
@@ -69,9 +81,14 @@ def submit(
     request created the first time (`created` False) instead of a second one. `context` is stored with the request
     and shown to approvers; keep it to what they need to decide.
 
+    `entity_type` must be the module's own namespaced type, `<module>.<type>` (e.g. `examinations.result_set`):
+    those are reserved for `submit()`, and the HTTP API refuses them, so a request for one was always made by the
+    module itself. Anything else is refused with INVALID_REQUEST.
+
     Returns {"id", "status", "current_step_order", "created"}: a new request is "pending" at its chain's first step.
     The outcome arrives later as the event workflow.request.approved or workflow.request.rejected, carrying the
-    same entity_type and entity_id.
+    same request_id (the returned "id"), entity_type and entity_id. A consumer acts on an outcome only when its
+    `request_id` is the id `submit()` returned for that record (keep it with the record).
 
     Raises WorkflowUnavailableError when workflow is not wired in this process, and WorkflowRefusedError (code
     UNKNOWN_CHAIN, CHAIN_HAS_NO_STEPS or INVALID_REQUEST) when workflow refuses it.
@@ -80,6 +97,11 @@ def submit(
         raise WorkflowUnavailableError("platform/workflow is not wired in this process (eos_core.workflow.hooks)")
     if not organisation_id:
         raise WorkflowRefusedError(INVALID_REQUEST, "organisation_id is required")
+    module, _, kind = (entity_type or "").partition(ENTITY_TYPE_SEPARATOR)
+    if not module.strip() or not kind.strip():
+        raise WorkflowRefusedError(
+            INVALID_REQUEST, f"entity_type {entity_type!r} must be the module's own, namespaced <module>.<type>"
+        )
     if not requested_by:
         raise WorkflowRefusedError(INVALID_REQUEST, "requested_by is required")
     return hooks.submit(

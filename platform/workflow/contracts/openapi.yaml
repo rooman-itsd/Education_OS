@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: workflow API
-  version: 0.2.0
+  version: 0.3.0
   description: "Configurable workflow and approval engine (state machines, SLAs, delegation)."
 servers:
   - url: /api/v1/workflow
@@ -112,7 +112,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkflowRequest"
         "400": { $ref: "#/components/responses/BadRequest" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403":
+          description: >-
+            Missing workflow:request:create, or `code: reserved_entity_type`: the entity_type is a module's
+            (`<module>.<type>`, any type containing a dot), which only that module creates, in-process, through
+            eos_core.workflow.submit (security review N6). Nothing is written.
 
   /requests/pending:
     get:
@@ -297,7 +301,13 @@ components:
       required: [chain_code, entity_type, entity_id, title]
       properties:
         chain_code: { type: string, minLength: 1, maxLength: 64 }
-        entity_type: { type: string, minLength: 1, maxLength: 64 }
+        entity_type:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            The kind of record. Over HTTP a free-standing type without a dot (`leave`, `expense`); a module's
+            namespaced `<module>.<type>` is reserved for eos_core.workflow.submit and refused here (403).
         entity_id: { type: string, minLength: 1, maxLength: 64 }
         title: { type: string, minLength: 1, maxLength: 255 }
         description: { type: string, nullable: true }
