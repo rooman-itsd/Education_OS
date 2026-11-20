@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Notification history is now purged (DPDP gap D14, part of #148). `NOTIFICATION_HISTORY_RETENTION_DAYS` (default 90)
+  was documented but read by nothing, so message addresses, subjects and in_app bodies were kept forever. New platform
+  job `notification.prune-history` (`45 2 * * *`, entry point `eos.scheduler_jobs`, handled by the existing
+  `scheduler.job.due` consumer, reporting `notification.job.finished`) deletes `sent`, `delivered`, `failed`,
+  `bounced` and `suppressed` messages last changed before the cutoff, per organisation and in batches, and keeps
+  `queued` and `sending` ones. The setting is clamped to 1..36500 days. Idempotent.
 - The rest of tenancy's stub emails are notification's (#316 follow-up): new templates
   `tenancy.organisation.suspended`, `.closed`, `.reactivated` and `.deletion_scheduled`, chosen by
   `on_status_changed` from `tenancy.organisation.archived`, `.suspended` and (new) `.activated`: suspended or

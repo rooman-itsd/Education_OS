@@ -83,7 +83,29 @@ reminder and invoice have no caller at all — see the limitations below.
 | Preferences, transactional mail that cannot be switched off, in-app inbox | built |
 | Memory transport (dev and tests), refused outside dev mode | built |
 | `recover_stuck()` for abandoned messages and due retries, with a bounded recovery-failure policy | run every 5 minutes by the scheduled job `notification.recover-stuck` (`application/jobs.py`) |
+| History retention: finished messages older than `NOTIFICATION_HISTORY_RETENTION_DAYS` (default 90) are deleted, per organisation | run daily at 02:45 by the scheduled job `notification.prune-history` (`application/retention.py`); see "History retention" |
 | Alembic chain `db/` with RLS, fresh and existing-database paths | built |
+
+## History retention
+
+`NOTIFICATION_HISTORY_RETENTION_DAYS` (default 90, valid 1..36500, clamped and logged once; unparseable text means 90)
+is enforced by the platform job `notification.prune-history` (cron `45 2 * * *`, entry point
+`eos.scheduler_jobs`), which the scheduler fires and this module's `scheduler.job.due` consumer runs. It reports
+`notification.job.finished` with the organisations scanned, rows deleted and organisations that failed.
+
+- **Deleted:** messages in `sent`, `delivered`, `failed`, `bounced` or `suppressed` whose `updated_at` is older than
+  the cutoff. A message row holds the recipient address, subject, variables and, for in_app, the body. There is no
+  separate delivery-attempt table (attempts are columns on the row), so deleting the row removes everything.
+- **Kept:** `queued` and `sending` messages, however old: they have not been sent yet or are held by a worker, and
+  `notification.recover-stuck` still has to deliver or fail them. They age out once finished.
+- **Per organisation:** the organisations with old rows are listed in platform scope (ids only), then each is purged in
+  its own organisation scope, in batches of 1000. One organisation failing does not stop the others; the run is then
+  reported `failed` and the next day retries.
+- **Idempotent:** a second run finds nothing older than the cutoff. Templates and preferences are not history and are
+  never touched.
+- **Consequences:** an in_app inbox entry disappears from the recipient's inbox after the retention period. The
+  idempotency key (`client_token`, `source_event_id`) goes with the row, so an event redelivered after the period
+  would send again; the relay redelivers within days, not months.
 
 ## Reacting to other modules' events
 

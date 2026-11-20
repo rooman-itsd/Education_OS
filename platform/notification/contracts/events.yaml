@@ -63,9 +63,11 @@ events:
   - name: notification.job.finished
     version: 1
     description: >-
-      The outcome of a notification.recover-stuck run, for platform/scheduler, which closes the run
-      (see platform/scheduler/contracts/events.yaml). detail counts what the sweep found, re-drove,
-      failed, skipped and exhausted, or names the error class if the sweep itself failed.
+      The outcome of a notification.recover-stuck or notification.prune-history run, for platform/scheduler,
+      which closes the run (see platform/scheduler/contracts/events.yaml). For recover-stuck, detail counts what
+      the sweep found, re-drove, failed, skipped and exhausted; for prune-history, the organisations scanned,
+      rows deleted and organisations that failed (outcome failed when any did). It names the error class if
+      the job itself failed.
     payload:
       run_id: uuid
       outcome: string
@@ -87,4 +89,4 @@ consumes:
   - billing.trial.expiring              # 7, 3 and 1 days before the trial ends
   - billing.trial.expired               # trial ended, how to upgrade
   - billing.subscription.upgraded       # plan changed, what is now available
-  - scheduler.job.due                   # notification.recover-stuck: retry due and abandoned messages
+  - scheduler.job.due                   # notification.recover-stuck (retry due and abandoned messages), notification.prune-history (retention)
