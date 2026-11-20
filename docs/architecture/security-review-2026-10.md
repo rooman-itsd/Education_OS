@@ -1,7 +1,5 @@
 # Security review, October 2026 (v1.0 launch)
 
-Updated in November: [security-review-2026-11.md](security-review-2026-11.md) reviews what merged after this one.
-
 Internal review before the 6 November 2026 release (issue #147, batch #314). Scope: the platform core
 (identity, tenancy, billing, the host and its entitlement gate), the registration flow, the row-level
 security model, and every module merged in October. The external penetration test is after launch.
