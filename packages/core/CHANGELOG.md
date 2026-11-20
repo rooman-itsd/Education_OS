@@ -5,6 +5,9 @@ All notable changes to `eos-core`. Follows Keep a Changelog, semver per package.
 ## Unreleased
 
 ### Added
+- `Settings.check_secrets()` (security review N21, October S7 follow-up): with `EOS_DEV_MODE` false it raises
+  `InsecureSettingsError` when `EOS_JWT_SECRET` is unset or the built-in development key (`DEV_JWT_SECRET`), or
+  shorter than 32 bytes. apps/backend calls it first thing in `create_app`, so such an API never starts.
 - `eos_core.workflow` (#325 Q10): `submit(db, organisation_id, *, chain_code, entity_type, entity_id, title,
   requested_by, description=None, context=None, client_token=None) -> dict` sends a record for approval through
   platform/workflow without importing it. It delegates to `hooks.submit`, None until the host wires it

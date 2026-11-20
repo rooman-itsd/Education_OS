@@ -131,6 +131,15 @@ else
 fi
 # An .env.api from before the eos_app role: give the API its own database password, generated in the container.
 in_ct "grep -q '^EOS_APP_DB_PASSWORD=.' $APP/infra/docker/.env.api || printf '\nEOS_APP_DB_PASSWORD=%s\n' \"\$(openssl rand -hex 24)\" >> $APP/infra/docker/.env.api"
+# The command, run inside the container, that gives the env file FILE a signing key the API accepts outside dev mode
+# (eos_core Settings.check_secrets, security review N21): at least 32 bytes and not the built-in development key. A
+# missing, short or development key is replaced by a new random one, which signs everyone out once; a good key is
+# kept. tools/scripts/tests/test_deploy_jwt_secret.py runs it.
+jwt_secret_cmd() { # jwt_secret_cmd FILE
+  local file="$1"
+  echo "f=$file; v=\$(sed -n 's/^EOS_JWT_SECRET=//p' \$f | tail -n 1); { [ \$(printf %s \"\$v\" | wc -c) -ge 32 ] && [ \"\$v\" != 'dev-only-change-me-dev-only-change-me-32b' ]; } || { sed -i '/^EOS_JWT_SECRET=/d' \$f; printf '\nEOS_JWT_SECRET=%s\n' \"\$(openssl rand -hex 32)\" >> \$f; echo '   EOS_JWT_SECRET was missing or unsafe: a new one is set (everyone signs in again)'; }"
+}
+in_ct "$(jwt_secret_cmd "$APP/infra/docker/.env.api")"
 # Keycloak (profile `oidc`) publishes its port on the container's LAN address only, where the proxy reaches it.
 in_ct "grep -q '^KEYCLOAK_BIND=.' $APP/infra/docker/.env.api || { sed -i '/^KEYCLOAK_BIND=/d' $APP/infra/docker/.env.api; printf '\nKEYCLOAK_BIND=%s\n' $CT_IP >> $APP/infra/docker/.env.api; }"
 
