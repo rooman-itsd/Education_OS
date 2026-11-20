@@ -9,6 +9,7 @@ import hashlib
 import hmac
 
 from cryptography.fernet import Fernet, InvalidToken
+from eos_core import settings as core_settings
 
 from ..domain.errors import AdapterError
 from .config import Config
@@ -19,7 +20,7 @@ _DEV_KEY = base64.urlsafe_b64encode(hashlib.sha256(b"video-conferencing developm
 def _key(cfg: Config) -> bytes:
     if cfg.data_key:
         return cfg.data_key.encode()
-    if cfg.mode == "mock":
+    if cfg.mode == "mock" and core_settings.settings.dev_mode:
         return _DEV_KEY
     raise AdapterError("not_configured", "VIDEO_CONFERENCING_DATA_KEY is not set")
 
