@@ -1,0 +1,2 @@
+[eos.integration_adapters]
+fake-adapter = hub_fake_adapter:FakeAdapter

@@ -80,6 +80,15 @@ events:
       finish it on the provider's portal. The caller shows the files and the steps from the operation's output.
     payload: { organisation_id: uuid, delivery_id: uuid, port: string, operation: string, caller_module: string, caller_reference: string }
 
+  # --- Scheduled jobs (platform/scheduler's protocol) ----------------------------------------------------------
+  - name: integration-hub.job.finished
+    version: 1
+    description: >-
+      One of the hub's scheduled jobs (process-deliveries, health-checks, refresh-tokens, purge) finished; closes the
+      scheduler's run. Added by the build: platform/scheduler requires <module>.job.finished from every module that
+      declares a job.
+    payload: { run_id: uuid, outcome: string, detail: string }
+
   # --- Port: certificate-issuance ------------------------------------------------------------------------------
   - name: integration-hub.certificate.issued
     version: 1
