@@ -145,3 +145,67 @@ and in some modules before/after snapshots and a reason), purged with the organi
 deserve the institution's strictest roles: health and injuries (sports-nutrition-health, athlete-performance
 clearance), grievances about sexual harassment and ragging (grievance), national ID numbers (student-information),
 financial data (hr-payroll, fees-accounts concessions), children's data (below), and location (transport).
+
+## 4. Consent and notice at registration
+
+**Organisation sign-up, before this pass.**
+
+- The public site's register page (`modules/student-lifecycle/web-portal-cms/frontend/src/public/pages/RegisterPage.tsx`)
+  had a required box, "I accept the Education OS terms of service on behalf of this organisation", with no link: no
+  terms or privacy notice existed. It sends `accepted_terms: true`.
+- The dashboard app's sign-up (`/app#signup`, `apps/frontend/src/auth/SignUp.tsx`) has **no box at all** and sends
+  `accepted_terms: true` for every registration (gap D3).
+- `platform/tenancy` refused `accepted_terms: false` (400, "terms must be accepted") but stored nothing: no version,
+  no time, no user. No test covered the refusal.
+
+**Done in this pass.**
+
+- **#665 (merged):** the organisation records `terms_version` (`EOS_TERMS_VERSION`, default `2026-11-20`),
+  `terms_accepted_at` and `terms_accepted_by` (the first administrator's user id); they are in the organisation's
+  responses and its export, and `tenancy.organisation.registered` carries the version. Migration `tenancy_0003`.
+  Tests: `platform/tenancy/backend/tests/test_terms_acceptance.py` (refusal stores nothing; version, time and user
+  recorded; environment override; visible to the organisation and in the export).
+- **#667 (open):** the Privacy Notice and Terms of Service at `#/privacy` and `#/terms`, linked from the footer and
+  from the register page's box, which now reads "I agree to the Terms of Service on behalf of this organisation and
+  have read the Privacy Notice". `LEGAL_VERSION` in `public/legal.ts` equals tenancy's `DEFAULT_TERMS_VERSION`.
+
+**Still missing.**
+
+- Users the organisation creates (`POST /identity/users`) and students signing in see no notice and give no consent.
+  That is the institution's notice to give (section 1); the platform could show the institution's notice at first
+  sign-in (gap D16).
+- Changing the terms: nothing asks existing organisations to accept a new version (gap D17).
+- The public admissions routes, once the gateway exposes them, take an applicant's name, email, phone and date of
+  birth with no notice, consent or age check (gap D18).
+
+## 5. Retention, export and deletion: what is verified
+
+Tests run on 20 November 2026 against `72ce9d2f`, SQLite, with the repository's virtual environment:
+
+| What | Proof | Result |
+|---|---|---|
+| The export holds every table with `organisation_id` of every enabled module, only this organisation's rows, secrets redacted (`password_hash` → `[redacted]`), invoices included; org admins get 403 | `apps/backend/tests/test_organisation_export_and_deletion.py::test_export_then_delete_restore_and_purge` (the real host with every enabled module) | 1 passed |
+| Deletion archives at once (sign-in refused with "archived", module routes 403), needs `confirm_slug` for a paying organisation, can be restored; the purge is refused before `delete_after`, then removes every row; the other organisation is untouched | same test | passed |
+| Export and purge without module code, tables found from the database (also reflected ones), FK-blocked tables retried, 409 `purge_blocked` naming the table, append-only tables kept and listed, redaction of secret-like suffixes, retention configurable, force purge | `platform/tenancy/backend/tests/test_export_and_deletion.py` (15 tests) and `test_terms_acceptance.py` (4) | 24 passed |
+| Audit: personal keys and email addresses dropped before storage; a purged organisation's trail tombstoned; prune job removes only records past retention; retention below the 7-year floor raised to it | `platform/audit/backend/tests/test_audit_consumers.py`, `test_audit_records.py` | 48 and 32 passed. The Postgres-only tests (`test_audit_postgres.py`, grants and the `audit_redact_organisation` function) skip on SQLite; CI runs them |
+| Event outbox: delivered events pruned after retention, pending and dead-lettered kept | `platform/event-bus/backend/tests/test_relay.py::test_prune_removes_only_delivered_events_past_retention` | 19 passed |
+| Transport GPS positions purged after `TRANSPORT_POSITION_RETENTION_DAYS` | `modules/campus-life/transport/backend/tests/test_jobs.py::test_purge_old_positions` | 4 passed |
+| Wearables: data gone on unlink even when the provider is down; retention deletes only old records | `integrations/wearables/tests/test_linking.py` | 16 passed (module not enabled) |
+| Documents: a delete that storage refuses deletes nothing; deleting a version keeps the chain (#645) | `platform/documents/backend/tests/test_document_replay_and_versions.py` | not run locally (needs `minio`); passed in CI on main (api workflow run 43818587678, 16 November) |
+
+**Gaps found here.**
+
+- **Export is super admin only** (`platform:organisation:export`). An institution cannot download its own data; it
+  must ask (the terms say so). Files are references only: platform/documents is not enabled, and when it is, the
+  export must include the files (gap D12).
+- **The purge runs by hand.** Nothing schedules it (`platform/tenancy/README.md`, "Who runs the purge"); retention is
+  kept only if a super admin runs `POST .../purge` after `delete_after` (gap D11).
+- **Stored files survive the purge.** The purge deletes `documents_document` rows but not the objects in storage;
+  documents has no consumer of `tenancy.organisation.purged` (gap D13, before documents is enabled).
+- **Notification history is kept forever.** `NOTIFICATION_HISTORY_RETENTION_DAYS=90` is documented but read by no
+  code (gap D14).
+- **Invoices are purged.** GST law needs them kept (gap D15, already noted in the tenancy README).
+- **Retention schedules exist only as settings.** e-office categories have `retention_years`, which nothing
+  enforces. No feature module deletes individual records on a schedule; everything is R0.
+- **Backups.** Purged data stays in backups up to 8 weeks, and restoring an older backup brings a purged organisation
+  back; the restore runbook must repeat the purge (`infra/backup-dr/README.md` says so).
