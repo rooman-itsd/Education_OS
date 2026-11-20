@@ -209,3 +209,72 @@ Tests run on 20 November 2026 against `72ce9d2f`, SQLite, with the repository's 
   enforces. No feature module deletes individual records on a schedule; everything is R0.
 - **Backups.** Purged data stays in backups up to 8 weeks, and restoring an older backup brings a purged organisation
   back; the restore runbook must repeat the purge (`infra/backup-dr/README.md` says so).
+
+## 6. Rights of the data principal
+
+For institution data the institution answers the request (it is the Data Fiduciary); the platform has to give it
+the means. For account and billing data the operator answers through the Grievance Officer.
+
+**Grievance Officer / contact for data protection:** `[Grievance Officer name, email]`, `[Company legal name]`,
+`[Registered address]`. Faizan to fill; the same placeholders are on the privacy notice and terms (#667).
+
+| Right | Feature today | Status |
+|---|---|---|
+| Information about processing (s.11): a summary of the data, the processing, and who it was shared with | Organisation export (super admin, whole organisation). The privacy notice lists processors | **Partial.** No per-person summary or export; an institution must assemble one from the module screens or ask for a filtered export (gap D8) |
+| Correction, completion, updating (s.12(1), (2)) | Most modules have update routes for their own records (e.g. student-information `PATCH` person, hr-payroll employee) | **Partial.** identity has no route to change a user's name or email, or to disable or delete a user (`platform/identity/backend/src/eos_identity/api/router.py`: login, OIDC, `me`, list and create users only) (gap D10) |
+| Erasure (s.12(3)) | Whole-organisation purge only | **Gap.** No erasure of one person across modules; the audit trail keeps names in before/after payloads for 7 years and cannot be redacted per person (gaps D9, D19) |
+| Withdraw consent (s.6(4)) | Wearables and DigiLocker links can be revoked (not enabled) | **Gap** at platform level: handled by request to the institution or the Grievance Officer (gap D16) |
+| Grievance redressal (s.13) | `governance/grievance` is the institution's student grievance process (POSH, ragging), not data-protection grievances | **Gap** until the Grievance Officer is named and the notice published (D4). The notice promises an answer within 30 days; counsel to check against the Rules |
+| Nomination (s.14) | none | **Gap**, handled by request (D16) |
+| Complaint to the Data Protection Board | stated in the notice | Done in #667 once published |
+
+## 7. Children's data (s.9)
+
+What the code records:
+
+- **Date of birth:** `student_information_person.date_of_birth` (optional), `admissions_application.applicant_date_of_birth`,
+  `athlete_performance_athlete.date_of_birth`, `hr_payroll_employee.date_of_birth`,
+  `digilocker_issued_document.holder_dob`.
+- **Guardians:** `student_information_person.guardians`, a free-form JSON list with no consent fields.
+- **Nothing computes an age, flags a minor, or records a parent's or guardian's consent**, verifiable or not
+  (searched for minor, guardian consent, parental, age checks: no code). The platform cannot tell which of its
+  people are children.
+- **No tracking or targeted advertising:** neither app loads analytics or advertising scripts (searched
+  `apps/frontend` and the public site); the only third-party request is Google Fonts.
+
+Institutions likely to enrol under-18s: sports academies, music and arts academies, schools in the academy
+profiles, and hostels. Their students' health (sports-nutrition-health), location (transport passes and trips),
+grievances and videos (training-video-analysis) are the riskiest.
+
+Position for v1.0: the institution, as Data Fiduciary, obtains verifiable parental consent; the Terms of Service
+(#667, section 5) make that the institution's duty, and the notice says so. The DPDP Rules 2025 exempt educational
+institutions from parts of s.9 for educational activities and children's safety (counsel to confirm the scope). The
+platform should still record it (gap D7).
+
+## 8. Processors and transfers outside India
+
+| Recipient | Data | Where | Status |
+|---|---|---|---|
+| Hosting | everything | self-hosted on the operator's Proxmox servers (web CT 101, API on its own LXC); backups copied to a second location | `[Hosting location]` to be stated in the notice (gap D20) |
+| Email relay (SMTP, `MESSAGING_PROVIDERS_SMTP_*`) | recipient address, message | depends on the relay configured on the server; not recorded in the repository | name the provider and its location (D20) |
+| SBIePay (State Bank of India) | payer, amount, references; card and bank details stay with SBI | India | enabled (Standard plan and up) |
+| Google Fonts (`apps/frontend/index.html` loads fonts.googleapis.com) | visitor IP address, user agent | outside India | disclosed in the notice; self-hosting the fonts removes it (gap D21) |
+| Keycloak (ADR-0006) | institution users' sign-in | self-hosted | — |
+| DigiLocker, NAD/ABC, AISHE/NIRF/NAAC portals | per integration | India (government) | not enabled |
+| Zoom, Microsoft Teams, Webex; Garmin, Polar, Fitbit, Strava; partner universities | per integration | often outside India | not enabled; disclosed in the notice |
+
+Section 16 allows transfers outside India except to countries the Central Government restricts; none is
+restricted at the time of writing (counsel to confirm). The terms commit to telling institutions before a new
+processor is added.
+
+## 9. Security safeguards and breaches (s.8(5), s.8(6))
+
+The safeguards are those of the [October security review](security-review-2026-10.md): row-level security per
+organisation with the API on a role that cannot bypass it, permission keys on every route, PBKDF2 password hashes,
+secrets out of git, audited impersonation. Open items there that matter for DPDP: S5 (rate limits), S7 (dev mode and
+the default JWT secret on the server), S11 (API port exposure).
+
+**Breach notification.** The Act requires telling the Board and each affected person; the Rules set the form and a
+72-hour detailed report (counsel to confirm). There is no breach runbook in `infra/runbooks/` (gap D22). Logs: the
+Rules ask for logs to be kept at least a year for some purposes; the outbox keeps 30 days and the web server's log
+rotation is not recorded in the repository (gap D23).
