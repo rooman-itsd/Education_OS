@@ -37,6 +37,10 @@ MAX_RECOVERY_DELAY_S = 86_400
 # absurd: it is the overflow guard, not the correctness guarantee.
 MAX_SENDING_LEASE_S = 86_400
 
+# The ceiling for NOTIFICATION_HISTORY_RETENTION_DAYS (100 years). It only rules out the absurd: the value goes
+# into `now - timedelta(days=...)`, which raises OverflowError for a huge one and would stop the purge for good.
+MAX_HISTORY_RETENTION_DAYS = 36_500
+
 # Fields already reported, so this can never hold more entries than NotificationConfig has fields. The lock
 # makes "once per field" a guarantee: without it two threads building a config at once could both log.
 _warned_fields: set[str] = set()
@@ -78,6 +82,9 @@ class NotificationConfig:
     sending_lease_s: int
     recovery_max_failures: int
     recovery_max_delay_s: int
+    # How long a finished message (sent, delivered, failed, bounced, suppressed) is kept before the
+    # notification.prune-history job deletes it. 1..36500, clamped and logged like the settings above.
+    history_retention_days: int = 90
 
     def __post_init__(self) -> None:
         """from_env() parses within bounds, but send_message(), dispatch() and recover_stuck() each accept an
@@ -99,6 +106,9 @@ class NotificationConfig:
         # policy's own maximum, which is incoherent. The lease must exceed the provider call it protects --
         # seconds, not days -- so the ceiling is far above any sane value and only rules out the absurd.
         self._bound("sending_lease_s", floor=1, ceiling=MAX_SENDING_LEASE_S)
+        # A retention of zero or less would delete today's history, so the floor is one day; the ceiling keeps
+        # timedelta(days=...) from overflowing. Unparseable text falls back to 90 in from_env().
+        self._bound("history_retention_days", floor=1, ceiling=MAX_HISTORY_RETENTION_DAYS)
 
     def _bound(self, field: str, *, floor: int, ceiling: int | None) -> None:
         """Clamp an integer that is out of range; refuse anything that is not an integer.
@@ -140,4 +150,5 @@ class NotificationConfig:
             sending_lease_s=_int("NOTIFICATION_SENDING_LEASE_S", 120, minimum=1),
             recovery_max_failures=_int("NOTIFICATION_RECOVERY_MAX_FAILURES", 5, minimum=1),
             recovery_max_delay_s=_int("NOTIFICATION_RECOVERY_MAX_DELAY_S", 3600, minimum=1),
+            history_retention_days=_int("NOTIFICATION_HISTORY_RETENTION_DAYS", 90, minimum=0),
         )
