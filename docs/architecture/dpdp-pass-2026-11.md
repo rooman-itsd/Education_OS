@@ -316,5 +316,7 @@ student data at scale; **Medium** and **Low** after launch. Owners are suggestio
 - This document, and the test runs in section 5.
 - #665 (merged): consent recorded at registration.
 - #667: privacy notice and terms of service at https://educationos.futureacad.ae/#/privacy and
-  https://educationos.futureacad.ae/#/terms once merged (the web build deploys from `main`).
+  https://educationos.futureacad.ae/#/terms once merged. That site serves the `main` build (`web-dist`; `/VERSION`
+  answered `97ba1f5`, a `main` commit, on 20 November), so the pages appear a minute after the web build; a host set
+  up as production (`web-release`) gets them with the next `vX.Y.Z` tag (`infra/autodeploy/README.md`).
 - The October [security review](security-review-2026-10.md) for the safeguards.
