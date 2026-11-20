@@ -354,8 +354,10 @@ def test_submit_moves_the_paper_to_moderation_once_and_is_audited(client, org, h
     body = ok(client.post(f"{URL}/{paper['id']}/marks/submit", headers=auth(headers)))
     assert body["id"] == paper["id"] and body["status"] == "moderation"
     assert paper_status(org, paper["id"]) == "moderation"
-    actions = [a.action for a in audit_entries(org.id, paper["id"])]
-    assert actions[-1] == "exam_paper.marks_submitted"
+    # the test clock is frozen, so audit entries tie on time and their order is not asserted: filter by action
+    submitted = [a for a in audit_entries(org.id, paper["id"]) if a.action == "exam_paper.marks_submitted"]
+    assert len(submitted) == 1
+    assert (submitted[0].before, submitted[0].after) == ({"status": "marks_entry"}, {"status": "moderation"})
     assert err(client.post(f"{URL}/{paper['id']}/marks/submit", headers=auth(headers)), 409, "paper_not_in_marks_entry")
     assert err(
         enter(client, headers, paper["id"], {"candidate_id": paper["eligible"][0], "absent": True}),
