@@ -50,11 +50,15 @@ modules the host has enabled, so they run only when this module is enabled in `a
 | `enrolment-registration.course-registration.confirmed` | `registration_ref`; `section_member` in the section from the date of `confirmed_at` |
 | `enrolment-registration.course-registration.withdrawn` | `registration_ref.withdrawn_on`; memberships end on the date of `withdrawn_at` |
 | `enrolment-registration.section-allocation.changed` | `registration_ref.moves`; the old section ends the day before `effective_on`, the new one starts on it |
+| `student-information.person.account-linked` | `person_account`: which person a sign-in account is (null once unlinked) |
 
 Delivery is at-least-once and unordered: each handler is idempotent on the envelope id (`processed_event`), tolerates an
 event arriving before its creation, orders status changes by the envelope `occurred_at`, and applies an event only in its
 own organisation. A registration's memberships are rebuilt from all the facts its events carried, so any arrival
-order gives the same rows. `person_id` is stored as `student_id`. Not consumed, pending decisions (see the decisions
+order gives the same rows. `person_id` is stored as `student_id`. A student signs in with their identity user id, so
+`/me/schedule`, `/me/attendance-summary` and `/me/attendance-history` map the caller's user id to their person id
+through `person_account`, and use the user id itself while no link is known (data allocated by user id, as in tests and
+dev data, keeps working). Not consumed, pending decisions (see the decisions
 page): `faculty-assignment.*` (identity mapping), `offering.updated` and `course.*` (no new values in the payload).
 
 ## Tests

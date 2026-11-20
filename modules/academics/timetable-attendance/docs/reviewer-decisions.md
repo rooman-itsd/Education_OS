@@ -31,7 +31,7 @@ where he approved the PR and asked for these to be recorded. "Contract change" m
 | Open point | Owner | Effect on the code |
 |---|---|---|
 | Whether `faculty_id` (the person on `academic-management.faculty-assignment.*`) may be stored as the instructor (`instructor_id`). The rename is proposed in academic-management's PR #168; no record of Faizan's confirmation was found in the sources inspected | Faizan | **The `faculty-assignment.created` and `.ended` consumers are not implemented**, so `assignment_ref` is never filled by an event and a slot cannot name an instructor assignment outside tests |
-| Whether `student_id` is the `person_id` carried by the enrolment events (Praveen proposed it and asked for Faizan's confirmation under Q3) | Faizan | **Built on that assumption** at the lead's request (section E). enrolment-registration's `docs/integration-points.md` records `person_id` (the student-information Person id, agreed on issue #100) as the answer to Q3. Open still: `/me` reads the caller's identity user id as the `student_id`, so a student whose user id is not their person id sees nothing there |
+| Whether `student_id` is the `person_id` carried by the enrolment events (Praveen proposed it and asked for Faizan's confirmation under Q3) | Faizan | **Built on that assumption** at the lead's request (section E). enrolment-registration's `docs/integration-points.md` records `person_id` (the student-information Person id, agreed on issue #100) as the answer to Q3. `/me` now maps the caller's identity user id to their person id through `person_account`, filled from student-information's `person.account-linked`, and falls back to the user id while no link is known |
 | How `offering.updated` and `course.*` are applied: they carry only `changed_fields`, not the new values | Shivani, with Faizan | Not consumed. A change to an offering's course code or title after creation is not reflected |
 | How a department is known (Q9) | Faizan | See A |
 
@@ -65,7 +65,7 @@ confirmation; none is hidden behind a flag.
 | Point | Choice | Why |
 |---|---|---|
 | Who "teaches" a class | `instructor_id` (from `assignment_ref`) equals the caller's user id | The faculty-assignment mapping (section B) is unconfirmed; this is the PRD's intent |
-| Who "is" a student | the caller's user id is the `student_id` of `section_member` | PRD Q3 is open; `/me/schedule` and `/me/attendance-*` need one id |
+| Who "is" a student | the person linked to the caller's user id (`person_account`), else the caller's user id, is the `student_id` of `section_member` | `section_member` holds enrolment-registration's `person_id`; student-information's `person.account-linked` gives the link |
 | An ad-hoc class's date | the start's date in the offset the request gives (`09:30+05:30` is that day in India) | The organisation's time zone has no source (section 10); this uses the caller's own wall clock and assumes no zone |
 | Today, when `date` is omitted | the UTC date | Same reason; the widgets pass the viewer's date, so they are not affected |
 | The active academic period | the known term (`term_ref`) containing today; the latest-starting if several | academic-management answers 404 `active_term_not_found` the same way; the contract adds the 404 |

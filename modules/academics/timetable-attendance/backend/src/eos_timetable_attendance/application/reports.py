@@ -32,7 +32,7 @@ from ..infrastructure.models import iso
 from . import access as k
 from . import service as svc
 from .access import Actor
-from .classes import _now
+from .classes import _now, my_student_ids
 from .errors import TimetableAttendanceError, invalid, not_found
 
 _domain = svc._domain
@@ -84,12 +84,19 @@ def _require_read_all(a: Actor) -> None:
 # ---------------------------------------------------------------- student summary and history
 
 
-def _summary(db: Session, student_id: str, period: str) -> dict:
+def _ids(student: str | tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+    """The student id a report names, and every id their records may be kept under (my_student_ids)."""
+    ids = (student,) if isinstance(student, str) else student
+    return ids[0], ids
+
+
+def _summary(db: Session, student: str | tuple[str, ...], period: str) -> dict:
     """components.schemas.StudentAttendanceSummary: one row per course offering of the period."""
+    student_id, ids = _ids(student)
     threshold = _threshold()
     statuses: dict[str, list[str]] = defaultdict(list)
     section_of: dict[str, str] = {}
-    for record, _, cls in ar.attendance(db, academic_period_id=period, student_id=student_id):
+    for record, _, cls in ar.attendance(db, academic_period_id=period, student_id=ids):
         statuses[cls.course_offering_id].append(record.status)
         section_of.setdefault(cls.course_offering_id, cls.section_id)  # newest class first: the latest section
     offerings = repo.offering_refs(db, set(statuses))
@@ -126,7 +133,7 @@ def _summary(db: Session, student_id: str, period: str) -> dict:
 
 def _history(
     db: Session,
-    student_id: str,
+    student: str | tuple[str, ...],
     *,
     academic_period_id: str | None,
     course_offering_id: str | None,
@@ -136,6 +143,7 @@ def _history(
     offset: int,
 ) -> dict:
     """components.schemas.StudentAttendanceHistory, newest first."""
+    student_id, ids = _ids(student)
     if academic_period_id is not None:
         _domain(require_id, academic_period_id, "academic_period_id")
     if course_offering_id is not None:
@@ -146,7 +154,7 @@ def _history(
         db,
         academic_period_id=academic_period_id,
         course_offering_id=course_offering_id,
-        student_id=student_id,
+        student_id=ids,
         date_from=first,
         date_to=last,
     )
@@ -173,7 +181,7 @@ def _history(
 
 def my_summary(db: Session, a: Actor, academic_period_id: str | None) -> dict:
     """GET /me/attendance-summary (FR-13)."""
-    return _summary(db, a.user_id, _period(db, academic_period_id))
+    return _summary(db, my_student_ids(db, a), _period(db, academic_period_id))
 
 
 def my_history(
@@ -182,7 +190,7 @@ def my_history(
     """GET /me/attendance-history (FR-13)."""
     return _history(
         db,
-        a.user_id,
+        my_student_ids(db, a),
         academic_period_id=academic_period_id,
         course_offering_id=course_offering_id,
         limit=limit,
