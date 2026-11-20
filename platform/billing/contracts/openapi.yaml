@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: billing API
-  version: 0.4.0
+  version: 0.5.0
   description: "Plans, trials, subscriptions, upgrades and invoices. See ADR-0005."
 servers:
   - url: /api/v1/billing
@@ -19,7 +19,9 @@ paths:
     post:
       summary: Start an upgrade to a plan. Returns a payment session from the payment adapter. Permission billing:subscription:manage.
       requestBody: { content: { application/json: { schema: { type: object, required: [plan], properties: { plan: { type: string }, billing_cycle: { type: string, enum: [monthly, yearly] } } } } } }
-      responses: { "201": { description: Payment session, content: { application/json: { schema: { type: object, properties: { payment_url: { type: string }, reference: { type: string } } } } } } }
+      responses:
+        "201": { description: Payment session, content: { application/json: { schema: { type: object, properties: { payment_url: { type: string }, reference: { type: string } } } } } }
+        "409": { description: "Already on this plan; or `code: payment_not_configured`: no payment adapter (BILLING_PAYMENT_ADAPTER=none) and the plan is paid. Outside dev mode a super admin activates it once paid (PUT /admin/subscriptions/{organisation_id}); no invoice is issued." }
   /subscription/cancel:
     post:
       summary: Cancel at the end of the current period. Permission billing:subscription:manage.
@@ -42,9 +44,20 @@ paths:
       responses: { "200": { description: Saved, content: { application/json: { schema: { $ref: "#/components/schemas/BillingProfile" } } } }, "422": { description: Invalid GSTIN or state } }
   /webhooks/payment:
     post:
-      summary: Payment adapter callback. Confirms an upgrade and activates the subscription.
+      summary: >-
+        Payment adapter callback (payment-sbiepay's PaymentNotification). No token: trusted only when X-Payment-Signature
+        is the hex HMAC-SHA256 of the raw body with BILLING_PAYMENT_WEBHOOK_SECRET. A succeeded payment with
+        source_module billing (its source_reference is the upgrade's reference) and the pending plan's total amount
+        activates the upgrade; a failed one, or another module's, is acknowledged and changes nothing.
       security: []
-      responses: { "204": { description: Processed } }
+      parameters: [{ name: X-Payment-Signature, in: header, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: Processed (also for a notification already processed) }
+        "401": { description: Missing or wrong signature }
+        "404": { description: "No payment adapter configured (BILLING_PAYMENT_ADAPTER=none), or an unknown reference" }
+        "409": { description: "`code: amount_mismatch`: the amount is not the pending plan's total" }
+        "422": { description: No valid amount }
+        "503": { description: BILLING_PAYMENT_WEBHOOK_SECRET is not set }
   /admin/reports/subscriptions:
     get:
       summary: "Super admin (platform:revenue:read): subscriptions per plan and status, monthly recurring revenue (active subscriptions x the plan's monthly price), paid invoices of the last 30 days, and trials ending in the next 14 days, soonest first. Money as decimal strings."
