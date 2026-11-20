@@ -24,7 +24,7 @@ from sqlalchemy import select
 MODULE_DIR = Path(__file__).resolve().parents[2]
 
 
-def event(name, organisation_id, payload=None, *, actor=None, occurred_at=None):
+def event(name, organisation_id, payload=None, *, actor=None, occurred_at=None, impersonated_by=None):
     return SimpleNamespace(
         id=str(uuid.uuid4()),
         name=name,
@@ -33,6 +33,7 @@ def event(name, organisation_id, payload=None, *, actor=None, occurred_at=None):
         actor=actor,
         version=1,
         occurred_at=occurred_at or datetime.now(UTC) - timedelta(minutes=5),
+        impersonated_by=impersonated_by,
     )
 
 
@@ -53,6 +54,20 @@ def records(organisation_id: str | None = None, *, platform: bool = False) -> li
             else q.where(AuditRecord.organisation_id == organisation_id)
         )
         return list(db.scalars(q.order_by(AuditRecord.occurred_at)))
+
+
+def test_an_event_raised_under_impersonation_records_the_super_admin_in_its_context():
+    """Security review N3: the actor stays the impersonated user; the super admin behind them is recorded too, from
+    the envelope only (a payload key of the same name lands in `after`, never in the context)."""
+    org, user, super_admin = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    e = event("identity.user.created", org, {"user_id": user}, actor=user, impersonated_by=super_admin)
+    plain = event("identity.user.created", org, {"user_id": str(uuid.uuid4()), "impersonated_by": "forged"}, actor=user)
+    deliver(e)
+    deliver(plain)
+    by_entity = {r.entity_id: r for r in records(org)}
+    assert by_entity[user].actor == user and by_entity[user].context["impersonated_by"] == super_admin
+    forged = by_entity[plain.payload["user_id"]]
+    assert "impersonated_by" not in forged.context and forged.after["impersonated_by"] == "forged"
 
 
 def test_a_state_change_event_becomes_one_record_in_its_organisation():

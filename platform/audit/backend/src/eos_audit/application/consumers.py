@@ -142,6 +142,11 @@ def on_event(db: Session, event) -> None:
     context = {"source": "event-bus", "event_id": event.id, "event_version": getattr(event, "version", 1)}
     if dropped:
         context["dropped_keys"] = sorted(set(dropped))
+    # The envelope's impersonated_by (security review N3): `actor` is the user the request acted as, this is the
+    # super admin really acting. From the envelope only, as POST /records takes it from the token only.
+    impersonated_by = getattr(event, "impersonated_by", None)
+    if impersonated_by:
+        context["impersonated_by"] = impersonated_by
     occurred_at = getattr(event, "occurred_at", None)
 
     def write(session: Session, organisation_id: str | None, token: str) -> None:

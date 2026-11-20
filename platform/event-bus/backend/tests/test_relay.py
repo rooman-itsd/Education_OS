@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from eos_core.db import SessionLocal
-from eos_core.events import OutboxEvent
+from eos_core.events import OutboxEvent, impersonation
 from eos_core.tenant import get_current_organisation, is_bypass, platform_scope
 from eos_event_bus.application.relay import DEAD_LETTERED, STALLED, backoff
 from eos_event_bus.domain.models import state_of
@@ -24,6 +24,19 @@ def test_an_event_reaches_its_consumer_and_is_marked_published():
     assert ev.id == eid and ev.organisation_id == ORG_A and ev.payload == {"room_id": "r1"} and ev.version == 1
     stored = row(eid)
     assert stored.published and stored.published_at is not None and stored.attempts == 0
+
+
+def test_the_envelope_carries_the_impersonator_from_the_publishing_context():
+    """Security review N3: publish() stamps the super admin behind an impersonated request on the envelope, and the
+    consumer receives it; an event raised outside impersonation carries none."""
+    seen = []
+    with impersonation("super-admin-1"):
+        imp = raise_event("hostel.room.allocated", ORG_A, {"room_id": "r1"})
+    plain = raise_event("hostel.room.allocated", ORG_A, {"room_id": "r2"})
+    relay({"fees": {"hostel.room.allocated": lambda db, ev: seen.append(ev)}}, Clock()).run_once()
+    by_id = {ev.id: ev for ev in seen}
+    assert by_id[imp].impersonated_by == "super-admin-1" and by_id[plain].impersonated_by is None
+    assert row(imp).impersonated_by == "super-admin-1"
 
 
 def test_an_event_nobody_consumes_is_still_published():

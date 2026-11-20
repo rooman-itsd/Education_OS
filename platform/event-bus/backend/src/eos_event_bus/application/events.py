@@ -136,6 +136,7 @@ def event_out(row: OutboxEvent, config: EventBusConfig, delivered_to: list[Event
         "version": row.version or 1,
         "organisation_id": row.organisation_id,
         "actor": row.actor,
+        "impersonated_by": row.impersonated_by,
         "occurred_at": iso(row.occurred_at),
         "payload": row.payload or {},
         "state": state_of(row, config.max_attempts),

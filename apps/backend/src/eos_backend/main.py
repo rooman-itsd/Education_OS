@@ -14,6 +14,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import directories
+from .actor import ImpersonationContext
 from .gateway import EntitlementGate
 from .modules import enabled, middleware_only, router_for
 from .observability import REQUEST_ID, RequestContext, configure_logging, init_sentry
@@ -82,6 +83,8 @@ def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
             "request, sign-ins included, counts against the proxy's address and one bucket. Set it to the proxy's "
             "address (platform/api-gateway/README.md)."
         )
+    # Innermost of all: the super admin behind an impersonation token, for every event the route publishes (actor.py).
+    app.add_middleware(ImpersonationContext)
     app.add_middleware(EntitlementGate)
     app.add_middleware(RateLimit, settings=gateway)
     app.add_middleware(
