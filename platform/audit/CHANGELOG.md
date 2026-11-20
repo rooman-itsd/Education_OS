@@ -3,6 +3,8 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Records identity's new user events: `identity.user.updated`, `identity.user.disabled`, `identity.user.enabled` and
+  `identity.user.erased` (DPDP gap D10, #148). Their payloads carry ids and field names only, never a name or address.
 - Contact details never reach an immutable record (review of #434). `tenancy.organisation.registered` carries
   `admin_email` and the consumer stored the payload verbatim in `after`; a record cannot be edited or deleted, so the
   address could never be removed on a DPDP erasure request. The consumer now drops a key that names a contact detail

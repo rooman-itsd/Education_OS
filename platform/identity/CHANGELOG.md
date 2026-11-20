@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Users can be corrected, disabled, enabled and erased (DPDP s.12 correction and erasure, offboarding; gap D10 of the
+  November 2026 DPDP pass, #148). API 0.2.0, additive: `PATCH /users/{user_id}` (name, email, roles, with the role
+  rules of `POST /users` and the plan's `users` limit for a learner made staff), `POST /users/{user_id}/disable` and
+  `/enable` (the plan limit again on enable), and `DELETE /users/{user_id}`, which anonymises the row into a tombstone
+  instead of deleting it, so other modules' ids and the audit trail keep their meaning. New key
+  `identity:user:erase`, granted to `org-admin`. The organisation's last active admin can never be disabled, erased
+  or lose `org-admin` (`409 last_admin`). New events `identity.user.updated`, `.disabled`, `.enabled` and `.erased`
+  (ids and field names only), all audited. `GET /users` leaves erased users out. How long a disabled user's tokens
+  stay valid, and what to do in Keycloak, is in the README.
 - The Research Lead layout (agriculture-college) also holds `projects-guide`. It lists `projects.to-review`, whose
   request needs `projects:guidance:read`, and `projects-coordinator` alone does not grant it, so the widget answered
   403. Every other layout with that widget already held the role (found by the e2e journey in #537).

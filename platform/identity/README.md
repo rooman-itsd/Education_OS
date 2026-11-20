@@ -13,6 +13,51 @@ the system of record for users and organisation membership. It is not the identi
 policy, MFA, Google / Microsoft / SAML brokering live in Keycloak, and organisation status and slugs come
 from platform/tenancy through hooks apps/backend fills at startup (this module imports no other module).
 
+## Managing users: correct, disable, erase (DPDP s.12; offboarding)
+
+An org admin (`identity:user:manage`, and `identity:user:erase` for erasure; both granted to `org-admin`) manages
+the users of their own organisation. Another organisation's user, or an erased one, is `404`.
+
+| Route | What it does | Event |
+|---|---|---|
+| `PATCH /users/{user_id}` | Corrects `name` and `email`, changes `roles` (any of the three). The rules of `POST /users` apply: no platform role, no `service`, and a learner made staff must fit the plan's `users` limit. `409 email_taken` when another user has the address. | `identity.user.updated` (`changed`: field names; `roles` when changed) |
+| `POST /users/{user_id}/disable` | The user can no longer sign in, by password or through Keycloak, and stops counting against the plan's `users` limit. | `identity.user.disabled` |
+| `POST /users/{user_id}/enable` | Undoes a disable. A staff user needs a free seat again (`409 plan_limit_reached`). | `identity.user.enabled` |
+| `DELETE /users/{user_id}` | Erasure, `204`. See below. | `identity.user.erased` |
+
+**The last admin.** The organisation's last active `org-admin` cannot be disabled, erased or lose `org-admin`
+(`409 last_admin`). A disabled admin does not count. On Postgres the check runs under the organisation's seat lock,
+so two admins cannot disable each other at the same moment.
+
+**When a disabled user's tokens stop working.** Sign-in (`/auth/login`, the OIDC callback) takes active users only.
+Every platform route guarded by identity's `require` or `current_principal` (identity, tenancy, billing, audit and the others)
+reads the user row on each request, so a token issued before the disable is refused on the next request. A
+Keycloak access token is mapped to the user on every request (`resolve_oidc_claims`), so it is refused everywhere at
+once. Feature modules verify the platform's own HS256 token by signature and expiry only (their `api/deps.py`), so
+there one stays valid until it expires: `EOS_JWT_TTL_MINUTES`, 720 minutes (12 hours) by default. The API issues no
+refresh tokens, so nothing renews it. To cut a person off from feature modules at once, rotate `EOS_JWT_SECRET`
+(everyone signs in again; `infra/runbooks/rotate-secrets.md`). A per-request user check in the host's entitlement
+gate would close the window; it is not built yet.
+
+**Erasure anonymises; it does not delete the row.** Other modules (`created_by`, `assigned_to`, `faculty_id` ...)
+and the audit trail hold the user id, and must keep meaning "this person did this". So `DELETE` keeps the row as a
+tombstone: `name` becomes "Erased user", `email` becomes `erased-<id>@erased.invalid` (unique, and `.invalid` can
+never receive mail), the password hash and the Keycloak subject are removed, the roles are cleared and the status
+is `erased`, which no sign-in path or token check accepts; it can never be enabled again. The original address is
+free for a new user. Erased users are left out of `GET /users`. Nothing identity publishes or audits carries the
+name or the address, so nothing in identity's tables keeps them.
+
+**What erasure does not do.** Personal data the modules hold under the user id (a staff record, a student's
+profile) is theirs to erase: `identity.user.erased` (payload `user_id`, `erased_at`) is their signal, and no module
+consumes it yet (DPDP gaps D9, D19 in `docs/architecture/dpdp-pass-2026-11.md`). Audit records written before the
+erasure keep their payloads, which hold no contact details but may hold a name.
+
+**Keycloak.** identity does not create or change realm accounts (they are made by hand or federated; see the realm
+setup below), so a disable or an erasure here does not touch the realm. It does not need to for access: the realm
+can still authenticate the person, but the callback and the bearer path refuse them. For a full offboarding or
+erasure, also disable or delete the person in the realm's admin console (Users → the user → *Enabled* off, or
+*Delete*; *Sessions* → *Sign out* ends their realm sessions). Automating that belongs to `integrations/keycloak`.
+
 ## Signing in through Keycloak (ADR-0006)
 
 One Keycloak realm per organisation, named by the slug, served by the public proxy under

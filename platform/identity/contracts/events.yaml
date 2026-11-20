@@ -5,8 +5,28 @@ module: identity
 version: 1
 events:
   - name: identity.user.created
-    description: A user was created (registration, POST /users, the super-admin seed). Payload: user_id, roles.
+    description: >-
+      A user was created (registration, POST /users, the super-admin seed). Payload: user_id, roles.
   - name: identity.user.oidc_linked
     description: >-
       A user signed in through the organisation's Keycloak realm for the first time and the realm subject was
       linked to the user by verified email (ADR-0006). Payload: user_id, realm.
+  - name: identity.user.updated
+    description: >-
+      An org admin changed a user's name, email or roles (PATCH /users/{user_id}). Payload: user_id, changed (the field
+      names, any of name, email, roles), roles (the new list, only when roles changed). Never the name or email
+      themselves: the audit record is permanent and must hold no contact details.
+  - name: identity.user.disabled
+    description: >-
+      A user can no longer sign in (POST /users/{user_id}/disable): password and Keycloak sign-in are refused, and every
+      platform route refuses the user's existing tokens at once. Payload: user_id.
+  - name: identity.user.enabled
+    description: >-
+      A disabled user can sign in again (POST /users/{user_id}/enable). Payload: user_id.
+  - name: identity.user.erased
+    description: >-
+      A user was erased (DELETE /users/{user_id}; DPDP s.12(3)). identity keeps the row as a tombstone (status `erased`,
+      name "Erased user", an email under erased.invalid), so ids other modules and the audit trail hold still
+      resolve; the password, the Keycloak link and the roles are gone and the user can never sign in again. A
+      module that holds personal data keyed by this user id should erase or anonymise it on this event. Payload:
+      user_id, erased_at (ISO 8601, UTC).
