@@ -13,8 +13,10 @@ read-only or suspends it by itself, per the plan's policy).
 ## What suspending does
 
 - Nobody of that organisation can sign in: the answer is `organisation is suspended`.
-- A person already signed in is refused too: every request to a feature module answers `403` with the code
-  `organisation_inactive`, token or not. Tokens last 12 hours by default (`EOS_JWT_TTL_MINUTES`).
+- A person already signed in is refused too, on their next request: every request, to a feature module or a
+  platform service (identity, billing, audit, ...), answers `403` with the code `organisation_inactive`. A token
+  issued before the suspension does not keep working until it expires; reactivating gives it its access back.
+  The same holds for a super admin's impersonation token into that organisation.
 - Nothing is deleted. Backups, files and records stay; so does the organisation's slug.
 - The change is recorded in the audit trail as a super admin action (`tenancy.organisation.suspended`, with your reason).
 - Other organisations are not affected.
