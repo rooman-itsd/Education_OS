@@ -152,6 +152,16 @@ def seed(org: str) -> dict:
         eligibility_status="pending",
         eligibility_reasons=[],
     )
+    mark = m.MarkEntryRow(
+        id=new(),
+        organisation_id=org,
+        candidate_id=cand.id,
+        marks_obtained=Decimal(50),
+        absent=False,
+        entered_by=new(),
+        entered_at=NOW,
+        status="entered",
+    )
     ref = m.OfferingRef(
         id=new(),
         organisation_id=org,
@@ -176,7 +186,7 @@ def seed(org: str) -> dict:
         summary="created",
         occurred_at=NOW,
     )
-    rows = [g, band, a, comp, c, p, s, link, d, cand, ref, marker, audit]
+    rows = [g, band, a, comp, c, p, s, link, d, cand, mark, ref, marker, audit]
     with _db(org) as db:
         for row in rows:  # parents first, committed one by one so a foreign key never points at nothing
             db.add(row)

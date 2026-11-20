@@ -5,8 +5,8 @@ no foreign key leaves this module. academic_period_id, course_offering_id, cours
 
 This is the foundation: the configuration side of the PRD's data model (cycles, grading and assessment schemes, papers,
 sessions, duties, the offering read model and the audit entry), and the `candidate` table (schema only: nothing writes
-or reads it yet). Not here, because they depend on decisions that are not taken (docs/reviewer-decisions.md):
-`hall_ticket`, `mark_entry`, `result` (they depend on eligibility) and `registration_ref`. `student_id` carries the
+or reads it yet) and the `mark_entry` table. Not here, because they depend on decisions that are not taken
+(docs/reviewer-decisions.md): `hall_ticket`, `result` (they depend on eligibility) and `registration_ref`. `student_id` carries the
 canonical `person_id` (decided on issue #325)."""
 
 from __future__ import annotations
@@ -277,6 +277,31 @@ class CandidateRow(Base, TenantMixin, TimestampMixin):
     determined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class MarkEntryRow(Base, TenantMixin, TimestampMixin):
+    """One candidate's marks for their paper (PRD FR-10 to FR-12): entered by an evaluator, adjusted by a moderator, then
+    locked. The paper is the candidate's (`candidate.exam_paper_id`), so it is not repeated here.
+
+    One row per candidate: the key is the candidate id alone, a globally unique id, so it carries no nullable
+    `organisation_id` member (the candidate table's reason for NOT NULL). `marks_obtained` is NULL when `absent`;
+    the original marks are never changed by moderation, which only sets `moderation_delta` (the adjustment to the
+    original, replaced by a later moderation, not added to it), `moderation_reason` and `moderated_by`. The final marks
+    are `marks_obtained + moderation_delta`, computed, not stored. Rows are never hard-deleted."""
+
+    __tablename__ = f"{PREFIX}mark_entry"
+    __table_args__ = (UniqueConstraint("candidate_id", name="uq_examinations_mark_entry_candidate"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    candidate_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}candidate.id"))
+    marks_obtained: Mapped[Decimal | None] = mapped_column(MARKS, nullable=True)
+    absent: Mapped[bool] = mapped_column(Boolean, default=False)
+    entered_by: Mapped[str] = mapped_column(String(36))
+    entered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    moderation_delta: Mapped[Decimal | None] = mapped_column(MARKS, nullable=True)
+    moderation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    moderated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+
+
 class OfferingRef(Base, TenantMixin, TimestampMixin):
     """Read model of an academic-management course offering (PRD section 9), for the papers of an offering and the
     reports that group by department. Written by the `offering.created` and `offering.status-changed` consumers
@@ -353,6 +378,7 @@ TABLES = [
         ExamSessionPaperRow,
         ExamDutyRow,
         CandidateRow,
+        MarkEntryRow,
         OfferingRef,
         ProcessedEvent,
         AuditEntry,

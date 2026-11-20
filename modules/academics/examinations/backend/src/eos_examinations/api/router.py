@@ -11,7 +11,8 @@ getGradingScheme, replaceGradingScheme, setDefaultGradingScheme, listAssessmentS
 getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExamCycles, createExamCycle, getExamCycle,
 updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
 getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
-cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties."""
+cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties; and the marks
+operations: listMarks, enterMarks, submitMarks, moderateMarks and lockMarks."""
 
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from ..application import access as k
 from ..application import duties as dty
+from ..application import marks as mks
 from ..application import schedule as sch
 from ..application import service as svc
 from ..application.access import Actor
@@ -320,3 +322,53 @@ def list_my_duties(
     db: Session = Depends(get_db),
 ):
     return _run(dty.list_my_duties, db, a, include_past)
+
+
+# ---------------------------------------------------------------- marks
+
+
+@router.get("/papers/{exam_paper_id}/marks")
+def list_marks(
+    exam_paper_id: str,
+    a: Actor = Depends(require(k.MARKS_READ_ASSIGNED)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.list_marks, db, a, exam_paper_id)
+
+
+@router.put("/papers/{exam_paper_id}/marks")
+def enter_marks(
+    exam_paper_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.MARKS_ENTER_ASSIGNED)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.enter_marks, db, a, exam_paper_id, body)
+
+
+@router.post("/papers/{exam_paper_id}/marks/submit")
+def submit_marks(
+    exam_paper_id: str,
+    a: Actor = Depends(require(k.MARKS_ENTER_ASSIGNED)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.submit_marks, db, a, exam_paper_id)
+
+
+@router.post("/papers/{exam_paper_id}/moderation")
+def moderate_marks(
+    exam_paper_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.MARKS_MODERATE_ASSIGNED)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.moderate_marks, db, a, exam_paper_id, body)
+
+
+@router.post("/papers/{exam_paper_id}/lock")
+def lock_marks(
+    exam_paper_id: str,
+    a: Actor = Depends(require(k.MARKS_LOCK)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.lock_marks, db, a, exam_paper_id)
