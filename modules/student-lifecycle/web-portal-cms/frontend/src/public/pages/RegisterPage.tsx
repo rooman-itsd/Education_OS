@@ -15,7 +15,9 @@ import {
 
 /**
  * Organisation registration: pick the academy package, enter the organisation and its first
- * administrator, accept the terms, submit to platform/tenancy POST /register (public). The form has
+ * administrator, accept the terms, submit to platform/tenancy POST /register (public). The terms box links the
+ * Terms of Service and Privacy Notice (#/terms, #/privacy, opened in a new tab so the form keeps its input); tenancy
+ * records the accepted version, time and administrator (#665, #148). The form has
  * exactly the fields that endpoint accepts (RegistrationInput) and mirrors its rules, so a visitor
  * sees problems before submitting; whatever the server still rejects is shown against the field or
  * as one message. There is no plan field: every organisation starts on the free trial (billing),
@@ -382,7 +384,17 @@ export function RegisterPage({ onNavigate }: { onNavigate: (route: PublicRoute) 
                   checked={form.terms}
                   onChange={(e) => set("terms", e.target.checked)}
                 />
-                <span>I accept the Education OS terms of service on behalf of this organisation.</span>
+                <span>
+                  I agree to the{" "}
+                  <a href="/#/terms" target="_blank" rel="noopener">
+                    Terms of Service
+                  </a>{" "}
+                  on behalf of this organisation and have read the{" "}
+                  <a href="/#/privacy" target="_blank" rel="noopener">
+                    Privacy Notice
+                  </a>
+                  .
+                </span>
               </label>
               {err("terms")}
               <div className="wpc-reg__actions">
