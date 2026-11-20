@@ -18,6 +18,9 @@ interface Registered {
 export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; onLogin: () => void }) {
   const [types, setTypes] = useState<AcademyType[]>([]);
   const [form, setForm] = useState({ organisation_name: "", slug: "", academy_type: "", name: "", email: "", password: "" });
+  // Consent at registration (DPDP, #148): the administrator must tick the box; platform/tenancy refuses
+  // accepted_terms false and records the version, time and administrator (#665).
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [registered, setRegistered] = useState<Registered | null>(null);
@@ -50,7 +53,7 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
           slug: form.slug || slugFromName(form.organisation_name),
           academy_type: form.academy_type,
           admin: { name: form.name, email: form.email, password: form.password },
-          accepted_terms: true,
+          accepted_terms: accepted,
         },
       });
       setRegistered(r);
@@ -143,6 +146,13 @@ export function SignUp({ onDone, onLogin }: { onDone: (slug: string) => void; on
         <label className="eos-field">
           Password <span className="eos-field__hint">(at least 8 characters)</span>
           <input className="eos-input" type="password" minLength={8} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required autoComplete="new-password" />
+        </label>
+        <label className="eos-field">
+          <span className="eos-field__hint">
+            <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} required />{" "}
+            I agree to the <a href="/#/terms" target="_blank" rel="noopener">Terms of Service</a> on behalf of this
+            organisation and have read the <a href="/#/privacy" target="_blank" rel="noopener">Privacy Notice</a>.
+          </span>
         </label>
         {error && <p className="eos-form-error" role="alert">{error}</p>}
         <Button variant="primary" type="submit" disabled={busy}>{busy ? "Creating…" : "Create organisation"}</Button>
