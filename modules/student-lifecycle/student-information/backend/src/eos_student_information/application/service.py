@@ -8,6 +8,8 @@ Implements all core use cases:
 - Contract-compliant transactional outbox event publishing
 - The person-to-sign-in-account link (`person.account-linked`), published whenever identity_user_id is set, changed
   or cleared, and republished on request for links made before the event existed
+- The guardian's consent for a minor (DPDP gap D7): recorded or withdrawn with an append-only trail; the platform
+  records it and never blocks anything on it
 """
 
 from __future__ import annotations
@@ -22,8 +24,21 @@ from eos_core.db import new_id, utcnow
 from sqlalchemy.orm import Session
 
 from ..domain.enums import DOCUMENT_TYPES, IdCardStatus, PersonStatus
-from ..domain.rules import RuleViolationError, generate_card_number, validate_status_change
-from ..infrastructure.models import IdentityCard, Person, PersonDocument, StatusHistoryEntry, iso
+from ..domain.rules import (
+    RuleViolationError,
+    adult_cutoff,
+    generate_card_number,
+    validate_consent_date,
+    validate_status_change,
+)
+from ..infrastructure.models import (
+    GuardianConsentEntry,
+    IdentityCard,
+    Person,
+    PersonDocument,
+    StatusHistoryEntry,
+    iso,
+)
 
 
 @dataclass
@@ -224,12 +239,17 @@ def list_people(
     identity_number: str | None = None,
     identity_user_id: str | None = None,
     status: list[str] | str | None = None,
+    minor: bool | None = None,
+    guardian_consent: bool | None = None,
     page: int = 1,
     page_size: int = 50,
 ) -> dict[str, Any]:
     """Finds people within caller's organisation supporting exact identity search,
 
-    status filtering, partial text search on name/email, and pagination.
+    status filtering, partial text search on name/email, and pagination. `minor` keeps people under 18 today (true) or
+    18 and over (false); a person without a date of birth matches neither. `guardian_consent` keeps people whose
+    guardian's consent is recorded (true) or not (false), so minor=true&guardian_consent=false lists the minors whose
+    consent is missing.
     """
     query = db.query(Person).filter(Person.organisation_id == actor.organisation_id)
 
@@ -245,6 +265,14 @@ def list_people(
             statuses = list(status)
         if statuses:
             query = query.filter(Person.status.in_(statuses))
+
+    if minor is not None:
+        cutoff = adult_cutoff(date.today())
+        query = query.filter(Person.date_of_birth.isnot(None))
+        query = query.filter(Person.date_of_birth > cutoff if minor else Person.date_of_birth <= cutoff)
+    if guardian_consent is not None:
+        consent = Person.guardian_consent_obtained
+        query = query.filter(consent.is_(True) if guardian_consent else consent.isnot(True))
 
     if q and q.strip():
         term = _like(q.strip())
@@ -418,6 +446,91 @@ def change_status(
 
     db.flush()
     return person
+
+
+GUARDIAN_CONSENT_CHANGED = "student-information.person.guardian-consent-changed"
+
+
+def set_guardian_consent(
+    db: Session,
+    actor: Actor,
+    person_id: str,
+    *,
+    obtained: bool,
+    obtained_on: date | None = None,
+    note: str | None = None,
+) -> Person:
+    """Record (obtained true) or withdraw (obtained false) the guardian's consent on a person (DPDP gap D7).
+
+    The institution obtains verifiable consent offline; this records it. Recording sets obtained_on (today unless a
+    date not in the future is given) and recorded_by to the caller; recording again corrects the date or note.
+    Withdrawing clears the record. Each change appends to the consent history and publishes
+    `person.guardian-consent-changed` (no note, no guardian data). Nothing is refused for a minor without consent."""
+    person = get_person(db, actor, person_id)
+    note = (note or "").strip() or None
+    today = date.today()
+
+    if obtained:
+        when = obtained_on or today
+        try:
+            validate_consent_date(when, today)
+        except RuleViolationError as exc:
+            raise _rule_error(exc.code, exc.message) from exc
+        person.guardian_consent_obtained = True
+        person.guardian_consent_obtained_on = when
+        person.guardian_consent_recorded_by = actor.user_id
+        person.guardian_consent_note = note
+        action = "recorded"
+    else:
+        if obtained_on is not None:
+            raise _rule_error("consent_date_not_allowed", "obtained_on is only given when recording consent")
+        if not person.guardian_consent_obtained:
+            raise _rule_error("consent_not_recorded", "No guardian consent is recorded on this person")
+        person.guardian_consent_obtained = False
+        person.guardian_consent_obtained_on = None
+        person.guardian_consent_recorded_by = None
+        person.guardian_consent_note = None
+        when = None
+        action = "withdrawn"
+    person.updated_at = utcnow()
+
+    db.add(
+        GuardianConsentEntry(
+            id=new_id(),
+            organisation_id=actor.organisation_id,
+            person_id=person.id,
+            action=action,
+            obtained_on=when,
+            note=note,
+            changed_by=actor.user_id,
+            changed_at=utcnow(),
+        )
+    )
+    _publish(
+        db,
+        actor,
+        GUARDIAN_CONSENT_CHANGED,
+        actor.organisation_id,
+        {"person_id": person.id, "guardian_consent_obtained": obtained, "obtained_on": iso(when)},
+    )
+
+    db.flush()
+    return person
+
+
+def get_guardian_consent_history(db: Session, actor: Actor, person_id: str) -> list[dict[str, Any]]:
+    """Every time the guardian's consent was recorded or withdrawn on a person, most recent first."""
+    get_person(db, actor, person_id)
+    entries = (
+        db.query(GuardianConsentEntry)
+        .filter(
+            GuardianConsentEntry.organisation_id == actor.organisation_id,
+            GuardianConsentEntry.person_id == person_id,
+        )
+        .order_by(GuardianConsentEntry.changed_at.desc())
+        .all()
+    )
+    return [e.to_dict() for e in entries]
 
 
 def get_status_history(db: Session, actor: Actor, person_id: str) -> list[dict[str, Any]]:

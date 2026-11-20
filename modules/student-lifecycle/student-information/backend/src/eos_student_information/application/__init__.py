@@ -9,6 +9,7 @@ from .service import (
     change_status,
     create_person,
     delete_document,
+    get_guardian_consent_history,
     get_person,
     get_status_history,
     issue_id_card,
@@ -17,6 +18,7 @@ from .service import (
     list_people,
     republish_account_links,
     revoke_id_card,
+    set_guardian_consent,
     update_person,
 )
 
@@ -27,6 +29,7 @@ __all__ = [
     "change_status",
     "create_person",
     "delete_document",
+    "get_guardian_consent_history",
     "get_person",
     "get_status_history",
     "issue_id_card",
@@ -35,5 +38,6 @@ __all__ = [
     "list_people",
     "republish_account_links",
     "revoke_id_card",
+    "set_guardian_consent",
     "update_person",
 ]

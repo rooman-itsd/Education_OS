@@ -1,7 +1,7 @@
 """PostgreSQL Row-Level Security (RLS) tests for student-information.
 
 Tests:
-- RLS enabled and forced on all four student_information tables
+- RLS enabled and forced on all five student_information tables
 - tenant_isolation policy exists on all tables
 - Tests with unprivileged probe role (NOSUPERUSER, NOBYPASSRLS, NOINHERIT)
 - Cross-tenant read/write prevention enforced by PostgreSQL engine
@@ -111,7 +111,7 @@ def as_role(engine, role: str, organisation_id: str | None):
 
 
 def test_every_table_has_forced_tenant_isolation_policy(pg):
-    """Verifies that all 4 tables have row-level security enabled, forced, and policy tenant_isolation."""
+    """Verifies that all 5 tables have row-level security enabled, forced, and policy tenant_isolation."""
     from eos_student_information.infrastructure.models import TABLES
     from sqlalchemy import text
 

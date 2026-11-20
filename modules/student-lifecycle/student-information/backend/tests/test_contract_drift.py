@@ -58,7 +58,7 @@ def test_routes_and_methods_match_openapi(openapi):
     }
 
     assert implemented_routes == contract_routes
-    assert len(contract_routes) == 13
+    assert len(contract_routes) == 15
 
 
 def test_enums_match_openapi_schemas(openapi):
@@ -119,7 +119,12 @@ def test_error_schemas_contract_shapes(openapi):
     }
 
     rule_codes = schemas["RuleError"]["properties"]["code"]["enum"]
-    assert set(rule_codes) == {"status_unchanged"}
+    assert set(rule_codes) == {
+        "status_unchanged",
+        "consent_date_in_future",
+        "consent_date_not_allowed",
+        "consent_not_recorded",
+    }
 
 
 def test_permission_catalogue_matches_dependency_constants(permissions):
@@ -138,13 +143,14 @@ def test_permission_catalogue_matches_dependency_constants(permissions):
 
 
 def test_contracted_events_catalog(events):
-    """All 6 events in contracts/events.yaml are accounted for."""
+    """All 7 events in contracts/events.yaml are accounted for."""
     contract_event_names = {e["name"] for e in events["events"]}
     expected_event_names = {
         "student-information.person.created",
         "student-information.person.updated",
         "student-information.person.status-changed",
         "student-information.person.account-linked",
+        "student-information.person.guardian-consent-changed",
         "student-information.id-card.issued",
         "student-information.id-card.revoked",
     }
