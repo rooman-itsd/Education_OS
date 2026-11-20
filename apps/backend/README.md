@@ -10,7 +10,9 @@ organisation is suspended, and `read_only` for writes after a trial ends. Platfo
 organisation is no longer active (suspended or archived) is refused on them too, with the same 403
 `organisation_inactive`, on the next request (security review N2): suspending an organisation does not wait for
 its tokens to expire. Requests without a token, and the super admin's tokens (no organisation), reach the
-route's own checks unchanged.
+route's own checks unchanged. On a feature module the gate also refuses a token whose user is no longer active
+(disabled or erased in identity) with 401 `user_disabled`, as identity's `current_principal` does on platform
+routes; a feature module builds its principal from the token alone.
 
 Around the gate sit `platform/api-gateway`'s middlewares: rate limits per user and per organisation for
 signed-in requests, per client address for the rest, and for sign-in/sign-up (429 with `Retry-After`,

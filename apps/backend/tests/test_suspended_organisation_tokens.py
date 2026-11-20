@@ -73,3 +73,40 @@ def test_tokens_without_an_organisation_and_bad_tokens_reach_the_platform_routes
     assert client.get("/api/v1/identity/users").status_code == 401
     assert client.get("/api/v1/identity/users", headers=auth("not-a-jwt")).status_code == 401
     assert client.get("/api/v1/billing/plans").status_code == 200  # public route, no token
+
+
+def _set_user_status(user_id: str, status: str) -> None:
+    """What identity's disable and erase (#685, DPDP D10) do to the row, without depending on their routes."""
+    from eos_core.db import SessionLocal
+    from eos_core.tenant import platform_scope
+    from eos_identity.domain.models import User
+
+    with platform_scope(), SessionLocal() as db:
+        db.get(User, user_id).status = status
+        db.commit()
+
+
+def test_a_disabled_or_erased_users_old_token_is_refused_on_a_module_route(client):
+    """Identity's current_principal already refused such a user on platform routes; a feature module builds its
+    principal from the token alone and accepted it until it expired (up to 12 hours)."""
+    a = register_and_login(client, slug="n2-user", academy_type="dance-academy")
+    body = {"email": "learner@n2-user.example.com", "name": "L", "password": "Passw0rd!x", "roles": ["student"]}
+    made = client.post("/api/v1/identity/users", json=body, headers=auth(a["token"]))
+    assert made.status_code == 201, made.text
+    login = client.post(
+        "/api/v1/identity/auth/login",
+        json={"email": body["email"], "password": body["password"], "organisation_slug": "n2-user"},
+    )
+    h, user_id = auth(login.json()["token"]), made.json()["id"]
+    assert client.get("/api/v1/lms/ping", headers=h).status_code == 200
+
+    for status in ("disabled", "erased"):
+        _set_user_status(user_id, status)
+        r = client.get("/api/v1/lms/ping", headers=h)
+        assert r.status_code == 401 and r.json() == {"detail": f"user is {status}", "code": "user_disabled"}, r.text
+        assert client.get("/api/v1/identity/auth/me", headers=h).status_code == 401  # identity's own check
+
+    _set_user_status(user_id, "active")
+    assert client.get("/api/v1/lms/ping", headers=h).status_code == 200
+    # the organisation's other users are untouched
+    assert client.get("/api/v1/lms/ping", headers=auth(a["token"])).status_code == 200

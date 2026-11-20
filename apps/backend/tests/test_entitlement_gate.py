@@ -14,13 +14,13 @@ def test_the_entitlement_lookup_runs_in_a_worker_thread_not_on_the_event_loop(cl
     seen: list[bool] = []
     lookup = gateway._entitlement
 
-    def spy(org: str) -> dict:
+    def spy(org: str, user_id: str | None) -> tuple[dict, str | None]:
         try:
             asyncio.get_running_loop()
             seen.append(True)
         except RuntimeError:
             seen.append(False)
-        return lookup(org)
+        return lookup(org, user_id)
 
     monkeypatch.setattr(gateway, "_entitlement", spy)
     assert client.get("/api/v1/lms/ping", headers=auth(a["token"])).status_code == 200

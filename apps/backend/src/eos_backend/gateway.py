@@ -53,9 +53,14 @@ class EntitlementGate(BaseHTTPMiddleware):
         # In a worker thread, never on the event loop: a pool checkout blocks while every connection is taken, and
         # the requests holding them need the loop to finish and give them back, so a burst of dashboard requests
         # would hang the whole API until the pool timed out (30 s).
-        ent = await run_in_threadpool(_entitlement, org)
+        ent, user_status = await run_in_threadpool(_entitlement, org, claims.get("sub"))
         if ent["status"] != "active":
             return _inactive(ent["status"])
+        if user_status not in (None, "active"):
+            # A disabled or erased user (identity, DPDP D10) is refused on the next request, as identity's
+            # current_principal refuses them on platform routes: a feature module builds its principal from the
+            # token alone and would otherwise accept it until it expires.
+            return JSONResponse({"detail": f"user is {user_status}", "code": "user_disabled"}, status_code=401)
         if ent.get("subscription_status") == "read_only" and request.method not in ("GET", "HEAD", "OPTIONS"):
             return JSONResponse(
                 {"detail": "trial ended; the organisation is read-only until it upgrades", "code": "read_only"},
@@ -92,12 +97,18 @@ class EntitlementGate(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _entitlement(org: str) -> dict:
-    from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
+def _entitlement(org: str, user_id: str | None) -> tuple[dict, str | None]:
+    """The organisation's entitlement and the token user's status, in one session. The status is None when no
+    identity user carries the id (nothing to refuse on: only a token signed with the platform's key reaches
+    here); identity keeps a disabled or erased user's row, with that status, so those are always found."""
+    from eos_identity.application import service as identity  # lazy: avoid import cycles at startup
+    from eos_tenancy.application import service as tenancy
 
     db = SessionLocal()
     try:
-        return tenancy.entitlement(db, org)
+        ent = tenancy.entitlement(db, org)
+        user = identity.get_user(db, user_id) if user_id else None
+        return ent, getattr(user, "status", None)
     finally:
         db.close()
 
