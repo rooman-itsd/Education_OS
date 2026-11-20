@@ -126,10 +126,33 @@ def test_zoom_url_validation_is_answered_with_the_encrypted_token(adapter):
 def test_url_validation_with_the_wrong_secret_proves_nothing_to_zoom(adapter, monkeypatch):
     raw = fixture("zoom/event_url_validation.json").encode()
     monkeypatch.setenv("VIDEO_CONFERENCING_ZOOM_WEBHOOK_SECRET_TOKEN", "some-other-secret")
-    body = json.loads(verdict(adapter, request(raw))["handshake_response"]["body"])
-    assert (
-        body["encryptedToken"] != hmac.new(ZOOM_SECRET.encode(), b"qgg8vlvZRS6UYooatFL8Aw", hashlib.sha256).hexdigest()
-    )
+    # signed with the secret Zoom holds, which is not this deployment's: refused, so nothing is proved to Zoom
+    assert verdict(adapter, request(raw, zoom_signature(raw, NOW_TS)))["verdict"] == "reject"
+
+
+def test_an_unsigned_url_validation_is_rejected(adapter):
+    """Zoom signs the url_validation request like every other event; one without a valid signature is refused."""
+    raw = fixture("zoom/event_url_validation.json").encode()
+    assert verdict(adapter, request(raw)) == {"verdict": "reject", "reject_status": 401}
+    assert verdict(adapter, request(raw, zoom_signature(raw, NOW_TS, "not-the-secret")))["verdict"] == "reject"
+    assert verdict(adapter, request(raw, zoom_signature(raw, NOW_TS - 301)))["verdict"] == "reject"
+
+
+def test_the_url_validation_handshake_cannot_be_used_to_sign_a_forged_event(adapter, transport, org):
+    """The handshake answers HMAC(secret, plainToken), the same function as the event signature HMAC(secret,
+    "v0:<ts>:<body>"). Answered without a signature, it signed any event a caller wrote: the security review of
+    November 2026 (N13). Now the handshake itself must be signed, so nobody without the secret gets an answer."""
+    zoom_org_meeting(adapter, transport, org)
+    forged = fixture("zoom/event_meeting_ended.json").encode()
+    plain = f"v0:{NOW_TS}:".encode() + forged
+    handshake_body = json.dumps(
+        {"event": "endpoint.url_validation", "payload": {"plainToken": plain.decode()}}
+    ).encode()
+    v = verdict(adapter, request(handshake_body))  # no signature: a stranger asking the adapter to sign for it
+    assert v["verdict"] == "reject"
+    # had it been answered, this is the signature the stranger would have sent with the forged event
+    stolen = "v0=" + hmac.new(ZOOM_SECRET.encode(), plain, hashlib.sha256).hexdigest()
+    assert zoom_signature(forged, NOW_TS)["x-zm-signature"] == stolen  # the two functions are the same
 
 
 @pytest.mark.parametrize("raw", [b"", b"not json", b"[]", b'"x"', b"\xff\xfe", b"{" * 5000, b'{"event": "endpoint.url_validation", "payload": {"plainToken": 5}}',

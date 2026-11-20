@@ -9,8 +9,15 @@ permissions:
   - key: identity:user:read
     description: List the users of own organisation.
   - key: identity:user:manage
-    description: Create, disable and assign roles to users of own organisation. Platform roles cannot be granted.
+    description: >-
+      Create, update (name, email, roles), disable and enable users of own organisation. Platform roles cannot be
+      granted, and the organisation's last active admin cannot be disabled or lose `org-admin`.
+  - key: identity:user:erase
+    description: >-
+      Erase a user of own organisation (DPDP s.12(3)): the row stays as a tombstone so other modules' references and
+      the audit trail keep their meaning, its personal fields are cleared, sign-in is removed for good, and
+      identity.user.erased tells the modules to erase what they hold. Never the organisation's last active admin.
 roles:
   - name: org-admin
     description: Organisation administrator, created at registration. Scoped to one organisation.
-    grants: [identity:user:read, identity:user:manage]
+    grants: [identity:user:read, identity:user:manage, identity:user:erase]

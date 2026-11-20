@@ -5,7 +5,7 @@ import hashlib
 import jwt
 from eos_core import events, oidc
 from eos_core.config import expand_roles
-from eos_core.db import SessionLocal, scoped
+from eos_core.db import SessionLocal, scoped, utcnow
 from eos_core.security import create_token, hash_password, verify_password
 from eos_core.settings import settings
 from eos_core.tenant import get_current_organisation, organisation_scope, platform_scope
@@ -118,7 +118,10 @@ def lock_user_seats(db: Session, organisation_id: str) -> None:
 
 
 def list_users(db: Session) -> list[User]:
-    return list(db.scalars(scoped(db, select(User), User).order_by(User.created_at)))
+    """The organisation's users, without erased ones: a tombstone is kept for the ids other modules hold, not to be
+    managed."""
+    q = scoped(db, select(User), User).where(User.status != ERASED)
+    return list(db.scalars(q.order_by(User.created_at)))
 
 
 # The roles of the people an organisation teaches, not employs. A role is a learner's when it is one of these or
@@ -315,3 +318,173 @@ def authenticate_oidc(db: Session, *, slug: str, code: str, code_verifier: str, 
         super_admin=False,
     )
     return user, token
+
+
+# ---- Updating, disabling and erasing users (DPDP s.12 correction and erasure; offboarding) -------------------
+
+ACTIVE, DISABLED, ERASED = "active", "disabled", "erased"
+ADMIN_ROLE = "org-admin"
+ERASED_NAME = "Erased user"
+# A tombstone address: unique per user (the organisation's email constraint), and under the `.invalid` top-level
+# domain (RFC 2606), so it can never belong to anyone or receive mail.
+ERASED_EMAIL_DOMAIN = "erased.invalid"
+# Not a hash verify_password can ever match (it needs four `$`-separated parts), so nobody signs in with it.
+NO_PASSWORD = "!erased"
+
+
+class UserNotFoundError(Exception):
+    """No such user in the organisation: another organisation's user, an unknown id, or an erased user."""
+
+
+class EmailTakenError(Exception):
+    """Another user of the organisation already has the email."""
+
+
+class LastAdminError(Exception):
+    """The change would leave the organisation without an active admin."""
+
+
+def is_admin(roles: list[str] | None) -> bool:
+    """Whether a person with these roles is an organisation admin: `org-admin`, held or inherited."""
+    return ADMIN_ROLE in expand_roles(list(roles or []))
+
+
+def _manageable(db: Session, organisation_id: str, user_id: str) -> User:
+    """The organisation's user `user_id`, never another organisation's (filtered by the organisation itself, as
+    well as by the session's scope and, on Postgres, row-level security) and never an erased one."""
+    with organisation_scope(organisation_id):
+        q = select(User).where(User.id == user_id, User.organisation_id == organisation_id)
+        user = db.scalar(scoped(db, q, User))
+    if user is None or user.status == ERASED:
+        raise UserNotFoundError("user not found")
+    return user
+
+
+def _guard_last_admin(db: Session, user: User, *, stays_admin: bool) -> None:
+    """Refuse a change that takes the last active admin away from the organisation: disabling or erasing them, or
+    taking `org-admin` from their roles. Under the organisation's seat lock, so two admins disabling each other
+    at the same moment cannot both pass on Postgres."""
+    if stays_admin or user.status != ACTIVE or not is_admin(user.roles):
+        return
+    lock_user_seats(db, user.organisation_id)
+    with organisation_scope(user.organisation_id):
+        q = select(User.roles).where(
+            User.organisation_id == user.organisation_id, User.status == ACTIVE, User.id != user.id
+        )
+        others = sum(1 for roles in db.scalars(q) if is_admin(roles))
+    if others == 0:
+        raise LastAdminError("the organisation's last active admin cannot be disabled, erased or lose org-admin")
+
+
+def _guard_staff_seat(db: Session, organisation_id: str) -> None:
+    """The plan's `users` limit for one more active staff account, as create_user applies it."""
+    limit = hooks.user_limit(db, organisation_id)
+    if limit is not None and limit > 0:
+        lock_user_seats(db, organisation_id)
+        used = count_staff_users(db, organisation_id)
+        if used >= limit:
+            raise PlanLimitReachedError("users", limit, used)
+
+
+def update_user(
+    db: Session,
+    *,
+    organisation_id: str,
+    user_id: str,
+    actor: str | None,
+    name: str | None = None,
+    email: str | None = None,
+    roles: list[str] | None = None,
+) -> User:
+    """Correct a user's name or email, or change their roles (None: leave as is). Roles follow create_user's rules:
+    no role a person may not hold, and a learner who becomes staff while active must fit the plan's `users` limit.
+    Publishes identity.user.updated naming the changed fields, never their values: the audit record is permanent.
+    Refusals raise before anything is written."""
+    if roles is not None:
+        refused = NOT_A_PERSON_ROLES.intersection(roles)
+        if refused:
+            raise RoleNotAssignableError(f"{', '.join(sorted(refused))} is not a role a person can hold")
+    user = _manageable(db, organisation_id, user_id)
+    changed: list[str] = []
+    if name is not None and name != user.name:
+        changed.append("name")
+    if email is not None and email.lower() != user.email:
+        with organisation_scope(organisation_id):
+            q = select(User.id).where(User.organisation_id == organisation_id, User.email == email.lower())
+            if db.scalar(q) is not None:
+                raise EmailTakenError("another user of the organisation has this email")
+        changed.append("email")
+    if roles is not None and list(roles) != list(user.roles or []):
+        _guard_last_admin(db, user, stays_admin=is_admin(roles))
+        if user.status == ACTIVE and is_learner(user.roles) and not is_learner(roles):
+            _guard_staff_seat(db, organisation_id)
+        changed.append("roles")
+    if not changed:
+        return user
+    if "name" in changed:
+        user.name = name
+    if "email" in changed:
+        user.email = email.lower()
+    payload: dict = {"user_id": user.id, "changed": changed}
+    if "roles" in changed:
+        user.roles = list(roles)
+        payload["roles"] = list(roles)
+    db.flush()
+    events.publish(db, "identity.user.updated", organisation_id, payload, actor=actor)
+    return user
+
+
+def disable_user(db: Session, *, organisation_id: str, user_id: str, actor: str | None) -> User:
+    """Stop the user signing in: login and the Keycloak paths take active users only, and current_principal
+    refuses the user's existing tokens on every platform route from the next request. The user stops counting
+    against the plan's `users` limit (count_staff_users counts active users). Already disabled: nothing changes."""
+    user = _manageable(db, organisation_id, user_id)
+    if user.status == DISABLED:
+        return user
+    _guard_last_admin(db, user, stays_admin=False)
+    user.status = DISABLED
+    db.flush()
+    events.publish(db, "identity.user.disabled", organisation_id, {"user_id": user.id}, actor=actor)
+    return user
+
+
+def enable_user(db: Session, *, organisation_id: str, user_id: str, actor: str | None) -> User:
+    """Let a disabled user sign in again. A staff user takes a seat again, so the plan's `users` limit applies.
+    An erased user cannot come back (UserNotFoundError). Already active: nothing changes."""
+    user = _manageable(db, organisation_id, user_id)
+    if user.status == ACTIVE:
+        return user
+    if not is_learner(user.roles):
+        _guard_staff_seat(db, organisation_id)
+    user.status = ACTIVE
+    db.flush()
+    events.publish(db, "identity.user.enabled", organisation_id, {"user_id": user.id}, actor=actor)
+    return user
+
+
+def erase_user(db: Session, *, organisation_id: str, user_id: str, actor: str | None) -> User | None:
+    """Erase a user (DPDP s.12(3)) by anonymising the row, not deleting it: other modules and the audit trail hold
+    the id, and a deleted row would leave them pointing at nothing. The name and email become a tombstone, the
+    password hash and the Keycloak subject are removed, the roles are cleared and the status is `erased`, which no
+    sign-in path and no token check accepts. identity.user.erased asks every module to erase or anonymise what it
+    holds for the id. Returns None, and publishes nothing, when the user was already erased."""
+    with organisation_scope(organisation_id):
+        q = select(User).where(User.id == user_id, User.organisation_id == organisation_id)
+        user = db.scalar(scoped(db, q, User))
+    if user is None:
+        raise UserNotFoundError("user not found")
+    if user.status == ERASED:
+        return None
+    _guard_last_admin(db, user, stays_admin=False)
+    user.name = ERASED_NAME
+    user.email = f"erased-{user.id}@{ERASED_EMAIL_DOMAIN}"
+    user.password_hash = NO_PASSWORD
+    user.oidc_subject = None
+    user.roles = []
+    user.status = ERASED
+    db.flush()
+    erased_at = utcnow().isoformat()
+    events.publish(
+        db, "identity.user.erased", organisation_id, {"user_id": user.id, "erased_at": erased_at}, actor=actor
+    )
+    return user

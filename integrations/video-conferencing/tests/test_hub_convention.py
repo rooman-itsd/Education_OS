@@ -10,7 +10,9 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from vc_support import fixture, request
+from vc_support import fixture, request, zoom_signature
+
+NOW_TS = 1793858400  # 2026-11-05 06:00:00 UTC, the tests' clock (conftest)
 
 
 @dataclass
@@ -72,5 +74,5 @@ def test_an_app_level_callback_has_no_connection_and_is_verified_with_platform_c
     """The hub's context for /inbound/{adapter} has organisation_id, connection_id, provider and mode all None."""
     app = HubContext(None, None, None, None, operation="verify_inbound")
     raw = fixture("zoom/event_url_validation.json").encode()
-    v = adapter.verify_inbound(app, request(raw, {})).output
+    v = adapter.verify_inbound(app, request(raw, zoom_signature(raw, NOW_TS))).output
     assert v["verdict"] == "handshake" and json.loads(v["handshake_response"]["body"])["encryptedToken"]

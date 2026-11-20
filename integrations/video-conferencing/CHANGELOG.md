@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+### Security
+- Zoom's `endpoint.url_validation` handshake is answered only when the request carries a valid `x-zm-signature` within the
+  timestamp tolerance, like every other event. Answered unsigned, the handshake's HMAC of `plainToken` signed any event a
+  caller wrote as `v0:<ts>:<body>` (security review, November 2026, N13).
 
 ## [0.3.0] - 2026-11-05
 Built on the draft contracts (0.2.0); no contract file changed.

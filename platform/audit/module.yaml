@@ -40,6 +40,10 @@ consumes_events:
   - tenancy.impersonation.started
   - identity.user.created
   - identity.user.oidc_linked
+  - identity.user.updated
+  - identity.user.disabled
+  - identity.user.enabled
+  - identity.user.erased
   - billing.subscription.started
   - billing.subscription.upgraded
   - billing.subscription.downgraded
