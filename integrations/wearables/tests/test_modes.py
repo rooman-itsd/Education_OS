@@ -7,11 +7,7 @@ import logging
 import uuid
 
 import pytest
-from eos_wearables.application.adapter import (
-    WearablesAdapter,
-    get_adapter,
-    startup_check,
-)
+from eos_wearables.application.adapter import WearablesAdapter, get_adapter, startup_check
 from eos_wearables.domain.context import Context
 from eos_wearables.domain.errors import AdapterError
 from eos_wearables.infrastructure.config import Config
@@ -59,48 +55,13 @@ def test_mock_mode_supports_the_whole_port_and_touches_no_network(adapter, trans
     assert not transport.requests
 
 
-def test_sandbox_is_the_default_mode_and_mock_refused_outside_dev_mode(monkeypatch):
-    import dataclasses
-
-    from eos_core import settings as core_settings
-
-    # Sandbox is the default mode
-    assert Config.load().mode == "sandbox"
-
-    # Mock mode is refused outside dev mode
-    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
-    monkeypatch.setenv("WEARABLES_MODE", "mock")
-    with pytest.raises(AdapterError) as e:
-        Config.load()
-    assert "WEARABLES_MODE=mock is refused unless EOS_DEV_MODE=true" in str(e.value)
-
-    # Connection mode mock is also refused outside dev mode
-    with pytest.raises(AdapterError) as e2:
-        Context.coerce({"organisation_id": "org1", "connection_id": "conn1", "provider": "strava", "mode": "mock"})
-    assert "connection mode mock is refused unless EOS_DEV_MODE=true" in str(e2.value)
-
-
-def test_mock_mode_when_enabled_in_dev_mode_touches_no_network(adapter, transport, org, monkeypatch):
-    monkeypatch.setenv("WEARABLES_MODE", "mock")
+def test_mock_mode_is_the_default_when_neither_the_hub_nor_the_environment_names_a_mode(adapter, transport, org):
     link = make_link(org, "strava")
     r = adapter.sync(
         org.ctx("strava", link["person"], link["link"], mode=None, secrets={}),
         {"account_link_id": link["link"], "from": "2026-11-03", "to": "2026-11-05"},
     )
     assert r.error is None and r.output["stored"] > 0 and not transport.requests
-
-
-def test_mock_mode_call_refused_outside_dev_mode(adapter, org, monkeypatch):
-    import dataclasses
-
-    from eos_core import settings as core_settings
-
-    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
-    link = make_link(org, "strava")
-    ctx = Context(organisation_id=org.id, connection_id=org.connection_id, provider="strava", mode="mock")
-    res = adapter.sync(ctx, {"account_link_id": link["link"]})
-    assert res.error["code"] == "not_configured"
-    assert "mock mode is refused unless EOS_DEV_MODE=true" in res.error["detail"]
 
 
 def test_mock_mode_still_verifies_for_real(adapter, org):

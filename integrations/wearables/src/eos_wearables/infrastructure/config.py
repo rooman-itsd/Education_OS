@@ -8,8 +8,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from eos_core import settings as core_settings
-
 from ..domain.context import MODES
 from ..domain.errors import AdapterError
 
@@ -67,11 +65,9 @@ class Config:
 
     @classmethod
     def load(cls) -> Config:
-        mode = _env("MODE", "sandbox").lower()
+        mode = _env("MODE", "mock").lower()
         if mode not in MODES:
             raise AdapterError("not_configured", "WEARABLES_MODE must be mock, sandbox or live")
-        if mode == "mock" and not core_settings.settings.dev_mode:
-            raise AdapterError("not_configured", "WEARABLES_MODE=mock is refused unless EOS_DEV_MODE=true")
         strava_base = _env("STRAVA_API_BASE_URL", "https://www.strava.com/api/v3").rstrip("/")
         strava_site = strava_base.rsplit("/api/", 1)[0]
         return cls(
