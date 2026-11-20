@@ -5,6 +5,7 @@ Tables:
 - student_information_status_history
 - student_information_document
 - student_information_id_card
+- student_information_guardian_consent_history
 """
 
 from __future__ import annotations
@@ -13,10 +14,11 @@ from datetime import UTC, date, datetime
 
 import sqlalchemy as sa
 from eos_core.db import Base, TenantMixin, TimestampMixin, new_id, utcnow
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..domain.enums import IdCardStatus, PersonStatus
+from ..domain.rules import is_minor
 
 PREFIX = "student_information_"
 
@@ -82,6 +84,20 @@ class Person(Base, TenantMixin, TimestampMixin):
     source: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    # The guardian's consent for a minor (DPDP gap D7): the institution obtains it offline, the platform records it.
+    # Null obtained means never recorded, read as not obtained.
+    guardian_consent_obtained: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    guardian_consent_obtained_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    guardian_consent_recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    guardian_consent_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    def guardian_consent(self) -> dict:
+        return {
+            "obtained": bool(self.guardian_consent_obtained),
+            "obtained_on": iso(self.guardian_consent_obtained_on),
+            "recorded_by": self.guardian_consent_recorded_by,
+            "note": self.guardian_consent_note,
+        }
 
     def to_dict(self) -> dict:
         return {
@@ -101,6 +117,8 @@ class Person(Base, TenantMixin, TimestampMixin):
             "source": self.source,
             "created_at": iso(self.created_at),
             "updated_at": iso(self.updated_at),
+            "minor": is_minor(self.date_of_birth, date.today()),
+            "guardian_consent": self.guardian_consent(),
         }
 
 
@@ -222,5 +240,38 @@ class IdentityCard(Base, TenantMixin):
         return data
 
 
-MODELS = (Person, StatusHistoryEntry, PersonDocument, IdentityCard)
+class GuardianConsentEntry(Base, TenantMixin):
+    """Append-only trail of guardian consent being recorded or withdrawn on a person, like the status history."""
+
+    __tablename__ = f"{PREFIX}guardian_consent_history"
+    __table_args__ = (
+        Index(f"ix_{PREFIX}guardian_consent_history_organisation_id", "organisation_id"),
+        Index(f"ix_{PREFIX}guardian_consent_history_person_id", "person_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    organisation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    person_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey(f"{PREFIX}person.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # recorded | withdrawn
+    obtained_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_by: Mapped[str] = mapped_column(String(36), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "person_id": self.person_id,
+            "organisation_id": self.organisation_id,
+            "action": self.action,
+            "obtained_on": iso(self.obtained_on),
+            "note": self.note,
+            "changed_by": self.changed_by,
+            "changed_at": iso(self.changed_at),
+        }
+
+
+MODELS = (Person, StatusHistoryEntry, PersonDocument, IdentityCard, GuardianConsentEntry)
 TABLES = [m.__table__ for m in MODELS]

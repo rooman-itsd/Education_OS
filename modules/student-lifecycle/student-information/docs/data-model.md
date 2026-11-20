@@ -23,6 +23,21 @@ The aggregate root. One row per person with a learner relationship to the organi
 | status_effective_date | |
 | source | optional `{module, entity, id}` — where the person originated (e.g. an accepted admissions application). Cached for traceability only, never joined |
 | created_at, updated_at | |
+| guardian_consent_obtained, guardian_consent_obtained_on, guardian_consent_recorded_by, guardian_consent_note | nullable; the guardian's consent for a minor as recorded by staff (DPDP gap D7). The API shows them as `guardian_consent` and adds a derived `minor` (under 18 today; null without a date of birth), which is never stored |
+
+### GuardianConsentEntry
+Append-only (`student_information_guardian_consent_history`). One row each time the guardian's consent is recorded or
+withdrawn; never updated or deleted.
+
+| Field | Notes |
+|---|---|
+| id | uuid |
+| person_id | references Person within this schema |
+| organisation_id | |
+| action | recorded, withdrawn |
+| obtained_on | the date the institution obtained it; null for a withdrawal |
+| note | optional: how it was verified, or why it was withdrawn |
+| changed_by, changed_at | the acting user's id and when |
 
 ### StatusHistoryEntry
 Append-only. One row per status change; never updated or deleted.
@@ -69,6 +84,7 @@ A logical record of an issued card. The physical/PDF artifact is a `platform/doc
 Person (1) ──< StatusHistoryEntry (many)
 Person (1) ──< PersonDocument (many)
 Person (1) ──< IdentityCard (many)
+Person (1) ──< GuardianConsentEntry (many)
 ```
 
 All relationships are within this module's own schema. `identity_user_id` and `source.id` are

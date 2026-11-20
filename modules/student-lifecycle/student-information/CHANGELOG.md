@@ -4,6 +4,24 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-20
+- Guardian's consent for minors (DPDP gap D7; the institution obtains verifiable consent offline, the platform records
+  it and blocks nothing on it):
+  - `Person.minor` (read-only, derived from `date_of_birth`: under 18 today; null when the date of birth is unknown)
+    and `Person.guardian_consent` (`{obtained, obtained_on, recorded_by, note}`).
+  - `PUT /people/{id}/guardian-consent` (permission `student-information:person:write`: registrar, org-admin,
+    admissions-staff): `obtained: true` records it (`obtained_on` defaults to today, never in the future;
+    `recorded_by` is the caller), `obtained: false` withdraws it and clears the record. New 422 codes
+    `consent_date_in_future`, `consent_date_not_allowed`, `consent_not_recorded`.
+  - `GET /people/{id}/guardian-consent` (`student-information:person:read`): the append-only history.
+  - `GET /people` filters `minor` and `guardian_consent`: `?minor=true&guardian_consent=false` lists the minors whose
+    consent is missing.
+  - Event `student-information.person.guardian-consent-changed` (`{organisation_id, person_id,
+    guardian_consent_obtained, obtained_on}`; no note, no guardian data).
+  - Migration `student_information_0002`: four nullable columns on `student_information_person` and the table
+    `student_information_guardian_consent_history` (organisation_id, row-level security).
+- Contract versions: openapi `0.3.0`, module `0.3.0`; `events.yaml` stays at payload version 1 (additive only).
+
 ## [0.2.0] - 2026-11-06
 - Added `student-information.person.account-linked` (`{organisation_id, person_id, identity_user_id, linked,
   previous_identity_user_id}`), published in the transaction of every write that sets, changes or clears a person's

@@ -164,12 +164,13 @@ def test_document_and_id_card_model_serialization():
 
 
 def test_tables_metadata():
-    assert len(MODELS) == 4
-    assert len(TABLES) == 4
+    assert len(MODELS) == 5
+    assert len(TABLES) == 5
     names = {t.name for t in TABLES}
     assert names == {
         f"{PREFIX}person",
         f"{PREFIX}status_history",
         f"{PREFIX}document",
         f"{PREFIX}id_card",
+        f"{PREFIX}guardian_consent_history",
     }

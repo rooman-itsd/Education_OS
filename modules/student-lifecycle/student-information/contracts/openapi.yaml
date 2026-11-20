@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: student-information API
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Student master record (SIS): the Person system of record for Education OS. Profiles,
     documents, ID cards, status history. Person records are created only by an authorised staff
@@ -20,6 +20,8 @@ paths:
         - { name: identity_number, in: query, description: "Exact match on identity document number, to check for a duplicate", schema: { type: string } }
         - { name: identity_user_id, in: query, description: "Exact match on the linked platform/identity user, for modules that hold a user id and need the person", schema: { type: string, format: uuid } }
         - { name: status, in: query, style: form, explode: false, schema: { type: array, items: { $ref: "#/components/schemas/PersonStatus" } } }
+        - { name: minor, in: query, description: "true keeps people under 18 today, false people 18 and over; a person without a date of birth matches neither", schema: { type: boolean } }
+        - { name: guardian_consent, in: query, description: "true keeps people with the guardian's consent recorded, false those without. minor=true&guardian_consent=false lists the minors whose consent is missing", schema: { type: boolean } }
         - { $ref: "#/components/parameters/Page" }
         - { $ref: "#/components/parameters/PageSize" }
       responses:
@@ -83,6 +85,32 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { description: "Status unchanged (new status equals current status)", content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } } }
+
+  /people/{id}/guardian-consent:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      summary: >
+        Every time the guardian's consent was recorded or withdrawn on this person, most recent first (the audit
+        trail; entries are never edited or deleted). Permission student-information:person:read.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/GuardianConsentEntry" } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: >
+        Record or withdraw the guardian's consent for a minor (DPDP Act s.9, gap D7). The institution obtains
+        verifiable consent offline; the platform records it and never blocks anything on it. obtained true records it:
+        obtained_on defaults to today and cannot be in the future, recorded_by is the caller, and recording again
+        corrects the date or note. obtained false withdraws it and clears the record. Each call appends to the history
+        and publishes student-information.person.guardian-consent-changed. Permission student-information:person:write.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GuardianConsentInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Person" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: >
+            consent_date_in_future (obtained_on after today), consent_date_not_allowed (obtained_on given when
+            withdrawing) or consent_not_recorded (withdrawing when no consent is recorded)
+          content: { application/json: { schema: { $ref: "#/components/schemas/RuleError" } } }
 
   /people/{id}/documents:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -221,6 +249,12 @@ components:
             status_effective_date: { type: string, format: date }
             created_at: { type: string, format: date-time }
             updated_at: { type: string, format: date-time }
+            minor:
+              type: boolean
+              nullable: true
+              readOnly: true
+              description: Under 18 today, derived from date_of_birth; null when the date of birth is unknown.
+            guardian_consent: { $ref: "#/components/schemas/GuardianConsent" }
     PersonPage:
       type: object
       properties:
@@ -245,6 +279,37 @@ components:
         status: { $ref: "#/components/schemas/PersonStatus" }
         reason: { type: string }
         effective_date: { type: string, format: date }
+        changed_by: { type: string, format: uuid }
+        changed_at: { type: string, format: date-time }
+
+    GuardianConsent:
+      type: object
+      readOnly: true
+      description: >-
+        The guardian's consent for a minor, as recorded by staff (set through PUT /people/{id}/guardian-consent, not
+        through create or update). obtained is false until it is recorded and after it is withdrawn.
+      required: [obtained, obtained_on, recorded_by, note]
+      properties:
+        obtained: { type: boolean }
+        obtained_on: { type: string, format: date, nullable: true, description: "When the institution obtained it" }
+        recorded_by: { type: string, format: uuid, nullable: true, description: "The staff user who recorded it" }
+        note: { type: string, nullable: true, description: "How it was verified, e.g. signed form on file" }
+    GuardianConsentInput:
+      type: object
+      required: [obtained]
+      properties:
+        obtained: { type: boolean, description: "true records the consent, false withdraws it" }
+        obtained_on: { type: string, format: date, description: "Recording only. Defaults to today; not in the future" }
+        note: { type: string, maxLength: 500, description: "How it was verified, or why it was withdrawn" }
+    GuardianConsentEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        person_id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        action: { type: string, enum: [recorded, withdrawn] }
+        obtained_on: { type: string, format: date, nullable: true }
+        note: { type: string, nullable: true }
         changed_by: { type: string, format: uuid }
         changed_at: { type: string, format: date-time }
 
@@ -301,5 +366,5 @@ components:
     RuleError:
       type: object
       properties:
-        code: { type: string, enum: [status_unchanged] }
+        code: { type: string, enum: [status_unchanged, consent_date_in_future, consent_date_not_allowed, consent_not_recorded] }
         message: { type: string }

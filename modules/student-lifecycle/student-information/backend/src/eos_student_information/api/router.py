@@ -75,6 +75,8 @@ def list_people(
     identity_number: str | None = None,
     identity_user_id: str | None = None,
     status: str | None = None,
+    minor: bool | None = None,
+    guardian_consent: bool | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     actor: Actor = Depends(require(PERM_PERSON_READ)),
@@ -90,6 +92,8 @@ def list_people(
         identity_number=identity_number,
         identity_user_id=identity_user_id,
         status=parsed_status,
+        minor=minor,
+        guardian_consent=guardian_consent,
         page=page,
         page_size=page_size,
     )
@@ -164,6 +168,38 @@ def change_status(
         status=body.status,
         reason=body.reason,
         effective_date=body.effective_date,
+    ).to_dict()
+
+
+# ---------------------------------------------------------------- Guardian consent (DPDP gap D7)
+
+
+@router.get("/people/{id}/guardian-consent", status_code=200)
+def get_guardian_consent_history(
+    id: str,
+    actor: Actor = Depends(require(PERM_PERSON_READ)),
+    db: Session = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Every time the guardian's consent was recorded or withdrawn on a person, most recent first."""
+    return _run(svc.get_guardian_consent_history, db, actor, id)
+
+
+@router.put("/people/{id}/guardian-consent", status_code=200)
+def set_guardian_consent(
+    id: str,
+    body: s.GuardianConsentInput,
+    actor: Actor = Depends(require(PERM_PERSON_WRITE)),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Records (obtained true) or withdraws (obtained false) the guardian's consent obtained offline."""
+    return _run(
+        svc.set_guardian_consent,
+        db,
+        actor,
+        id,
+        obtained=body.obtained,
+        obtained_on=body.obtained_on,
+        note=body.note,
     ).to_dict()
 
 
