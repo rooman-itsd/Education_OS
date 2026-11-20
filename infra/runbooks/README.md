@@ -10,6 +10,7 @@ person who has not seen the system for weeks: read one through before you start.
 | [restore.md](restore.md) | Data is lost or wrong in the database, or the whole host is lost |
 | [suspend-a-tenant.md](suspend-a-tenant.md) | An organisation must be blocked at once, or switched back on (non-payment, abuse, a security incident) |
 | [rotate-secrets.md](rotate-secrets.md) | A secret leaked, someone with access left, or on the regular schedule |
+| [personal-data-breach.md](personal-data-breach.md) | Personal data may have been seen, copied, changed or lost: detect, contain, assess, tell the Board and the people affected (DPDP s.8(6)), record |
 | [roll-back-a-deploy.md](roll-back-a-deploy.md) | A release or a merge to `main` broke the site |
 | [scale-the-api.md](scale-the-api.md) | The API is slow or out of memory under load |
 
