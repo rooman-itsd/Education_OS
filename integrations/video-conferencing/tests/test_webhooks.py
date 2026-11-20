@@ -145,7 +145,9 @@ def test_the_url_validation_handshake_cannot_be_used_to_sign_a_forged_event(adap
     zoom_org_meeting(adapter, transport, org)
     forged = fixture("zoom/event_meeting_ended.json").encode()
     plain = f"v0:{NOW_TS}:".encode() + forged
-    handshake_body = json.dumps({"event": "endpoint.url_validation", "payload": {"plainToken": plain.decode()}}).encode()
+    handshake_body = json.dumps(
+        {"event": "endpoint.url_validation", "payload": {"plainToken": plain.decode()}}
+    ).encode()
     v = verdict(adapter, request(handshake_body))  # no signature: a stranger asking the adapter to sign for it
     assert v["verdict"] == "reject"
     # had it been answered, this is the signature the stranger would have sent with the forged event
