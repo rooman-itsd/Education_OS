@@ -66,6 +66,8 @@ async def lifespan(app: FastAPI):
 def create_app(extra_routers: dict[str, APIRouter] | None = None) -> FastAPI:
     """Mount everything config/modules.enabled.yaml lists (platform services, feature modules, integrations),
     plus `extra_routers` (tests). Fails before serving anything if a listed entry is not installed."""
+    # Before anything else: outside dev mode a signing key anyone could know stops start-up (security review N21).
+    settings.check_secrets()
     entries = enabled()
     routers = {e.name: r for e in entries if (r := router_for(e)) is not None}
     mounted = sorted(e.name for e in entries if e.kind != "platform")

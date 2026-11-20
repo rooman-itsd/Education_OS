@@ -1,9 +1,13 @@
 import os
+import secrets
 import tempfile
 from pathlib import Path
 
 os.environ.setdefault("EOS_DATABASE_URL", f"sqlite:///{tempfile.mkdtemp()}/test.db")
 os.environ.setdefault("EOS_DEV_MODE", "true")
+# A random key per run, never the built-in development one: tests that build the app with dev mode off (test_gateway,
+# test_jwt_secret) would otherwise be refused at start-up (Settings.check_secrets, security review N21).
+os.environ.setdefault("EOS_JWT_SECRET", secrets.token_hex(32))
 os.environ.setdefault("EOS_SUPER_ADMIN_EMAIL", "root@platform.example.com")
 os.environ.setdefault("EOS_SUPER_ADMIN_PASSWORD", "RootPassw0rd!")
 os.environ.setdefault("BILLING_PAYMENT_ADAPTER", "none")
