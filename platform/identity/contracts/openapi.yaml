@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: identity API
-  version: 0.1.1
+  version: 0.2.0
   description: "SSO (SAML / OAuth2 / OIDC), RBAC with fine-grained permissions, MFA, session management."
 servers:
   - url: /api/v1/identity
@@ -57,14 +57,14 @@ paths:
         "404": { description: OIDC is not configured for the slug }
   /users:
     get:
-      summary: Users of own organisation (identity:user:read).
+      summary: Users of own organisation (identity:user:read). Erased users (tombstones) are left out.
       responses:
         "200": { description: list of users }
     post:
       summary: Create a user of own organisation (identity:user:manage).
       responses:
         "201": { description: the user }
-        "403": { description: A platform role, or a role no person may hold (`service`). }
+        "403": { description: "A platform role, or a role no person may hold (`service`)." }
         "409":
           description: >-
             The organisation's plan allows no more active staff accounts. The plan's `users` limit counts staff
@@ -73,8 +73,102 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanLimitReached" }
+  /users/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+    patch:
+      summary: Update a user of own organisation (identity:user:manage); DPDP s.12 correction.
+      description: >-
+        Changes any of name, email and roles; fields left out stay. Roles follow the rules of POST /users: no platform
+        role, no role a person may not hold, and a learner made staff must fit the plan's `users` limit. Publishes
+        identity.user.updated with the names of the changed fields (never their values).
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUser" }
+      responses:
+        "200": { description: the user }
+        "403": { description: "A platform role, or a role no person may hold (`service`)." }
+        "404": { description: No such user in own organisation (another organisation's user, or an erased one). }
+        "409":
+          description: >-
+            `email_taken` (another user of the organisation has the email), `last_admin` (the change would take
+            `org-admin` from the organisation's last active admin), or `plan_limit_reached` (as for POST /users).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/Conflict" }
+                  - { $ref: "#/components/schemas/PlanLimitReached" }
+        "422": { description: No field given, or a field is invalid. }
+    delete:
+      summary: Erase a user of own organisation (identity:user:erase); DPDP s.12(3).
+      description: >-
+        Anonymises, never hard-deletes: other modules and the audit trail hold the user id. The row becomes a
+        tombstone (status `erased`, name "Erased user", email `erased-<id>@erased.invalid`); the password hash, the
+        Keycloak subject and the roles are removed, so the user can never sign in again and no token of theirs is
+        accepted by a platform route. Publishes identity.user.erased so each module erases or anonymises what it
+        holds. Erasing an erased user again changes nothing and answers 204.
+      responses:
+        "204": { description: erased }
+        "404": { description: No such user in own organisation. }
+        "409":
+          description: "`last_admin`: the user is the organisation's last active admin."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conflict" }
+  /users/{id}/disable:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+    post:
+      summary: Stop a user of own organisation signing in (identity:user:manage); offboarding.
+      description: >-
+        Password and Keycloak sign-in are refused, and every platform route (those guarded by identity's
+        current_principal) refuses the user's existing tokens on the next request; Keycloak access tokens are
+        re-checked on every request everywhere. Feature modules verify the platform's own HS256 token by signature
+        and expiry alone, so one issued before the disable stays valid there until it expires
+        (`EOS_JWT_TTL_MINUTES`, default 720 minutes). The user no longer counts against the plan's `users` limit.
+        Disabling a disabled user changes nothing. Publishes identity.user.disabled.
+      responses:
+        "200": { description: "the user, `status` disabled" }
+        "404": { description: No such user in own organisation. }
+        "409":
+          description: "`last_admin`: the user is the organisation's last active admin."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conflict" }
+  /users/{id}/enable:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+    post:
+      summary: Let a disabled user of own organisation sign in again (identity:user:manage).
+      description: >-
+        A staff user must fit the plan's `users` limit again. An erased user cannot be enabled (404). Enabling an
+        active user changes nothing. Publishes identity.user.enabled.
+      responses:
+        "200": { description: "the user, `status` active" }
+        "404": { description: No such user in own organisation (or an erased one). }
+        "409":
+          description: The plan allows no more active staff accounts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlanLimitReached" }
 components:
   schemas:
+    UpdateUser:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        email: { type: string, format: email }
+        roles: { type: array, minItems: 1, items: { type: string } }
+    Conflict:
+      type: object
+      required: [detail, code]
+      properties:
+        detail: { type: string }
+        code: { type: string, enum: [email_taken, last_admin] }
     PlanLimitReached:
       type: object
       required: [detail, code, limit, allowed, used]
