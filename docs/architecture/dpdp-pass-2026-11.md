@@ -242,8 +242,8 @@ What the code records:
 - **No tracking or targeted advertising:** neither app loads analytics or advertising scripts (searched
   `apps/frontend` and the public site); the only third-party request is Google Fonts.
 
-Institutions likely to enrol under-18s: sports academies, music and arts academies, schools in the academy
-profiles, and hostels. Their students' health (sports-nutrition-health), location (transport passes and trips),
+Of the 15 academy profiles (`platform/identity/config/profiles/`), the dance, music, arts and theatre academies
+and the sports college are the likeliest to enrol under-18s, and first-year college students can be 17. Their students' health (sports-nutrition-health), location (transport passes and trips),
 grievances and videos (training-video-analysis) are the riskiest.
 
 Position for v1.0: the institution, as Data Fiduciary, obtains verifiable parental consent; the Terms of Service
@@ -278,3 +278,43 @@ the default JWT secret on the server), S11 (API port exposure).
 72-hour detailed report (counsel to confirm). There is no breach runbook in `infra/runbooks/` (gap D22). Logs: the
 Rules ask for logs to be kept at least a year for some purposes; the outbox keeps 30 days and the web server's log
 rotation is not recorded in the repository (gap D23).
+
+## 10. Gaps
+
+Severity: **Launch** blocks the v1.0 launch checklist item; **High** fix before onboarding institutions with real
+student data at scale; **Medium** and **Low** after launch. Owners are suggestions (the module owners in
+`.github/CODEOWNERS`).
+
+| # | Gap | Severity | Owner | Fix |
+|---|---|---|---|---|
+| D1 | No privacy notice or terms on the public site | Launch | Praveen | #667: `#/privacy`, `#/terms`, footer and register-page links. Merge after D5 |
+| D2 | Consent at registration not recorded (no version, time or user) | Launch | Faizan | **Fixed, #665** |
+| D3 | `/app#signup` registers with `accepted_terms: true` and no box to tick | Launch | Srujan | Add the same required box and links to `apps/frontend/src/auth/SignUp.tsx`, or send `/app#signup` to the public `#/register` |
+| D4 | No Grievance Officer or data-protection contact named | Launch | Faizan | Fill `[Grievance Officer name, email]`, `[Company legal name]`, `[Registered address]` in `public/legal.ts` |
+| D5 | Notice and terms are unreviewed drafts | Launch | Faizan | Counsel reviews `public/legal.ts` (both documents), the legal bases in section 3 and the dates in section 1; fill `[Hosting location]`, `[Jurisdiction city]` |
+| D6 | No processing agreement between the operator and institutions (s.8(2)) | Launch | Faizan | Section 5 of the draft terms is one; counsel to confirm it suffices or add a separate DPA |
+| D7 | Children: no age flag, no record of verifiable parental consent | High | Praveen | student-information: a `guardian_consent` record (who, how verified, when, version of the institution's notice) and a derived `is_minor`; admissions to collect it with the application |
+| D8 | No per-person access summary or export | Medium | Faizan, Himanshu | A super admin or org-admin export filtered to one person: tables with `person_id`, `student_id`, `user_id`, `employee_id`, `athlete_id` and similar, reusing tenancy's table discovery |
+| D9 | No erasure of one person across modules | Medium | Faizan, Himanshu | An erasure job by person keys over the same tables, with a per-person audit tombstone (needs an audit function like `audit_redact_organisation`) |
+| D10 | identity cannot update, disable or delete a user | High | Himanshu | `PATCH /identity/users/{id}` (name, email, roles, status) and `DELETE` or anonymise; also needed to offboard staff |
+| D11 | The organisation purge is not scheduled | Medium | Himanshu | A scheduler job that purges organisations past `delete_after`; until then a runbook step |
+| D12 | Export is super admin only; files are references only | Medium | Faizan | An org-admin export route; files included once documents is enabled |
+| D13 | The purge leaves documents' stored files | Medium (before enabling documents) | Himanshu | documents consumes `tenancy.organisation.purged` and deletes the organisation's objects |
+| D14 | `NOTIFICATION_HISTORY_RETENTION_DAYS` is not implemented | Medium | Himanshu | A notification prune job (bodies and addresses), as audit and event-bus have |
+| D15 | Invoices are purged, GST law needs them kept | Medium | Faizan | Legal-retention exception for `billing_invoice` (keep, detach from the organisation), decided by counsel |
+| D16 | No platform notice for created users, no consent withdrawal or nomination | Medium | Faizan | Institution notice shown at first sign-in with acceptance recorded per user; withdrawal and nomination by request until then |
+| D17 | Existing organisations are never asked to accept a new terms version | Low | Faizan | Compare `terms_version` with the current one at admin sign-in and ask again |
+| D18 | Public admissions routes take applicant data with no notice, consent or age check | High (before exposing them) | Praveen | Notice link, consent box, guardian consent for minors, recorded with the application |
+| D19 | Audit keeps names in payloads for 7 years with no per-person redaction | Low | Himanshu | Part of D9 |
+| D20 | Hosting location and email provider not recorded | Launch (for the notice) | Srujan | State them in `infra/` and in the notice |
+| D21 | Google Fonts sends visitors' IP addresses outside India | Low | Srujan | Serve the fonts from the app's own `public/` |
+| D22 | No breach-notification runbook | High | Srujan, Faizan | `infra/runbooks/personal-data-breach.md`: detect, contain, assess, tell the Board and the people affected, record |
+| D23 | Log retention not set against the Rules | Low | Srujan | Record nginx and API log rotation; keep at least what the Rules require |
+
+## 11. Evidence
+
+- This document, and the test runs in section 5.
+- #665 (merged): consent recorded at registration.
+- #667: privacy notice and terms of service at https://educationos.futureacad.ae/#/privacy and
+  https://educationos.futureacad.ae/#/terms once merged (the web build deploys from `main`).
+- The October [security review](security-review-2026-10.md) for the safeguards.
