@@ -1,6 +1,8 @@
 """The entitlement gate (ADR-0005). Every request to /api/v1/<module>/... for a feature module must come
-from a user whose organisation is entitled to that module. Platform services are always reachable;
-they do their own permission checks."""
+from a user whose organisation is entitled to that module. Platform services do their own permission checks,
+but a token of an organisation that is no longer active (suspended or archived) is refused on them too, on the
+next request: sign-in already refuses such an organisation, and a token issued before the suspension must not
+keep working for the rest of its life (security review N2)."""
 
 from __future__ import annotations
 
@@ -18,14 +20,22 @@ PREFIX = "/api/v1/"
 PUBLIC = {"health"}
 
 
+def _inactive(status: str | None) -> JSONResponse:
+    return JSONResponse(
+        {"detail": f"organisation is {status or 'missing'}", "code": "organisation_inactive"}, status_code=403
+    )
+
+
 class EntitlementGate(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         if not path.startswith(PREFIX):
             return await call_next(request)
         module = path[len(PREFIX) :].split("/", 1)[0]
-        if module in PLATFORM_MODULES or module in PUBLIC:
+        if module in PUBLIC:
             return await call_next(request)
+        if module in PLATFORM_MODULES:
+            return await self._platform(request, call_next)
         auth = request.headers.get("authorization", "")
         if not auth.lower().startswith("bearer "):
             return JSONResponse({"detail": "missing bearer token"}, status_code=401)
@@ -45,9 +55,7 @@ class EntitlementGate(BaseHTTPMiddleware):
         # would hang the whole API until the pool timed out (30 s).
         ent = await run_in_threadpool(_entitlement, org)
         if ent["status"] != "active":
-            return JSONResponse(
-                {"detail": f"organisation is {ent['status']}", "code": "organisation_inactive"}, status_code=403
-            )
+            return _inactive(ent["status"])
         if ent.get("subscription_status") == "read_only" and request.method not in ("GET", "HEAD", "OPTIONS"):
             return JSONResponse(
                 {"detail": "trial ended; the organisation is read-only until it upgrades", "code": "read_only"},
@@ -64,6 +72,25 @@ class EntitlementGate(BaseHTTPMiddleware):
             )
         return await call_next(request)
 
+    async def _platform(self, request: Request, call_next):
+        """A platform service answers for itself who may call it: no token, a bad token or a token without an
+        organisation (the super admin) passes through to the route's own check, unchanged. A token of an
+        organisation user (impersonated or not) is refused when that organisation is not active, with the same
+        403 `organisation_inactive` a feature module gives. Nothing is exempt: sign-in is refused to such an
+        organisation, so the only tokens that reach here were issued before the suspension."""
+        try:
+            claims = await token_claims(request) or {}
+        except jwt.PyJWTError:
+            return await call_next(request)  # the route's current_principal answers 401 with the reason
+        org = claims.get("org")
+        if org:
+            # One primary-key read per request, off the event loop (see dispatch). Not cached: a suspension
+            # must take effect on the very next request.
+            status = await run_in_threadpool(_organisation_status, org)
+            if status != "active":
+                return _inactive(status)
+        return await call_next(request)
+
 
 def _entitlement(org: str) -> dict:
     from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
@@ -71,5 +98,15 @@ def _entitlement(org: str) -> dict:
     db = SessionLocal()
     try:
         return tenancy.entitlement(db, org)
+    finally:
+        db.close()
+
+
+def _organisation_status(org: str) -> str | None:
+    from eos_tenancy.application import service as tenancy  # lazy: avoid import cycles at startup
+
+    db = SessionLocal()
+    try:
+        return tenancy.organisation_status(db, org)
     finally:
         db.close()

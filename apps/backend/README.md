@@ -6,7 +6,11 @@ FastAPI host. Mounts every platform service and enabled feature module under `/a
 the **entitlement gate** (ADR-0005): a request to a feature module is refused with 403
 `module_not_entitled` unless the caller's organisation is entitled to it, `organisation_inactive` if the
 organisation is suspended, and `read_only` for writes after a trial ends. Platform services
-(identity, tenancy, billing, ...) are always reachable and do their own permission checks.
+(identity, tenancy, billing, ...) do their own permission checks, but a token of an organisation user whose
+organisation is no longer active (suspended or archived) is refused on them too, with the same 403
+`organisation_inactive`, on the next request (security review N2): suspending an organisation does not wait for
+its tokens to expire. Requests without a token, and the super admin's tokens (no organisation), reach the
+route's own checks unchanged.
 
 Around the gate sit `platform/api-gateway`'s middlewares: rate limits per user and per organisation for
 signed-in requests, per client address for the rest, and for sign-in/sign-up (429 with `Retry-After`,
