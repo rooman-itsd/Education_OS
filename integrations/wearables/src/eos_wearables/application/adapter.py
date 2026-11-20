@@ -23,6 +23,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from eos_core import settings as core_settings
 from eos_core.db import SessionLocal, scoped
 from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import delete, select
@@ -31,13 +32,27 @@ from sqlalchemy.orm import Session
 from .. import __version__
 from ..domain.context import Context, Result
 from ..domain.errors import AdapterError
-from ..domain.models import DATA_TYPES, LinkAccount, LinkStatus, Read, Sync, UnlinkAccount, parse
+from ..domain.models import (
+    DATA_TYPES,
+    LinkAccount,
+    LinkStatus,
+    Read,
+    Sync,
+    UnlinkAccount,
+    parse,
+)
 from ..infrastructure.config import PROVIDERS as PROVIDER_IDS
 from ..infrastructure.config import Config
 from ..infrastructure.http import Http
 from ..infrastructure.models import AuditEntry, LinkState, ReadLog, Record, aware, iso
 from ..infrastructure.providers import PROVIDERS
-from ..infrastructure.providers.base import InboundEvent, InboundRequest, Normal, Provider, utcnow
+from ..infrastructure.providers.base import (
+    InboundEvent,
+    InboundRequest,
+    Normal,
+    Provider,
+    utcnow,
+)
 from ..infrastructure.providers.mock import MockProvider
 
 log = logging.getLogger("eos.wearables")
@@ -102,6 +117,8 @@ class WearablesAdapter:
             raise AdapterError("not_configured", "this adapter has no such provider")
         provider: Provider = cls(cfg, Http(self._client_factory, cfg.http_timeout_s), self.clock)
         if (ctx.mode or cfg.mode) == "mock":
+            if not core_settings.settings.dev_mode:
+                raise AdapterError("not_configured", "mock mode is refused unless EOS_DEV_MODE=true")
             provider = MockProvider(provider)
         return provider, cfg
 
