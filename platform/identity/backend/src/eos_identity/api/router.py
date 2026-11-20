@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from eos_core.db import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from sqlalchemy.orm import Session
 
 from ..application import service
@@ -95,8 +95,7 @@ def create_user(
     p: Principal = Depends(require("identity:user:manage", organisation=True)),
     db: Session = Depends(get_db),
 ):
-    if any(r in ("super-admin",) for r in body.roles):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "platform roles are never grantable inside an organisation")
+    _refuse_platform_roles(body.roles)
     try:
         user = service.create_user(
             db,
@@ -109,10 +108,130 @@ def create_user(
     except service.RoleNotAssignableError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
     except service.PlanLimitReachedError as e:
-        # the same shape as the entitlement gate's refusals: `code` beside `detail`
-        return JSONResponse(
-            {"detail": str(e), "code": "plan_limit_reached", "limit": e.limit, "allowed": e.allowed, "used": e.used},
-            status_code=status.HTTP_409_CONFLICT,
-        )
+        return _plan_limit(e)
     db.commit()
     return user.to_dict()
+
+
+PLATFORM_ROLES = frozenset({"super-admin"})
+
+
+def _refuse_platform_roles(roles: list[str]) -> None:
+    if PLATFORM_ROLES.intersection(roles):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "platform roles are never grantable inside an organisation")
+
+
+def _plan_limit(e: service.PlanLimitReachedError) -> JSONResponse:
+    # the same shape as the entitlement gate's refusals: `code` beside `detail`
+    return JSONResponse(
+        {"detail": str(e), "code": "plan_limit_reached", "limit": e.limit, "allowed": e.allowed, "used": e.used},
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
+def _conflict(code: str, e: Exception) -> JSONResponse:
+    return JSONResponse({"detail": str(e), "code": code}, status_code=status.HTTP_409_CONFLICT)
+
+
+UserId = Path(min_length=1, max_length=36)
+
+
+class UpdateUser(BaseModel):
+    """Any of name, email and roles; a field left out stays as it is."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    email: EmailStr | None = None
+    roles: list[str] | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _something(self):
+        if self.name is None and self.email is None and self.roles is None:
+            raise ValueError("give at least one of name, email and roles")
+        return self
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    body: UpdateUser,
+    user_id: str = UserId,
+    p: Principal = Depends(require("identity:user:manage", organisation=True)),
+    db: Session = Depends(get_db),
+):
+    """DPDP s.12 correction, and role changes, inside the caller's organisation."""
+    if body.roles is not None:
+        _refuse_platform_roles(body.roles)
+    try:
+        user = service.update_user(
+            db,
+            organisation_id=p.organisation_id,
+            user_id=user_id,
+            actor=p.user_id,
+            name=body.name,
+            email=body.email,
+            roles=body.roles,
+        )
+    except service.UserNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except service.RoleNotAssignableError as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
+    except service.EmailTakenError as e:
+        return _conflict("email_taken", e)
+    except service.LastAdminError as e:
+        return _conflict("last_admin", e)
+    except service.PlanLimitReachedError as e:
+        return _plan_limit(e)
+    db.commit()
+    return user.to_dict()
+
+
+@router.post("/users/{user_id}/disable")
+def disable_user(
+    user_id: str = UserId,
+    p: Principal = Depends(require("identity:user:manage", organisation=True)),
+    db: Session = Depends(get_db),
+):
+    """Offboarding: the user can no longer sign in, and platform routes refuse their tokens from the next request."""
+    try:
+        user = service.disable_user(db, organisation_id=p.organisation_id, user_id=user_id, actor=p.user_id)
+    except service.UserNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except service.LastAdminError as e:
+        return _conflict("last_admin", e)
+    db.commit()
+    return user.to_dict()
+
+
+@router.post("/users/{user_id}/enable")
+def enable_user(
+    user_id: str = UserId,
+    p: Principal = Depends(require("identity:user:manage", organisation=True)),
+    db: Session = Depends(get_db),
+):
+    try:
+        user = service.enable_user(db, organisation_id=p.organisation_id, user_id=user_id, actor=p.user_id)
+    except service.UserNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except service.PlanLimitReachedError as e:
+        return _plan_limit(e)
+    db.commit()
+    return user.to_dict()
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def erase_user(
+    user_id: str = UserId,
+    p: Principal = Depends(require("identity:user:erase", organisation=True)),
+    db: Session = Depends(get_db),
+):
+    """DPDP s.12(3) erasure: the row becomes a tombstone (other modules hold the id) and identity.user.erased asks
+    each module to erase what it holds."""
+    try:
+        service.erase_user(db, organisation_id=p.organisation_id, user_id=user_id, actor=p.user_id)
+    except service.UserNotFoundError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except service.LastAdminError as e:
+        return _conflict("last_admin", e)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

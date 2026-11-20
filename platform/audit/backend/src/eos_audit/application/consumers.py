@@ -55,6 +55,10 @@ AUDITED: tuple[str, ...] = (
     # identity
     "identity.user.created",
     "identity.user.oidc_linked",
+    "identity.user.updated",
+    "identity.user.disabled",
+    "identity.user.enabled",
+    "identity.user.erased",
     # billing: subscription and invoice state (not the reminders, which change nothing)
     "billing.subscription.started",
     "billing.subscription.upgraded",

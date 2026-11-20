@@ -73,9 +73,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PlanLimitReached" }
-  /users/{id}:
+  /users/{user_id}:
     parameters:
-      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+      - { name: user_id, in: path, required: true, schema: { type: string, maxLength: 36 } }
     patch:
       summary: Update a user of own organisation (identity:user:manage); DPDP s.12 correction.
       description: >-
@@ -117,9 +117,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Conflict" }
-  /users/{id}/disable:
+  /users/{user_id}/disable:
     parameters:
-      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+      - { name: user_id, in: path, required: true, schema: { type: string, maxLength: 36 } }
     post:
       summary: Stop a user of own organisation signing in (identity:user:manage); offboarding.
       description: >-
@@ -137,9 +137,9 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Conflict" }
-  /users/{id}/enable:
+  /users/{user_id}/enable:
     parameters:
-      - { name: id, in: path, required: true, schema: { type: string, maxLength: 36 } }
+      - { name: user_id, in: path, required: true, schema: { type: string, maxLength: 36 } }
     post:
       summary: Let a disabled user of own organisation sign in again (identity:user:manage).
       description: >-
