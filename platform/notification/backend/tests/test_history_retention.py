@@ -170,3 +170,19 @@ def test_the_recovery_job_does_not_purge(org):
     assert consumers.CONSUMERS["scheduler.job.due"] is consumers.on_job_due
     with platform_scope(), SessionLocal() as db:
         assert db.scalar(select(func.count()).select_from(OutboxEvent)) >= 1
+
+
+def test_a_batch_the_delete_cannot_remove_stops_the_purge_instead_of_looping(org, monkeypatch):
+    """Review of #683: the loop selected a batch, deleted it and selected again until nothing was left. A batch that the
+    delete cannot remove (a row-level policy or a concurrent change hiding it from the delete) was selected forever."""
+    _add(org.id, "sent", OLD)
+    real_delete = retention.delete
+    calls = {"n": 0}
+
+    def removes_nothing(model):
+        calls["n"] += 1
+        return real_delete(model).where(Message.id == "no-such-message")
+
+    monkeypatch.setattr(retention, "delete", removes_nothing)
+    counts = retention.prune_history(now=NOW)
+    assert calls["n"] == 1 and counts["deleted"] == 0

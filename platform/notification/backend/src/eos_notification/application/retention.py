@@ -80,4 +80,11 @@ def _prune_organisation(factory: sessionmaker, org: str, stale: tuple) -> int:
                 return deleted
             result = db.execute(delete(Message).where(Message.organisation_id == org, Message.id.in_(ids)))
             db.commit()
+            if result.rowcount == 0:
+                # The batch was selected but nothing could be deleted (a policy or a concurrent change hides it from
+                # the delete): selecting again would find the same rows forever. Stop and say so; the next run retries.
+                log.warning(
+                    "notification history purge for %s removed nothing from a batch of %d; stopped", org, len(ids)
+                )
+                return deleted
             deleted += result.rowcount or 0
