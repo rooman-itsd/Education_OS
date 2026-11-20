@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+### Security
+- Default mode changed to `sandbox`; `mock` mode is refused for both environment configuration and per-connection
+  calls unless `EOS_DEV_MODE=true` (security review, November 2026, N17, #681).
 
 ## [0.3.0] - 2026-11-05
 Built on the draft contracts (0.2.0); no contract file changed.

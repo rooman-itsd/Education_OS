@@ -4,6 +4,12 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
 ### Security
+- Default mode changed to `sandbox`; `mock` mode is refused for both environment configuration and per-connection
+  calls unless `EOS_DEV_MODE=true`. Development data key and Jitsi app secret fallbacks are similarly disabled outside
+  dev mode (security review, November 2026, N17, #681).
+- Self-hosted Jitsi `base_url` requires `https` and validates hostnames/IPs to block SSRF against private, loopback,
+  link-local, and cloud metadata addresses. Healthcheck no longer echoes the HTTP status code (security review,
+  November 2026, N16, #680).
 - Zoom's `endpoint.url_validation` handshake is answered only when the request carries a valid `x-zm-signature` within the
   timestamp tolerance, like every other event. Answered unsigned, the handshake's HMAC of `plainToken` signed any event a
   caller wrote as `v0:<ts>:<body>` (security review, November 2026, N13).

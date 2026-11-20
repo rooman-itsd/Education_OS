@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from eos_core import settings as core_settings
+
 from .errors import AdapterError
 
 MODES = ("mock", "sandbox", "live")
@@ -39,6 +41,8 @@ class Context:
             raise AdapterError("invalid_request", "the call context needs organisation_id, connection_id, provider")
         if ctx.mode is not None and ctx.mode not in MODES:
             raise AdapterError("invalid_request", "mode must be mock, sandbox or live")
+        if ctx.mode == "mock" and not core_settings.settings.dev_mode:
+            raise AdapterError("not_configured", "connection mode mock is refused unless EOS_DEV_MODE=true")
         if not isinstance(ctx.settings, dict) or not isinstance(ctx.secrets, dict):
             raise AdapterError("invalid_request", "settings and secrets must be objects")
         return ctx
