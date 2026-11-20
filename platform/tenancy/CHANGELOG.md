@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Consent at registration is recorded (DPDP, #148). `POST /register` already refused `accepted_terms: false`; the
+  organisation now also keeps which version of the Terms of Service and Privacy Notice was accepted
+  (`terms_version`, from `EOS_TERMS_VERSION`, default `2026-11-20`), when (`terms_accepted_at`) and by which user
+  (`terms_accepted_by`, the first administrator). The three fields are on the organisation's responses and in its
+  export; `tenancy.organisation.registered` carries `terms_version`. Migration `tenancy_0003` adds the columns
+  (nullable: organisations registered before stay null). Contract 0.4.0 (additive).
 - `POST /register/resend` (public): mails a new verification token to the registering address while the
   organisation is `pending_verification`, and makes earlier unused tokens stop working (#316 follow-up). The
   verification email's token is never stored, so a mail lost to an SMTP failure or a closed tab could not be

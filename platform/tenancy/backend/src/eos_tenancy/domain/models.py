@@ -30,6 +30,11 @@ class Organisation(Base, TimestampMixin):
     deletion_requested_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status_before_deletion: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # Consent at registration (DPDP, #148): which version of the Terms of Service and Privacy Notice the first
+    # administrator accepted, when, and which user they are. NULL for organisations registered before it was kept.
+    terms_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    terms_accepted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
     def to_dict(self, **extra) -> dict:
         return {
@@ -45,6 +50,9 @@ class Organisation(Base, TimestampMixin):
             "delete_after": self.delete_after.isoformat() if self.delete_after else None,
             "deletion_requested_by": self.deletion_requested_by,
             "deletion_requested_at": self.deletion_requested_at.isoformat() if self.deletion_requested_at else None,
+            "terms_version": self.terms_version,
+            "terms_accepted_at": self.terms_accepted_at.isoformat() if self.terms_accepted_at else None,
+            "terms_accepted_by": self.terms_accepted_by,
             **extra,
         }
 

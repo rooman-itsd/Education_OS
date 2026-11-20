@@ -76,7 +76,8 @@ them, and a legal-retention exception for `billing_invoice` is a decision for th
 opened), so the purge today removes them.
 
 ## Data
-Schema `tenancy`: `organisation` (with `delete_after`, `deletion_requested_by/at` and `status_before_deletion`
+Schema `tenancy`: `organisation` (with `terms_version`, `terms_accepted_at` and `terms_accepted_by`, the consent
+recorded at registration, #148; and `delete_after`, `deletion_requested_by/at` and `status_before_deletion`
 while a deletion is pending), `organisation_module` (toggles and overrides), `registration_token`,
 `impersonation_session`. This is the one schema whose tables are not themselves tenant-scoped,
 because they define the tenants.

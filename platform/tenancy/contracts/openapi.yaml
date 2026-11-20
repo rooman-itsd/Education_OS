@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: tenancy API
-  version: 0.3.0
+  version: 0.4.0
   description: "Organisations (tenants), self-service registration, academy type, entitlements. See ADR-0005."
 servers:
   - url: /api/v1/tenancy
@@ -166,7 +166,7 @@ components:
             name: { type: string }
             email: { type: string, format: email }
             password: { type: string, format: password }
-        accepted_terms: { type: boolean }
+        accepted_terms: { type: boolean, description: "Must be true: the administrator accepts the Terms of Service and has read the Privacy Notice on the organisation's behalf. Refused (400) otherwise. The organisation records the version, time and user (terms_version, terms_accepted_at, terms_accepted_by)." }
     Organisation:
       type: object
       properties:
@@ -183,6 +183,9 @@ components:
         delete_after: { type: string, format: date-time, nullable: true, description: "Set while a deletion is pending: the purge may run after this moment" }
         deletion_requested_by: { type: string, format: uuid, nullable: true }
         deletion_requested_at: { type: string, format: date-time, nullable: true }
+        terms_version: { type: string, nullable: true, description: "Version of the Terms of Service and Privacy Notice accepted at registration (DPDP consent record). Null for organisations registered before it was kept" }
+        terms_accepted_at: { type: string, format: date-time, nullable: true, description: "When the first administrator accepted them" }
+        terms_accepted_by: { type: string, format: uuid, nullable: true, description: "The identity user who accepted them on the organisation's behalf" }
     OrganisationUpdate:
       type: object
       properties:
