@@ -339,7 +339,7 @@ def test_an_update_has_the_same_effect_a_delete_removes_the_record(adapter, tran
     assert update[0]["kind"] == "data_available"
     transport.on("GET", API + r"/activities/9876543210", status=404)
     gone = adapter.parse_inbound(
-        ctx, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
+        None, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
     ).output
     assert gone == {"notifications": []} and [r.provider_record_id for r in records(ids["link"])] == ["9876543211"]
 
@@ -356,7 +356,7 @@ def test_deauthorisation_revokes_the_link_and_deletes_the_athletes_strava_data(a
         body={"message": "Bad Request", "errors": [{"field": "refresh_token", "code": "invalid"}]},
     )
     out = adapter.parse_inbound(
-        ctx, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
+        None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
     ).output["notifications"]
     assert out == [
         {"port": "wearable-data", "kind": "link_revoked_by_provider", "data": {"account_link_subject": STRAVA_ATHLETE}}
@@ -367,8 +367,8 @@ def test_deauthorisation_revokes_the_link_and_deletes_the_athletes_strava_data(a
     )  # no longer an active link
 
 
-def test_forged_deauthorisation_without_context_is_ignored(adapter, transport, org):
-    ids = make_link(org, "strava")
+def test_forged_deauthorisation_without_tokens_is_ignored(adapter, transport, org):
+    ids = make_link(org, "strava", tokens={})
     transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
     ctx = org.ctx("strava", ids["person"], ids["link"])
     adapter.sync(ctx, {"account_link_id": ids["link"]})
@@ -392,14 +392,16 @@ def test_forged_deauthorisation_when_athlete_is_still_authorized_is_ignored(adap
         body={"access_token": "new-tok", "refresh_token": "new-ref", "expires_in": 21600},
     )
     out = adapter.parse_inbound(
-        ctx, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
+        None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
     ).output
     assert out == {"notifications": []}
-    assert link_row(ids["link"]).status == "active" and len(records(ids["link"])) == 2
+    row = link_row(ids["link"])
+    assert row.status == "active" and len(records(ids["link"])) == 2
+    assert row.tokens["access_token"] == "new-tok"  # rotated tokens saved
 
 
-def test_forged_delete_without_context_is_ignored(adapter, transport, org):
-    ids = make_link(org, "strava")
+def test_forged_delete_without_tokens_is_ignored(adapter, transport, org):
+    ids = make_link(org, "strava", tokens={})
     transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
     ctx = org.ctx("strava", ids["person"], ids["link"])
     adapter.sync(ctx, {"account_link_id": ids["link"]})
@@ -418,7 +420,7 @@ def test_forged_delete_when_activity_still_exists_is_ignored(adapter, transport,
     adapter.sync(ctx, {"account_link_id": ids["link"]})
     transport.on("GET", API + r"/activities/9876543210", status=200, body={"id": 9876543210})
     out = adapter.parse_inbound(
-        ctx, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
+        None, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
     ).output
     assert out == {"notifications": []}
     assert len(records(ids["link"])) == 2

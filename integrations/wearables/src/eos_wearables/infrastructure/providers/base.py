@@ -293,8 +293,8 @@ class Provider:
     def healthcheck(self, ctx: Context) -> dict:
         return {"status": "healthy", "detail": "no provider call is made for this provider", "expires_at": None}
 
-    def is_deauthorized(self, ctx: Context | None) -> bool:
-        return True
+    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
+        return True, None
 
     def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
         return True

@@ -206,21 +206,21 @@ class StravaProvider(Provider):
             raise map_status(r)
         return r.status_code < 400
 
-    def is_deauthorized(self, ctx: Context | None) -> bool:
+    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
         if ctx is None:
-            return False
+            return False, None
         refresh = ctx.secrets.get("refresh_token")
         token = ctx.secrets.get("access_token")
         if not refresh and not token:
-            return False
+            return False, None
         if refresh:
             try:
-                self._tokens({"grant_type": "refresh_token", "refresh_token": refresh})
-                return False  # refresh succeeded: athlete is still authorized
+                out = self._tokens({"grant_type": "refresh_token", "refresh_token": refresh})
+                return False, out.get("secrets")  # refresh succeeded: athlete is still authorized, rotated tokens
             except AdapterError as e:
                 if e.provider_code in ("400", "401") or e.code == "consent_required":
-                    return True  # refresh rejected: confirmed deauthorized
-                return False
+                    return True, None  # refresh rejected: confirmed deauthorized
+                return False, None
         if token:
             r = self.http.send(
                 "GET",
@@ -228,8 +228,8 @@ class StravaProvider(Provider):
                 headers={"Authorization": f"Bearer {token}"},
             )
             if r.status_code == 401:
-                return True
-        return False
+                return True, None
+        return False, None
 
     def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
         if ctx is None:

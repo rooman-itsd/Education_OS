@@ -207,6 +207,7 @@ def make_link(
         organisation_id=org.id, connection_id=org.connection_id, account_link_id=link, person_id=person, provider=provider,
         provider_subject=subject or SUBJECTS[provider], status=status, status_since=NOW - timedelta(days=1), created_at=NOW - timedelta(days=1),
         data_types=types if types is not None else {"strava": ["activity"], "polar": ["daily_summary", "activity", "sleep"]}.get(provider, ["daily_summary", "activity", "sleep", "heart_rate_variability", "body_composition"]),
+        tokens=fields.pop("tokens", SECRETS[provider]()),
     )  # fmt: skip
     for k, v in fields.items():
         setattr(row, k, v)
