@@ -2,8 +2,9 @@
 
 Update of the [October review](security-review-2026-10.md) for the launch checklist item "Security review
 filed; open findings assigned" (issue #314). It covers what merged after the October review (its last commit,
-30 October 2026, #353) up to `origin/main` at 72ce9d2f (20 November 2026, #665), plus the open pull request
-#554 (platform/integration-hub backend, branch `feat/integration-hub/backend` at e227770b).
+30 October 2026, #353) up to `origin/main` at 97ba1f5d (20 November 2026), which includes #665 (terms acceptance) and #554
+(platform/integration-hub backend, reviewed on its branch at e227770b and merged during this review; the merged code
+is the same).
 
 Reviewer: Claude Code for Faizan, 20 November 2026. Status: in progress; each area is committed as it is reviewed.
 
@@ -11,7 +12,7 @@ Reviewer: Claude Code for Faizan, 20 November 2026. Status: in progress; each ar
 
 Security-relevant code new or changed since 30 October, by area:
 
-1. platform/integration-hub (#554, open): OAuth state, callback verification, the secret store and key rotation,
+1. platform/integration-hub (#554): OAuth state, callback verification, the secret store and key rotation,
    the reject limit, SSRF in provider requests, tenant resolution.
 2. platform/api-gateway (#363) and its deployment (`infra/`, `tools/scripts/deploy-api-lxc.sh`): rate limits,
    security headers, trusted proxies (`EOS_TRUSTED_PROXIES`, `EOS_FORWARDED_ALLOW_IPS`).
@@ -42,5 +43,44 @@ ones). Medium and above have an issue.
 
 | ID | Severity | Component | Description | Evidence | Verified | Status | Owner | Fix |
 |---|---|---|---|---|---|---|---|---|
+| N1 | Low | platform/integration-hub | A callback the adapter answers as a handshake writes an `InboundReceipt` row and commits, with no rejection count or limit. With an adapter whose handshake needs no secret (Zoom's `endpoint.url_validation`, N9), anyone can make the hub write one row per request, bounded only by the gateway's per-address bucket (1200 a minute). No adapter is registered on the live host today (the API image installs only messaging-providers and payment-sbiepay, which declare no `eos.integration_adapters` entry point) | `platform/integration-hub/backend/src/eos_integration_hub/application/inbound.py:298-310` | Reading | Open; noted on #554 | himanshu-rooman | Count handshakes per source like rejections (`_over_limit`), or keep no receipt for a handshake; N9 removes the unsigned handshake |
 
 ## 4. Reviewed, no findings
+
+**platform/integration-hub (#554).** Now mounted in the host (`platform:` list); its routes are platform routes, so the
+entitlement gate lets the OAuth callback and `/inbound/...` through and each route checks its own key (covered by
+`apps/backend/tests/test_platform_permissions.py`). No adapter is registered on the live host yet, so every inbound
+path answers 404 there. Checked:
+- OAuth state (`application/authorisation.py:119-177`, `348-423`): 32-byte random state stored only as a SHA-256
+  hash, PKCE S256 with the verifier encrypted under the hub key and the state hash as associated data, single use by one
+  conditional `UPDATE` (`claim_state`), bound to the browser by an HttpOnly, Secure, SameSite=Lax cookie compared in
+  constant time, refused when a signed-in caller is not the person who started it, and spent on any mismatch. The
+  return URL is checked against `INTEGRATION_HUB_ALLOWED_RETURN_HOSTS` (no userinfo, https only off localhost).
+- Callback verification (`application/inbound.py:270-381`): every request is verified by the adapter over the raw
+  body before anything is processed; an unverified one is never processed; the body limit is checked before and while
+  reading; dedupe is per connection; a raw body is kept only encrypted.
+- Tenant resolution (`inbound.py:398-430`): a connection key in the URL is looked up by hash; an app-level callback
+  resolves only to a connection of the same adapter, or to exactly one active account link (two organisations with
+  the same provider account resolve to nobody). Whether the adapter's own `resolves_to` can be trusted is the
+  adapter's verification (see N9 to N11).
+- Reject limit (`inbound.py:127-238`): past the limit, rejections are still answered and verified but nothing is
+  written; a signed callback is never refused because of someone else's junk. Handshakes are not counted (N1).
+- Secret store and key rotation (`infrastructure/secrets.py`): AES-256-GCM with the reference as associated data, a
+  key id per blob, the previous key accepted only while rotating, files 0600 in 0700 directories written atomically;
+  outside dev mode a missing or malformed `INTEGRATION_HUB_SECRET_KEK` refuses (no fallback key), and the `env`
+  backend is refused; no value is logged or put in an exception.
+- SSRF: the hub makes no outbound request itself; adapters do, from connection settings an organisation admin
+  enters. The hub has no shared address guard for those settings (see N12, Jitsi).
+
+**platform/api-gateway (#363) and its deployment (#590, #663).** Checked: `X-Forwarded-For` is believed only from
+`EOS_TRUSTED_PROXIES` (loopback by default) and read from the right, so a client cannot pick its bucket
+(`application/limiter.py:425-441`); IPv6 is keyed by /64; the sign-in body is read at most 16 KiB and a larger one
+answers 413, so padding cannot dodge the per-account bucket; a refused sign-in costs an attempt and nothing else
+does; an invalid token is anonymous (address bucket); refusals are given back to buckets already charged. Security
+headers go on every response including refusals (`api/middleware.py:219-244`). `deploy-api-lxc.sh:116-131` writes
+the proxy's address into both `EOS_TRUSTED_PROXIES` and uvicorn's `EOS_FORWARDED_ALLOW_IPS` and replaces a loopback
+value; uvicorn then rewrites the peer to the client, and the gateway keys on that peer, which it does not trust, so
+the two settings agree. The in-process buckets count per worker (documented in the scale runbook); Compose runs one
+worker unless `EOS_API_WORKERS` is set. October's S11 (port 8000 published on every interface,
+`infra/docker/docker-compose.api.yml:149-150`) is unchanged; a direct LAN caller still cannot forge its address,
+because only the proxy's address is trusted. No new finding.
