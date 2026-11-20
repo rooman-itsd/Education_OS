@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrivacyPage, TermsPage } from "../src/public/pages/LegalPage";
 import { SiteFooter } from "../src/public/components/SiteFooter";
-import { LEGAL_VERSION, PRIVACY_NOTICE, TERMS_OF_SERVICE } from "../src/public/legal";
+import { ADDRESS, COMPANY, GRIEVANCE_OFFICER, LEGAL_VERSION, PRIVACY_NOTICE, TERMS_OF_SERVICE } from "../src/public/legal";
 
 afterEach(cleanup);
 
@@ -11,7 +11,7 @@ describe("legal pages (#148, draft pending legal review)", () => {
     expect(LEGAL_VERSION).toBe("2026-11-20");
   });
 
-  it("the privacy notice shows its title, version, every section and the operator's placeholders", () => {
+  it("the privacy notice shows its title, version, every section and the operator's details", () => {
     render(<PrivacyPage onNavigate={() => {}} />);
     expect(screen.getByRole("heading", { level: 1, name: "Privacy Notice" })).toBeTruthy();
     expect(screen.getByText(new RegExp(`Version ${LEGAL_VERSION}`))).toBeTruthy();
@@ -19,8 +19,8 @@ describe("legal pages (#148, draft pending legal review)", () => {
       expect(screen.getByRole("heading", { level: 2, name: s.heading })).toBeTruthy();
     }
     const text = document.body.textContent ?? "";
-    for (const placeholder of ["[Company legal name]", "[Registered address]", "[Grievance Officer name, email]"]) {
-      expect(text).toContain(placeholder);
+    for (const detail of [COMPANY, ADDRESS, GRIEVANCE_OFFICER]) {
+      expect(text).toContain(detail);
     }
     expect(text).toContain("Data Protection Board of India");
   });

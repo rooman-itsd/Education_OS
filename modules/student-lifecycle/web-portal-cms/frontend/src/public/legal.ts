@@ -3,9 +3,8 @@
  *
  * The Privacy Notice and Terms of Service of the public site (#/privacy, #/terms), issue #148 (DPDP pass).
  * Written from the data map in docs/architecture/dpdp-pass-2026-11.md, not by a lawyer. Counsel must review both
- * before the launch, and Faizan must fill the bracketed placeholders ([Company legal name], [Registered address],
- * [Grievance Officer name, email], [Hosting location], [Jurisdiction city]); the pages show them as they are
- * until then. Nothing here is invented company detail.
+ * before the launch. Company, Grievance Officer, hosting and jurisdiction were given by Faizan on 20 Nov 2026;
+ * [Registered address] is still a placeholder, shown as it is until he fills it.
  *
  * LEGAL_VERSION must equal platform/tenancy's DEFAULT_TERMS_VERSION (eos_tenancy/application/service.py,
  * #665): registration records that version as the one the administrator accepted. Change both together when
@@ -17,10 +16,10 @@ export const LEGAL_VERSION = "2026-11-20";
 /** Shown as the effective date. Set to the publication date after legal review. */
 export const LEGAL_EFFECTIVE = "20 November 2026";
 
-/** Placeholders left visible for the operator to fill. */
-export const COMPANY = "[Company legal name]";
+/** The operator's details, given by Faizan (20 Nov 2026). ADDRESS is still a visible placeholder. */
+export const COMPANY = "Rooman Technologies Pvt. Ltd.";
 export const ADDRESS = "[Registered address]";
-export const GRIEVANCE_OFFICER = "[Grievance Officer name, email]";
+export const GRIEVANCE_OFFICER = "Faizan, faizan@rooman.com";
 
 /** A block of a section: a paragraph, or a bulleted list. */
 export type LegalBlock = string | { list: string[] };
@@ -143,7 +142,7 @@ export const PRIVACY_NOTICE: LegalDocument = {
           "limit them to that purpose:",
         {
           list: [
-            "Hosting: Education OS runs on servers we operate ourselves, in [Hosting location]. Database backups are " +
+            "Hosting: Education OS runs on servers we operate ourselves, in India (Bengaluru). Database backups are " +
               "copied to a second location we control.",
             "Email: an email delivery service that sends the platform's emails.",
             "Payments: SBIePay (State Bank of India's payment gateway) for paid plans, and for fee payments where an " +
@@ -407,7 +406,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
       id: "law",
       heading: "12. Governing law",
       blocks: [
-        "These Terms are governed by the laws of India. The courts at [Jurisdiction city] have exclusive jurisdiction " +
+        "These Terms are governed by the laws of India. The courts at Bengaluru, Karnataka have exclusive jurisdiction " +
           "over any dispute about them.",
       ],
     },
