@@ -128,6 +128,17 @@ describe("RegisterPage: the form", () => {
     expect(registerCalls(f)).toHaveLength(0);
   });
 
+  it("the terms box links the Terms of Service and the Privacy Notice in a new tab", async () => {
+    mockApi();
+    await renderReady();
+    const terms = screen.getByRole("link", { name: "Terms of Service" });
+    const privacy = screen.getByRole("link", { name: "Privacy Notice" });
+    expect(terms.getAttribute("href")).toBe("/#/terms");
+    expect(privacy.getAttribute("href")).toBe("/#/privacy");
+    expect(terms.getAttribute("target")).toBe("_blank");
+    expect(privacy.getAttribute("target")).toBe("_blank");
+  });
+
   it("rejects a malformed email before sending anything", async () => {
     const f = mockApi();
     await renderReady();

@@ -9,8 +9,11 @@ import type { BadgeTone, PageTheme } from "@eos/ui-kit";
  * only what the shared shell (header, footer, routing) needs.
  */
 
-/** The public routes, carried in the URL hash: `#/`, `#/features`, `#/signup` (plans), `#/register`, `#/verify`. */
-export type PublicRoute = "home" | "features" | "signup" | "register" | "verify";
+/**
+ * The public routes, carried in the URL hash: `#/`, `#/features`, `#/signup` (plans), `#/register`, `#/verify`,
+ * and the legal pages `#/privacy` and `#/terms` (pages/LegalPage.tsx, text in legal.ts).
+ */
+export type PublicRoute = "home" | "features" | "signup" | "register" | "verify" | "privacy" | "terms";
 
 /** Where "Sign in" hands off to — the role-dashboard app, served at /app (apps/frontend/src/main.tsx). */
 export const APP_URL = "/app";
@@ -112,8 +115,8 @@ export const FOOTER: FooterColumn[] = [
 
 /** Legal links on the footer's bottom line. */
 export const FOOTER_LEGAL: FooterLink[] = [
-  { label: "Privacy policy", href: FOOTER_TODO_HREF },
-  { label: "Terms of service", href: FOOTER_TODO_HREF },
+  { label: "Privacy notice", route: "privacy" },
+  { label: "Terms of service", route: "terms" },
   { label: "Cookie policy", href: FOOTER_TODO_HREF },
   { label: "Accessibility", href: FOOTER_TODO_HREF },
 ];
