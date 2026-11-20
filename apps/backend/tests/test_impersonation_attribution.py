@@ -11,7 +11,7 @@ import uuid
 from eos_backend.main import create_app
 from eos_core.db import SessionLocal, get_db
 from eos_core.events import OutboxEvent, current_impersonator, publish
-from eos_core.tenant import platform_scope
+from eos_core.tenant import organisation_scope, platform_scope
 from eos_event_bus.application.consumers import discover as discover_consumers
 from eos_event_bus.application.relay import Relay
 from eos_event_bus.application.transport import InProcessTransport
@@ -88,9 +88,11 @@ def test_a_feature_modules_events_carry_the_impersonator_too():
 
     @probe.post("/publish")
     def publish_one(request: Request, db: Session = Depends(get_db)):
-        ev = publish(db, "lms.probe.published", request.state.organisation_id, {"probe": True}, actor="someone")
-        db.commit()
-        return {"id": ev.id}
+        org = request.state.organisation_id  # as a feature module does: its writes run in the caller's organisation
+        with organisation_scope(org):  # (on Postgres row-level security refuses the row otherwise)
+            ev = publish(db, "lms.probe.published", org, {"probe": True}, actor="someone")
+            db.commit()
+            return {"id": ev.id}
 
     with TestClient(create_app(extra_routers={"lms": probe})) as c:
         a = register_and_login(c, slug=f"n3f-{uuid.uuid4().hex[:6]}", academy_type="dance-academy")
