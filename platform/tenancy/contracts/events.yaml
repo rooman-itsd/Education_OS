@@ -5,8 +5,8 @@ module: tenancy
 version: 1
 events:
   - name: tenancy.organisation.registered
-    description: A new organisation signed up and chose an academy type. Billing starts the trial; identity creates the admin user.
-    payload: { organisation_id: uuid, slug: string, academy_type: string, admin_email: string }
+    description: A new organisation signed up and chose an academy type. Billing starts the trial; identity creates the admin user. terms_version is the Terms of Service / Privacy Notice version the admin accepted.
+    payload: { organisation_id: uuid, slug: string, academy_type: string, admin_email: string, terms_version: string }
   - name: tenancy.organisation.verified
     description: Admin email verified. The organisation now waits for super admin approval of its academic package.
     payload: { organisation_id: uuid, academy_type: string }

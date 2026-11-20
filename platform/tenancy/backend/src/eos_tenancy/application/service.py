@@ -35,6 +35,15 @@ RESERVED = {"admin", "api", "www", "app", "platform"}
 TOKEN_TTL = timedelta(hours=48)  # a verification token's life; also how its issue time is derived (expires - TTL)
 RESEND_COOLDOWN = timedelta(seconds=60)  # between two verification emails for one organisation
 RESEND_MAX_PER_DAY = 5  # verification emails per organisation in any 24 hours, the registration's included
+# The version of the Terms of Service and Privacy Notice the public site shows at registration
+# (modules/student-lifecycle/web-portal-cms, public/legal.ts LEGAL_VERSION). Change both together when either
+# document changes; EOS_TERMS_VERSION overrides it on a server whose pages are ahead of its code.
+DEFAULT_TERMS_VERSION = "2026-11-20"
+
+
+def terms_version() -> str:
+    """The Terms of Service / Privacy Notice version a registration accepts now. EOS_TERMS_VERSION."""
+    return (os.environ.get("EOS_TERMS_VERSION") or DEFAULT_TERMS_VERSION).strip()[:40]
 
 
 class TenancyError(Exception):
@@ -76,11 +85,18 @@ def register(
     with platform_scope():
         if db.scalar(select(Organisation).where(Organisation.slug == slug)):
             raise TenancyError("slug already in use", 409)
-    org = Organisation(name=organisation_name, slug=slug, academy_type=academy_type, country=country)
+    org = Organisation(
+        name=organisation_name,
+        slug=slug,
+        academy_type=academy_type,
+        country=country,
+        terms_version=terms_version(),
+        terms_accepted_at=clock(),
+    )
     db.add(org)
     db.flush()
     with organisation_scope(org.id):
-        identity.create_user(
+        admin_user = identity.create_user(
             db,
             organisation_id=org.id,
             email=admin["email"],
@@ -88,6 +104,7 @@ def register(
             password=admin["password"],
             roles=["org-admin"],
         )
+        org.terms_accepted_by = admin_user.id  # the administrator who ticked the box, on the organisation's behalf
         token = secrets.token_urlsafe(32)
         issued = RegistrationToken(
             organisation_id=org.id,
@@ -102,7 +119,13 @@ def register(
             db,
             "tenancy.organisation.registered",
             org.id,
-            {"organisation_id": org.id, "slug": slug, "academy_type": academy_type, "admin_email": admin["email"]},
+            {
+                "organisation_id": org.id,
+                "slug": slug,
+                "academy_type": academy_type,
+                "admin_email": admin["email"],
+                "terms_version": org.terms_version,
+            },
         )
         # Recorded in this transaction, sent only after it commits. The token is passed in memory only:
         # notification never stores, logs or publishes it.
