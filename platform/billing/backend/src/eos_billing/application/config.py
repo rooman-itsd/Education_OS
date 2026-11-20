@@ -46,3 +46,10 @@ def invoicing() -> InvoicingConfig:
             raise gst.GstError("BILLING_SUPPLIER_NAME is required when BILLING_SUPPLIER_GSTIN is set")
         supplier = Supplier(gstin, name, (env("BILLING_SUPPLIER_ADDRESS") or "").strip(), gst.state_code(gstin))
     return InvoicingConfig(supplier, rate, sac, prefix)
+
+
+def payment_webhook_secret() -> str:
+    """The key the payment adapter signs its notifications to POST /webhooks/payment with (HMAC-SHA256 of the raw
+    body, hex, in X-Payment-Signature). For payment-sbiepay it is the same value as PAYMENT_SBIEPAY_NOTIFY_SECRET.
+    Empty: no notification is accepted."""
+    return (os.environ.get("BILLING_PAYMENT_WEBHOOK_SECRET") or "").strip()

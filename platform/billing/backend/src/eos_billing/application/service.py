@@ -20,9 +20,10 @@ from . import config
 
 
 class BillingError(Exception):
-    def __init__(self, message: str, status: int = 400):
+    def __init__(self, message: str, status: int = 400, code: str | None = None):
         super().__init__(message)
         self.status = status
+        self.code = code  # a machine-readable reason the API answers beside the message, when there is one
 
 
 def seed_plans(db: Session) -> None:
@@ -126,9 +127,20 @@ def upgrade(db: Session, *, organisation_id: str, plan_id: str, billing_cycle: s
     if sub.plan_id == plan_id and sub.status == "active":
         raise BillingError("already on this plan", 409)
     reference = secrets.token_hex(8)
+    if settings.payment_adapter == "none" and _is_paid(plan) and not settings.dev_mode:
+        # Security review N8: with no adapter nothing can take the money, so a paid plan is never self-service: it
+        # was activated at once with a numbered "paid" GST invoice for money never received. A super admin
+        # activates it once payment has arrived offline (PUT /admin/subscriptions/{organisation_id}), which issues
+        # no invoice. A free plan needs no payment and still activates here.
+        raise BillingError(
+            "online payment is not set up: a paid plan is activated by the platform once payment is received",
+            409,
+            code="payment_not_configured",
+        )
     with organisation_scope(organisation_id):
         if settings.payment_adapter == "none":
-            # No payment adapter configured (dev / pilot): activate immediately and say so.
+            # No payment adapter configured: a free plan, or a paid one in dev mode only (local development and
+            # the test suites): activate immediately and say so.
             _activate(db, sub, plan_id, billing_cycle, reference)
             db.commit()
             return {
@@ -142,11 +154,47 @@ def upgrade(db: Session, *, organisation_id: str, plan_id: str, billing_cycle: s
     return {"payment_url": f"/api/v1/billing/pay/{reference}", "reference": reference, "activated": False}
 
 
-def confirm_payment(db: Session, *, reference: str) -> Subscription:
+def _is_paid(plan: Plan) -> bool:
+    return Decimal(str(plan.price_per_month or 0)) > 0
+
+
+def expected_total(db: Session, organisation_id: str, plan: Plan, months: int = 1) -> Decimal:
+    """What the organisation must pay for `months` of `plan`, GST included: the total the invoice will carry
+    (_tax_fields computes the same, and also takes a number)."""
+    taxable = gst.money(Decimal(str(plan.price_per_month or 0)) * months)
+    try:
+        cfg = config.invoicing()
+    except gst.GstError as e:
+        raise BillingError(f"invoicing is not configured correctly: {e}", 503) from e
+    if cfg.supplier is None:
+        return taxable
+    profile = get_profile(db, organisation_id)
+    pos = gst.place_of_supply(profile.state_code if profile else None, cfg.supplier.state_code)
+    return gst.compute_tax(taxable, cfg.gst_rate, intra_state=pos == cfg.supplier.state_code).total
+
+
+def confirm_payment(
+    db: Session, *, reference: str, amount: str | None = None, organisation_id: str | None = None
+) -> Subscription:
+    """Activate the upgrade a verified payment notification names (api/router.py verifies the adapter's signature
+    first). The amount paid must be the pending plan's total; a notification for an upgrade this reference already
+    activated is answered as done, so the adapter's retries are harmless."""
     with platform_scope():
         sub = db.scalar(select(Subscription).where(Subscription.payment_reference == reference))
-    if not sub or not sub.pending_plan_id:
+    if sub is None or (organisation_id and organisation_id != sub.organisation_id):
         raise BillingError("unknown payment reference", 404)
+    if not sub.pending_plan_id:
+        if sub.status == "active":
+            return sub  # already activated by this reference: a redelivered notification
+        raise BillingError("unknown payment reference", 404)
+    plan = get_plan(db, sub.pending_plan_id)
+    try:
+        paid = gst.money(Decimal(str(amount)))
+    except (ArithmeticError, ValueError, TypeError) as e:
+        raise BillingError("the notification carries no valid amount", 422) from e
+    due = expected_total(db, sub.organisation_id, plan)
+    if paid != due:
+        raise BillingError(f"amount {paid} does not match the {plan.id} plan's {due}", 409, code="amount_mismatch")
     with organisation_scope(sub.organisation_id):
         _activate(db, sub, sub.pending_plan_id, "monthly", reference)
         db.commit()

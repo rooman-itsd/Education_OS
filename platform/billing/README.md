@@ -22,6 +22,17 @@ Plans, trials, subscriptions, upgrades and invoices. Decision: [ADR-0005](../../
 - Trial: starts at registration, reminders at 7, 3 and 1 days, then read-only or suspended.
 - Upgrade: self-service through the payment adapter; the entitlement widens the moment the
   payment webhook confirms. Downgrades apply at period end.
+- Paid only against a payment (security review N7, N8):
+  - `POST /webhooks/payment` takes no token, so it is trusted only when signed: `X-Payment-Signature` is the hex
+    HMAC-SHA256 of the raw body with `BILLING_PAYMENT_WEBHOOK_SECRET` (payment-sbiepay signs its
+    PaymentNotification this way with the same value, `PAYMENT_SBIEPAY_NOTIFY_SECRET`). Only a succeeded payment
+    for `billing` whose amount is the pending plan's total activates the upgrade; a redelivery changes nothing.
+    No secret: 503. No adapter: 404.
+  - With no adapter (`BILLING_PAYMENT_ADAPTER=none`) a paid plan is not self-service outside dev mode: the upgrade
+    answers `409 payment_not_configured` and nothing is invoiced. A super admin activates the plan once payment
+    has arrived offline (`PUT /admin/subscriptions/{organisation_id}`), which issues no invoice: a numbered GST
+    invoice is written only for a payment the API confirmed. A free plan activates at once. In dev mode (local
+    development and the test suites) a paid plan still activates without payment, as before.
 - Invoices as PDFs in `platform/documents`.
 - Super admin: edit plans, set any organisation's plan, extend trials, comp, revenue reports.
 
