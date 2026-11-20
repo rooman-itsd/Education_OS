@@ -367,12 +367,9 @@ class ZoomProvider(Provider):
         body = json_object(req.raw_body)
         if not secret or body is None or req.method.upper() != "POST":
             return reject()
-        if body.get("event") == "endpoint.url_validation":
-            plain = (body.get("payload") or {}).get("plainToken")
-            if not isinstance(plain, str) or not 1 <= len(plain) <= 256:
-                return reject(400)
-            enc = hmac.new(secret.encode(), plain.encode(), hashlib.sha256).hexdigest()
-            return handshake(json.dumps({"plainToken": plain, "encryptedToken": enc}), "application/json")
+        # Every request is verified first, the url_validation handshake included (Zoom signs it like any event). The
+        # handshake answers HMAC(secret, plainToken), the same function as the signature HMAC(secret, "v0:<ts>:<body>"),
+        # so answering it unsigned would sign any event a stranger wrote (security review, November 2026, N13).
         ts = req.header("x-zm-request-timestamp")
         sig = req.header("x-zm-signature")
         if not ts.isdigit() or len(ts) > 12 or not sig.startswith("v0="):
@@ -382,6 +379,12 @@ class ZoomProvider(Provider):
         want = "v0=" + hmac.new(secret.encode(), b"v0:" + ts.encode() + b":" + req.raw_body, hashlib.sha256).hexdigest()
         if not hex_equal(want, sig):
             return reject()
+        if body.get("event") == "endpoint.url_validation":
+            plain = (body.get("payload") or {}).get("plainToken")
+            if not isinstance(plain, str) or not 1 <= len(plain) <= 256:
+                return reject(400)
+            enc = hmac.new(secret.encode(), plain.encode(), hashlib.sha256).hexdigest()
+            return handshake(json.dumps({"plainToken": plain, "encryptedToken": enc}), "application/json")
         payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
         obj = payload.get("object") if isinstance(payload.get("object"), dict) else {}
         # An app-level URL serves every institution that authorised Rooman's app: the account names the tenant, and
