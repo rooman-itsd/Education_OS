@@ -5,14 +5,17 @@
 **Status:** in progress (issue #325). Built: the backend domain rules and persistence foundation (exam cycles, grading
 and assessment schemes, papers, sessions, duties), the permission keys and the authentication guard, and the three
 Examination Staff widgets (their endpoints are not served yet) and the Faculty widget `exam-duties` (it reads
-`GET /me/duties`, which the API serves). The API serves 28 of 51 operations: grading schemes,
-assessment schemes, exam cycles, exam papers, exam sessions and exam duties (`api/router.py`), mounted under
+`GET /me/duties`, which the API serves). The API serves 33 of 51 operations: grading schemes,
+assessment schemes, exam cycles, exam papers, exam sessions, exam duties and marks (`api/router.py`), mounted under
 `/api/v1/examinations` because the module is listed in `apps/backend/config/modules.enabled.yaml`. Not built: the other
-23 operations, candidate creation and eligibility, hall tickets,
-marks, results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
+18 operations, candidate creation and eligibility, hall tickets,
+results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
 `application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`, and papers serve `course_code`, `course_title` and `department_id` from it when it has them (omitted otherwise; an offering created before the consumers may have no row until a backfill, and later offering changes are not applied). Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 The `examinations_candidate` table exists (migration `ex_0005`, schema only): nothing creates, reads or serves candidates yet.
+Marks (`application/marks.py`, table `examinations_mark_entry`, migration `ex_0006`): `listMarks`, `enterMarks`, `submitMarks`,
+`moderateMarks` and `lockMarks` work on the eligible candidates of a paper. Until candidates are created a paper has none, and no
+operation yet moves a paper into `marks_entry` (docs/reviewer-decisions.md, section 15).
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
 
