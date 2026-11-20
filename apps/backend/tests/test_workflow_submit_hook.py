@@ -194,3 +194,47 @@ def test_a_lost_race_on_the_client_token_returns_the_winners_request(client, org
         )  # fmt: skip
         db.commit()
     assert again["id"] == first["id"] and again["created"] is False
+
+
+def test_a_student_cannot_create_a_modules_request_over_http_while_submit_still_can(client, org):
+    """Security review N6 (#673): the outcome events identify the record by entity_type and entity_id, and students
+    hold workflow:request:create. A request a student made up for `examinations.result_set` would, once approved,
+    look to examinations like its own result set's approval. A module's namespaced types are reserved for submit()."""
+    slug = f"wf-st-{uuid.uuid4().hex[:6]}"
+    with organisation_scope(org["id"]), SessionLocal() as db:
+        create_user(
+            db,
+            organisation_id=org["id"],
+            email=f"student@{slug}.example.com",
+            name="Student",
+            password="Passw0rd!x",
+            roles=["student"],
+        )
+        db.commit()
+    login = client.post(
+        "/api/v1/identity/auth/login", json={"email": f"student@{slug}.example.com", "password": "Passw0rd!x"}
+    )
+    assert login.status_code == 200, login.text
+    student = auth(login.json()["token"])
+    forged = {"chain_code": CHAIN, "entity_type": "examinations.result_set", "entity_id": "rs-1", "title": "Results"}
+
+    r = client.post("/api/v1/workflow/requests", json=forged, headers=student)
+    assert r.status_code == 403 and r.json()["code"] == "reserved_entity_type", r.text
+    assert client.post("/api/v1/workflow/requests", json=forged, headers=org["admin"]).status_code == 403  # anyone
+    assert _submitted_events(org["id"]) == []  # nothing was created
+
+    # a free-standing request (no module namespace) is still the student's to file
+    own = client.post("/api/v1/workflow/requests", json={**forged, "entity_type": "leave"}, headers=student)
+    assert own.status_code == 201, own.text
+
+    # and the module itself still submits its record in-process
+    out = _submit(org["id"], org["faculty"], client_token="results-rs-1")
+    assert out["created"] is True
+    assert [e["entity_type"] for e in _submitted_events(org["id"])].count("examinations.result_set") == 1
+
+
+def test_submit_refuses_an_entity_type_that_is_not_a_modules_own(client, org):
+    for entity_type in ("result_set", ".result_set", "examinations.", ""):
+        with pytest.raises(workflow.WorkflowRefusedError) as e:
+            _submit(org["id"], org["faculty"], entity_type=entity_type)
+        assert e.value.code == workflow.INVALID_REQUEST

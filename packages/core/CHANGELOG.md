@@ -5,6 +5,9 @@ All notable changes to `eos-core`. Follows Keep a Changelog, semver per package.
 ## Unreleased
 
 ### Added
+- `eos_core.workflow.is_module_entity_type()` and the rule behind it (security review N6): `submit()` accepts only
+  a module's namespaced `<module>.<type>` entity type (else `invalid_request`), and platform/workflow's
+  `POST /requests` refuses those types, so only the module itself creates a request its outcome consumer acts on.
 - `eos_core.workflow` (#325 Q10): `submit(db, organisation_id, *, chain_code, entity_type, entity_id, title,
   requested_by, description=None, context=None, client_token=None) -> dict` sends a record for approval through
   platform/workflow without importing it. It delegates to `hooks.submit`, None until the host wires it

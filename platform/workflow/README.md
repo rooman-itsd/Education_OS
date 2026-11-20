@@ -44,8 +44,16 @@ req = workflow.submit(
   back with the caller's own change. A refusal writes nothing and leaves the caller's transaction usable.
 - **Where it works.** Only the API process wires the hook; elsewhere (the event-bus relay, a script)
   `submit()` raises `WorkflowUnavailableError`.
+- **Entity types are namespaced and reserved** (security review N6). `entity_type` must be the module's own
+  `<module>.<type>` (e.g. `examinations.result_set`); `submit()` refuses anything else with `invalid_request`.
+  Those types are reserved for `submit()`: `POST /requests` refuses any entity type containing a dot with
+  `403 reserved_entity_type`, whoever asks. Students and faculty hold `workflow:request:create`, so without this
+  anyone could make up a request for `examinations.result_set` and `rs-1` whose approval examinations would take
+  for its own. Free-standing requests people file through the API (`leave`, `expense`) have no dot and are
+  unchanged.
 - **The outcome** arrives as `workflow.request.approved` or `workflow.request.rejected`, carrying the same
-  `entity_type` and `entity_id`; their payloads are in [contracts/events.yaml](contracts/events.yaml).
+  `request_id` (the `id` `submit()` returned), `entity_type` and `entity_id`; their payloads are in
+  [contracts/events.yaml](contracts/events.yaml).
 
 ## Who sees and acts on a request
 - **Read:** org and super admins read every request. Everyone else reads their own requests, those delegated to
@@ -60,9 +68,11 @@ req = workflow.submit(
 
 ## Reacting to a decision (consumers)
 Subscribe to the events in [contracts/events.yaml](contracts/events.yaml); each declares its payload.
-- **Filter on `entity_type`** (the kind of record the request is about, e.g. `examinations.result_set`), and on
-  `chain_code` if you submit to more than one chain; ignore every other event. Then use **`entity_id`** to find
-  your own record. Never act on an event from an organisation other than the envelope's `organisation_id`.
+- **Filter on your own namespaced `entity_type`** (e.g. `examinations.result_set`, which only your `submit()` can
+  create), and on `chain_code` if you submit to more than one chain; ignore every other event. Then use
+  **`entity_id`** to find your own record, and act only when the event's **`request_id`** is the id `submit()`
+  returned for it (store it with the record): a later request for the same record, or one from before, is not
+  this decision. Never act on an event from an organisation other than the envelope's `organisation_id`.
 - `workflow.request.approved` (final approval: `approved_by`, `comments`) and `workflow.request.rejected`
   (`rejected_by`, the deciding `step_order` and `step_name`, `comments`) are the outcomes; `workflow.step.advanced`
   and `workflow.step.overdue` are progress. `comments` may be null.
