@@ -12,5 +12,8 @@ dependencies = [
   "eos-identity",
 ]
 
+[project.entry-points."eos.event_consumers"]
+documents = "eos_documents.application.consumers:CONSUMERS"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
