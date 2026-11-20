@@ -8,3 +8,5 @@ events:
     description: A document was successfully uploaded and verified in storage.
   - name: documents.document.deleted
     description: A document was deleted from storage and metadata catalog.
+  - name: documents.organisation.purged
+    description: All documents and storage objects of an organisation were purged.

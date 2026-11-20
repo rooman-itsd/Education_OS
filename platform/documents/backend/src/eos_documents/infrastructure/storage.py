@@ -56,6 +56,10 @@ class StoragePort(Protocol):
         """Server-side copy within the bucket (confirm moves an upload to the document's own key)."""
         ...
 
+    def delete_prefix(self, bucket: str, prefix: str) -> int:
+        """Delete all objects with the given prefix. Returns the count of deleted objects."""
+        ...
+
 
 class MinioStorage:
     """MinIO / S3-compatible storage implementation."""
@@ -132,6 +136,19 @@ class MinioStorage:
 
         self.client.copy_object(bucket, dest_key, CopySource(bucket, source_key))
 
+    def delete_prefix(self, bucket: str, prefix: str) -> int:
+        from minio.deleteobjects import DeleteObject
+
+        objects_to_delete = [
+            DeleteObject(obj.object_name) for obj in self.client.list_objects(bucket, prefix=prefix, recursive=True)
+        ]
+        if not objects_to_delete:
+            return 0
+        errors = list(self.client.remove_objects(bucket, objects_to_delete))
+        if errors:
+            logger.warning("Errors removing objects with prefix %s: %s", prefix, errors)
+        return len(objects_to_delete) - len(errors)
+
 
 class MemoryStorage:
     """Thread-safe in-memory object storage for tests and development."""
@@ -171,6 +188,12 @@ class MemoryStorage:
         if item is None:
             raise KeyError(f"Object {bucket}/{source_key} not found")
         self.objects[(bucket, dest_key)] = (bytes(item[0]), item[1])
+
+    def delete_prefix(self, bucket: str, prefix: str) -> int:
+        matching_keys = [k for b, k in self.objects if b == bucket and k.startswith(prefix)]
+        for k in matching_keys:
+            self.objects.pop((bucket, k), None)
+        return len(matching_keys)
 
 
 _storage_singleton: StoragePort | None = None
