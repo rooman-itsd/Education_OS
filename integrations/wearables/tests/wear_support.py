@@ -18,6 +18,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 11, 5, 6, 0, tzinfo=UTC)
 PREFIX = "/api/v1/wearables"
 POLAR_KEY = "polar-signature-secret-key"
+GARMIN_KEY = "garmin-signature-secret-key"
 STRAVA_VERIFY = "strava-verify-token"
 STRAVA_SUB = "120475"
 STRAVA_ATHLETE = "12345678"
@@ -163,6 +164,10 @@ def link_input(person: str, provider: str, **over) -> dict:
 
 def polar_signature(raw: bytes, key: str = POLAR_KEY) -> dict:
     return {"Polar-Webhook-Signature": hmac.new(key.encode(), raw, hashlib.sha256).hexdigest()}
+
+
+def garmin_signature(raw: bytes, key: str = GARMIN_KEY) -> dict:
+    return {"garmin-webhook-signature": hmac.new(key.encode(), raw, hashlib.sha256).hexdigest()}
 
 
 def request(raw: bytes | str, headers: dict | None = None, *, method="POST", query=None, suffix="") -> dict:

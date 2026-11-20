@@ -766,6 +766,9 @@ class WearablesAdapter:
             if row is None:
                 return []
             if ev.kind == "revoked":
+                if not provider.is_deauthorized(c):
+                    log.warning("wearables: unconfirmed deauthorisation for subject %s ignored", ev.subject)
+                    return []
                 self._revoke_row(db, c, row, "link.revoked_by_provider")
                 return [_note("link_revoked_by_provider", {"account_link_subject": ev.subject})]
             if ev.kind == "narrowed":
@@ -773,11 +776,14 @@ class WearablesAdapter:
                 self._audit(db, c, org, "link.narrowed", "link", link_id)
                 db.commit()
             elif ev.kind == "deleted":
+                confirmed_ids = [rid for rid in ev.record_ids if provider.is_activity_deleted(c, rid)]
+                if not confirmed_ids:
+                    return []
                 db.execute(
                     delete(Record).where(
                         Record.account_link_id == link_id,
                         Record.organisation_id == org,
-                        Record.provider_record_id.in_([i[:200] for i in ev.record_ids]),
+                        Record.provider_record_id.in_([i[:200] for i in confirmed_ids]),
                     )
                 )
                 self._audit(db, c, org, "records.deleted", "link", link_id)

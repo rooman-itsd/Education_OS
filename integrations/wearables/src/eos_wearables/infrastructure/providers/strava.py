@@ -206,6 +206,46 @@ class StravaProvider(Provider):
             raise map_status(r)
         return r.status_code < 400
 
+    def is_deauthorized(self, ctx: Context | None) -> bool:
+        if ctx is None:
+            return False
+        refresh = ctx.secrets.get("refresh_token")
+        token = ctx.secrets.get("access_token")
+        if not refresh and not token:
+            return False
+        if refresh:
+            try:
+                self._tokens({"grant_type": "refresh_token", "refresh_token": refresh})
+                return False  # refresh succeeded: athlete is still authorized
+            except AdapterError as e:
+                if e.provider_code in ("400", "401") or e.code == "consent_required":
+                    return True  # refresh rejected: confirmed deauthorized
+                return False
+        if token:
+            r = self.http.send(
+                "GET",
+                f"{self.cfg.strava_api_base_url}/athlete",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if r.status_code == 401:
+                return True
+        return False
+
+    def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
+        if ctx is None:
+            return False
+        token = ctx.secrets.get("access_token")
+        if not token:
+            return False
+        r = self.http.send(
+            "GET",
+            f"{self.cfg.strava_api_base_url}/activities/{activity_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if r.status_code == 404:
+            return True
+        return False
+
     # --- data
     def pull(self, ctx: Context, data_type: str, start: date, end: date) -> list[Normal]:
         if data_type != "activity":

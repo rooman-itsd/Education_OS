@@ -148,7 +148,7 @@ def test_sandbox_and_mock_start_regardless_and_each_call_names_what_it_lacks(mon
 
 
 SECRETS = ["strava-access-1", "strava-refresh-1", "polar-access-1", "garmin-access-1", "google-access-1", "platform-strava-secret", "platform-polar-secret", "platform-garmin-secret",
-           "platform-google-secret", "strava-verify-token", "polar-signature-secret-key"]  # fmt: skip
+           "platform-google-secret", "strava-verify-token", "polar-signature-secret-key", "garmin-signature-secret-key"]  # fmt: skip
 
 
 def test_no_secret_reaches_the_log_a_repr_or_an_error(adapter, transport, org, caplog):
