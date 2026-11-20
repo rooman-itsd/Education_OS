@@ -168,6 +168,7 @@ financial data (hr-payroll, fees-accounts concessions), children's data (below),
 - **#667 (open):** the Privacy Notice and Terms of Service at `#/privacy` and `#/terms`, linked from the footer and
   from the register page's box, which now reads "I agree to the Terms of Service on behalf of this organisation and
   have read the Privacy Notice". `LEGAL_VERSION` in `public/legal.ts` equals tenancy's `DEFAULT_TERMS_VERSION`.
+- **#669 (open):** `/app#signup` gets the same required box and links and sends what was ticked (gap D3).
 
 **Still missing.**
 
@@ -289,7 +290,7 @@ student data at scale; **Medium** and **Low** after launch. Owners are suggestio
 |---|---|---|---|---|
 | D1 | No privacy notice or terms on the public site | Launch | Praveen | #667: `#/privacy`, `#/terms`, footer and register-page links. Merge after D5 |
 | D2 | Consent at registration not recorded (no version, time or user) | Launch | Faizan | **Fixed, #665** |
-| D3 | `/app#signup` registers with `accepted_terms: true` and no box to tick | Launch | Srujan | Add the same required box and links to `apps/frontend/src/auth/SignUp.tsx`, or send `/app#signup` to the public `#/register` |
+| D3 | `/app#signup` registers with `accepted_terms: true` and no box to tick | Launch | Srujan | #669: the same required box and links; sends what was ticked |
 | D4 | No Grievance Officer or data-protection contact named | Launch | Faizan | Fill `[Grievance Officer name, email]`, `[Company legal name]`, `[Registered address]` in `public/legal.ts` |
 | D5 | Notice and terms are unreviewed drafts | Launch | Faizan | Counsel reviews `public/legal.ts` (both documents), the legal bases in section 3 and the dates in section 1; fill `[Hosting location]`, `[Jurisdiction city]` |
 | D6 | No processing agreement between the operator and institutions (s.8(2)) | Launch | Faizan | Section 5 of the draft terms is one; counsel to confirm it suffices or add a separate DPA |
@@ -315,6 +316,7 @@ student data at scale; **Medium** and **Low** after launch. Owners are suggestio
 
 - This document, and the test runs in section 5.
 - #665 (merged): consent recorded at registration.
+- #669: the consent box at `/app#signup`.
 - #667: privacy notice and terms of service at https://educationos.futureacad.ae/#/privacy and
   https://educationos.futureacad.ae/#/terms once merged. That site serves the `main` build (`web-dist`; `/VERSION`
   answered `97ba1f5`, a `main` commit, on 20 November), so the pages appear a minute after the web build; a host set
