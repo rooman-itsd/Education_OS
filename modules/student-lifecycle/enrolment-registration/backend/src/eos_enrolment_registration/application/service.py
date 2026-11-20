@@ -438,25 +438,25 @@ def _place(
         registration.id,
         {"course_offering_id": course_offering_id, "section_id": section_id, "registration_type": registration_type},
     )
-    _publish(
-        db,
-        org,
-        actor.user_id,
-        "course-registration.confirmed",
-        {
-            "registration_id": registration.id,
-            "person_id": registration.person_id,
-            "course_offering_id": course_offering_id,
-            "section_id": section_id,
-            "academic_period_id": academic_period_id,
-            "registration_type": registration_type,
-            "student_name": enrolment.student_name,
-            "roll_number": enrolment.roll_number,
-            "confirmed_at": _iso(now),
-        },
-    )
+    _publish(db, org, actor.user_id, "course-registration.confirmed", _confirmed_payload(registration, enrolment))
     db.flush()
     return registration
+
+
+def _confirmed_payload(registration: CourseRegistration, enrolment: ProgrammeEnrolment) -> dict:
+    """contracts/events.yaml course-registration.confirmed: the registration as it is now, with its enrolment's name
+    and roll number."""
+    return {
+        "registration_id": registration.id,
+        "person_id": registration.person_id,
+        "course_offering_id": registration.course_offering_id,
+        "section_id": registration.section_id,
+        "academic_period_id": registration.academic_period_id,
+        "registration_type": registration.registration_type,
+        "student_name": enrolment.student_name,
+        "roll_number": enrolment.roll_number,
+        "confirmed_at": _iso(registration.confirmed_at),
+    }
 
 
 def _withdraw(db: Session, actor: Actor, registration: CourseRegistration, reason: str, now: datetime) -> None:
@@ -686,6 +686,43 @@ def change_section(db: Session, actor: Actor, registration_id: str, to_section_i
     )
     db.flush()
     return _views(db, [registration])[0]
+
+
+def republish_registrations(db: Session, actor: Actor) -> int:
+    """The backfill for consumers that started after registrations were confirmed (issue #325): publish
+    `course-registration.confirmed` again for every registration of the caller's organisation that is confirmed now,
+    oldest first. Returns how many were published.
+
+    The payload is the registration as it is now: its current section (a section move made before is not replayed;
+    this module keeps no move history, and the current section is what a consumer needs), its original confirmed_at,
+    and the enrolment's current name and roll number. Each is a new event (new envelope id, occurred_at now).
+    Consumers apply a confirmation once per registration_id, so one that already knows the registration keeps what it
+    has, and running this twice is harmless. Withdrawn registrations are not republished: a consumer that never saw
+    one has nothing to undo, and holds no row for it, which is the state it should be in. Nothing is changed and no
+    audit row is written: a republish changes no state."""
+    org = actor.organisation_id
+    registrations = (
+        db.query(CourseRegistration)
+        .filter(CourseRegistration.organisation_id == org, CourseRegistration.status == e.CONFIRMED)
+        .order_by(CourseRegistration.confirmed_at.asc(), CourseRegistration.id.asc())
+        .all()
+    )
+    ids = {r.programme_enrolment_id for r in registrations}
+    enrolments = (
+        {
+            en.id: en
+            for en in db.query(ProgrammeEnrolment).filter(
+                ProgrammeEnrolment.organisation_id == org, ProgrammeEnrolment.id.in_(ids)
+            )
+        }
+        if ids
+        else {}
+    )
+    for registration in registrations:
+        payload = _confirmed_payload(registration, enrolments[registration.programme_enrolment_id])
+        _publish(db, org, actor.user_id, "course-registration.confirmed", payload)
+    db.flush()
+    return len(registrations)
 
 
 # ---------------------------------------------------------------- report

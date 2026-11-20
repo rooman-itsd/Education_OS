@@ -19,6 +19,11 @@ including the decisions in section 11.
 ## Public surface
 - API: [contracts/openapi.yaml](contracts/openapi.yaml)
 - Events: [contracts/events.yaml](contracts/events.yaml)
+- Backfill: `POST /registrations/republish` (permission `enrolment-registration:registration:manage`) publishes
+  `course-registration.confirmed` again for every registration that is confirmed now. **Run it once per organisation
+  after deploy** (0.2.0), so consumers that started late (examinations, timetable-attendance, lms) learn the
+  registrations confirmed before them. Safe to repeat. See
+  [docs/integration-points.md](docs/integration-points.md#backfill-post-registrationsrepublish-run-once-per-organisation-after-deploy).
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 
 | Widget | Dashboard | Kind | Permission | Data |

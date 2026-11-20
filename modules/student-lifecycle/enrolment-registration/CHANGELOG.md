@@ -3,6 +3,13 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `POST /registrations/republish` (permission `enrolment-registration:registration:manage`): the backfill for
+  consumers that started after registrations were confirmed (issue #325). Publishes
+  `course-registration.confirmed` again for every registration of the caller's organisation that is confirmed now
+  (current section, original `confirmed_at`, current name and roll number; new envelope id, `occurred_at` now) and
+  returns `{"published": n}`. Withdrawn registrations and section moves are not republished. Run once per
+  organisation after deploy. Contract versions: openapi `0.2.0`, module `0.2.0`; `events.yaml` stays at payload
+  version 1 (description only).
 - Backend (issue #105): own Alembic chain (`enrolment_registration_alembic_version`) with nine
   `enrolment_registration_*` tables, each with `organisation_id` and the forced `tenant_isolation` policy; programme
   enrolment with per-organisation roll numbers, registration windows, single and bulk course registration applying

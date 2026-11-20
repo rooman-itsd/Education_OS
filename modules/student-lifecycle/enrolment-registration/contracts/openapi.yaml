@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: enrolment-registration API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Programme enrolment (with roll numbers), registration windows, and course registration for course offerings and
     sections, the source of truth for who is registered for what (docs/prd.md).
@@ -156,6 +156,27 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BulkRegistrationInput" } } } }
       responses:
         "200": { description: One result per student, in request order, content: { application/json: { schema: { $ref: "#/components/schemas/BulkRegistrationResult" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /registrations/republish:
+    post:
+      tags: [registrations]
+      summary: >-
+        Publish enrolment-registration.course-registration.confirmed again for every registration in the caller's
+        organisation that is confirmed now (the backfill for consumers that started after registrations were
+        confirmed, issue #325). Run it once per organisation after deploy, and again whenever a consumer has lost its
+        copy. The payload is the registration as it is now: current section, original confirmed_at, current name and
+        roll number. Each is a new event (new envelope id, occurred_at now); consumers apply a confirmation once per
+        registration_id, so calling this twice is harmless. Withdrawn registrations are skipped and section moves are
+        not replayed. Changes nothing and writes no audit row.
+      operationId: republishRegistrations
+      x-permission: enrolment-registration:registration:manage
+      responses:
+        "200":
+          description: The number of confirmations published.
+          content:
+            application/json:
+              schema: { type: object, required: [published], properties: { published: { type: integer, minimum: 0 } } }
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /registrations/{registration_id}:
