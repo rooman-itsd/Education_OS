@@ -43,7 +43,12 @@ ones). Medium and above have an issue.
 
 | ID | Severity | Component | Description | Evidence | Verified | Status | Owner | Fix |
 |---|---|---|---|---|---|---|---|---|
-| N1 | Low | platform/integration-hub | A callback the adapter answers as a handshake writes an `InboundReceipt` row and commits, with no rejection count or limit. With an adapter whose handshake needs no secret (Zoom's `endpoint.url_validation`, N9), anyone can make the hub write one row per request, bounded only by the gateway's per-address bucket (1200 a minute). No adapter is registered on the live host today (the API image installs only messaging-providers and payment-sbiepay, which declare no `eos.integration_adapters` entry point) | `platform/integration-hub/backend/src/eos_integration_hub/application/inbound.py:298-310` | Reading | Open; noted on #554 | himanshu-rooman | Count handshakes per source like rejections (`_over_limit`), or keep no receipt for a handshake; N9 removes the unsigned handshake |
+| N1 | Low | platform/integration-hub | A callback the adapter answers as a handshake writes an `InboundReceipt` row and commits, with no rejection count or limit. With an adapter whose handshake needs no secret (Zoom's `endpoint.url_validation`, N13), anyone can make the hub write one row per request, bounded only by the gateway's per-address bucket (1200 a minute). No adapter is registered on the live host today (the API image installs only messaging-providers and payment-sbiepay, which declare no `eos.integration_adapters` entry point) | `platform/integration-hub/backend/src/eos_integration_hub/application/inbound.py:298-310` | Reading | Open; noted on #554 | himanshu-rooman | Count handshakes per source like rejections (`_over_limit`), or keep no receipt for a handshake; N13 removes the unsigned handshake |
+| N2 | Medium | apps/backend gate, platform/identity | A suspended or archived organisation's users keep working on every platform service until their token expires (12 hours): the entitlement gate checks the organisation's status only for feature modules, and `current_principal` checks only the user's status. Sign-in is refused after a suspension, so only tokens issued before it work. Live | `apps/backend/src/eos_backend/gateway.py:27-28`, `:47-50`; `platform/identity/backend/src/eos_identity/api/deps.py:38-50`; `packages/core/src/eos_core/settings.py:21` | Test: after `PUT /tenancy/admin/organisations/{id}/status` suspended, the admin's old token gets 200 on `GET /identity/users` and `GET /audit/records` and 201 on `POST /billing/subscription/upgrade`, while a feature module answers 403 | Open | faizanrooman | Check the organisation's status in `current_principal` (one cached lookup per request, as the gate does), with an explicit allow-list for what a suspended organisation may still read (its own status, billing) |
+| N3 | Medium | platform/tenancy (impersonation), packages/core events | What a super admin does while impersonating is recorded as the impersonated user: only `tenancy.impersonation.started` names the super admin; every later event and audit record carries the user as actor and nothing else, because `events.publish` has no field for it. The reason may be empty. Live | `platform/tenancy/backend/src/eos_tenancy/application/service.py:449-469`; `packages/core/src/eos_core/events.py:36-46`; `platform/audit/backend/src/eos_audit/application/consumers.py:152-160` | Test by the platform-services review agent (not kept): under impersonation the super admin created a user, a chain and approved a request; the outbox events and the audit record name only the organisation admin | Open | faizanrooman | Carry the token's `imp` into the request context and the event envelope (`impersonated_by`), store it in audit, and require a non-empty reason |
+| N4 | Low | modules/student-lifecycle/student-information | `POST /account-links/republish` publishes one `person.account-linked` per linked person of the organisation, synchronously and with no throttle, and `admissions-staff` and `registrar` hold the key it needs (`person:write`), not only the admin. Repeated calls fill the outbox and every consumer with copies (harmless to data: consumers apply by `occurred_at`, but each call is O(persons) events). Organisation scoping is correct | `modules/student-lifecycle/student-information/backend/src/eos_student_information/api/router.py:129-135`; `application/service.py:345-361` | Reading | Open | praveen-rooman | Require an admin-only key (or `org-admin`) for the backfill and refuse a second run within a cool-down (store the last run per organisation) |
+| N5 | Low | modules/academics/academic-management | `POST /offerings/republish` publishes four events per offering and section of the whole organisation, synchronously, with no throttle; `department-admin` holds the key (`offering:write`) and can trigger the organisation-wide backfill. Scoping is correct (`repo.q`) | `modules/academics/academic-management/backend/src/eos_academic_management/api/router.py:249-253`; `application/service.py:1026-1056` | Reading | Open | shivanisinghrooman-09 | As N4: an admin-only key and a cool-down per organisation |
+| N6 | Medium | packages/core workflow hook, platform/workflow | The outcome events `workflow.request.approved` / `rejected` identify the record only by `entity_type` and `entity_id`, and anyone holding `workflow:request:create` (students and faculty do) can create a request with any `entity_type`, `entity_id`, chain and `context` through `POST /workflow/requests`. `eos_core.workflow.submit` tells modules the outcome "carries the same entity_type and entity_id", so a module that acts on an approval by matching those would act on a request a student made up. No module consumes the outcome yet. Latent | `packages/core/src/eos_core/workflow.py:73-75`; `platform/workflow/backend/src/eos_workflow/api/router.py:55-60`, `:152-170`; `platform/workflow/contracts/permissions.yaml` (student, faculty: `workflow:request:create`) | Reading | Open | faizanrooman | Reserve entity types per module (`<module>.<type>`): `submit()` stamps the calling module, `POST /requests` refuses a reserved prefix; and document that a consumer matches the outcome's `request_id` to the id `submit()` returned |
 
 ## 4. Reviewed, no findings
 
@@ -62,7 +67,7 @@ path answers 404 there. Checked:
 - Tenant resolution (`inbound.py:398-430`): a connection key in the URL is looked up by hash; an app-level callback
   resolves only to a connection of the same adapter, or to exactly one active account link (two organisations with
   the same provider account resolve to nobody). Whether the adapter's own `resolves_to` can be trusted is the
-  adapter's verification (see N9 to N11).
+  adapter's verification (see N13 to N15).
 - Reject limit (`inbound.py:127-238`): past the limit, rejections are still answered and verified but nothing is
   written; a signed callback is never refused because of someone else's junk. Handshakes are not counted (N1).
 - Secret store and key rotation (`infrastructure/secrets.py`): AES-256-GCM with the reference as associated data, a
@@ -70,7 +75,7 @@ path answers 404 there. Checked:
   outside dev mode a missing or malformed `INTEGRATION_HUB_SECRET_KEK` refuses (no fallback key), and the `env`
   backend is refused; no value is logged or put in an exception.
 - SSRF: the hub makes no outbound request itself; adapters do, from connection settings an organisation admin
-  enters. The hub has no shared address guard for those settings (see N12, Jitsi).
+  enters. The hub has no shared address guard for those settings (see N16, Jitsi).
 
 **platform/api-gateway (#363) and its deployment (#590, #663).** Checked: `X-Forwarded-For` is believed only from
 `EOS_TRUSTED_PROXIES` (loopback by default) and read from the right, so a client cannot pick its bucket
@@ -84,3 +89,36 @@ the two settings agree. The in-process buckets count per worker (documented in t
 worker unless `EOS_API_WORKERS` is set. October's S11 (port 8000 published on every interface,
 `infra/docker/docker-compose.api.yml:149-150`) is unchanged; a direct LAN caller still cannot forge its address,
 because only the proxy's address is trusted. No new finding.
+
+**Authentication (#365, #655).** `eos_core.security.decode_token` picks the verification path by algorithm, and each
+path accepts only its own (`HS256` against the secret, `RS256` against the realm's keys), so neither `alg: none` nor
+an HS256 token signed with a realm's public key passes. A realm token (`eos_core/oidc.py:283-318`) is refused before
+any network call unless its issuer is one of our realms and the realm is enabled (`EOS_OIDC_REALMS`); then
+signature, issuer, audience, expiry, `typ` (an ID token is not a bearer token) and `azp`; the JWKS fetch is bounded
+(timeout, one refetch per realm a minute, four at once, failures remembered). Identity maps a realm token to a user of
+the realm's own organisation only, checks that organisation's status on every request, and links by email only when
+Keycloak says it is verified and the user has no subject yet (`identity/application/service.py:227-262`); the
+super admin never signs in through OIDC. Impersonation (#655): only `platform:organisations:impersonate` (super
+admin), only a user of that organisation, a 60-minute token with `sa` false and without `service`; attribution is N3.
+Tokens still cannot be revoked (October S8, accepted).
+
+**Tenancy and row-level security.** Every migration chain on `main` (the 41 enabled modules, the 11 enabled platform
+services, the two enabled integrations, and the unmounted documents, search and six integrations) was applied to an
+empty PostgreSQL 16 database as the deploy does (`infra/docker/migrate.sh`, then `alembic upgrade head` for the rest),
+and the catalogue was queried: 443 tables, of which 380 carry `organisation_id`, and every one of those has row-level
+security enabled and forced and the standard `tenant_isolation` policy on `app.organisation_id`. The tables without
+`organisation_id` are the Alembic version tables, `billing_plan`, `billing_invoice_counter` (exempted in its
+migration) and `tenancy_organisation`, as in October. Consumers that run per event (`library`, `budget-grants`,
+`fees-accounts` and the rest) refuse to run inside `platform_scope` and switch to the event's organisation; the
+modules' `platform_scope` uses since October are scheduled sweeps. Terms acceptance (#665): registration is refused
+without `accepted_terms: true`, and the version, time and accepting user are recorded server-side. Export and purge
+(#354, #366): every route needs a `platform:` key; the purge finding is N9.
+
+**Republish endpoints.** All three filter by the caller's organisation (`student-information` explicitly,
+`academic-management` through `repo.q`, `enrolment-registration` explicitly in #652) and change no state; consumers
+apply by occurred time, so a republish does not roll anything back. Abuse by repetition: N4, N5, and the same note
+on #652 (`registration:manage`).
+
+**`eos_core.workflow.submit` (#654).** It skips `workflow:request:create` by design: the caller is a module acting
+for its own user, and `requested_by` must be that user (the self-approval rule and the per-requester idempotency key
+depend on it). No module calls it yet. The risk is the reverse direction, N6.
