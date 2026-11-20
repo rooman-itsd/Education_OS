@@ -1086,6 +1086,8 @@ def _providers_env() -> str:
 
 
 def get_adapter(**kwargs) -> VideoConferencingAdapter:
-    """The entry-point factory (eos.integration_adapters): refuses to start when the configured mode lacks credentials."""
-    startup_check()
+    """The entry-point factory (eos.integration_adapters): refuses to start when live mode lacks credentials."""
+    cfg = Config.load()
+    if cfg.mode == "live":
+        startup_check(cfg)
     return VideoConferencingAdapter(**kwargs)
