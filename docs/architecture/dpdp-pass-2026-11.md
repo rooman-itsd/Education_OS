@@ -90,3 +90,58 @@ needs a stated reason and publishes `tenancy.impersonation.started` (60-minute t
 | external-university-portals (not enabled) | `exchange`: person id, partner name, transcript document | students | transcript exchange | C | R0 | org-admin |
 | video-conferencing (not enabled) | `attendance`: person id, display name, time in meeting; meeting host; recordings (document ids) | students, staff | online classes | V | R0 | org-admin |
 | wearables (not enabled) | `record`: person id, provider data (heart rate, sleep, training), read log | athletes | training | C (athlete's own link; revocable) | 730 days (`WEARABLES_RETENTION_DAYS`, tested) | coach, org-admin; every read logged in `read_log` |
+
+### 3.2 Feature modules
+
+Retention is R0 for every row unless stated. Most modules also keep their own `audit_entry` (actor, action, entity,
+and in some modules before/after snapshots and a reason), purged with the organisation.
+
+| Module | Personal data | Principals | Purpose | Basis | Who can read |
+|---|---|---|---|---|---|
+| student-lifecycle/student-information | `person`: first, last and preferred name, **date of birth**, gender, **national ID or passport number** (`identity_number`), contact (JSON), **guardians** (JSON, free form), linked user; status history; documents; ID cards | students, guardians | the learner record | C (V for adults) | registrar, org-admin, management, admissions-staff |
+| student-lifecycle/admissions | `application`: applicant first and last name, email, phone, **date of birth**, user id; uploaded documents and their verification; offers, decline reasons; merit list rank and score | applicants (often minors) | admission | C | applicant (own), admissions-reviewer, admissions-staff, department-admin, management, org-admin |
+| student-lifecycle/enrolment-registration | `programme_enrolment`: person id, student name, roll number, end reason; course registrations, withdrawal reasons | students | enrolment | C / V | registration-staff, org-admin, management, department-admin, examination-staff |
+| student-lifecycle/web-portal-cms | page and announcement bodies (staff-written; no visitor data stored) | staff (as editors) | public site | V | public pages: anyone; editing: web-portal-cms-editor, org-admin |
+| academics/academic-management | `roster_entry`: person id, student name, roll number; `faculty_assignment`: faculty id | students, faculty | sections and rosters | V / E | org-admin, department-admin, faculty, student, examination-staff |
+| academics/examinations | `candidate`: student id, eligibility and override reasons; `exam_duty`: staff id | students, staff | exams, eligibility | V / L (university regulations) | examinations roles (controller, department head, faculty, student own, viewer) |
+| academics/lms | submissions (text, files), quiz attempts and answers, grades and feedback, discussion posts, `member_ref`: student name | students, instructors | teaching and assessment | V | lms roles (admin, department head, instructor, student own, viewer) |
+| academics/timetable-attendance | `attendance_record`: student id, status, remark, who marked; changes with reasons; section members' names | students, faculty | attendance, exam eligibility | V / L | timetable-attendance roles (admin, department head, faculty, student own, viewer, exam-eligibility) |
+| campus-life/hostel | `allocation`: person name, notes, room; `leave_request`: destination, reason, **contact phone**; `visit`: **visitor name, relation, ID document note**; `incident`: category, description, action taken | residents (often minors), their visitors | residence, safety | C / V | hostel-admin, warden, security, resident (own), student, viewer |
+| campus-life/library | members (name, category, block reason), loans, reservations, fines | students, staff | lending | V | library-admin, librarian, member (own), viewer |
+| campus-life/transport | drivers (name, **licence number**, phone); passes (person name, route, stop); **`position`: GPS latitude/longitude of a trip** (the vehicle, not the rider) | riders, drivers | transport, safety | V / E | transport-admin, driver, rider, viewer. Positions deleted after 30 days (`TRANSPORT_POSITION_RETENTION_DAYS`, tested) |
+| campus-life/alumni | `alumnus`: full name, email, phone, LinkedIn URL, employer, city, notes; mentoring assignments and session notes | alumni, mentees | alumni relations | C | alumni-coordinator, alumni-mentee |
+| campus-life/placement-career (not enabled) | `application`: student name, declared CGPA, backlogs, offer CTC; company contacts (name, email, phone) | students, recruiters | placement | C | placement-career-officer, viewer, student (own) |
+| facilities/asset-management | custodian id, verifier ids, disposal recipient | staff | assets | E | asset-management roles, facility-staff |
+| facilities/facility-booking | bookings: booked by/for, notes, party size | staff, students | bookings | V | booking user (own), approver, manager, facility-staff, academy roles |
+| facilities/inventory-equipment | loans: borrower, purpose, damage notes; movements: issued to | staff, students | equipment loans | V | inventory roles, academy roles |
+| facilities/maintenance | tickets: reporter, assignee, description, photos, rating, feedback | staff, students | repairs | V | maintenance roles, facility-staff |
+| facilities/sports-facilities | usage: group name, headcount, recorder | staff | facility use | V | sports-facilities roles, coach, athlete, org-admin |
+| finance-operations/fees-accounts | invoices (person name), payments (**instrument number, bank name**, gateway reference), receipts, refunds, **concessions with reasons and documents** (can reveal category, income or disability) | students, payers | fees | V / C; L for receipts | finance-staff, examination-staff (dues), management, org-admin; applicant and student their own |
+| finance-operations/hr-payroll | `employee`: name, email, phone, **date of birth**, designation, **bank account holder, last 4 digits and IFSC, PAN last 4**, exit reason; salary structures, payslips, leave reasons, appraisals (self review, ratings) | staff | HR, payroll | E; L (tax, PF) | hr-staff, finance-staff, management, org-admin; staff their own (department-admin and faculty roles hold self-service keys) |
+| finance-operations/procurement | vendors: contact name, email, phone, address, GSTIN, **PAN**, bank last 4, IFSC (a sole proprietor is a person) | vendor contacts | purchasing | V / L | finance-staff, management, department-admin, facility-staff, faculty, research-office, org-admin |
+| finance-operations/budget-grants | investigators (user id, role); expenditure descriptions | staff | grants | E | finance-staff, research-office, management, department-admin, org-admin, faculty, research roles |
+| finance-operations/e-office | file notes (text, author), movements, receipts (sender), dispatches (**addressee, address, email**); categories carry `retention_years`, which **nothing enforces** | staff, correspondents | office files | E / L | file holders and the roles in its catalogue (hr, finance, department-admin, management, org-admin, faculty and others) |
+| governance/grievance | `case`: **complainant id, respondent person id or description, category (incl. sexual harassment, ragging), description**, proceedings, decisions, appeals | students, staff | grievance redressal | L (POSH Act, UGC regulations) | grievance-complainant (own), committee-member, coordinator, viewer |
+| governance/rti | `request`: **applicant name, address, email, phone**, information sought, fee; responses, transfers, appeals | the public | RTI Act duties | L (RTI Act 2005) | rti-officer, custodian, appellate-authority, viewer |
+| governance/iqac-accreditation | response owners, narratives, evidence links | staff | accreditation | E / L | iqac roles |
+| governance/regulatory-reports | filing owners, preparation notes | staff | statutory filings | E / L | regulatory-reports roles |
+| practice/field-training | sites (contact name, email); placements (trainee and supervisor names), log entries and reflections, assessments | trainees, supervisors | internships | C / V | field-training roles (trainee own) |
+| practice/portfolio | items (owner, description, media), reviews, scores | learners | portfolios | C | portfolio roles, academy roles |
+| practice/productions | crew roles (user id, role name, notes, reason), tasks | students, staff | productions | V | productions roles, academy roles |
+| practice/projects | members, guides, submissions (notes, files), reviews and scores | students, faculty | projects | V | projects roles |
+| practice/selection-process | candidates (person id, source), panel decisions (scores, comments), interview slots | applicants | auditions, interviews | C | panelist, coordinator, org-admin, applicant and student (own) |
+| practice/skill-progress | assessments: learner, evaluator, scores, level, feedback, evidence URLs | learners | skills | V | skill-progress roles |
+| sports/athlete-performance | `athlete`: full name, **date of birth, gender**, squad, coach; results, fitness assessments, **medical clearance and restrictions** | athletes (often minors) | performance | C | athlete-performance roles, coach, medical-staff, athlete (own), nutritionist, management, org-admin |
+| sports/sports-nutrition-health | **health records, injuries (body part, severity, clinical notes), appointments, nutrition plans, body weight** | athletes | athlete health | C; M in an emergency | sports-nutrition-health roles (medical, nutritionist, coach, athlete own), medical-staff, org-admin |
+| sports/tournament-events | entries (athlete ids, team names), officials (name), logistics (contact person, accommodation) | athletes, officials | competitions | V | tournament-events roles |
+| sports/training-video-analysis | **videos of athletes**, annotations naming athletes, session attendance | athletes, coaches | coaching | C | training-video-analysis roles, athlete (own), org-admin |
+| support/helpdesk | tickets (requester, description, attachments, rating, feedback), comments | students, staff | support | V | helpdesk roles, support-staff, org-admin, management |
+| support/incident-management | incidents and problems (reporter, lead, responders, timeline text) | staff | IT incidents | E | incident-management roles |
+| support/knowledge-base | article authors and reviewers; feedback (person id, comment); `view_seen` reader key | staff, readers | articles | V | knowledge-base roles |
+| support/sla-management | ticket references and assignees | staff | SLA clocks | E | sla-management roles |
+| support/amc-vendor-support | vendor contacts (JSON) on contracts | vendor staff | maintenance contracts | V | amc-vendor-support roles |
+
+**Special categories.** The Act has no "sensitive" category, but these tables carry data whose misuse harms most and
+deserve the institution's strictest roles: health and injuries (sports-nutrition-health, athlete-performance
+clearance), grievances about sexual harassment and ragging (grievance), national ID numbers (student-information),
+financial data (hr-payroll, fees-accounts concessions), children's data (below), and location (transport).
