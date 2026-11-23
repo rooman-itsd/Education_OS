@@ -41,6 +41,28 @@ command output pasted in the issue, or a screenshot).
 - [ ] Privacy notice and terms published on the public site; the DPDP pass (#148) done — Praveen, Faizan
 - [ ] Go-live decision recorded in ADR-0007 with the date, the tag and who decided — Faizan
 
+## Known issues at launch
+Recorded so the release is honest about them. They are not hidden by loosening an objective.
+
+- **The API misses the load-test objectives** (#152, [tests/performance](../../tests/performance/README.md)).
+  The objective is p95 under 500 ms and p99 under 1500 ms at 50 concurrent users. Faizan decided on 23 Nov 2026 to
+  profile for two days, fix the biggest cause, and tag with the real numbers here instead of changing
+  `tests/performance/slo.yaml`. Measured on 23 Nov 2026 on a laptop's Docker, with one API process, 50 users and
+  20 s per scenario:
+
+  | Code | Dashboard rps | Dashboard p95 | Management rps | Management p95 |
+  |---|---|---|---|---|
+  | `main` at 3eced13 | 24.1 | 17.2 s | 17.7 | 23.7 s |
+  | with #696, #697 and #698 (gate cache off) | 27.8 | 14.8 s | 23.5 | 19.7 s |
+
+  Cause: the API is CPU-bound in a single process. The profile (tests/performance/README.md, "Results, 20 Nov 2026")
+  ranks the gateway's per-request lookups first, then the tenant settings, route matching and the dependency
+  overrides; #696 to #698 address those. The entitlement gate cache (`EOS_GATE_CACHE_SECONDS`, #698) stays `0` in
+  production: 5 s added little in the same test, and with 0 a suspension or disabled user takes effect on the next
+  request. Not yet measured, for v1.1: more API processes behind the pooler
+  ([scale-the-api](../../infra/runbooks/scale-the-api.md)), and dispatching routes by module prefix. Numbers on the
+  production host replace these once it runs. — Srujan
+
 ## Rollback
 Both the API host (`EOS_DEPLOY_REF=latest-tag`) and `web-release` follow the **highest** `vX.Y.Z` tag,
 and a tag is never deleted or moved. To roll back, tag the last good commit with the next patch version
