@@ -34,6 +34,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 Contract 0.2.0: financial run summaries need `reporting:report:execute`; `client_token` is per requester.
 
 ### Fixed
+- Enforce financial category for definitions reading financial metrics (N10). Sensitivity is determined directly from the underlying metric definition (`metrics.BY_KEY[k].category`), and `create_definition` and `update_definition` reject custom report codes naming a financial metric unless categorized as `financial`.
 - Financial report data is restricted to roles that may run and export reports. A run of a `financial`
   definition (e.g. `fee-collection-summary`) answers 404 on `GET /executions/{id}` without
   `reporting:report:execute`, and the department-reports widget lists financial runs only to those roles. Faculty
