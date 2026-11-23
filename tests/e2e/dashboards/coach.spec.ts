@@ -16,8 +16,9 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  *   facility-booking.bookings (upcoming bookings on the resources the coach approves) is checked by its empty state,
  *   then by a booking facility staff make on a track the coach approves;
  *   wearables.alerts is not built in v1 (see NOT_BUILT);
- * - the sports data journeys are fixme: each needs a sports module enabled, and the coach's scoping in
- *   tournament-events and training-video-analysis needs the athlete-performance.athlete.registered event.
+ * - the sports data journeys need their module enabled; each creates its own data (squad-overview and
+ *   reviews-pending do not need athlete tagging, so they do not depend on the athlete-performance.athlete.registered
+ *   event reaching their module).
  *
  * The sports suite is the profile's one specialized suite, so Trial includes it; facilities is not in Trial, so the
  * super admin moves the organisation to Standard first. The empty-state tests run before any data is created
@@ -183,37 +184,94 @@ test.describe("coach widgets", () => {
 });
 
 // Backend-dependent: these need their module's API to create the data through, so nothing here is faked. Each needs
-// its module in both modules.enabled.yaml files; write them as the finance-staff data journeys are written then.
+// its module in both modules.enabled.yaml files; written as the finance-staff data journeys are written.
 test.describe("with sports data", () => {
-  test.fixme("athlete-performance.squad-overview counts the coach's athletes and their latest results", async () => {
-    // sports/athlete-performance (sprint batch #330, PR #385). As the org admin (athlete-performance-admin through the
-    // profile role) POST /athlete-performance/disciplines { name: "Athletics", category: "individual", active: true }
-    // and /metrics { name: "100 m sprint", unit: "s", direction: "lower_is_better", discipline_id }. As the coach
-    // (athlete:write, result:record) POST /athlete-performance/athletes twice { full_name, primary_discipline_id,
-    // coach_id: <coach id>, squad: "Sprints", status: "active" } and a POST /athlete-performance/results for each
-    // { athlete_id, metric_id, value, recorded_at, context: "training" }.
-    // Expect: "No athletes yet" is gone; the summary shows 2 athletes in squad "Sprints" with results recorded.
+  test("athlete-performance.squad-overview counts the coach's athletes and their latest results", async ({ page, request }) => {
+    const w = byId("athlete-performance.squad-overview");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the athlete-performance API answered ${status[w.id]} to the coach role`);
+    const discipline = await created<{ id: string }>(request, admin, "/athlete-performance/disciplines", {
+      name: "Athletics",
+      category: "individual",
+      active: true,
+    });
+    const metric = await created<{ id: string }>(request, admin, "/athlete-performance/metrics", {
+      name: "100 m sprint",
+      unit: "s",
+      direction: "lower_is_better",
+      discipline_id: discipline.id,
+    });
+    const athleteA = await created<{ id: string }>(request, user, "/athlete-performance/athletes", {
+      full_name: "Asha Verma",
+      primary_discipline_id: discipline.id,
+      coach_id: user.id,
+      squad: "Sprints",
+      status: "active",
+    });
+    const athleteB = await created<{ id: string }>(request, user, "/athlete-performance/athletes", {
+      full_name: "Rohit Nair",
+      primary_discipline_id: discipline.id,
+      coach_id: user.id,
+      squad: "Sprints",
+      status: "active",
+    });
+    for (const athlete of [athleteA, athleteB]) {
+      await created(request, user, "/athlete-performance/results", {
+        athlete_id: athlete.id,
+        metric_id: metric.id,
+        value: 11.6,
+        recorded_at: new Date().toISOString(),
+        context: "training",
+      });
+    }
+    await signIn(page, user);
+    const panel = widget(page, "Squad overview");
+    await expect(panel.getByText("No athletes yet")).toHaveCount(0);
+    await expect(panel.locator("dl > div").filter({ hasText: "Athletes" })).toHaveText("Athletes2");
+    await expect(panel.getByText("Asha Verma")).toBeVisible();
+    await expect(panel.getByText("Rohit Nair")).toBeVisible();
+    await expect(panel.getByText(/100 m sprint 11\.6 s/)).toHaveCount(2);
   });
 
-  test.fixme("training-video-analysis.reviews-pending lists a video not annotated yet", async () => {
-    // sports/training-video-analysis (sprint batch #330, PR #390). As the coach (video:upload)
-    // POST /training-video-analysis/videos { title: "Block starts, lane 4", video_url: "https://videos.example.com/e2e.mp4",
-    // duration_seconds: 95, uploader_id: <coach id>, recorded_at: <today> } and add no annotation. Videos tagged to an
-    // athlete are scoped by the athlete ids training-video-analysis learns from athlete-performance.athlete.registered
-    // through platform/event-bus, so a journey that tags athletes needs that event delivered.
-    // Expect: "No videos waiting for review" is gone; the row shows "Block starts, lane 4" with its duration, and the
-    // video drops off the list after POST /videos/{id}/annotations.
+  test("training-video-analysis.reviews-pending lists a video not annotated yet", async ({ page, request }) => {
+    const w = byId("training-video-analysis.reviews-pending");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the training-video-analysis API answered ${status[w.id]} to the coach role`);
+    await created(request, user, "/training-video-analysis/videos", {
+      title: "Block starts, lane 4",
+      video_url: "https://videos.example.com/e2e.mp4",
+      duration_seconds: 95,
+      uploader_id: user.id,
+      recorded_at: new Date().toISOString(),
+    });
+    await signIn(page, user);
+    const panel = widget(page, "Videos to review");
+    await expect(panel.getByText("No videos waiting for review")).toHaveCount(0);
+    await expect(panel.getByText("Block starts, lane 4")).toBeVisible();
+    await expect(panel.getByText("1:35")).toBeVisible();
   });
 
-  test.fixme("tournament-events.calendar shows a published tournament in the next four weeks", async () => {
-    // sports/tournament-events (sprint batch #330, PR #388). A user holding tournament-events-admin (check that
-    // org-admin does) POST /tournament-events/tournaments { name: "State Athletics Championship", discipline:
-    // "Athletics", level: "state", format: "heats_and_finals", start_date: dayFromNow(7), end_date: dayFromNow(8),
-    // venue: "City stadium", hosting: "away" } and POST /tournaments/{id}/publish. A draft must not appear.
-    // Expect: "Nothing on the calendar" is gone; the calendar (today to dayFromNow(27)) shows the championship on its
-    // dates with its venue.
+  test("tournament-events.calendar shows a published tournament in the next four weeks", async ({ page, request }) => {
+    const w = byId("tournament-events.calendar");
+    test.skip(!shipped(w), waitingFor(w));
+    test.skip(!ready(w.id), `the tournament-events API answered ${status[w.id]} to the coach role`);
+    const tournament = await created<{ id: string }>(request, admin, "/tournament-events/tournaments", {
+      name: "State Athletics Championship",
+      discipline: "Athletics",
+      level: "state",
+      format: "heats_and_finals",
+      start_date: dayFromNow(7),
+      end_date: dayFromNow(8),
+      venue: "City stadium",
+      hosting: "away",
+    });
+    await created(request, admin, `/tournament-events/tournaments/${tournament.id}/publish`, {});
+    await signIn(page, user);
+    const panel = widget(page, "Tournament calendar");
+    await expect(panel.getByText("Nothing on the calendar")).toHaveCount(0);
+    await expect(panel.getByText("State Athletics Championship")).toBeVisible();
+    await expect(panel.getByText("City stadium", { exact: false })).toBeVisible();
   });
-
 });
 
 test.describe("with facility data", () => {
