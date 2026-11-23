@@ -57,7 +57,8 @@ class StoragePort(Protocol):
         ...
 
     def delete_prefix(self, bucket: str, prefix: str) -> int:
-        """Delete all objects with the given prefix. Returns the count of deleted objects."""
+        """Delete all objects with the given prefix, every version and delete marker of them on a versioned bucket.
+        Returns the count of deleted objects (versions and markers counted one each)."""
         ...
 
 
@@ -139,8 +140,11 @@ class MinioStorage:
     def delete_prefix(self, bucket: str, prefix: str) -> int:
         from minio.deleteobjects import DeleteObject
 
+        # include_version: on a versioned bucket a plain delete only adds a delete marker and leaves every earlier
+        # version readable, so the purge names each version and marker. On an unversioned bucket this is the same list.
         objects_to_delete = [
-            DeleteObject(obj.object_name) for obj in self.client.list_objects(bucket, prefix=prefix, recursive=True)
+            DeleteObject(obj.object_name, getattr(obj, "version_id", None))
+            for obj in self.client.list_objects(bucket, prefix=prefix, recursive=True, include_version=True)
         ]
         if not objects_to_delete:
             return 0
