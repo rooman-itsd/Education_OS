@@ -27,8 +27,8 @@ from eos_core import events
 from eos_identity.application.service import list_users
 from sqlalchemy.orm import Session
 
-from . import messages
-from .jobs import RECOVER_STUCK
+from . import messages, retention
+from .jobs import PRUNE_HISTORY, RECOVER_STUCK
 from .organisations import hooks
 
 log = logging.getLogger("eos.notification")
@@ -150,15 +150,18 @@ def on_job_due(db: Session, event) -> None:
     so this session only carries the finished event. A failed sweep is reported, not raised: the next tick runs
     it again, and redelivering the due event would only repeat the same sweep."""
     payload = event.payload or {}
-    if payload.get("job") != RECOVER_STUCK:
+    job = payload.get("job")
+    if job not in (RECOVER_STUCK, PRUNE_HISTORY):
         return  # another module's job
     try:
-        counts = messages.recover_stuck()
+        counts = messages.recover_stuck() if job == RECOVER_STUCK else retention.prune_history()
         outcome = "succeeded"
         detail = ", ".join(f"{k} {v}" for k, v in counts.items())
     except Exception as e:  # noqa: BLE001  reported to the run; exception text may carry addresses
-        log.exception("notification.recover-stuck failed")
+        log.exception("%s failed", job)
         outcome, detail = "failed", type(e).__name__
+    if outcome == "succeeded" and job == PRUNE_HISTORY and counts["errors"]:
+        outcome = "failed"  # some organisations were not purged; the next run retries them
     events.publish(
         db,
         "notification.job.finished",
