@@ -4,6 +4,11 @@ All notable changes to `eos-core`. Follows Keep a Changelog, semver per package.
 
 ## Unreleased
 
+### Fixed
+- Tokens tolerate `CLOCK_LEEWAY_SECONDS` (30) of clock difference on `iat`, `nbf` and `exp`, in `decode_token` and
+  for Keycloak tokens (`oidc.decode_realm_token`): a token issued a moment "in the future" by another clock, or just
+  before the host's clock was stepped, was refused as "not yet valid (iat)" on first use.
+
 ### Added
 - `Settings.check_secrets()` (security review N21, October S7 follow-up): with `EOS_DEV_MODE` false it raises
   `InsecureSettingsError` when `EOS_JWT_SECRET` is unset or the built-in development key (`DEV_JWT_SECRET`), or
