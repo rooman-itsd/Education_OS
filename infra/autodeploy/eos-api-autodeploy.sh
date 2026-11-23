@@ -8,6 +8,11 @@
 #   latest-tag      production: the highest vX.Y.Z release tag (v0.10.0 is above v0.9.0; pre-releases
 #                   such as v1.0.0-rc1 never count), the same one .github/workflows/web.yml publishes to
 #                   `web-release`. A tag whose commit is not on main is refused.
+#
+# After the restart it waits for /api/v1/health inside the new API container (EOS_AUTODEPLOY_HEALTH_SECONDS,
+# default 120). If the API never answers, it puts the previous image and checkout back, restarts on them and
+# remembers the failed commit, so the next runs do not deploy it again every two minutes: a new commit, or
+# FORCE=1, tries again. Migrations already applied stay (they are forward-only); the previous code runs on them.
 set -euo pipefail
 
 CONFIG="${EOS_AUTODEPLOY_CONFIG:-/etc/eos/api-autodeploy.env}"
@@ -16,6 +21,9 @@ CONFIG="${EOS_AUTODEPLOY_CONFIG:-/etc/eos/api-autodeploy.env}"
 
 APP="${EOS_APP_DIR:-/opt/education-os}"
 REF="${EOS_DEPLOY_REF:-main}"
+HEALTH_SECONDS="${EOS_AUTODEPLOY_HEALTH_SECONDS:-120}"
+FAILED_FILE="${EOS_AUTODEPLOY_FAILED_FILE:-/var/lib/eos/api-autodeploy.failed}"
+ROLLBACK_IMAGE="eos-api:rollback"
 COMPOSE="docker compose -f $APP/infra/docker/docker-compose.api.yml --env-file $APP/infra/docker/.env.api"
 
 # Never run two copies at once (timer vs manual run).
@@ -48,6 +56,20 @@ have="$(git rev-parse --short HEAD)"
 if [ "$want" = "$have" ] && [ "${FORCE:-}" != "1" ]; then
   exit 0
 fi
+if [ "$(cat "$FAILED_FILE" 2>/dev/null || true)" = "$want" ] && [ "${FORCE:-}" != "1" ]; then
+  exit 0  # rolled back from this commit already (logged then); wait for a new one, or FORCE=1
+fi
+
+# The running API's image, kept under its own tag: the rebuild below takes over the name, and the prune at the end
+# would delete the old image once nothing names it. Empty on a host whose API is not running yet.
+running="$($COMPOSE ps -q api 2>/dev/null | head -1 || true)"
+image_ref="" ; image_id=""
+if [ -n "$running" ]; then
+  image_ref="$(docker inspect -f '{{.Config.Image}}' "$running")"
+  image_id="$(docker inspect -f '{{.Image}}' "$running")"
+  docker image tag "$image_id" "$ROLLBACK_IMAGE"
+fi
+
 git reset -q --hard "$target"
 
 # The API connects as eos_app (infra/docker/db-roles.py). An .env.api from before that gets its password here.
@@ -65,6 +87,33 @@ if ! $COMPOSE run --rm -T migrate; then
   exit 1
 fi
 $COMPOSE up -d --quiet-pull
+
+healthy() {
+  local cid
+  cid="$($COMPOSE ps -q api 2>/dev/null | head -1 || true)"
+  [ -n "$cid" ] && docker exec "$cid" python -c     "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)" >/dev/null 2>&1
+}
+deadline=$((SECONDS + HEALTH_SECONDS))
+until healthy; do
+  if [ "$SECONDS" -ge "$deadline" ]; then
+    git reset -q --hard "$have"
+    if [ -n "$image_id" ]; then
+      docker image tag "$ROLLBACK_IMAGE" "$image_ref"
+      # --no-deps: not the migrate service, whose old code would not know the revision just applied and fail
+      $COMPOSE up -d --no-deps api relay scheduler
+      msg="API not healthy within ${HEALTH_SECONDS}s at $want; rolled back to $have"
+    else
+      msg="API not healthy within ${HEALTH_SECONDS}s at $want; no previous image to roll back to"
+    fi
+    mkdir -p "$(dirname "$FAILED_FILE")" && printf '%s
+' "$want" > "$FAILED_FILE"
+    logger -t eos-api-autodeploy "$msg (skipped until a new commit, or FORCE=1)"
+    exit 1
+  fi
+  sleep 3
+done
+rm -f "$FAILED_FILE"
+[ -z "$image_id" ] || docker image rm "$ROLLBACK_IMAGE" >/dev/null 2>&1 || true
 docker image prune -f >/dev/null
 # And the build cache: every merge rebuilds the install layer (about 200 MB), so old cache is never reused and
 # filled CT 122's disk (3.6 GB on 7.8 GB in three weeks). The base image is an image, not cache, and is kept.

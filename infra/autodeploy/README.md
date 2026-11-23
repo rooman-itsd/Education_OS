@@ -41,6 +41,16 @@ and `curl -s https://educationos.futureacad.ae/api/v1/health`. Rollback: revert 
 the next check deploys it. A failed migration is logged (`migrations failed at <sha>; API not restarted,
 staying on <sha>`): the API stays on the previous version and the next check tries again, so fix forward or revert.
 
+After the restart the script waits up to two minutes (`EOS_AUTODEPLOY_HEALTH_SECONDS` in
+`/etc/eos/api-autodeploy.env`, default 120) for `/api/v1/health` inside the new API container. If it never answers
+(the API refuses a setting at start-up, an import fails), the script puts the previous image and checkout back,
+restarts `api`, `relay` and `scheduler` on them (not `migrate`: migrations are forward-only and stay applied), and
+logs `API not healthy within 120s at <sha>; rolled back to <sha>`. That commit is then skipped, so the API is not
+restarted onto it every two minutes: the next commit on what the host follows deploys normally, and
+`FORCE=1 eos-api-autodeploy` tries the same one again after fixing the host (for example its `.env.api`). The
+failed commit is in `/var/lib/eos/api-autodeploy.failed`. Changing this script needs `install-api.sh` again on
+each API host: the installed copy is not auto-updated.
+
 ## Environments
 
 | | Staging | Production |
