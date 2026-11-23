@@ -317,6 +317,6 @@ test.describe("with sports data", () => {
     await expect(panel.getByText("No upcoming tournaments")).toHaveCount(0);
     await expect(panel.getByText("Inter-University Athletics Meet")).toBeVisible();
     await expect(panel.getByText("Main stadium", { exact: false })).toBeVisible();
-    await expect(panel.getByText("Entered")).toBeVisible();
+    await expect(panel.getByText("Entered", { exact: true })).toBeVisible();
   });
 });
