@@ -93,3 +93,63 @@ def test_on_purged_ignores_invalid_uuid(db, monkeypatch):
 def test_consumers_dict_registers_tenancy_organisation_purged():
     assert "tenancy.organisation.purged" in consumers.CONSUMERS
     assert consumers.CONSUMERS["tenancy.organisation.purged"] is consumers.on_purged
+
+
+def test_minio_storage_delete_prefix_raises_on_errors():
+    from eos_documents.infrastructure.storage import MinioStorage
+
+    class FakeDeleteError:
+        def __init__(self, name: str, code: str):
+            self.name = name
+            self.code = code
+
+    class FakeMinioClient:
+        def list_objects(self, bucket: str, prefix: str = "", recursive: bool = False):
+            from dataclasses import dataclass
+
+            @dataclass
+            class Item:
+                object_name: str
+
+            return [Item("org-1/file1.pdf"), Item("org-1/file2.pdf")]
+
+        def remove_objects(self, bucket: str, objects):
+            return [FakeDeleteError("org-1/file1.pdf", "AccessDenied")]
+
+    storage = MinioStorage.__new__(MinioStorage)
+    storage.client = FakeMinioClient()
+
+    import pytest
+
+    with pytest.raises(
+        RuntimeError,
+        match="Failed to delete 1 objects with prefix org-1/: \\['AccessDenied'\\]",
+    ):
+        storage.delete_prefix("test-bucket", "org-1/")
+
+
+def test_on_purged_fails_and_does_not_publish_event_on_storage_error(db, monkeypatch):
+    class ErrorStorage(MemoryStorage):
+        def delete_prefix(self, bucket: str, prefix: str) -> int:
+            raise RuntimeError("Storage error")
+
+    monkeypatch.setattr(
+        "eos_documents.application.consumers.get_storage",
+        lambda cfg=None: ErrorStorage(),
+    )
+    org_id = str(uuid.uuid4())
+    event = FakeEvent(
+        name="tenancy.organisation.purged",
+        organisation_id=None,
+        payload={"organisation_id": org_id, "slug": "test-org"},
+    )
+    import pytest
+
+    with pytest.raises(RuntimeError, match="Storage error"):
+        consumers.on_purged(db, event)
+
+    db.flush()
+    evs = list(
+        db.execute(select(OutboxEvent).where(OutboxEvent.name == "documents.organisation.purged")).scalars().all()
+    )
+    assert len(evs) == 0

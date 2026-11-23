@@ -146,8 +146,10 @@ class MinioStorage:
             return 0
         errors = list(self.client.remove_objects(bucket, objects_to_delete))
         if errors:
-            logger.warning("Errors removing objects with prefix %s: %s", prefix, errors)
-        return len(objects_to_delete) - len(errors)
+            error_codes = [getattr(e, "code", str(e)) for e in errors]
+            logger.warning("Errors removing %d objects with prefix %s: %s", len(errors), prefix, error_codes)
+            raise RuntimeError(f"Failed to delete {len(errors)} objects with prefix {prefix}: {error_codes}")
+        return len(objects_to_delete)
 
 
 class MemoryStorage:
