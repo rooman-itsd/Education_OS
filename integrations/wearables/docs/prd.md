@@ -23,7 +23,7 @@ It also backs the `wearables.alerts` widget already on the coach's dashboard lay
 |---|---|
 | Training plans, readiness scores, thresholds and their alerts ("load too high") | athlete-performance (open question 2) |
 | Nutrition and medical decisions | sports-nutrition-health |
-| Linking and unlinking, tokens, OAuth state | `platform/integration-hub` (account links, `integration-hub:self:link`) |
+| Linking and unlinking, tokens, OAuth state | `platform/integration-hub` (account links, `integration-hub:self:link`). The adapter holds tokens encrypted at rest solely for inbound webhook verification. |
 | A mobile app reading on-device stores (Health Connect, Apple HealthKit) | not in v1.0 (open question 3) |
 
 ## Providers (sources)
@@ -63,7 +63,7 @@ All four providers deliver to one app-level URL each: `/inbound/wearables?provid
 | Provider | Verification | Then |
 |---|---|---|
 | Polar | HMAC-SHA256 of the raw body with the signature key | Fetch the new exercise, activity or sleep with the user's token |
-| Strava | No signature exists. Accept only our `subscription_id` and an `owner_id` with an active link; trust nothing else in the body | Fetch the activity with the athlete's token; `authorized: false` revokes the link |
+| Strava | No signature exists. Accept only our `subscription_id` and an `owner_id` with an active link; trust nothing else in the body | Fetch the activity with the athlete's token; confirm deauthorisation (`GET /athlete` -> 401) and activity deletion (`GET /activities/{id}` -> 404) with the stored encrypted access token before acting |
 | Garmin | Match each entry to an active link by Garmin user id and token; signing as Garmin documents it | Store pushed summaries, or pull for pings; deregistration revokes the link; permission change narrows it |
 | Google Health | As Google documents | Fetch the changed data types |
 

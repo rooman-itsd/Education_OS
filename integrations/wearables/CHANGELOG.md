@@ -6,7 +6,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 ### Security
 - Default mode changed to `sandbox`; `mock` mode is refused for both environment configuration and per-connection calls unless `EOS_DEV_MODE=true` (Security review 2026-11, N17, #681).
 - Verify Garmin push signatures using HMAC-SHA256 (`garmin-webhook-signature` or `x-garmin-signature`) and reject unsigned or improperly signed webhook pushes (Security review 2026-11, N14, #678).
-- Confirm Strava deauthorisations and activity deletions with Strava API before deleting athlete records or revoking links to prevent forged deauthorisation attacks (Security review 2026-11, N15, #679).
+- Encrypt athlete tokens at rest with Fernet (`WEARABLES_DATA_KEY`) and confirm Strava deauthorisations and activity deletions non-destructively with Strava API before deleting athlete records or revoking links (Security review 2026-11, N15, #679).
 
 ## [0.3.0] - 2026-11-05
 Built on the draft contracts (0.2.0); no contract file changed.

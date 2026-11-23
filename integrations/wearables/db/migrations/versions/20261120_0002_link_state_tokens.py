@@ -1,4 +1,4 @@
-"""Add tokens to LinkState for inbound webhook confirmation.
+"""Add tokens_encrypted to LinkState for encrypted callback verification (Finding N15).
 
 Revision ID: wear_0002
 Revises: wear_0001
@@ -19,8 +19,8 @@ P = "wearables_"
 
 
 def upgrade() -> None:
-    op.add_column(f"{P}link_state", sa.Column("tokens", sa.JSON(), nullable=True))
+    op.add_column(f"{P}link_state", sa.Column("tokens_encrypted", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
-    op.drop_column(f"{P}link_state", "tokens")
+    op.drop_column(f"{P}link_state", "tokens_encrypted")

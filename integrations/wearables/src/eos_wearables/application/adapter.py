@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import logging
 import os
 import uuid
@@ -33,6 +34,7 @@ from .. import __version__
 from ..domain.context import Context, Result
 from ..domain.errors import AdapterError
 from ..domain.models import DATA_TYPES, LinkAccount, LinkStatus, Read, Sync, UnlinkAccount, parse
+from ..infrastructure import crypto
 from ..infrastructure.config import PROVIDERS as PROVIDER_IDS
 from ..infrastructure.config import Config
 from ..infrastructure.http import Http
@@ -216,7 +218,8 @@ class WearablesAdapter:
                     row = LinkState(organisation_id=c.organisation_id, connection_id=c.connection_id, account_link_id=link_id, person_id=person_id,
                                     provider=c.provider, data_types=self._types_for(provider, c, []))  # fmt: skip
                     db.add(row)
-                row.tokens = out.get("secrets")
+                if out.get("secrets"):
+                    row.tokens_encrypted = crypto.seal(cfg, json.dumps(out["secrets"]))
                 self._activate(row, out["provider_subject"])
                 db.flush()
                 self._audit(db, c, c.organisation_id, "link.connected", "link", row.account_link_id)
@@ -241,7 +244,7 @@ class WearablesAdapter:
 
     def refresh_authorisation(self, ctx: Any, input: dict | None = None) -> Result:
         def run(c: Context):
-            provider, _ = self._provider(c)
+            provider, cfg = self._provider(c)
             try:
                 out = provider.refresh_authorisation(c)
                 if out.get("secrets") and c.account_link and c.account_link.get("id"):
@@ -254,7 +257,7 @@ class WearablesAdapter:
                             )
                         )
                         if row is not None:
-                            row.tokens = out["secrets"]
+                            row.tokens_encrypted = crypto.seal(cfg, json.dumps(out["secrets"]))
                             db.commit()
                 return out
             except AdapterError as e:
@@ -788,15 +791,22 @@ class WearablesAdapter:
             row = db.scalar(scoped(db, select(LinkState).where(LinkState.account_link_id == link_id), LinkState))
             if row is None:
                 return []
+            stored_tokens: dict = {}
+            if row.tokens_encrypted:
+                try:
+                    unsealed = crypto.unseal(cfg, row.tokens_encrypted)
+                    stored_tokens = json.loads(unsealed) if unsealed else {}
+                except Exception:
+                    stored_tokens = {}
             link_ctx = (
-                replace(c, secrets=row.tokens or {})
+                replace(c, secrets=stored_tokens)
                 if c
                 else Context(
                     organisation_id=org,
                     connection_id=row.connection_id,
                     provider=provider.id,
                     mode=cfg.mode,
-                    secrets=row.tokens or {},
+                    secrets=stored_tokens,
                     account_link={
                         "id": row.account_link_id,
                         "person_id": row.person_id,
@@ -808,7 +818,7 @@ class WearablesAdapter:
                 deauthorized, new_tokens = provider.is_deauthorized(link_ctx)
                 if not deauthorized:
                     if new_tokens:
-                        row.tokens = new_tokens
+                        row.tokens_encrypted = crypto.seal(cfg, json.dumps(new_tokens))
                         db.commit()
                     log.warning("wearables: unconfirmed deauthorisation for subject %s ignored", ev.subject)
                     return []

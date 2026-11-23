@@ -11,7 +11,7 @@ os.environ.setdefault("EOS_REPO_ROOT", str(Path(__file__).resolve().parents[3]))
 
 import httpx
 import pytest
-from wear_support import GARMIN_KEY, POLAR_KEY, STRAVA_SUB, STRAVA_VERIFY, Clock, Transport
+from wear_support import DATA_KEY, GARMIN_KEY, POLAR_KEY, STRAVA_SUB, STRAVA_VERIFY, Clock, Transport
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -52,6 +52,7 @@ def env(monkeypatch):
         if k.startswith("WEARABLES_"):
             monkeypatch.delenv(k)
     for k, v in {
+        "DATA_KEY": DATA_KEY,
         "GARMIN_CLIENT_ID": "platform-garmin-id", "GARMIN_CLIENT_SECRET": "platform-garmin-secret", "GARMIN_WEBHOOK_SIGNATURE_KEY": GARMIN_KEY,
         "POLAR_CLIENT_ID": "platform-polar-id", "POLAR_CLIENT_SECRET": "platform-polar-secret", "POLAR_WEBHOOK_SIGNATURE_KEY": POLAR_KEY,
         "GOOGLE_HEALTH_CLIENT_ID": "platform-google-id", "GOOGLE_HEALTH_CLIENT_SECRET": "platform-google-secret",

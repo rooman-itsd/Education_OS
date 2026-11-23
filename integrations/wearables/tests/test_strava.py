@@ -349,12 +349,7 @@ def test_deauthorisation_revokes_the_link_and_deletes_the_athletes_strava_data(a
     transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
     ctx = org.ctx("strava", ids["person"], ids["link"])
     adapter.sync(ctx, {"account_link_id": ids["link"]})
-    transport.on(
-        "POST",
-        r"oauth/token",
-        status=400,
-        body={"message": "Bad Request", "errors": [{"field": "refresh_token", "code": "invalid"}]},
-    )
+    transport.on("GET", API + r"/athlete", status=401)
     out = adapter.parse_inbound(
         None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
     ).output["notifications"]
@@ -385,19 +380,13 @@ def test_forged_deauthorisation_when_athlete_is_still_authorized_is_ignored(adap
     transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
     ctx = org.ctx("strava", ids["person"], ids["link"])
     adapter.sync(ctx, {"account_link_id": ids["link"]})
-    transport.on(
-        "POST",
-        r"oauth/token",
-        status=200,
-        body={"access_token": "new-tok", "refresh_token": "new-ref", "expires_in": 21600},
-    )
+    transport.on("GET", API + r"/athlete", status=200, body={"id": 12345678})
     out = adapter.parse_inbound(
         None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
     ).output
     assert out == {"notifications": []}
     row = link_row(ids["link"])
     assert row.status == "active" and len(records(ids["link"])) == 2
-    assert row.tokens["access_token"] == "new-tok"  # rotated tokens saved
 
 
 def test_forged_delete_without_tokens_is_ignored(adapter, transport, org):
@@ -424,6 +413,40 @@ def test_forged_delete_when_activity_still_exists_is_ignored(adapter, transport,
     ).output
     assert out == {"notifications": []}
     assert len(records(ids["link"])) == 2
+
+
+def test_activity_delete_when_token_is_expired_is_ignored(adapter, transport, org):
+    ids = make_link(org, "strava")
+    transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
+    ctx = org.ctx("strava", ids["person"], ids["link"])
+    adapter.sync(ctx, {"account_link_id": ids["link"]})
+    assert len(records(ids["link"])) == 2
+    transport.on("GET", API + r"/activities/9876543210", status=401)
+    out = adapter.parse_inbound(
+        None, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
+    ).output
+    assert out == {"notifications": []}
+    assert len(records(ids["link"])) == 2
+
+
+def test_complete_authorisation_stores_encrypted_tokens(adapter, transport, org):
+    from eos_wearables.infrastructure import crypto
+    from eos_wearables.infrastructure.config import Config
+
+    transport.on("POST", OAUTH + "/token", "strava/token_exchange.json")
+    link_id = "00000000-0000-4000-8000-000000000099"
+    person_id = "00000000-0000-4000-8000-000000000098"
+    ctx = org.ctx("strava", person_id, link_id, secrets={})
+    res = adapter.complete_authorisation(
+        ctx,
+        {"code": "abc", "code_verifier": "V" * 43, "redirect_uri": "https://hub.example/cb"},
+    )
+    assert res.error is None
+    row = link_row(link_id)
+    assert row is not None
+    assert row.tokens_encrypted is not None
+    unsealed = crypto.unseal(Config.load(), row.tokens_encrypted)
+    assert json.loads(unsealed)["access_token"] == "strava-access-1"
 
 
 def test_other_athlete_updates_are_ignored(adapter, org):

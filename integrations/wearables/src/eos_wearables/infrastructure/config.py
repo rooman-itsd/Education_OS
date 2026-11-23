@@ -65,6 +65,7 @@ class Config:
     strava_client_id: str = ""
     strava_client_secret: str = field(default="", repr=False)
     strava_verify_token: str = field(default="", repr=False)
+    data_key: str = field(default="", repr=False)
 
     @classmethod
     def load(cls) -> Config:
@@ -109,6 +110,7 @@ class Config:
             strava_client_id=_env("STRAVA_CLIENT_ID"),
             strava_client_secret=_env("STRAVA_CLIENT_SECRET"),
             strava_verify_token=_env("STRAVA_VERIFY_TOKEN"),
+            data_key=_env("DATA_KEY"),
         )
 
     def missing_credentials(self, provider: str) -> list[str]:

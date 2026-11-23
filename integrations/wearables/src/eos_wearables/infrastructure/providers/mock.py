@@ -109,7 +109,7 @@ class MockProvider(Provider):
     def healthcheck(self, ctx: Context) -> dict:
         return {"status": "healthy", "detail": "mock mode: no provider was called", "expires_at": None}
 
-    def is_deauthorized(self, ctx: Context | None) -> bool:
+    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
         return self.inner.is_deauthorized(ctx)
 
     def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
