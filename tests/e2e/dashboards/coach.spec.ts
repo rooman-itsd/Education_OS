@@ -255,7 +255,11 @@ test.describe("with sports data", () => {
     const w = byId("tournament-events.calendar");
     test.skip(!shipped(w), waitingFor(w));
     test.skip(!ready(w.id), `the tournament-events API answered ${status[w.id]} to the coach role`);
-    const tournament = await created<{ id: string }>(request, admin, "/tournament-events/tournaments", {
+    // org-admin does not itself hold tournament-events:tournament:write/:publish (tournament-events' permissions.yaml
+    // grants those only to tournament-events-admin, and platform/identity/config/dashboards/org-admin.yaml does not
+    // list it in module_roles), so a dedicated tournament-events-admin user creates and publishes the tournament.
+    const tournamentAdmin = await addUser(request, admin, "tournament-events-admin");
+    const tournament = await created<{ id: string }>(request, tournamentAdmin, "/tournament-events/tournaments", {
       name: "State Athletics Championship",
       discipline: "Athletics",
       level: "state",
@@ -265,7 +269,7 @@ test.describe("with sports data", () => {
       venue: "City stadium",
       hosting: "away",
     });
-    await created(request, admin, `/tournament-events/tournaments/${tournament.id}/publish`, {});
+    await created(request, tournamentAdmin, `/tournament-events/tournaments/${tournament.id}/publish`, {});
     await signIn(page, user);
     const panel = widget(page, "Tournament calendar");
     await expect(panel.getByText("Nothing on the calendar")).toHaveCount(0);
