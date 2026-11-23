@@ -55,7 +55,7 @@ def _read_by_code(key: str) -> bool:
 def test_every_setting_the_breach_runbook_changes_reaches_the_containers():
     """The runbook pauses deletion by editing .env.api and running `up -d` (step 6). A key the code reads but compose
     does not pass would leave deletion running while the responder believes it paused. A key no code reads yet (the
-    runbook names notification history pruning before it exists) is skipped."""
+    runbook names notification history pruning before #683 adds it) is skipped."""
     environment = yaml.safe_load(COMPOSE.read_text())["x-app-environment"]
     named = set(re.findall(r"`([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:=[^`]*)?`", RUNBOOK.read_text(encoding="utf-8")))
     keys = {k for k in named if "RETENTION" in k and _read_by_code(k)}
@@ -72,6 +72,7 @@ def test_the_retention_and_terms_settings_default_to_the_codes_own_values():
         "AUDIT_RETENTION_DAYS": "2555",  # eos_audit RETENTION_FLOOR_DAYS
         "EVENT_BUS_RETENTION_DAYS": "30",
         "SCHEDULER_RUN_RETENTION_DAYS": "90",
+        "NOTIFICATION_HISTORY_RETENTION_DAYS": "90",  # platform/notification, #683
         "EOS_TERMS_VERSION": "",  # empty: tenancy's DEFAULT_TERMS_VERSION
         "EOS_ORGANISATION_RETENTION_DAYS": "30",  # tenancy DEFAULT_RETENTION_DAYS
     }
