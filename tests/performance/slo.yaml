@@ -8,6 +8,12 @@ scenarios:
     p95_ms: 500
     p99_ms: 1500
     error_rate: 0.005
+  # The Management dashboard: its seven GETs, five of them feature modules behind the entitlement gate. A dashboard
+  # is a dashboard: the same objective as the Organisation Admin's.
+  management:
+    p95_ms: 500
+    p99_ms: 1500
+    error_rate: 0.005
   # Signing in checks a password hash, which is deliberately slow; people sign in far less often than they read.
   signin:
     p95_ms: 1000
