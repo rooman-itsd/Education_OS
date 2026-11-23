@@ -1,5 +1,9 @@
-"""Load test for the Education OS API (#152): sign-in, the Organisation Admin dashboard and registration, across many
-organisations, with the results checked against the service level objectives in ../slo.yaml.
+"""Load test for the Education OS API (#152): sign-in, the Organisation Admin and Management dashboards and
+registration, across many organisations, with the results checked against the service level objectives in ../slo.yaml.
+
+The Organisation Admin dashboard reads platform services only. The Management dashboard reads feature modules, so each
+of its requests also goes through the host's entitlement gate (apps/backend/src/eos_backend/gateway.py), which looks
+up the organisation's entitlement first: the cost most users' dashboards have and the first scenario does not.
 
 Run it against a stack started for the purpose (../README.md), never against production: it registers organisations.
 It refuses to start unless the API reports dev_mode, which production never has, and it names everything it creates
@@ -40,6 +44,18 @@ DASHBOARD = (
     "/identity/users",
     "/audit/records?limit=5",
 )
+# What the Management dashboard asks for (platform/identity/config/dashboards/management.yaml, the probes of
+# tests/e2e/dashboards/management.spec.ts): the shell's /me, then each widget's GET, five of them feature modules.
+MANAGEMENT = (
+    "/identity/auth/me",
+    "/admissions/reports/funnel",
+    "/fees-accounts/reports/collection-vs-target",
+    "/reporting/widgets/attendance-and-results",
+    "/grievance/stats/open",
+    "/regulatory-reports/calendar?from=2026-01-01&to=2026-01-31",
+    "/productions/upcoming",
+)
+SCENARIOS = ("signin", "dashboard", "management", "registration")
 PASSWORD = "Load-test-" + secrets.token_hex(6)
 BROWSER_CONNECTIONS = 6
 
@@ -54,6 +70,7 @@ class Account:
     email: str
     slug: str
     token: str = ""
+    manager_token: str = ""  # a user with the management role in the same organisation (the Management dashboard)
 
 
 @dataclass
@@ -111,7 +128,13 @@ async def timed(client: httpx.AsyncClient, method: str, path: str, **kw) -> tupl
 
 
 async def ok(client: httpx.AsyncClient, method: str, path: str, **kw) -> dict:
-    r = await client.request(method, path, **kw)
+    """A setup request that must succeed. A 429 is waited out (Retry-After) and tried again: the API's rate limits
+    (platform/api-gateway) count every sign-in of the seeding from the generator's one address."""
+    for _ in range(30):
+        r = await client.request(method, path, **kw)
+        if r.status_code != 429:
+            break
+        await asyncio.sleep(float(r.headers.get("retry-after", "1")) + 0.1)
     if r.status_code >= 400:
         raise RuntimeError(f"{method} {path} -> {r.status_code} {r.text[:200]}")
     return r.json()
@@ -134,8 +157,11 @@ def registration(run: str, label: str) -> dict:
 
 
 async def seed(client: httpx.AsyncClient, run: str, orgs: int, root: str) -> list[Account]:
-    """Register, verify and approve `orgs` organisations, a few at a time, and sign their admins in."""
+    """Register, verify and approve `orgs` organisations, a few at a time, and sign their admins in. Each is put on the
+    Standard plan (the trial plan has none of the Management dashboard's modules, as the e2e journey does it) and
+    gets a management user, signed in too."""
     gate = asyncio.Semaphore(5)
+    as_root = {"Authorization": f"Bearer {root}"}
 
     async def one(i: int) -> Account:
         async with gate:
@@ -146,11 +172,27 @@ async def seed(client: httpx.AsyncClient, run: str, orgs: int, root: str) -> lis
                 client,
                 "POST",
                 f"/tenancy/admin/organisations/{org['id']}/approve",
-                headers={"Authorization": f"Bearer {root}"},
+                headers=as_root,
                 json={"reason": "load test"},
+            )
+            await ok(
+                client,
+                "PUT",
+                f"/billing/admin/subscriptions/{org['id']}",
+                headers=as_root,
+                json={"plan": "standard", "reason": "load test: the Management dashboard's modules"},
             )
             account = Account(email=data["admin"]["email"], slug=data["slug"])
             account.token = await sign_in(client, account.email, PASSWORD, account.slug)
+            manager = f"manager@{data['slug']}.example.com"
+            await ok(
+                client,
+                "POST",
+                "/identity/users",
+                headers={"Authorization": f"Bearer {account.token}"},
+                json={"email": manager, "name": "Load Manager", "password": PASSWORD, "roles": ["management"]},
+            )
+            account.manager_token = await sign_in(client, manager, PASSWORD, account.slug)
             return account
 
     return list(await asyncio.gather(*(one(i) for i in range(orgs))))
@@ -174,23 +216,29 @@ async def part(base: str, name: str, users: int, first_user: int, seconds: float
 
         async def signin(u: int) -> None:
             # The password travels with the accounts: a spawned process would draw a different PASSWORD of its own.
-            email, slug, _, password = accounts[(u + len(sample.times)) % len(accounts)]
+            email, slug, _, password, _ = accounts[(u + len(sample.times)) % len(accounts)]
             body = {"email": email, "password": password, "organisation_slug": slug}
             ms, r = await timed(client, "POST", "/identity/auth/login", json=body)
             sample.add(ms, r.status_code if r else None)
 
-        async def dashboard(u: int) -> None:
-            auth = {"Authorization": f"Bearer {accounts[u % len(accounts)][2]}"}
-            results = await asyncio.gather(*(timed(client, "GET", p, headers=auth) for p in DASHBOARD))
-            for path, (ms, r) in zip(DASHBOARD, results, strict=True):
+        async def open_dashboard(token: str, paths: tuple[str, ...]) -> None:
+            auth = {"Authorization": f"Bearer {token}"}
+            results = await asyncio.gather(*(timed(client, "GET", p, headers=auth) for p in paths))
+            for path, (ms, r) in zip(paths, results, strict=True):
                 sample.add(ms, r.status_code if r else None, path.split("?")[0])
+
+        async def dashboard(u: int) -> None:
+            await open_dashboard(accounts[u % len(accounts)][2], DASHBOARD)
+
+        async def management(u: int) -> None:
+            await open_dashboard(accounts[u % len(accounts)][4], MANAGEMENT)
 
         async def register(u: int) -> None:
             made["n"] += 1
             ms, r = await timed(client, "POST", "/tenancy/register", json=registration(run, f"{tag}-u{u}-{made['n']}"))
             sample.add(ms, r.status_code if r else None)
 
-        work = {"signin": signin, "dashboard": dashboard, "registration": register}[name]
+        work = {"signin": signin, "dashboard": dashboard, "management": management, "registration": register}[name]
         start = time.perf_counter()
         stop = start + seconds
 
@@ -237,8 +285,18 @@ async def main() -> int:
     ap.add_argument("--out", default="", help="write the results as JSON here")
     ap.add_argument("--label", default="", help="a note stored with the results, e.g. 'pooler on'")
     ap.add_argument("--processes", type=int, default=4, help="load-generating processes the users are split over")
+    ap.add_argument(
+        "--scenarios",
+        default=",".join(SCENARIOS),
+        help=f"which scenarios to run, comma-separated (default: all, {', '.join(SCENARIOS)})",
+    )
     a = ap.parse_args()
     stages = [int(s) for s in a.stages.split(",") if s.strip()]
+    chosen = [s.strip() for s in a.scenarios.split(",") if s.strip()]
+    unknown = sorted(set(chosen) - set(SCENARIOS))
+    if unknown:
+        say(f"unknown scenario(s) {', '.join(unknown)}; choose from {', '.join(SCENARIOS)}")
+        return 2
     slo = yaml.safe_load(Path(a.slo).read_text(encoding="utf-8"))
 
     email, password = os.environ.get("EOS_SUPER_ADMIN_EMAIL"), os.environ.get("EOS_SUPER_ADMIN_PASSWORD")
@@ -258,10 +316,10 @@ async def main() -> int:
         accounts = await seed(client, run, a.orgs, root)
         say(f"seeded {len(accounts)} organisations in {time.perf_counter() - t0:.0f} s")
 
-    shared = [(acc.email, acc.slug, acc.token, PASSWORD) for acc in accounts]
+    shared = [(acc.email, acc.slug, acc.token, PASSWORD, acc.manager_token) for acc in accounts]
     results: list[dict] = []
     for c in stages:
-        for name in ("signin", "dashboard", "registration"):
+        for name in chosen:
             sample = await asyncio.to_thread(scenario, a.base, name, c, a.seconds, shared, run, a.processes)
             s = sample.summary()
             results.append(s)

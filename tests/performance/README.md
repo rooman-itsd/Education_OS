@@ -6,7 +6,7 @@ has, and names everything it creates `load-<run>-...`.
 
 | File | What |
 |---|---|
-| [load/run.py](load/run.py) | Seeds organisations (register, verify, approve), then runs three scenarios at rising numbers of simultaneous users and prints, per scenario and stage: requests per second, p50/p95/p99 response time, error rate. Exit 1 when an objective is missed |
+| [load/run.py](load/run.py) | Seeds organisations (register, verify, approve, Standard plan, a management user), then runs four scenarios at rising numbers of simultaneous users and prints, per scenario and stage: requests per second, p50/p95/p99 response time, error rate. Exit 1 when an objective is missed |
 | [slo.yaml](slo.yaml) | The service level objectives the run is checked against. **Proposed; the lead confirms them** |
 
 ## Scenarios
@@ -15,7 +15,10 @@ has, and names everything it creates `load-<run>-...`.
 |---|---|
 | `signin` | `POST /identity/auth/login` as one of the seeded admins (a password hash check each time) |
 | `dashboard` | Opens the Organisation Admin dashboard: the seven GETs it sends together (`/identity/auth/me`, `/billing/plans`, `/billing/subscription`, `/billing/invoices`, `/tenancy/organisation/entitlement`, `/identity/users`, `/audit/records?limit=5`), as that organisation, so row-level security applies to every read |
+| `management` | Opens the Management dashboard as the organisation's management user: `/identity/auth/me` and six widget GETs, five of them feature modules (`/admissions/reports/funnel`, `/fees-accounts/reports/collection-vs-target`, `/grievance/stats/open`, `/regulatory-reports/calendar`, `/productions/upcoming`) plus `/reporting/widgets/attendance-and-results`. A feature module's request passes the host's entitlement gate, which looks up the organisation's entitlement first; `dashboard` reads platform services only and never pays that |
 | `registration` | `POST /tenancy/register` for a new organisation |
+
+`--scenarios dashboard,management` runs only those (default: all four).
 
 Users never pause, so **50 simultaneous users here is far more load than 50 people**: a person opens a dashboard every
 half minute or so, not continuously.
@@ -27,7 +30,10 @@ Desktop's port forwarding is slower than the API and would be measured instead).
 
 ```
 # 1. A throwaway stack: its own project name, dev mode on (scratch.env holds EOS_DB_PASSWORD, EOS_APP_DB_PASSWORD,
-#    EOS_JWT_SECRET, EOS_SUPER_ADMIN_EMAIL, EOS_SUPER_ADMIN_PASSWORD, EOS_DEV_MODE=true, EOS_API_TAG=loadtest)
+#    EOS_JWT_SECRET, EOS_SUPER_ADMIN_EMAIL, EOS_SUPER_ADMIN_PASSWORD, EOS_DEV_MODE=true, EOS_API_TAG=loadtest, and
+#    EOS_RATE_LIMIT_AUTH_PER_MINUTE, EOS_RATE_LIMIT_AUTH_BURST, EOS_RATE_LIMIT_LOGIN_PER_MINUTE and
+#    EOS_RATE_LIMIT_LOGIN_BURST at 100000: every virtual user signs in from the generator's one address, so the
+#    gateway's sign-in limits would refuse them. The limiter stays on, so its cost is measured)
 docker compose -p eosload -f infra/docker/docker-compose.api.yml --env-file scratch.env up -d --build
 
 # 2. The load, from a container on the same network, using the API image's Python (it has httpx and pyyaml)
@@ -43,7 +49,29 @@ docker compose -p eosload -f infra/docker/docker-compose.api.yml --env-file scra
 second, and would otherwise be what is measured. `--out results.json` keeps the numbers.
 
 On a staging host, run step 2 there against `http://127.0.0.1:8000` (staging runs in dev mode) only with the lead's
-agreement: it adds organisations to staging's database.
+agreement: it adds organisations to staging's database. The seeding waits out a `429` (`Retry-After`), so it also
+works where the sign-in limits are the production ones; only the `signin` scenario then measures the limiter.
+
+## Results, 20 Nov 2026 (the API gateway on, 43 modules)
+
+The same laptop and settings as 5 Nov below, one API process, 50 users, 20 s, 4 generator processes, the sign-in
+limits raised as in step 1:
+
+| Scenario, 50 users | 5 Nov (24 modules) | 20 Nov, run 1 | 20 Nov, run 2 |
+|---|---|---|---|
+| dashboard | 41 rps, p95 9.0 s | 18.7 rps, p95 19.0 s | 15.0 rps, p95 22.6 s |
+| management (new) | | 14.9 rps, p95 22.4 s | 14.6 rps, p95 22.5 s |
+
+The API process ran at a median 120 % CPU (one process's ceiling) during run 2: it is CPU-bound. One request at a
+time, each GET took 21 to 45 ms (`/billing/plans`, one SQL statement, 21 ms). A profile of the GIL-holding thread
+under sequential requests (py-spy) put the CPU in: the gateway's lookups (`gateway._entitlement` on feature-module
+requests, `_organisation_status` on platform ones) about 21 %; `eos_core.db._set_tenant`, two `set_config` statements
+per transaction, 11.7 %; FastAPI matching the route across every module's router about 10 %; and FastAPI rebuilding
+every dependency of every request about 9 %, because `app.dependency_overrides` is not empty (FastAPI 0.142,
+`solve_dependencies`; the host's one override is `faculty_directory`, `apps/backend/src/eos_backend/directories.py`).
+The application's own logic is a few percent. A larger connection pool (40 + 10) raised `management` to 20.1 rps
+and left `dashboard` at 17.6 rps, within the runs' spread; a larger thread pool (100) made both worse: the process is out of CPU, not
+connections.
 
 ## Results and capacity note (5 Nov 2026)
 
