@@ -820,7 +820,7 @@ class WearablesAdapter:
                     if new_tokens:
                         row.tokens_encrypted = crypto.seal(cfg, json.dumps(new_tokens))
                         db.commit()
-                    log.warning("wearables: unconfirmed deauthorisation for subject %s ignored", ev.subject)
+                    log.warning("wearables: unconfirmed deauthorisation ignored")
                     return []
                 self._revoke_row(db, c, row, "link.revoked_by_provider")
                 return [_note("link_revoked_by_provider", {"account_link_subject": ev.subject})]
@@ -897,7 +897,7 @@ def startup_check(cfg: Config | None = None) -> None:
     wanted = [
         p.strip() for p in (os.environ.get("WEARABLES_PROVIDERS", "") or ",".join(PROVIDER_IDS)).split(",") if p.strip()
     ]
-    missing: list[str] = []
+    missing: list[str] = ["WEARABLES_DATA_KEY"] if not cfg.data_key else []
     for p in wanted:
         if p in PROVIDER_IDS:
             missing += cfg.missing_credentials(p)

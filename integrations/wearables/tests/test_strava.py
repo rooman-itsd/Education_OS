@@ -350,6 +350,12 @@ def test_deauthorisation_revokes_the_link_and_deletes_the_athletes_strava_data(a
     ctx = org.ctx("strava", ids["person"], ids["link"])
     adapter.sync(ctx, {"account_link_id": ids["link"]})
     transport.on("GET", API + r"/athlete", status=401)
+    transport.on(
+        "POST",
+        r"oauth/token",
+        status=400,
+        body={"message": "Bad Request", "errors": [{"field": "refresh_token", "code": "invalid"}]},
+    )
     out = adapter.parse_inbound(
         None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
     ).output["notifications"]
@@ -387,6 +393,32 @@ def test_forged_deauthorisation_when_athlete_is_still_authorized_is_ignored(adap
     assert out == {"notifications": []}
     row = link_row(ids["link"])
     assert row.status == "active" and len(records(ids["link"])) == 2
+
+
+def test_forged_deauthorisation_when_access_token_expired_but_refresh_succeeds_is_ignored(adapter, transport, org):
+    ids = make_link(org, "strava")
+    transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
+    ctx = org.ctx("strava", ids["person"], ids["link"])
+    adapter.sync(ctx, {"account_link_id": ids["link"]})
+    transport.on("GET", API + r"/athlete", status=401)
+    transport.on(
+        "POST",
+        r"oauth/token",
+        status=200,
+        body={"access_token": "new-tok", "refresh_token": "new-ref", "expires_in": 21600},
+    )
+    out = adapter.parse_inbound(
+        None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
+    ).output
+    assert out == {"notifications": []}
+    row = link_row(ids["link"])
+    assert row.status == "active" and len(records(ids["link"])) == 2
+    from eos_wearables.infrastructure import crypto
+    from eos_wearables.infrastructure.config import Config
+
+    unsealed = crypto.unseal(Config.load(), row.tokens_encrypted)
+    assert json.loads(unsealed)["access_token"] == "new-tok"
+    assert json.loads(unsealed)["refresh_token"] == "new-ref"
 
 
 def test_forged_delete_without_tokens_is_ignored(adapter, transport, org):
