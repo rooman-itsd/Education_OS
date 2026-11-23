@@ -93,6 +93,19 @@ x-app-environment: &app-environment
   INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS: ${INTEGRATION_HUB_DELIVERY_LOG_RETENTION_DAYS:-400}
   INTEGRATION_HUB_HEALTH_INTERVAL_MIN: ${INTEGRATION_HUB_HEALTH_INTERVAL_MIN:-15}
   INTEGRATION_HUB_HEALTH_RUNS_PER_HOUR: ${INTEGRATION_HUB_HEALTH_RUNS_PER_HOUR:-12}
+  # Retention and the DPDP settings. The personal-data breach runbook (../runbooks/personal-data-breach.md, step 6)
+  # pauses deletion by changing the first three in .env.api and running `up -d`; without these lines the change
+  # never reached the containers. Each default is the code's own, so an unset key behaves as before.
+  AUDIT_RETENTION_ENABLED: ${AUDIT_RETENTION_ENABLED:-true}
+  AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-2555}
+  EVENT_BUS_RETENTION_DAYS: ${EVENT_BUS_RETENTION_DAYS:-30}
+  SCHEDULER_RUN_RETENTION_DAYS: ${SCHEDULER_RUN_RETENTION_DAYS:-90}
+  # platform/notification history pruning (DPDP D14, #683); unused until that merges.
+  NOTIFICATION_HISTORY_RETENTION_DAYS: ${NOTIFICATION_HISTORY_RETENTION_DAYS:-90}
+  # platform/tenancy: the terms version a new registration accepts (empty: the code's current one), and how long a
+  # deletion-requested organisation is held before it is purged.
+  EOS_TERMS_VERSION: ${EOS_TERMS_VERSION:-}
+  EOS_ORGANISATION_RETENTION_DAYS: ${EOS_ORGANISATION_RETENTION_DAYS:-30}
 
 services:
   db:
