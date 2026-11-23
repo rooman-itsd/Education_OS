@@ -43,8 +43,13 @@ def _set_tenant(session: Session, transaction, connection) -> None:
     if connection.dialect.name != "postgresql":
         return
     org = resolve_organisation(session) or ""
-    connection.execute(text("SELECT set_config('app.organisation_id', :org, true)"), {"org": org})
-    connection.execute(text("SELECT set_config('app.bypass_rls', :b, true)"), {"b": "on" if is_bypass() else "off"})
+    # One statement, not two: every transaction pays this round trip before its first query, and most requests open
+    # two transactions (11.7 % of the API's CPU on 20 Nov, tests/performance/README.md). Both settings stay
+    # transaction-local (`true`), exactly as when they were set one at a time.
+    connection.execute(
+        text("SELECT set_config('app.organisation_id', :org, true), set_config('app.bypass_rls', :b, true)"),
+        {"org": org, "b": "on" if is_bypass() else "off"},
+    )
 
 
 def get_db():
