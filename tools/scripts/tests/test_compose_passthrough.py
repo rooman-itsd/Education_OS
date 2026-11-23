@@ -36,3 +36,44 @@ def test_every_smtp_setting_is_passed_to_the_api_container():
 def test_the_implicit_tls_switch_is_passed_through_and_off_by_default():
     environment = yaml.safe_load(COMPOSE.read_text())["x-app-environment"]
     assert environment["MESSAGING_PROVIDERS_SMTP_SSL"] == "${MESSAGING_PROVIDERS_SMTP_SSL:-false}"
+
+
+RUNBOOK = ROOT / "infra" / "runbooks" / "personal-data-breach.md"
+CODE_ROOTS = ("platform", "packages")  # retention is a platform concern
+
+
+def _read_by_code(key: str) -> bool:
+    """Whether some backend source reads this environment key (a quoted "KEY" in a .py under src/)."""
+    needle = f'"{key}"'
+    for top in CODE_ROOTS:
+        for path in (ROOT / top).glob("**/src/**/*.py"):
+            if needle in path.read_text(encoding="utf-8", errors="ignore"):
+                return True
+    return False
+
+
+def test_every_setting_the_breach_runbook_changes_reaches_the_containers():
+    """The runbook pauses deletion by editing .env.api and running `up -d` (step 6). A key the code reads but compose
+    does not pass would leave deletion running while the responder believes it paused. A key no code reads yet (the
+    runbook names notification history pruning before it exists) is skipped."""
+    environment = yaml.safe_load(COMPOSE.read_text())["x-app-environment"]
+    named = set(re.findall(r"`([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)(?:=[^`]*)?`", RUNBOOK.read_text(encoding="utf-8")))
+    keys = {k for k in named if "RETENTION" in k and _read_by_code(k)}
+    assert {"AUDIT_RETENTION_ENABLED", "EVENT_BUS_RETENTION_DAYS", "SCHEDULER_RUN_RETENTION_DAYS"} <= keys
+    missing = sorted(keys - set(environment))
+    assert not missing, f"the breach runbook changes these, but docker-compose.api.yml does not pass them: {missing}"
+
+
+def test_the_retention_and_terms_settings_default_to_the_codes_own_values():
+    """Passing a key through must not change behaviour where .env.api leaves it unset."""
+    environment = yaml.safe_load(COMPOSE.read_text())["x-app-environment"]
+    expected = {
+        "AUDIT_RETENTION_ENABLED": "true",
+        "AUDIT_RETENTION_DAYS": "2555",  # eos_audit RETENTION_FLOOR_DAYS
+        "EVENT_BUS_RETENTION_DAYS": "30",
+        "SCHEDULER_RUN_RETENTION_DAYS": "90",
+        "EOS_TERMS_VERSION": "",  # empty: tenancy's DEFAULT_TERMS_VERSION
+        "EOS_ORGANISATION_RETENTION_DAYS": "30",  # tenancy DEFAULT_RETENTION_DAYS
+    }
+    for key, default in expected.items():
+        assert environment.get(key) == f"${{{key}:-{default}}}", key
