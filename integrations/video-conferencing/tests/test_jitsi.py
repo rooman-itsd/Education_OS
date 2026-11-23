@@ -161,27 +161,89 @@ def test_a_bad_base_url_is_not_configured(adapter, org, url):
     assert r.error["code"] == "not_configured"
 
 
-def test_live_mode_wants_https(adapter, org):
-    r = adapter.create_meeting(
-        org.ctx("jitsi", mode="live", settings={"base_url": "http://meet.local", "app_id": "x"}), create_input()
-    )
+@pytest.mark.parametrize(
+    "ssrf_url",
+    [
+        "http://meet.local",
+        "http://localhost:8000",
+        "https://127.0.0.1:6379",
+        "https://127.1.2.3",
+        "https://10.0.0.5",
+        "https://172.16.0.1",
+        "https://192.168.1.1",
+        "https://169.254.169.254",
+        "https://0.0.0.0",
+        "https://[::1]",
+        "https://[fe80::1]",
+        "https://[fc00::1]",
+        "https://[::ffff:127.0.0.1]",
+        "https://[::ffff:169.254.169.254]",
+        "https://localhost:8443",
+    ],
+)
+def test_base_url_requires_https_and_refuses_ssrf(adapter, org, ssrf_url):
+    r = adapter.create_meeting(org.ctx("jitsi", settings={"base_url": ssrf_url, "app_id": "x"}), create_input())
     assert r.error["code"] == "not_configured"
-    assert (
-        adapter.create_meeting(
-            org.ctx("jitsi", mode="sandbox", settings={"base_url": "http://localhost:8000", "app_id": "x"}),
-            create_input("local"),
-        ).error
-        is None
+
+
+def test_jitsi_mock_secret_fallback_refused_outside_dev_mode(adapter, org, monkeypatch):
+    import dataclasses
+
+    from eos_core import settings as core_settings
+    from eos_video_conferencing.domain.context import Context
+    from eos_video_conferencing.domain.errors import AdapterError
+    from eos_video_conferencing.infrastructure.config import Config
+    from eos_video_conferencing.infrastructure.providers.jitsi import JitsiProvider
+
+    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
+    ctx = Context(
+        organisation_id=org.id,
+        connection_id=org.connection_id,
+        provider="jitsi",
+        mode="mock",
+        settings=org.ctx("jitsi")["settings"],
+        secrets={},
     )
+    res = adapter.join_link(
+        ctx,
+        {
+            "meeting_key": "class-session-1",
+            "person_id": PERSON,
+            "display_name": "Anita Rao",
+            "email": "anita@college.example.com",
+            "role": "attendee",
+        },
+    )
+    assert res.error["code"] == "not_configured"
+    assert "mock mode is refused unless EOS_DEV_MODE=true" in res.error["detail"]
+
+    jp = JitsiProvider(Config.load(), None, None)
+    with pytest.raises(AdapterError) as e:
+        jp._secret(ctx)
+    assert e.value.code == "not_configured"
+    assert "the connection has no app_secret" in e.value.detail
 
 
-def test_healthcheck_asks_the_server_in_sandbox_and_nothing_in_mock(adapter, transport, org):
+def test_healthcheck_asks_the_server_and_does_not_echo_status_code(adapter, transport, org):
     transport.on("GET", r"meet\.college\.example/$", status=200, body="<html>")
-    assert adapter.healthcheck(org.ctx("jitsi")).output["status"] == "healthy"
+    hc = adapter.healthcheck(org.ctx("jitsi")).output
+    assert hc["status"] == "healthy"
+    assert hc["detail"] == "Jitsi server is reachable"
+    assert "200" not in hc["detail"]
+
+    # Degraded status also does not echo status code
+    transport.routes.clear()
+    transport.on("GET", r"meet\.college\.example/$", status=403, body="forbidden")
+    hc_degraded = adapter.healthcheck(org.ctx("jitsi")).output
+    assert hc_degraded["status"] == "degraded"
+    assert hc_degraded["detail"] == "Jitsi server returned unexpected response"
+    assert "403" not in hc_degraded["detail"]
+
+    # Mock mode
     transport.routes.clear()
     assert (
         adapter.healthcheck(org.ctx("jitsi", mode="mock")).output["status"] == "healthy"
-        and len(transport.requests) == 1
+        and len(transport.requests) == 2
     )
 
 

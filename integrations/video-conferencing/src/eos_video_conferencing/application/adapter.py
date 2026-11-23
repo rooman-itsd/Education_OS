@@ -22,6 +22,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 
+from eos_core import settings as core_settings
 from eos_core.db import SessionLocal, scoped
 from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import select
@@ -56,7 +57,14 @@ from ..infrastructure.models import (
     iso,
 )
 from ..infrastructure.providers import PROVIDERS
-from ..infrastructure.providers.base import InboundRequest, Participant, Provider, ProviderEvent, Ref, utcnow
+from ..infrastructure.providers.base import (
+    InboundRequest,
+    Participant,
+    Provider,
+    ProviderEvent,
+    Ref,
+    utcnow,
+)
 from ..infrastructure.providers.mock import MockProvider
 
 log = logging.getLogger("eos.video_conferencing")
@@ -177,11 +185,15 @@ class VideoConferencingAdapter:
             raise AdapterError("not_configured", "this adapter has no such provider")
         provider: Provider = cls(cfg, Http(self._client_factory, cfg.http_timeout_s), self.clock)
         if (ctx.mode or cfg.mode) == "mock":
+            if not core_settings.settings.dev_mode:
+                raise AdapterError("not_configured", "mock mode is refused unless EOS_DEV_MODE=true")
             provider = MockProvider(provider)
         return provider, cfg
 
     def _cfg_for_store(self, ctx: Context) -> Config:
         cfg = self._config()
+        if (ctx.mode or cfg.mode) == "mock" and not core_settings.settings.dev_mode:
+            raise AdapterError("not_configured", "mock mode is refused unless EOS_DEV_MODE=true")
         return cfg if ctx.mode is None else _with_mode(cfg, ctx.mode)
 
     @contextmanager
@@ -1074,6 +1086,8 @@ def _providers_env() -> str:
 
 
 def get_adapter(**kwargs) -> VideoConferencingAdapter:
-    """The entry-point factory (eos.integration_adapters): refuses to start when the configured mode lacks credentials."""
-    startup_check()
+    """The entry-point factory (eos.integration_adapters): refuses to start when live mode lacks credentials."""
+    cfg = Config.load()
+    if cfg.mode == "live":
+        startup_check(cfg)
     return VideoConferencingAdapter(**kwargs)

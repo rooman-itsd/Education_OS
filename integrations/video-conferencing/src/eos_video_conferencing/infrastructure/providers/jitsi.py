@@ -4,11 +4,14 @@ Attendance and recordings are not available through the port (Jibri recordings s
 
 from __future__ import annotations
 
+import ipaddress
 import secrets
+import socket
 from datetime import timedelta
 from urllib.parse import quote, urlsplit
 
 import jwt
+from eos_core import settings as core_settings
 
 from ...domain.context import Context
 from ...domain.errors import AdapterError
@@ -20,27 +23,63 @@ DEV_SECRET = "mock-jitsi-app-secret-for-development-only"  # mock mode only; san
 ROOM_PREFIX_MAX = 40
 
 
+def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if getattr(ip, "ipv4_mapped", None):
+        mapped = ip.ipv4_mapped
+        if (
+            mapped.is_private
+            or mapped.is_loopback
+            or mapped.is_link_local
+            or mapped.is_reserved
+            or mapped.is_multicast
+            or mapped.is_unspecified
+        ):
+            return True
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+
+
+def _validate_host(hostname: str) -> None:
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if _is_blocked_ip(ip):
+            raise AdapterError(
+                "not_configured", "the connection's base_url must not point to a local, private or metadata address"
+            )
+        return
+    except ValueError:
+        pass
+
+    if core_settings.settings.dev_mode and hostname.lower().endswith((".example", ".test")):
+        return
+
+    try:
+        addrs = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        raise AdapterError("not_configured", "the connection's base_url host could not be resolved") from e
+
+    for addr in addrs:
+        ip_str = addr[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            if _is_blocked_ip(ip):
+                raise AdapterError(
+                    "not_configured", "the connection's base_url must not point to a local, private or metadata address"
+                )
+        except ValueError:
+            continue
+
+
 def base_url(ctx: Context) -> str:
-    """The institution's Jitsi base URL from its connection settings: http(s), a host, no credentials, no path tricks.
-    Plain http is accepted outside live mode so a local docker-jitsi-meet works."""
+    """The institution's Jitsi base URL from its connection settings: https, a host, no credentials, no path tricks."""
     raw = str(ctx.settings.get("base_url", "")).strip().rstrip("/")
     try:
         u = urlsplit(raw)
         port = u.port
     except ValueError:
         u, port = None, None
-    if (
-        u is None
-        or u.scheme not in ("http", "https")
-        or not u.hostname
-        or u.username
-        or u.password
-        or u.query
-        or u.fragment
-    ):
-        raise AdapterError("not_configured", "the connection's base_url is not a valid http(s) address")
-    if u.scheme == "http" and ctx.mode == "live":
-        raise AdapterError("not_configured", "live mode needs an https base_url")
+    if u is None or u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment:
+        raise AdapterError("not_configured", "the connection's base_url is not a valid https address")
+    _validate_host(u.hostname)
     return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
 
 
@@ -67,7 +106,7 @@ class JitsiProvider(Provider):
         secret = ctx.secrets.get("app_secret")
         if secret:
             return secret
-        if ctx.mode == "mock":
+        if ctx.mode == "mock" and core_settings.settings.dev_mode:
             return DEV_SECRET
         raise AdapterError("not_configured", "the connection has no app_secret")
 
@@ -127,6 +166,8 @@ class JitsiProvider(Provider):
             raise map_status(r)
         return {
             "status": "healthy" if r.status_code < 400 else "degraded",
-            "detail": f"the Jitsi server answered {r.status_code}",
+            "detail": "Jitsi server is reachable"
+            if r.status_code < 400
+            else "Jitsi server returned unexpected response",
             "expires_at": None,
         }

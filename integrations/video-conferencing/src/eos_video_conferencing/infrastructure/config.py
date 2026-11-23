@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from eos_core import settings as core_settings
+
 from ..domain.context import MODES
 from ..domain.errors import AdapterError
 
@@ -54,9 +56,11 @@ class Config:
 
     @classmethod
     def load(cls) -> Config:
-        mode = _env("MODE", "mock").lower()
+        mode = _env("MODE", "sandbox").lower()
         if mode not in MODES:
             raise AdapterError("not_configured", "VIDEO_CONFERENCING_MODE must be mock, sandbox or live")
+        if mode == "mock" and not core_settings.settings.dev_mode:
+            raise AdapterError("not_configured", "VIDEO_CONFERENCING_MODE=mock is refused unless EOS_DEV_MODE=true")
         return cls(
             mode=mode,
             zoom_api_base_url=_env("ZOOM_API_BASE_URL", "https://api.zoom.us/v2").rstrip("/"),

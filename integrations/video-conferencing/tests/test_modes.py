@@ -6,20 +6,87 @@ import json
 import logging
 
 import pytest
-from eos_video_conferencing.application.adapter import VideoConferencingAdapter, get_adapter, startup_check
+from eos_video_conferencing.application.adapter import (
+    VideoConferencingAdapter,
+    get_adapter,
+    startup_check,
+)
 from eos_video_conferencing.domain.context import Context
 from eos_video_conferencing.domain.errors import AdapterError
 from eos_video_conferencing.infrastructure.config import Config
 from vc_support import DATA_KEY, JITSI_SECRET, ZOOM_SECRET, create_input
 
 
-def test_mock_is_the_default_mode_and_touches_no_network(adapter, transport, org):
+def test_sandbox_is_the_default_mode_and_mock_refused_outside_dev_mode(monkeypatch):
+    import dataclasses
+
+    from eos_core import settings as core_settings
+
+    # Sandbox is the default mode
+    assert Config.load().mode == "sandbox"
+
+    # Mock mode is refused outside dev mode
+    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
+    monkeypatch.setenv("VIDEO_CONFERENCING_MODE", "mock")
+    with pytest.raises(AdapterError) as e:
+        Config.load()
+    assert "VIDEO_CONFERENCING_MODE=mock is refused unless EOS_DEV_MODE=true" in str(e.value)
+
+    # Connection mode mock is also refused outside dev mode
+    with pytest.raises(AdapterError) as e2:
+        Context.coerce({"organisation_id": "org1", "connection_id": "conn1", "provider": "zoom", "mode": "mock"})
+    assert "connection mode mock is refused unless EOS_DEV_MODE=true" in str(e2.value)
+
+
+def test_mock_mode_when_enabled_in_dev_mode_touches_no_network(adapter, transport, org, monkeypatch):
+    monkeypatch.setenv("VIDEO_CONFERENCING_MODE", "mock")
     ctx = org.ctx("zoom", mode=None, secrets={})
     out = adapter.create_meeting(ctx, create_input()).output
     assert out["join_url"].startswith("https://mock.zoom.example/j/") and out["passcode"] == "mock-pass"
     assert adapter.healthcheck(ctx).output["status"] == "healthy"
     assert adapter.create_meeting(ctx, create_input()).output["meeting_id"] == out["meeting_id"]
     assert not transport.requests
+
+
+def test_mock_mode_call_refused_outside_dev_mode(adapter, org, monkeypatch):
+    import dataclasses
+
+    from eos_core import settings as core_settings
+
+    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
+    ctx = Context(organisation_id=org.id, connection_id=org.connection_id, provider="zoom", mode="mock")
+    res = adapter.create_meeting(ctx, create_input())
+    assert res.error["code"] == "not_configured"
+    assert "mock mode is refused unless EOS_DEV_MODE=true" in res.error["detail"]
+
+
+def test_data_key_fallback_refused_outside_dev_mode(monkeypatch):
+    import dataclasses
+
+    from eos_core import settings as core_settings
+    from eos_video_conferencing.infrastructure.crypto import _key
+
+    monkeypatch.setattr(core_settings, "settings", dataclasses.replace(core_settings.settings, dev_mode=False))
+    cfg_mock = Config(
+        mode="mock",
+        zoom_api_base_url="",
+        zoom_oauth_base_url="",
+        teams_graph_base_url="",
+        teams_login_base_url="",
+        teams_renew_lead_min=720,
+        webex_api_base_url="",
+        jitsi_token_ttl_s=7200,
+        webhook_tolerance_s=300,
+        http_timeout_s=15,
+        attendance_delay_min=15,
+        zoom_create_limit_per_host_per_day=100,
+        max_recording_bytes=100,
+        public_base_url="",
+    )
+    with pytest.raises(AdapterError) as e:
+        _key(cfg_mock)
+    assert e.value.code == "not_configured"
+    assert "VIDEO_CONFERENCING_DATA_KEY is not set" in e.value.detail
 
 
 @pytest.mark.parametrize("provider", ["zoom", "teams", "webex", "jitsi"])
