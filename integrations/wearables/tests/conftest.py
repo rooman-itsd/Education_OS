@@ -64,6 +64,7 @@ def env(monkeypatch):
     from eos_wearables.infrastructure.providers import strava
 
     strava._BLOCKED.clear()
+    strava._UNCONFIRMED.clear()
 
 
 @pytest.fixture

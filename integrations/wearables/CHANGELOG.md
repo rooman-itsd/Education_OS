@@ -7,6 +7,9 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Default mode changed to `sandbox`; `mock` mode is refused for both environment configuration and per-connection calls unless `EOS_DEV_MODE=true` (Security review 2026-11, N17, #681).
 - Verify Garmin push signatures using HMAC-SHA256 (`garmin-webhook-signature` or `x-garmin-signature`) and reject unsigned or improperly signed webhook pushes (Security review 2026-11, N14, #678).
 - Encrypt athlete tokens at rest with Fernet (`WEARABLES_DATA_KEY`) and confirm Strava deauthorisations and activity deletions non-destructively with Strava API before deleting athlete records or revoking links (Security review 2026-11, N15, #679).
+- A forged Strava event can no longer delete an athlete's data when Strava's token endpoint refuses our own credentials: a deauthorisation is confirmed only when Strava names the athlete's refresh token as invalid, any other refusal, a 5xx or a rate limit confirms nothing and is retried. A real delete is now confirmed after refreshing an expired token. Strava ids must be integers, and a "no" from Strava holds the next confirmation for that athlete back for 30 seconds (follow-up to N15, #679).
+- Stored tokens: cleared when a link is revoked; `WEARABLES_DATA_KEY` accepts several comma-separated keys for rotation; the key is checked before a one-time code or refresh token is spent; tokens refreshed by a confirmation are stored at once, and a refused hub refresh retries once with the stored copy.
+- Garmin: the signature key must be at least 16 characters; docs now say the signing scheme is not confirmed to be Garmin's and that pushes carry no timestamp (follow-up to N14, #678).
 
 ## [0.3.0] - 2026-11-05
 Built on the draft contracts (0.2.0); no contract file changed.

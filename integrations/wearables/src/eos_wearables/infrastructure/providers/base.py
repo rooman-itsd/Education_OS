@@ -293,10 +293,16 @@ class Provider:
     def healthcheck(self, ctx: Context) -> dict:
         return {"status": "healthy", "detail": "no provider call is made for this provider", "expires_at": None}
 
-    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
-        return True, None
+    def is_deauthorized(self, ctx: Context | None, on_tokens: Callable[[dict], None] | None = None) -> bool:
+        """Whether the provider itself says the athlete withdrew the app. Providers whose events are signed need no
+        confirmation. One that is not signed asks the provider and may raise a retryable AdapterError when it cannot
+        tell. `on_tokens` is called with new tokens the moment a refresh made them, so the caller stores them even
+        when the check fails afterwards."""
+        return True
 
-    def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
+    def is_activity_deleted(
+        self, ctx: Context | None, activity_id: str, on_tokens: Callable[[dict], None] | None = None
+    ) -> bool:
         return True
 
     # --- inbound
