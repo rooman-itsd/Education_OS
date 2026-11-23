@@ -4,6 +4,7 @@ the secret fields are out of repr() and `describe()` is the only thing that may 
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass, field
 
@@ -18,6 +19,51 @@ PROVIDERS = ("zoom", "teams", "webex", "jitsi")
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(P + name, default).strip()
+
+
+# Addresses a server must never call for an institution, whatever an operator allows: this host, link-local (where cloud
+# metadata services listen), multicast, and the metadata addresses that are not link-local. Anything else that is not a
+# public address (private ranges, shared 100.64.0.0/10) is refused unless the operator names its network.
+ALWAYS_BLOCKED = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "0.0.0.0/8",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "224.0.0.0/4",
+        "100.100.100.200/32",  # Alibaba Cloud metadata, inside shared address space
+        "168.63.129.16/32",  # Azure WireServer, a public-looking address only a VM can reach
+        "::/128",
+        "::1/128",
+        "fe80::/10",
+        "ff00::/8",
+        "fd00:ec2::254/128",  # AWS IPv6 metadata
+    )
+)
+
+
+def _networks(name: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+    """Comma-separated CIDRs the operator allows although they are not public (an institution's own Jitsi on its
+    network). Operator-set only: an organisation's connection settings cannot name one. One that is not a network, or
+    that overlaps a whole always-blocked range (loopback, link-local, multicast), is a configuration error, not something
+    to skip. A range that merely contains one metadata address (100.64.0.0/10 holds Alibaba's) is allowed: that single
+    address stays blocked, because ALWAYS_BLOCKED is checked first."""
+    nets = []
+    for part in _env(name).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            net = ipaddress.ip_network(part, strict=False)
+        except ValueError as e:
+            raise AdapterError("not_configured", f"{P}{name} has an entry that is not a network (CIDR)") from e
+        whole = (b for b in ALWAYS_BLOCKED if b.num_addresses > 1)
+        if any(net.version == b.version and net.overlaps(b) for b in whole):
+            raise AdapterError(
+                "not_configured", f"{P}{name} names a range that is never allowed (loopback, link-local, multicast)"
+            )
+        nets.append(net)
+    return tuple(nets)
 
 
 def _int(name: str, default: int, minimum: int = 0, maximum: int = 10**9) -> int:
@@ -53,6 +99,7 @@ class Config:
     webex_client_id: str = ""
     webex_client_secret: str = field(default="", repr=False)
     data_key: str = field(default="", repr=False)
+    jitsi_allowed_networks: tuple = ()
 
     @classmethod
     def load(cls) -> Config:
@@ -70,6 +117,7 @@ class Config:
             teams_renew_lead_min=_int("TEAMS_SUBSCRIPTION_RENEW_LEAD_MIN", 720, 1, 4000),
             webex_api_base_url=_env("WEBEX_API_BASE_URL", "https://webexapis.com/v1").rstrip("/"),
             jitsi_token_ttl_s=_int("JITSI_TOKEN_TTL_S", 7200, 60, 86400),
+            jitsi_allowed_networks=_networks("JITSI_ALLOWED_NETWORKS"),
             webhook_tolerance_s=_int("WEBHOOK_TOLERANCE_S", 300, 1, 3600),
             http_timeout_s=_int("HTTP_TIMEOUT_S", 15, 1, 120),
             attendance_delay_min=_int("ATTENDANCE_DELAY_MIN", 15, 0, 1440),

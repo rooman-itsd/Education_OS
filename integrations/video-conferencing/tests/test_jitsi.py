@@ -394,3 +394,101 @@ def test_development_names_are_neither_resolved_nor_allowed_outside_dev_mode(ada
 
 
 _ = (START, time)
+
+
+# --- an institution's own Jitsi on its network: allowed only by the operator's list, never by the connection
+
+ALLOWED = "VIDEO_CONFERENCING_JITSI_ALLOWED_NETWORKS"
+
+
+def test_a_private_jitsi_is_refused_unless_the_operator_names_its_network(adapter, transport, org, monkeypatch):
+    resolving(monkeypatch, ["10.1.2.3"])
+    assert adapter.healthcheck(health_ctx(org, "https://meet.college.org")).error["code"] == "not_configured"
+    monkeypatch.setenv(ALLOWED, "10.0.0.0/8")
+    transport.on("GET", r"^https://10\.1\.2\.3/$", status=200, body="ok")
+    assert adapter.healthcheck(health_ctx(org, "https://meet.college.org")).output["status"] == "healthy"
+    (sent,) = transport.requests
+    assert sent.headers["host"] == "meet.college.org" and sent.extensions["sni_hostname"] == "meet.college.org"
+
+
+def test_the_operators_list_allows_only_what_it_names(adapter, transport, org, monkeypatch):
+    monkeypatch.setenv(ALLOWED, " 10.0.0.0/8 , 192.168.50.0/24 ,, fd00:1234::/32")
+    transport.on("GET", r".", status=200, body="ok")
+    for allowed in (["10.9.9.9"], ["192.168.50.7"], ["fd00:1234::5"]):
+        resolving(monkeypatch, allowed)
+        assert adapter.healthcheck(health_ctx(org, "https://meet.college.org")).error is None
+    for refused in (["172.16.0.1"], ["192.168.51.7"], ["fd00:9999::5"], ["10.9.9.9", "172.16.0.1"]):
+        resolving(monkeypatch, refused)  # one address outside the list is enough to refuse
+        assert adapter.healthcheck(health_ctx(org, "https://meet.college.org")).error["code"] == "not_configured"
+
+
+def test_an_address_literal_in_the_operators_list_is_connected_to_as_it_is(adapter, transport, org, monkeypatch):
+    monkeypatch.setenv(ALLOWED, "10.0.0.0/8")
+    transport.on("GET", r"^https://10\.1\.2\.3/$", status=200, body="ok")
+    assert adapter.healthcheck(health_ctx(org, "https://10.1.2.3")).output["status"] == "healthy"
+    assert adapter.healthcheck(health_ctx(org, "https://172.16.0.1")).error["code"] == "not_configured"
+
+
+@pytest.mark.parametrize(
+    "never",
+    [
+        "https://127.0.0.1",
+        "https://169.254.169.254",
+        "https://0.0.0.0",
+        "https://[::1]",
+        "https://[fe80::1]",
+        "https://[::ffff:127.0.0.1]",
+        "https://100.100.100.200",
+        "https://168.63.129.16",
+        "https://[::ffff:168.63.129.16]",
+        "https://[fd00:ec2::254]",
+    ],
+)
+def test_loopback_link_local_and_metadata_addresses_are_never_allowed(adapter, transport, org, monkeypatch, never):
+    """Not by the operator's list either: 100.64.0.0/10, 168.63.0.0/16 and fc00::/7 are listed, and the one metadata
+    address inside each is still refused. 168.63.129.16 (Azure's WireServer) is refused with no list at all."""
+    monkeypatch.setenv(ALLOWED, "100.64.0.0/10,168.63.0.0/16,fc00::/7,10.0.0.0/8")
+    assert adapter.healthcheck(health_ctx(org, never)).error["code"] == "not_configured"
+    monkeypatch.delenv(ALLOWED)
+    assert adapter.healthcheck(health_ctx(org, never)).error["code"] == "not_configured"
+    assert not transport.requests
+
+
+def test_a_listed_shared_range_works_except_for_the_metadata_address_in_it(adapter, transport, org, monkeypatch):
+    monkeypatch.setenv(ALLOWED, "100.64.0.0/10")  # a tailnet, for one
+    transport.on("GET", r"^https://100\.64\.0\.9/$", status=200, body="ok")
+    assert adapter.healthcheck(health_ctx(org, "https://100.64.0.9")).error is None
+    assert adapter.healthcheck(health_ctx(org, "https://100.100.100.200")).error["code"] == "not_configured"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "10.0.0.0/8,not-a-network",
+        "10.0.0.0/33",
+        "0.0.0.0/0",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "::/0",
+        "fe80::/10",
+        "224.0.0.0/4",
+    ],
+)
+def test_a_list_that_is_not_networks_or_opens_a_never_allowed_range_is_a_configuration_error(
+    adapter, transport, org, monkeypatch, bad
+):
+    monkeypatch.setenv(ALLOWED, bad)
+    resolving(monkeypatch, ["93.184.216.34"])
+    r = adapter.healthcheck(health_ctx(org, "https://meet.college.org"))
+    assert r.error["code"] == "not_configured" and ALLOWED in r.error["detail"] and bad not in r.error["detail"]
+    assert not transport.requests
+
+
+def test_a_connection_cannot_widen_the_list(adapter, transport, org, monkeypatch):
+    """The list is the operator's environment. Whatever an organisation puts in its own settings is ignored."""
+    resolving(monkeypatch, ["10.1.2.3"])
+    ctx = org.ctx(
+        "jitsi",
+        settings={"base_url": "https://meet.college.org", "app_id": "x", "allowed_networks": ["10.0.0.0/8"]},
+    )
+    assert adapter.healthcheck(ctx).error["code"] == "not_configured"

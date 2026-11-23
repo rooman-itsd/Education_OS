@@ -12,6 +12,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   (Alibaba's metadata address `100.100.100.200` is in it), reserved and multicast ranges, and IPv6 forms that carry an IPv4
   address (mapped, NAT64, 6to4). The healthcheck no longer echoes the HTTP status code (security review, November 2026,
   N16, #680).
+- `VIDEO_CONFERENCING_JITSI_ALLOWED_NETWORKS` (operator-set, comma-separated CIDRs, empty by default) lets an institution's
+  own Jitsi on a private network be reached, which #692 refused outright. The connection's settings cannot widen it.
+  Loopback, link-local, multicast and the cloud metadata addresses stay refused whatever is listed, and a list that opens
+  one of those ranges, or is not a list of networks, is a configuration error. Azure's WireServer `168.63.129.16`, a
+  public-looking address that passed the check, is now refused too, as is AWS's IPv6 metadata `fd00:ec2::254`.
 - The Jitsi healthcheck resolves the host once and sends the request to the address that passed the check, with the host
   name kept as `Host` and as the TLS server name (so the certificate is still checked for the name), and never follows a
   redirect. A name that answered with a public address when checked can no longer be looked up again as an internal one

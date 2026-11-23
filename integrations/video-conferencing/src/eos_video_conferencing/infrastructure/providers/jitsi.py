@@ -16,6 +16,7 @@ from eos_core import settings as core_settings
 from ...domain.context import Context
 from ...domain.errors import AdapterError
 from ...domain.models import CreateMeeting, UpdateMeeting
+from ..config import ALWAYS_BLOCKED
 from ..http import map_status
 from .base import Created, Provider, Ref
 
@@ -28,22 +29,31 @@ _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 _SIX_TO_FOUR = ipaddress.ip_network("2002::/16")
 
 
-def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address, allowed: tuple = ()) -> bool:
     """True for anything that is not a globally routable unicast address: loopback, private, link-local (cloud metadata),
     shared address space 100.64.0.0/10 (Alibaba's metadata address is in it), reserved, multicast and unspecified. An
-    IPv6 address that carries an IPv4 one (mapped, NAT64, 6to4) is judged by the IPv4 address it carries."""
+    IPv6 address that carries an IPv4 one (mapped, NAT64, 6to4) is judged by the IPv4 address it carries. `allowed` is
+    the operator's list of networks that are fine although not public (VIDEO_CONFERENCING_JITSI_ALLOWED_NETWORKS); it
+    never lifts the ranges in ALWAYS_BLOCKED, which also stop a public address a cloud keeps for its own use."""
+    if any(ip in net for net in ALWAYS_BLOCKED):
+        return True
     if isinstance(ip, ipaddress.IPv6Address):
         carried = ip.ipv4_mapped
         if carried is None and ip in _NAT64:
             carried = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
         if carried is None and ip in _SIX_TO_FOUR:
             carried = ipaddress.IPv4Address((int(ip) >> 80) & 0xFFFFFFFF)
-        if carried is not None and _is_blocked_ip(carried):
-            return True
+        if carried is not None:
+            if _is_blocked_ip(carried, allowed):
+                return True
+            if any(carried in net for net in allowed):
+                return False
+    if any(ip in net for net in allowed):
+        return False
     return not ip.is_global or ip.is_multicast
 
 
-def _validate_host(hostname: str, port: int | None = None) -> str | None:
+def _validate_host(hostname: str, port: int | None = None, allowed: tuple = ()) -> str | None:
     """Refuse a host that is, or resolves to, a blocked address. Returns the validated address to connect to, so the
     request goes where the check looked (a second lookup could answer differently: DNS rebinding), or None when there
     is nothing to pin: an address literal is connected to as it is, and a development name (`.example`, `.test`, in
@@ -53,7 +63,7 @@ def _validate_host(hostname: str, port: int | None = None) -> str | None:
     except ValueError:
         pass
     else:
-        if _is_blocked_ip(ip):
+        if _is_blocked_ip(ip, allowed):
             raise AdapterError("not_configured", _BLOCKED_MESSAGE)
         return None
 
@@ -71,7 +81,7 @@ def _validate_host(hostname: str, port: int | None = None) -> str | None:
             ip = ipaddress.ip_address(addr[4][0].split("%", 1)[0])
         except ValueError:
             continue
-        if _is_blocked_ip(ip):
+        if _is_blocked_ip(ip, allowed):
             raise AdapterError("not_configured", _BLOCKED_MESSAGE)
         found.append(str(ip))
     if not found:
@@ -93,19 +103,19 @@ def _split_base(ctx: Context):
     return u, port
 
 
-def base_url(ctx: Context) -> str:
+def base_url(ctx: Context, allowed: tuple = ()) -> str:
     """The institution's Jitsi base URL, checked: https, a host, no credentials, and no address a server must not call."""
     u, port = _split_base(ctx)
-    _validate_host(u.hostname, port)
+    _validate_host(u.hostname, port, allowed)
     return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
 
 
-def checked_request_target(ctx: Context) -> tuple[str, dict]:
+def checked_request_target(ctx: Context, allowed: tuple = ()) -> tuple[str, dict]:
     """The URL for a request the server makes to the institution's Jitsi, and the arguments that pin it. The host is
     resolved once, here; the request is sent to the address that passed the check, with the original name as Host and as
     the TLS server name, so the certificate is still checked against the name and a second lookup cannot redirect it."""
     u, port = _split_base(ctx)
-    pinned = _validate_host(u.hostname, port)
+    pinned = _validate_host(u.hostname, port, allowed)
     name = f"{u.hostname}{f':{port}' if port else ''}"
     if pinned is None:
         return f"{u.scheme}://{name}{u.path}", {"follow_redirects": False}
@@ -150,7 +160,7 @@ class JitsiProvider(Provider):
         return app
 
     def create(self, ctx: Context, spec: CreateMeeting, host_user: str) -> Created:
-        base = base_url(ctx)
+        base = base_url(ctx, self.cfg.jitsi_allowed_networks)
         self._app_id(ctx)
         prefix = str(ctx.settings.get("room_prefix", "")).strip()[:ROOM_PREFIX_MAX]
         room = f"{prefix}{'-' if prefix else ''}{secrets.token_hex(12)}"  # random: not guessable, unlike a class name
@@ -166,7 +176,7 @@ class JitsiProvider(Provider):
     def mint(
         self, ctx: Context, ref: Ref, person_id: str, name: str, email: str | None, moderator: bool
     ) -> tuple[str, object]:
-        base = base_url(ctx)
+        base = base_url(ctx, self.cfg.jitsi_allowed_networks)
         app = self._app_id(ctx)
         now = self.clock()
         end = ref.starts_at + timedelta(minutes=ref.duration_minutes)
@@ -191,7 +201,7 @@ class JitsiProvider(Provider):
         return f"{base}/{quote(str(ref.room_name))}?jwt={token}", exp
 
     def healthcheck(self, ctx: Context) -> dict:
-        target, pin = checked_request_target(ctx)
+        target, pin = checked_request_target(ctx, self.cfg.jitsi_allowed_networks)
         self._app_id(ctx)
         self._secret(ctx)
         r = self.http.send("GET", f"{target}/", **pin)

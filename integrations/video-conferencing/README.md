@@ -59,8 +59,10 @@ has no "ended" event: list meetings whose report should now exist) and `renew_su
 - **Jitsi `base_url`** is the only address the adapter calls that an institution chooses. It must be `https` and resolve
   only to globally routable addresses (no loopback, private, link-local, shared `100.64.0.0/10`, reserved or multicast
   address, no IPv6 form carrying one). The healthcheck resolves it once and connects to that address, with the name kept
-  for `Host` and TLS, and does not follow redirects; a Jitsi server on a private network is therefore not reachable from
-  the adapter. In dev mode only, names ending in `.example` or `.test` are accepted without a lookup, for the tests.
+  for `Host` and TLS, and does not follow redirects. A Jitsi server on a private network is not reachable unless the operator lists its
+  network in `VIDEO_CONFERENCING_JITSI_ALLOWED_NETWORKS` (an organisation's connection settings cannot); loopback,
+  link-local, multicast and the cloud metadata addresses (`169.254.169.254`, `100.100.100.200`, `168.63.129.16`,
+  `fd00:ec2::254`) stay refused whatever is listed. In dev mode only, names ending in `.example` or `.test` are accepted without a lookup, for the tests.
 
 ## Configuration
 
