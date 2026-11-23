@@ -7,7 +7,7 @@ import json
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
-from wear_support import GARMIN_USER, fixture, form_of, link_row, make_link, records, request
+from wear_support import GARMIN_USER, fixture, form_of, garmin_signature, link_row, make_link, records, request
 
 API = r"https://apis\.garmin\.com"
 QS = {"provider": "garmin"}
@@ -53,10 +53,42 @@ def test_refresh_and_revoke(adapter, transport, org):
     assert adapter.revoke_authorisation(org.ctx("garmin")).output == {"revoked": True}
 
 
-def push(adapter, name: str, ctx=None):
-    r = adapter.verify_inbound(ctx, request(fixture(name), query=QS))
+def push(adapter, name: str, ctx=None, headers=None):
+    raw = fixture(name).encode()
+    hdrs = garmin_signature(raw) if headers is None else headers
+    r = adapter.verify_inbound(ctx, request(raw, headers=hdrs, query=QS))
     assert r.error is None
     return r.output
+
+
+def test_unsigned_push_is_rejected(adapter, org):
+    make_link(org, "garmin")
+    raw = fixture("garmin/push_health.json").encode()
+    res = adapter.verify_inbound(None, request(raw, headers={}, query=QS))
+    assert res.output == {"verdict": "reject", "reject_status": 401}
+
+
+def test_push_with_bad_signature_is_rejected(adapter, org):
+    make_link(org, "garmin")
+    raw = fixture("garmin/push_health.json").encode()
+    res = adapter.verify_inbound(None, request(raw, headers={"garmin-webhook-signature": "bad"}, query=QS))
+    assert res.output == {"verdict": "reject", "reject_status": 401}
+
+
+def test_push_with_alternative_x_garmin_signature_header_is_accepted(adapter, org):
+    make_link(org, "garmin")
+    raw = fixture("garmin/push_health.json").encode()
+    sig = garmin_signature(raw)["garmin-webhook-signature"]
+    res = adapter.verify_inbound(None, request(raw, headers={"x-garmin-signature": sig}, query=QS))
+    assert res.output["verdict"] == "accept"
+
+
+def test_push_without_configured_signature_key_is_rejected(adapter, org, monkeypatch):
+    make_link(org, "garmin")
+    monkeypatch.delenv("WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY", raising=False)
+    raw = fixture("garmin/push_health.json").encode()
+    res = adapter.verify_inbound(None, request(raw, headers=garmin_signature(raw), query=QS))
+    assert res.output == {"verdict": "reject", "reject_status": 401}
 
 
 def test_a_push_for_an_athlete_with_an_active_link_is_accepted_and_names_the_connection(adapter, org):

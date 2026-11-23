@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from eos_core.db import Base, TenantMixin, new_id, utcnow
-from sqlalchemy import JSON, Date, DateTime, Index, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Date, DateTime, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 PREFIX = "wearables_"
@@ -49,6 +49,7 @@ class LinkState(Base, TenantMixin):
     consecutive_failures: Mapped[int] = mapped_column(Integer, default=0)
     failing_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    tokens_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Record(Base, TenantMixin):

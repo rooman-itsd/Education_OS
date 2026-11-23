@@ -9,6 +9,7 @@ dependencies = [
   "alembic>=1.13",
   "httpx>=0.27",
   "pydantic>=2",
+  "cryptography>=42",
   "eos-core",
 ]
 

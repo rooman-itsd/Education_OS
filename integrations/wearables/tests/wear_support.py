@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,10 +19,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 NOW = datetime(2026, 11, 5, 6, 0, tzinfo=UTC)
 PREFIX = "/api/v1/wearables"
 POLAR_KEY = "polar-signature-secret-key"
+GARMIN_KEY = "garmin-signature-secret-key"
 STRAVA_VERIFY = "strava-verify-token"
 STRAVA_SUB = "120475"
 STRAVA_ATHLETE = "12345678"
 GARMIN_USER = "d3b1c9a2-7f4e-4b8a-9c11-0a5e6f7d8e90"
+DATA_KEY = "d2VhcmFibGVzLXRlc3Qta2V5LTAwMDEtZm9yLXVuaXQ="
 
 
 def fixture(path: str) -> str:
@@ -165,6 +168,10 @@ def polar_signature(raw: bytes, key: str = POLAR_KEY) -> dict:
     return {"Polar-Webhook-Signature": hmac.new(key.encode(), raw, hashlib.sha256).hexdigest()}
 
 
+def garmin_signature(raw: bytes, key: str = GARMIN_KEY) -> dict:
+    return {"garmin-webhook-signature": hmac.new(key.encode(), raw, hashlib.sha256).hexdigest()}
+
+
 def request(raw: bytes | str, headers: dict | None = None, *, method="POST", query=None, suffix="") -> dict:
     return {
         "method": method,
@@ -194,14 +201,22 @@ def make_link(
 ) -> dict:
     """An account link as the hub would have made it, inserted directly (the linking flow has its own tests)."""
     from eos_core.db import SessionLocal
+    from eos_wearables.infrastructure import crypto
     from eos_wearables.infrastructure.models import LinkState
 
     person = person or str(uuid.uuid4())
     link = str(uuid.uuid4())
+    raw_tokens = fields.pop("tokens", SECRETS[provider]())
+    cfg = type("ConfigHolder", (), {"data_key": os.environ.get("WEARABLES_DATA_KEY", DATA_KEY), "mode": "sandbox"})()
+    tokens_encrypted = fields.pop(
+        "tokens_encrypted",
+        crypto.seal(cfg, json.dumps(raw_tokens)) if raw_tokens else None,
+    )
     row = LinkState(
         organisation_id=org.id, connection_id=org.connection_id, account_link_id=link, person_id=person, provider=provider,
         provider_subject=subject or SUBJECTS[provider], status=status, status_since=NOW - timedelta(days=1), created_at=NOW - timedelta(days=1),
         data_types=types if types is not None else {"strava": ["activity"], "polar": ["daily_summary", "activity", "sleep"]}.get(provider, ["daily_summary", "activity", "sleep", "heart_rate_variability", "body_composition"]),
+        tokens_encrypted=tokens_encrypted,
     )  # fmt: skip
     for k, v in fields.items():
         setattr(row, k, v)

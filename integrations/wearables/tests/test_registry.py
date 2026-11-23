@@ -45,6 +45,11 @@ def test_describe_is_the_registry_row(adapter):
         )
         assert p["credential_names"] == ["access_token", "refresh_token"]
     by = {p["provider"]: p for p in d["providers"]}
+    assert by["garmin"]["platform_credential_names"] == [
+        "WEARABLES_GARMIN_CLIENT_ID",
+        "WEARABLES_GARMIN_CLIENT_SECRET",
+        "WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY",
+    ]
     assert by["strava"]["platform_credential_names"] == [
         "WEARABLES_STRAVA_CLIENT_ID",
         "WEARABLES_STRAVA_CLIENT_SECRET",
