@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: event-bus API
-  version: 0.2.0
+  version: 0.3.0
   description: >-
     Operator view of the event bus: inspect the outbox, watch relay health, replay
     dead-lettered events. Modules do NOT publish through this API - they call
@@ -158,6 +158,10 @@ components:
           type: [string, "null"]
           format: uuid
           description: Null when the system caused the change
+        impersonated_by:
+          type: [string, "null"]
+          format: uuid
+          description: The super admin really acting when actor is a user being impersonated; null otherwise
         occurred_at:
           type: string
           format: date-time
