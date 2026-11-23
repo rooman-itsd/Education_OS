@@ -23,54 +23,65 @@ DEV_SECRET = "mock-jitsi-app-secret-for-development-only"  # mock mode only; san
 ROOM_PREFIX_MAX = 40
 
 
+_BLOCKED_MESSAGE = "the connection's base_url must not point to a local, private or metadata address"
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_SIX_TO_FOUR = ipaddress.ip_network("2002::/16")
+
+
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    if getattr(ip, "ipv4_mapped", None):
-        mapped = ip.ipv4_mapped
-        if (
-            mapped.is_private
-            or mapped.is_loopback
-            or mapped.is_link_local
-            or mapped.is_reserved
-            or mapped.is_multicast
-            or mapped.is_unspecified
-        ):
+    """True for anything that is not a globally routable unicast address: loopback, private, link-local (cloud metadata),
+    shared address space 100.64.0.0/10 (Alibaba's metadata address is in it), reserved, multicast and unspecified. An
+    IPv6 address that carries an IPv4 one (mapped, NAT64, 6to4) is judged by the IPv4 address it carries."""
+    if isinstance(ip, ipaddress.IPv6Address):
+        carried = ip.ipv4_mapped
+        if carried is None and ip in _NAT64:
+            carried = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if carried is None and ip in _SIX_TO_FOUR:
+            carried = ipaddress.IPv4Address((int(ip) >> 80) & 0xFFFFFFFF)
+        if carried is not None and _is_blocked_ip(carried):
             return True
-    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+    return not ip.is_global or ip.is_multicast
 
 
-def _validate_host(hostname: str) -> None:
+def _validate_host(hostname: str, port: int | None = None) -> str | None:
+    """Refuse a host that is, or resolves to, a blocked address. Returns the validated address to connect to, so the
+    request goes where the check looked (a second lookup could answer differently: DNS rebinding), or None when there
+    is nothing to pin: an address literal is connected to as it is, and a development name (`.example`, `.test`, in
+    dev mode only) is never resolved."""
     try:
         ip = ipaddress.ip_address(hostname)
-        if _is_blocked_ip(ip):
-            raise AdapterError(
-                "not_configured", "the connection's base_url must not point to a local, private or metadata address"
-            )
-        return
     except ValueError:
         pass
+    else:
+        if _is_blocked_ip(ip):
+            raise AdapterError("not_configured", _BLOCKED_MESSAGE)
+        return None
 
     if core_settings.settings.dev_mode and hostname.lower().endswith((".example", ".test")):
-        return
+        return None
 
     try:
-        addrs = socket.getaddrinfo(hostname, None)
+        addrs = socket.getaddrinfo(hostname, port or 443, type=socket.SOCK_STREAM)
     except socket.gaierror as e:
         raise AdapterError("not_configured", "the connection's base_url host could not be resolved") from e
 
+    found: list[str] = []
     for addr in addrs:
-        ip_str = addr[4][0]
         try:
-            ip = ipaddress.ip_address(ip_str)
-            if _is_blocked_ip(ip):
-                raise AdapterError(
-                    "not_configured", "the connection's base_url must not point to a local, private or metadata address"
-                )
+            ip = ipaddress.ip_address(addr[4][0].split("%", 1)[0])
         except ValueError:
             continue
+        if _is_blocked_ip(ip):
+            raise AdapterError("not_configured", _BLOCKED_MESSAGE)
+        found.append(str(ip))
+    if not found:
+        raise AdapterError("not_configured", "the connection's base_url host could not be resolved")
+    return found[0]
 
 
-def base_url(ctx: Context) -> str:
-    """The institution's Jitsi base URL from its connection settings: https, a host, no credentials, no path tricks."""
+def _split_base(ctx: Context):
+    """The institution's Jitsi base URL from its connection settings, parsed: https, a host, no credentials, no path
+    tricks. Nothing is resolved here."""
     raw = str(ctx.settings.get("base_url", "")).strip().rstrip("/")
     try:
         u = urlsplit(raw)
@@ -79,8 +90,30 @@ def base_url(ctx: Context) -> str:
         u, port = None, None
     if u is None or u.scheme != "https" or not u.hostname or u.username or u.password or u.query or u.fragment:
         raise AdapterError("not_configured", "the connection's base_url is not a valid https address")
-    _validate_host(u.hostname)
+    return u, port
+
+
+def base_url(ctx: Context) -> str:
+    """The institution's Jitsi base URL, checked: https, a host, no credentials, and no address a server must not call."""
+    u, port = _split_base(ctx)
+    _validate_host(u.hostname, port)
     return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
+
+
+def checked_request_target(ctx: Context) -> tuple[str, dict]:
+    """The URL for a request the server makes to the institution's Jitsi, and the arguments that pin it. The host is
+    resolved once, here; the request is sent to the address that passed the check, with the original name as Host and as
+    the TLS server name, so the certificate is still checked against the name and a second lookup cannot redirect it."""
+    u, port = _split_base(ctx)
+    pinned = _validate_host(u.hostname, port)
+    name = f"{u.hostname}{f':{port}' if port else ''}"
+    if pinned is None:
+        return f"{u.scheme}://{name}{u.path}", {"follow_redirects": False}
+    address = f"[{pinned}]" if ":" in pinned else pinned
+    return (
+        f"{u.scheme}://{address}{f':{port}' if port else ''}{u.path}",
+        {"headers": {"Host": name}, "extensions": {"sni_hostname": u.hostname}, "follow_redirects": False},
+    )
 
 
 class JitsiProvider(Provider):
@@ -158,10 +191,10 @@ class JitsiProvider(Provider):
         return f"{base}/{quote(str(ref.room_name))}?jwt={token}", exp
 
     def healthcheck(self, ctx: Context) -> dict:
-        base = base_url(ctx)
+        target, pin = checked_request_target(ctx)
         self._app_id(ctx)
         self._secret(ctx)
-        r = self.http.send("GET", f"{base}/")
+        r = self.http.send("GET", f"{target}/", **pin)
         if r.status_code >= 500:
             raise map_status(r)
         return {

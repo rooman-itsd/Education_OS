@@ -7,12 +7,23 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 - Default mode changed to `sandbox`; `mock` mode is refused for both environment configuration and per-connection
   calls unless `EOS_DEV_MODE=true`. Development data key and Jitsi app secret fallbacks are similarly disabled outside
   dev mode (security review, November 2026, N17, #681).
-- Self-hosted Jitsi `base_url` requires `https` and validates hostnames/IPs to block SSRF against private, loopback,
-  link-local, and cloud metadata addresses. Healthcheck no longer echoes the HTTP status code (security review,
-  November 2026, N16, #680).
-- Zoom's `endpoint.url_validation` handshake is answered only when the request carries a valid `x-zm-signature` within the
-  timestamp tolerance, like every other event. Answered unsigned, the handshake's HMAC of `plainToken` signed any event a
-  caller wrote as `v0:<ts>:<body>` (security review, November 2026, N13).
+- Self-hosted Jitsi `base_url` requires `https` and refuses any host that is, or resolves to, an address that is not
+  globally routable: loopback, private, link-local and cloud metadata addresses, shared address space `100.64.0.0/10`
+  (Alibaba's metadata address `100.100.100.200` is in it), reserved and multicast ranges, and IPv6 forms that carry an IPv4
+  address (mapped, NAT64, 6to4). The healthcheck no longer echoes the HTTP status code (security review, November 2026,
+  N16, #680).
+- The Jitsi healthcheck resolves the host once and sends the request to the address that passed the check, with the host
+  name kept as `Host` and as the TLS server name (so the certificate is still checked for the name), and never follows a
+  redirect. A name that answered with a public address when checked can no longer be looked up again as an internal one
+  (DNS rebinding).
+- Zoom's `endpoint.url_validation` handshake answers only a `plainToken` made of base64url characters (`A-Z a-z 0-9 _ -`, 1
+  to 256 long); anything else is refused, signed or not. Zoom's documentation does not say that the challenge is signed,
+  so it is answered whether or not it carries `x-zm-signature`, and every other event still needs a valid signature and
+  timestamp. The handshake answers HMAC(secret, `plainToken`), the same function as an event's signature
+  HMAC(secret, `v0:<ts>:<body>`): a `plainToken` of `v0:<ts>:<forged event>` used to sign any event a caller wrote. A
+  signed message always contains a `:`, a challenge token never does, so no answer can be an event signature (security
+  review, November 2026, N13). Replaces the "handshake must be signed" rule of #670, which would have refused Zoom's own
+  unsigned validation requests.
 
 ## [0.3.0] - 2026-11-05
 Built on the draft contracts (0.2.0); no contract file changed.
