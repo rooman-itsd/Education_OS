@@ -5,6 +5,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 ## [Unreleased]
 Contract 0.2.0 (additive): versions, `include_superseded`, 409 on a replayed intent after confirm.
 
+### Security
+- Delete stored files on organisation purge: subscribe to `tenancy.organisation.purged`, remove all objects under
+  the organisation's prefix in object storage, and publish `documents.organisation.purged` (security review,
+  November 2026, N9, #676).
+
 ### Fixed
 - A confirmed file can no longer be overwritten (#317 follow-up). A replayed upload intent handed out a fresh PUT
   URL for the document's own storage key even after confirm, and the original URL (valid 15 minutes) named the same
