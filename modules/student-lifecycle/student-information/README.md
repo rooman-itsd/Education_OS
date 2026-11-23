@@ -27,6 +27,13 @@ academic records (`academics/*`), or fee invoices (`finance-operations/fees-acco
   [docs/integration-points.md](docs/integration-points.md#the-account-link-and-its-backfill).
 - Backfill: `POST /account-links/republish` announces every existing link again. Run it once per organisation after
   deploying 0.2.0 (links made before the event existed are otherwise unknown to consumers).
+- Guardian's consent for minors (DPDP gap D7): the institution obtains verifiable parental consent offline; this
+  module records it. Each person carries a derived `minor` (under 18 today, null without a date of birth) and
+  `guardian_consent` (`obtained`, `obtained_on`, `recorded_by`, `note`). Staff with `student-information:person:write`
+  record or withdraw it with `PUT /people/{id}/guardian-consent`; every change is kept in the append-only history
+  (`GET /people/{id}/guardian-consent`) and announced by `person.guardian-consent-changed`, which carries no note and
+  no guardian data. `GET /people?minor=true&guardian_consent=false` lists the minors whose consent is missing. Nothing
+  is refused for a minor without consent: the platform records, the institution decides.
 - Permissions: [contracts/permissions.yaml](contracts/permissions.yaml)
 - Dashboard widgets: None yet (`frontend/src/widgets/index.ts` exports `widgets = []`)
 
@@ -72,7 +79,7 @@ $env:STUDENT_INFORMATION_TEST_POSTGRES_URL = "postgresql+psycopg://eos_test:<tes
 # Dedicated RLS test suite (2 tests):
 .venv\Scripts\python.exe -m pytest modules/student-lifecycle/student-information/backend/tests/test_rls_postgres.py -v
 
-# Complete module test suite (88 tests):
+# Complete module test suite (102 tests):
 .venv\Scripts\python.exe -m pytest modules/student-lifecycle/student-information/backend/tests -v
 
 # Clear the environment variable after testing:
@@ -87,7 +94,7 @@ STUDENT_INFORMATION_TEST_POSTGRES_URL="postgresql+psycopg://eos_test:<test_passw
 
 #### 3. Test lifecycle & isolation guarantees
 - The test fixture automatically creates an isolated throwaway database (`student_info_rls_<uuid>`) and an unprivileged probe role (`student_info_probe_<uuid>` with `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`).
-- Migrations apply via Alembic to configure `FORCE ROW LEVEL SECURITY` and `tenant_isolation` policies on all 4 tables (`person`, `status_history`, `document`, `id_card`).
+- Migrations apply via Alembic to configure `FORCE ROW LEVEL SECURITY` and `tenant_isolation` policies on all 5 tables (`person`, `status_history`, `document`, `id_card`, `guardian_consent_history`).
 - The probe role exercises tenant isolation using `SET LOCAL ROLE` and `app.organisation_id`.
 - The fixture drops both the temporary database (`WITH (FORCE)`) and the probe role at completion, guaranteeing zero leftover state.
 

@@ -3,7 +3,7 @@
 Tests:
 - Full upgrade to head and downgrade to base using db/alembic.ini
 - Dedicated Alembic version table: student_information_alembic_version
-- All four module tables created with required organisation_id column
+- All five module tables created with required organisation_id column
 - Partial unique indexes created:
   - uq_student_info_person_identity WHERE identity_number IS NOT NULL
   - uq_student_info_active_card WHERE status = 'issued'
@@ -45,7 +45,7 @@ def test_upgrade_matches_models_and_downgrade_removes_tables():
         inspector = inspect(conn)
         table_names = set(inspector.get_table_names())
 
-        # Verify all 4 tables plus dedicated version table exist
+        # Verify all 5 tables plus dedicated version table exist
         expected_tables = {t.name for t in TABLES}
         assert expected_tables <= table_names
         assert "student_information_alembic_version" in table_names
@@ -77,7 +77,7 @@ def test_upgrade_matches_models_and_downgrade_removes_tables():
 
 def test_all_model_tables_prefixed_and_tenant_scoped():
     """Every model table uses student_information_ prefix and has organisation_id."""
-    assert len(TABLES) == 4
+    assert len(TABLES) == 5
     for table in TABLES:
         assert table.name.startswith(PREFIX)
         assert "organisation_id" in table.columns

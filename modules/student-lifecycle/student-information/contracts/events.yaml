@@ -40,6 +40,13 @@ events:
       links made before this event existed; applying a republished link twice changes nothing.
     payload: { organisation_id: uuid, person_id: uuid, identity_user_id: "uuid?", linked: boolean, previous_identity_user_id: "uuid?" }
     consumers: [lms, timetable-attendance]
+  - name: student-information.person.guardian-consent-changed
+    description: >-
+      The guardian's consent for a minor was recorded (guardian_consent_obtained true, obtained_on the date the
+      institution obtained it) or withdrawn (false, obtained_on null), through PUT /people/{id}/guardian-consent
+      (DPDP gap D7). Carries no note and no guardian personal data. For audit and for consumers that want to show
+      whether consent is on file; nothing should be refused on it (the platform records consent, it does not gate).
+    payload: { organisation_id: uuid, person_id: uuid, guardian_consent_obtained: boolean, obtained_on: "date?" }
   - name: student-information.id-card.issued
     description: An ID card was issued to a person.
     payload: { organisation_id: uuid, person_id: uuid, card_id: uuid, card_number: string }

@@ -71,6 +71,30 @@ class StatusChangeInput(Strict):
     effective_date: date | None = None
 
 
+class GuardianConsentInput(Strict):
+    obtained: bool
+    obtained_on: date | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+class GuardianConsent(Strict):
+    obtained: bool
+    obtained_on: date | None = None
+    recorded_by: str | None = None
+    note: str | None = None
+
+
+class GuardianConsentEntry(Strict):
+    id: str
+    person_id: str
+    organisation_id: str
+    action: Literal["recorded", "withdrawn"]
+    obtained_on: date | None = None
+    note: str | None = None
+    changed_by: str
+    changed_at: str | None = None
+
+
 class PersonDocumentInput(Strict):
     type: PersonDocumentTypeLiteral
     document_id: str = Field(min_length=1)
@@ -91,7 +115,7 @@ class ConflictError(Strict):
 
 
 class RuleError(Strict):
-    code: Literal["status_unchanged"]
+    code: Literal["status_unchanged", "consent_date_in_future", "consent_date_not_allowed", "consent_not_recorded"]
     message: str
 
 
@@ -112,6 +136,8 @@ class Person(Strict):
     status_effective_date: date | None = None
     created_at: str | None = None
     updated_at: str | None = None
+    minor: bool | None = None
+    guardian_consent: GuardianConsent
 
 
 class PersonPage(Strict):

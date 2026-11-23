@@ -250,7 +250,10 @@ grievances and videos (training-video-analysis) are the riskiest.
 Position for v1.0: the institution, as Data Fiduciary, obtains verifiable parental consent; the Terms of Service
 (#667, section 5) make that the institution's duty, and the notice says so. The DPDP Rules 2025 exempt educational
 institutions from parts of s.9 for educational activities and children's safety (counsel to confirm the scope). The
-platform should still record it (gap D7).
+platform records it (gap D7, decided 20 November: the institution collects, the platform records, #690): a derived
+`minor` and a `guardian_consent` record (obtained, date, who recorded it, a note on how it was verified) on the person
+in student-information, with an append-only history and a list of the minors whose consent is missing. Nothing is
+blocked on it.
 
 ## 8. Processors and transfers outside India
 
@@ -294,7 +297,7 @@ student data at scale; **Medium** and **Low** after launch. Owners are suggestio
 | D4 | No Grievance Officer or data-protection contact named | Launch | Faizan | Fill `[Grievance Officer name, email]`, `[Company legal name]`, `[Registered address]` in `public/legal.ts` |
 | D5 | Notice and terms are unreviewed drafts | Launch | Faizan | Counsel reviews `public/legal.ts` (both documents), the legal bases in section 3 and the dates in section 1; fill `[Hosting location]`, `[Jurisdiction city]` |
 | D6 | No processing agreement between the operator and institutions (s.8(2)) | Launch | Faizan | Section 5 of the draft terms is one; counsel to confirm it suffices or add a separate DPA |
-| D7 | Children: no age flag, no record of verifiable parental consent | High | Praveen | student-information: a `guardian_consent` record (who, how verified, when, version of the institution's notice) and a derived `is_minor`; admissions to collect it with the application |
+| D7 | Children: no age flag, no record of verifiable parental consent | High | Praveen | **Decided: institution collects, platform records (PR #690).** student-information: a derived read-only `minor` and `guardian_consent` (obtained, obtained_on, recorded_by, note) on the person, set by `PUT /people/{id}/guardian-consent` (person:write), an append-only history, and `GET /people?minor=true&guardian_consent=false`. Admissions collecting it with the application is D18 |
 | D8 | No per-person access summary or export | Medium | Faizan, Himanshu | A super admin or org-admin export filtered to one person: tables with `person_id`, `student_id`, `user_id`, `employee_id`, `athlete_id` and similar, reusing tenancy's table discovery |
 | D9 | No erasure of one person across modules | Medium | Faizan, Himanshu | An erasure job by person keys over the same tables, with a per-person audit tombstone (needs an audit function like `audit_redact_organisation`) |
 | D10 | identity cannot update, disable or delete a user | High | Himanshu | `PATCH /identity/users/{id}` (name, email, roles, status) and `DELETE` or anonymise; also needed to offboard staff |
