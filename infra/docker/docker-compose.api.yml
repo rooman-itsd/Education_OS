@@ -142,6 +142,9 @@ services:
       # the public nginx (README, "Behind the public proxy"). Unset: this host only, as before.
       WEB_CONCURRENCY: ${EOS_API_WORKERS:-1}
       FORWARDED_ALLOW_IPS: ${EOS_FORWARDED_ALLOW_IPS:-127.0.0.1,::1}
+      # How long the entitlement gate may reuse an organisation's entitlement and status and a user's status
+      # (apps/backend/src/eos_backend/gateway.py). 0: never, a suspension applies on the next request.
+      EOS_GATE_CACHE_SECONDS: ${EOS_GATE_CACHE_SECONDS:-0}
     # integration-hub's secret store (credentials and OAuth tokens, encrypted under INTEGRATION_HUB_SECRET_KEK):
     # a named volume, so a redeploy keeps them. Not in the database or its backups by design.
     volumes:

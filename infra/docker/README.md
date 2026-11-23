@@ -287,6 +287,15 @@ One `uvicorn` process unless `EOS_API_WORKERS` is set in `.env.api` (`docker-com
 `WEB_CONCURRENCY`). When and how to raise it, and how to measure: `../runbooks/scale-the-api.md`, section 3. Switch
 the connection pooler (below) on first.
 
+#### Entitlement gate cache
+
+Before every request to a module, the API's entitlement gate reads the organisation's entitlement and status and the
+user's status from the database (`apps/backend/src/eos_backend/gateway.py`); this was the largest single cost per
+request in the 20 Nov profile (`tests/performance/README.md`). `EOS_GATE_CACHE_SECONDS` in `.env.api` lets it reuse an
+answer for that many seconds (at most 300), per API process. The trade: a suspension, a disabled user or a plan change
+then applies within that many seconds rather than on the next request. Unset or 0 (the default): nothing is reused.
+After changing it, `$C up -d api`; `$C exec -T api printenv EOS_GATE_CACHE_SECONDS` shows the value the API has.
+
 ### Connection pooler (PgBouncer, #96)
 
 Off unless a host switches it on. With it on, the API, the relay and the scheduler reach Postgres through
