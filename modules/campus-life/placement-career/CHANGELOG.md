@@ -35,3 +35,7 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
   `GET /reports/openings-summary`) and `placement-career.drives` ("Upcoming drives", placement-officer,
   `GET /reports/drives-upcoming`), with a typed client, loading, empty and error states with retry, Indian dates
   and rupees, and vitest tests. The module is not enabled in the apps yet.
+- Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/placement-career`) and
+  `apps/frontend/config/modules.enabled.yaml` (`placement-career.openings`, `.openings-summary` and `.drives` on the
+  learner, Placement Officer, Industry Coordinator and related dashboards) (#337). The e2e journeys of those
+  dashboards now check the widgets' titles and empty states.
