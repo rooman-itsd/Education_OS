@@ -65,6 +65,22 @@ its own signing only inside the program, so this header and scheme are not confi
 confirms them, something in front of the adapter must sign what Garmin sends, or no push will be accepted (it fails closed).
 The signature has no timestamp, so a captured signed push can be replayed within the hub's de-duplication window.
 
+## Before enabling Strava or Garmin in production
+
+Three things below rest on assumptions nobody has checked against the real provider. Each fails safe (it refuses or
+retries, it never deletes on a guess), so a wrong guess shows up as events that are not accepted, not as lost or forged
+data. Check them in sandbox first:
+
+| Assumption | How to check | If it is wrong |
+|---|---|---|
+| **Strava names a withdrawn athlete's refresh token as invalid** (`errors[].field == "refresh_token"`, `code == "invalid"`). The shape comes from the existing test fixture and Strava developer-forum reports, not from a live deauthorisation. | Link a test athlete, then remove the app in their Strava settings. Strava sends the `authorized: false` event; the log should say the link was revoked, not `unconfirmed deauthorisation ignored`. | A real deauthorisation is retried, then dropped, and the athlete's data stays. Adjust `StravaProvider._refresh_token_is_dead`. |
+| **Garmin signs pushes the way `GarminProvider.verify_inbound` expects** (HMAC-SHA256 of the raw body, hex, in `garmin-webhook-signature` or `x-garmin-signature`). Garmin documents its signing only inside the program. | Ask Garmin (or read the program's notification documentation) for the real header and algorithm, then send a real push to a sandbox endpoint. | Every push is refused (fails closed). Until the scheme is confirmed, something in front of the adapter must sign what Garmin sends. |
+| **Garmin pushes have no timestamp** that could bound a replay. | Same documentation. | A captured signed push can be replayed within the hub's de-duplication window; a replayed deregistration would revoke a re-linked athlete's link and delete their data. |
+
+Also: a Strava confirmation can refresh the athlete's token. Strava's rule for the old refresh token (kept valid or
+retired) is unknown; the adapter keeps the new pair at once and retries a refused hub refresh with it, which is safe
+either way.
+
 ## Fitbit (Google Health API)
 
 Everything specific to the Google Health API is an assumption until access is granted (the PRD's "Not verified"): the API
