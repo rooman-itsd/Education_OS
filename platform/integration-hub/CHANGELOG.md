@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Inbound handshakes write no `InboundReceipt` row (finding N1). Handshakes are answered immediately by the adapter without persisting database rows, eliminating unbound receipt writes.
 - Review of #554 (Srujan, Himanshu): inbound callbacks are always verified. The reject limit no longer answers 429
   before verification, which let anyone who knew a connection's callback URL block its signed webhooks with 30 junk
   requests a minute. Past `INTEGRATION_HUB_INBOUND_REJECT_LIMIT_PER_MIN`, a request that fails verification is still

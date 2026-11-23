@@ -176,6 +176,14 @@ def test_handshakes_are_answered_by_the_adapter(client, org, adapter):
     r = client.get(f"{BASE}/inbound/fake-adapter", params={"hub.mode": "subscribe", "hub.verify_token": "wrong"})
     assert r.status_code == 404  # the status the provider expects on a wrong verification code
 
+    # Handshakes write no InboundReceipt row (finding N1)
+    from eos_integration_hub.infrastructure.models import InboundReceipt
+    from sqlalchemy import func, select
+
+    with SessionLocal() as s:
+        receipts = s.scalar(select(func.count(InboundReceipt.id)).where(InboundReceipt.verdict == "handshake"))
+        assert receipts == 0
+
 
 def test_unknown_adapters_keys_and_oversize_bodies(client, org, adapter, monkeypatch):
     c = authorised_meet(client, org, adapter)
