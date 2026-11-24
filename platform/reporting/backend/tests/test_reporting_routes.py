@@ -227,6 +227,59 @@ def test_financial_summaries_need_execute_academic_ones_only_read(client, org):
     )
 
 
+def test_custom_financial_metric_definition_enforces_category_and_execute_permission(client, org):
+    # 1. Refuse creating custom definition reading a financial metric under non-financial category
+    r_bad = client.post(
+        "/api/v1/reporting/definitions",
+        json={"code": "finance.fees_collected", "name": "Custom Fees", "category": "academic"},
+        headers=org.admin_headers,
+    )
+    assert r_bad.status_code == 400
+    assert "reads a financial metric and its category must be 'financial'" in r_bad.text
+
+    # 2. Allow creating it under financial category
+    r_ok = client.post(
+        "/api/v1/reporting/definitions",
+        json={"code": "finance.fees_collected", "name": "Custom Fees", "category": "financial"},
+        headers=org.admin_headers,
+    )
+    assert r_ok.status_code == 201
+    def_id = r_ok.json()["id"]
+
+    # 3. Refuse updating it to non-financial category
+    r_up_bad = client.put(
+        f"/api/v1/reporting/definitions/{def_id}",
+        json={"category": "academic"},
+        headers=org.admin_headers,
+    )
+    assert r_up_bad.status_code == 400
+    assert "reads a financial metric and its category must be 'financial'" in r_up_bad.text
+
+    # 4. Run the report
+    run_res = client.post(f"/api/v1/reporting/definitions/{def_id}/run", headers=org.admin_headers).json()
+    exec_id = run_res["id"]
+
+    # 5. Faculty with only reporting:report:read cannot view financial execution (404)
+    r_fac = client.get(f"/api/v1/reporting/executions/{exec_id}", headers=org.faculty_headers)
+    assert r_fac.status_code == 404
+
+    # 6. Dept admin with reporting:report:execute can view it (200)
+    r_dept = client.get(f"/api/v1/reporting/executions/{exec_id}", headers=org.dept_admin_headers)
+    assert r_dept.status_code == 200
+    assert "result_summary" in r_dept.json()
+
+    # 7. Even if definition category was somehow set to "academic" in DB, summary_needs_execute protects execution
+    from eos_reporting.domain.models import ReportDefinition
+
+    with SessionLocal() as session:
+        defn = session.get(ReportDefinition, def_id)
+        defn.category = "academic"
+        session.commit()
+
+    r_fac_bypass = client.get(f"/api/v1/reporting/executions/{exec_id}", headers=org.faculty_headers)
+    assert r_fac_bypass.status_code == 404
+
+
 def test_the_recent_reports_widget_lists_financial_runs_only_to_executors(client, org):
     fee = _run(client, org.admin_headers, "fee-collection-summary")
     attendance = _run(client, org.admin_headers, "department-attendance")

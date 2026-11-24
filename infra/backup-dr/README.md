@@ -77,6 +77,7 @@ Add a row after every drill. A restore that fails, or counts that differ, is an 
 | Date (UTC) | Host | Dump | Backup | Restore check | Result | Notes |
 |---|---|---|---|---|---|---|
 | 2026-10-30 | education-os (staging, CT 122) | `eos-2026-10-30T093023Z.dump`, 456 KB | 2.3 s | 7.2 s, 131 tables | Row counts identical to live (`diff` empty) | Staging holds almost no data (1 user, no organisation), so the timings say little about a real institution: repeat monthly and once organisations exist. No second location was set (`EOS_BACKUP_OFFSITE` empty), so the backups shared the database's disk; a full restore onto a clean host is the DR drill (#151). |
+| 2026-11-23 | education-os (staging, CT 122) | `eos-2026-11-23T023359Z.dump`, 8.0 MB, the nightly of 02:33 (7.5 h old at the check, within the 24 h RPO) | nightly timer, under a minute | 36.4 s, 412 tables, `sha256sum -c` OK, exit 0 | Restored into `eos_restore_check` and dropped; live data untouched | Run by Srujan from the container's console, from the local copy. Row counts were not compared with live this time. Staging still holds demo data only (1 organisation, 2 users); most rows are platform history (`event_bus_delivery` 104 132, `outbox_event` 37 624, `scheduler_run` 12 532). Not the DR drill: no new host was built and the offsite copy on the second location was not restored (no Proxmox node access that day); that drill stays open on #345. |
 
 ### Restore the live database (an incident)
 
