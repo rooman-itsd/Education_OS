@@ -106,8 +106,13 @@ class ElmoError(ValueError):
 
 
 def _screen(content: bytes) -> None:
-    lowered = content.lower()
-    if b"<!doctype" in lowered or b"<!entity" in lowered:
+    if b"\x00" in content:
+        raise ElmoError("ELMO documents must be UTF-8 encoded")
+    try:
+        text = content.decode("utf-8").lower()
+    except UnicodeDecodeError as e:
+        raise ElmoError("ELMO documents must be UTF-8 encoded") from e
+    if "<!doctype" in text or "<!entity" in text:
         raise ElmoError("DOCTYPE and entity declarations are not accepted")
 
 

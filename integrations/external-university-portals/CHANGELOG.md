@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Security hardening (Finding N19): ELMO XML imports now require valid UTF-8 encoding and reject null bytes and non-UTF-8 encodings before screening for DOCTYPE and entity declarations, preventing encoding-based DOCTYPE screening bypasses.
 
 ## [0.3.0]
 - Adapter implementation (`src/eos_external_university_portals`), built on the draft 0.2.0 contracts:
