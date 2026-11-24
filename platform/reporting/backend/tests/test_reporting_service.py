@@ -60,6 +60,45 @@ def test_create_custom_definition_and_refuses_duplicate(db, org):
     assert exc.value.status == 400
 
 
+def test_financial_metric_requires_financial_category(db, org):
+    # Cannot create custom definition naming a financial metric with non-financial category
+    with pytest.raises(ReportingError, match="reads a financial metric and its category must be 'financial'"):
+        service.create_definition(
+            db,
+            org.id,
+            code="finance.fees_collected",
+            name="Collected Fees",
+            category="academic",
+        )
+
+    # Creating it with category="financial" succeeds
+    d = service.create_definition(
+        db,
+        org.id,
+        code="finance.fees_collected",
+        name="Collected Fees",
+        category="financial",
+    )
+    db.commit()
+    assert d.code == "finance.fees_collected"
+    assert d.category == "financial"
+
+    # Updating category to non-financial is refused
+    with pytest.raises(ReportingError, match="reads a financial metric and its category must be 'financial'"):
+        service.update_definition(
+            db,
+            org.id,
+            d.id,
+            category="administrative",
+        )
+
+    # summary_needs_execute recognizes financial metric even if category was academic
+    assert service.summary_needs_execute(d) is True
+    # Non-financial definition
+    acad_def = service.get_definition(db, org.id, "department-attendance")
+    assert service.summary_needs_execute(acad_def) is False
+
+
 def test_update_custom_definition_and_protects_system_reports(db, org):
     d = service.create_definition(
         db,
