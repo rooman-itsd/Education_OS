@@ -154,3 +154,4 @@ The Total must stay under the 2-hour RTO.
 
 | Date | Who | Backup used | 1 deploy | 3 copy | 4 restore | 5 checks | Total | Notes |
 |---|---|---|---|---|---|---|---|---|
+| 2026-11-23 | Srujan & Faizan | `eos-2026-11-23T023359Z.dump`, 8.0 MB | ~25 min | 5 min | 24.8 s (7 min total with migrate & start) | 5 min | ~42 min | First timed DR rebuild drill following DR.md (#151, Part of #345). Database recreated, pg_restore completed in 24.8 s (exit 0), migrations ran cleanly (`migrate: done`), and API started healthy (`status: "ok"`, database postgres, all 44 modules loaded). Row counts verified: `event_bus_delivery` 104 132, `outbox_event` 37 625, `scheduler_run` 12 532, `tenancy_organisation` 1, `identity_user` 3. Total time ~42 min, well within the 2-hour RTO. Teardown complete. |
