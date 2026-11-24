@@ -15,6 +15,7 @@ modules:
   - campus-life/alumni
   - academics/lms
   - campus-life/hostel
+  - campus-life/placement-career
   - campus-life/library
   - campus-life/transport
   - facilities/asset-management

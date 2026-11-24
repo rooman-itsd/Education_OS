@@ -11,6 +11,10 @@ from .db import utcnow
 from .settings import settings
 
 _ITER = 200_000
+# Seconds of clock difference tolerated on a token's iat, nbf and exp: a token issued by another process, Keycloak,
+# or this one just before the host's clock was stepped (NTP, a VM resuming) is otherwise refused as "not yet valid
+# (iat)". Small next to the token's lifetime; the same value for both kinds of token (oidc.py).
+CLOCK_LEEWAY_SECONDS = 30
 
 
 def hash_password(password: str) -> str:
@@ -60,4 +64,4 @@ def decode_token(token: str) -> dict:
         from . import oidc
 
         return oidc.decode_realm_token(token)
-    return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], leeway=CLOCK_LEEWAY_SECONDS)

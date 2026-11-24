@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 import httpx
 import jwt
 
+from .security import CLOCK_LEEWAY_SECONDS
 from .settings import settings
 
 _REALM_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -257,6 +258,7 @@ def verify_realm_token(token: str, *, token_type: str = ACCESS_TOKEN) -> dict:
         audience=settings.oidc_client_id,
         issuer=issuer(realm),
         options={"require": ["exp", "iat", "sub"]},
+        leeway=CLOCK_LEEWAY_SECONDS,  # Keycloak's clock is not this host's
     )
     if claims.get("typ") != token_type:
         raise OIDCError(f"expected a {token_type!r} token, got {claims.get('typ')!r}")

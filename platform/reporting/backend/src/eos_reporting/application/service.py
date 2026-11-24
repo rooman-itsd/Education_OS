@@ -38,11 +38,31 @@ logger = logging.getLogger(__name__)
 
 FINANCIAL = "financial"
 
+REPORT_METRICS = {
+    "faculty-workload": ("academics.faculty_contact_hours",),
+    "fee-collection-summary": (
+        "finance.fees_invoiced",
+        "finance.fees_collected",
+        "finance.refunds_issued",
+        "finance.concessions_approved",
+    ),
+}
+REPORT_UNAVAILABLE = {"department-attendance": "attendance", "exam-results-summary": "exam_results"}
+
+
+def _is_financial_code(code: str) -> bool:
+    keys = REPORT_METRICS.get(code) or ((code,) if code in metrics.BY_KEY else ())
+    return any(metrics.BY_KEY[k].category == FINANCIAL for k in keys if k in metrics.BY_KEY)
+
 
 def summary_needs_execute(definition: ReportDefinition | None) -> bool:
     """Financial report data (fee collection, dues) is for roles that may run and export reports
     (reporting:report:execute). reporting:report:read covers academic and administrative summaries only."""
-    return definition is not None and definition.category == FINANCIAL
+    if definition is None:
+        return False
+    if definition.category == FINANCIAL:
+        return True
+    return _is_financial_code(definition.code)
 
 
 class ReportingError(Exception):
@@ -182,6 +202,10 @@ def create_definition(
         raise ReportingError("Report code cannot be empty")
     if category not in CATEGORIES:
         raise ReportingError(f"Invalid category '{category}'. Must be one of: {sorted(CATEGORIES)}")
+    if category != FINANCIAL and _is_financial_code(code_clean):
+        raise ReportingError(
+            f"Report code '{code_clean}' reads a financial metric and its category must be '{FINANCIAL}'"
+        )
 
     existing = get_definition(db, organisation_id, code_clean)
     if existing:
@@ -230,6 +254,10 @@ def update_definition(
     if category is not None:
         if category not in CATEGORIES:
             raise ReportingError(f"Invalid category '{category}'")
+        if category != FINANCIAL and _is_financial_code(definition.code):
+            raise ReportingError(
+                f"Report code '{definition.code}' reads a financial metric and its category must be '{FINANCIAL}'"
+            )
         definition.category = category
     if parameters_schema is not None:
         definition.parameters_schema = parameters_schema
@@ -326,18 +354,6 @@ def _sanitize_error_message(exc: Exception) -> str:
     """Return a safe error message without leaking sensitive internal details."""
     msg = str(exc).strip().split("\n")[0]
     return f"Report computation failed: {msg[:200]}"
-
-
-REPORT_METRICS = {
-    "faculty-workload": ("academics.faculty_contact_hours",),
-    "fee-collection-summary": (
-        "finance.fees_invoiced",
-        "finance.fees_collected",
-        "finance.refunds_issued",
-        "finance.concessions_approved",
-    ),
-}
-REPORT_UNAVAILABLE = {"department-attendance": "attendance", "exam-results-summary": "exam_results"}
 
 
 def _period_bounds(period: str) -> tuple[date, date]:
@@ -562,7 +578,10 @@ def get_department_reports_widget_data(
     )
     if not include_financial:
         stmt = stmt.where(ReportDefinition.category != FINANCIAL)
-    recent_runs = db.execute(stmt.order_by(ReportExecution.executed_at.desc()).limit(5)).all()
+    recent_runs = db.execute(stmt.order_by(ReportExecution.executed_at.desc()).limit(10)).all()
+    if not include_financial:
+        recent_runs = [r for r in recent_runs if not summary_needs_execute(r[1])]
+    recent_runs = recent_runs[:5]
     recent_reports = [
         {
             "id": run.id,
