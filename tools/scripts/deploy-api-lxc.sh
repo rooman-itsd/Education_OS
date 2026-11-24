@@ -161,6 +161,11 @@ in_ct "bash $APP/infra/autodeploy/install-api.sh"
 echo "==> installing the nightly database backup"
 in_ct "bash $APP/infra/backup-dr/install.sh"
 
+# ---------- 5c. host monitoring and uptime alerts ----------
+# Idempotent; starts the minute timer and runs a first check (infra/monitoring/README.md).
+echo "==> installing host monitoring and uptime alerts"
+in_ct "bash $APP/infra/monitoring/install.sh"
+
 # ---------- 6. proxy ----------
 if [ "$WIRE_PROXY" = 0 ]; then
   echo "done: the API runs in container $CTID ($CT_IP). WIRE_PROXY=0: the public /api/ was left as it was."

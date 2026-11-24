@@ -51,12 +51,86 @@ bash infra/monitoring/install.sh
 ```
 
 Re-run `install.sh` after `eos-monitor.sh` changes (the copy in `/usr/local/bin` is not auto-updated); the
-settings in `/etc/eos/monitor.env` are kept. To set the webhook or a label:
+settings in `/etc/eos/monitor.env` are kept. Automated container deployments (`tools/scripts/deploy-api-lxc.sh`)
+install and enable `eos-monitor.timer` automatically in step 5c.
+
+To set the webhook or a label:
 
 ```
 nano /etc/eos/monitor.env          # EOS_MONITOR_WEBHOOK_URL="...", EOS_MONITOR_LABEL=staging
 systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
 ```
+
+## Configuring Telegram alerts
+
+Telegram channels and groups receive alerts via the standard Bot API (`sendMessage`):
+
+1. **Create the bot:** Message `@BotFather` on Telegram, send `/newbot`, name it (e.g. `Education OS Alerts`),
+   and copy the HTTP API bot token (`<token>`, e.g. `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).
+2. **Create the alerts channel or group:** Create a channel or group (e.g. `EOS Alerts`) for the on-call team,
+   and add the bot as an administrator with permission to post messages.
+3. **Find the chat ID:**
+   - Send a message to the channel or group.
+   - Run: `curl -s https://api.telegram.org/bot<token>/getUpdates`
+   - Look for `"chat":{"id": -100xxxxxxxxxx}`. Channel and supergroup IDs start with `-100`.
+4. **Configure `/etc/eos/monitor.env`:**
+   ```bash
+   EOS_MONITOR_WEBHOOK_URL="https://api.telegram.org/bot<token>/sendMessage?chat_id=<chat_id>"
+   EOS_MONITOR_LABEL=production
+   ```
+   *Important:* Always enclose the URL in double quotes `""`. Because Telegram URLs contain query parameters
+   (`?chat_id=`), shell parsing without quotes cuts the line at `&` or misinterprets symbols, causing the
+   `config` check to fail.
+5. **Test the alert:**
+   ```bash
+   systemctl start eos-monitor.service
+   journalctl -t eos-monitor -n 20 --no-pager
+   ```
+
+## Sentry error tracking
+
+While `eos-monitor` checks host health, containers, backups, and aggregated error rates, application-level Python
+exceptions are tracked by Sentry.
+
+### Setup
+
+In `/opt/education-os/infra/docker/.env.api`:
+
+```bash
+# Sentry DSN (from your Sentry project settings). Empty: Sentry disabled.
+EOS_SENTRY_DSN="https://<public-key>@o<org-id>.ingest.sentry.io/<project-id>"
+# Environment tag: staging or production (defaults to staging if unset)
+EOS_ENVIRONMENT=production
+```
+
+After updating `.env.api`, restart the API service:
+
+```bash
+docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d api
+```
+
+### Privacy and DPDP compliance
+
+Sentry integration in `apps/backend/src/eos_backend/observability.py` is configured with strict DPDP (Digital Personal
+Data Protection) data scrubbing:
+- **Stripped:** Request bodies, query parameters, authorization headers, cookies, local variables, and user IPs.
+- **Redacted:** Email addresses in log messages and breadcrumbs are masked to `[email]`.
+- **Tagged:** Every event carries `request_id` (matching `X-Request-ID` and journal logs) and `organisation_id`
+  so errors can be correlated across systems without exposing student or user personal data.
+
+## On-call and incident response
+
+Per launch checklist v1.0 item 28:
+- Alerts fire immediately to the Telegram alerts channel on any check failure.
+- When an alert arrives, the on-call engineer checks:
+  ```bash
+  journalctl -t eos-monitor -g ALERT -n 20 --no-pager
+  ls /var/lib/eos-monitor       # lists currently failing checks
+  ```
+- If Sentry alerts on unhandled exceptions, correlate using the `request_id` tag with server logs:
+  ```bash
+  docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api logs --tail 100 api | grep "<request_id>"
+  ```
 
 ## Day to day
 
