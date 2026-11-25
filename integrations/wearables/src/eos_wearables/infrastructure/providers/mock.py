@@ -109,11 +109,11 @@ class MockProvider(Provider):
     def healthcheck(self, ctx: Context) -> dict:
         return {"status": "healthy", "detail": "mock mode: no provider was called", "expires_at": None}
 
-    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
-        return self.inner.is_deauthorized(ctx)
+    def is_deauthorized(self, ctx: Context | None, on_tokens=None) -> bool:
+        return self.inner.is_deauthorized(ctx, on_tokens)
 
-    def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
-        return self.inner.is_activity_deleted(ctx, activity_id)
+    def is_activity_deleted(self, ctx: Context | None, activity_id: str, on_tokens=None) -> bool:
+        return self.inner.is_activity_deleted(ctx, activity_id, on_tokens)
 
     def verify_inbound(self, req: InboundRequest, link_of: Callable[[str], dict | None]) -> dict:
         return self.inner.verify_inbound(req, link_of)

@@ -15,6 +15,7 @@ from ..domain.errors import AdapterError
 
 P = "WEARABLES_"
 PROVIDERS = ("garmin", "polar", "google-health", "strava")
+MIN_SIGNATURE_KEY_CHARS = 16  # a shorter shared secret is guessable: refused, not accepted
 
 
 def _env(name: str, default: str = "") -> str:
@@ -74,6 +75,12 @@ class Config:
             raise AdapterError("not_configured", "WEARABLES_MODE must be mock, sandbox or live")
         if mode == "mock" and not core_settings.settings.dev_mode:
             raise AdapterError("not_configured", "WEARABLES_MODE=mock is refused unless EOS_DEV_MODE=true")
+        garmin_key = _env("GARMIN_WEBHOOK_SIGNATURE_KEY")
+        if garmin_key and len(garmin_key) < MIN_SIGNATURE_KEY_CHARS:
+            raise AdapterError(
+                "not_configured",
+                f"WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY must be at least {MIN_SIGNATURE_KEY_CHARS} characters",
+            )
         strava_base = _env("STRAVA_API_BASE_URL", "https://www.strava.com/api/v3").rstrip("/")
         strava_site = strava_base.rsplit("/api/", 1)[0]
         return cls(
@@ -101,7 +108,7 @@ class Config:
             http_timeout_s=_int("HTTP_TIMEOUT_S", 15, 1, 120),
             garmin_client_id=_env("GARMIN_CLIENT_ID"),
             garmin_client_secret=_env("GARMIN_CLIENT_SECRET"),
-            garmin_webhook_signature_key=_env("GARMIN_WEBHOOK_SIGNATURE_KEY"),
+            garmin_webhook_signature_key=garmin_key,
             polar_client_id=_env("POLAR_CLIENT_ID"),
             polar_client_secret=_env("POLAR_CLIENT_SECRET"),
             polar_webhook_signature_key=_env("POLAR_WEBHOOK_SIGNATURE_KEY"),

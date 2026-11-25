@@ -21,6 +21,15 @@ from wear_support import (
 )
 
 API = r"https://www\.strava\.com/api/v3"
+# What Strava answers when the athlete's refresh token is dead, and when it is our own client secret it refuses.
+DEAD_REFRESH_TOKEN = {
+    "message": "Bad Request",
+    "errors": [{"resource": "RefreshToken", "field": "refresh_token", "code": "invalid"}],
+}
+OUR_CLIENT_SECRET = {
+    "message": "Bad Request",
+    "errors": [{"resource": "Application", "field": "client_secret", "code": "invalid"}],
+}
 OAUTH = r"https://www\.strava\.com/oauth"
 PERSON = "00000000-0000-4000-8000-0000000000a1"
 
@@ -447,13 +456,12 @@ def test_forged_delete_when_activity_still_exists_is_ignored(adapter, transport,
     assert len(records(ids["link"])) == 2
 
 
-def test_activity_delete_when_token_is_expired_is_ignored(adapter, transport, org):
+def test_activity_delete_with_an_expired_token_and_a_dead_refresh_token_is_ignored(adapter, transport, org):
     ids = make_link(org, "strava")
     transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
-    ctx = org.ctx("strava", ids["person"], ids["link"])
-    adapter.sync(ctx, {"account_link_id": ids["link"]})
-    assert len(records(ids["link"])) == 2
+    adapter.sync(org.ctx("strava", ids["person"], ids["link"]), {"account_link_id": ids["link"]})
     transport.on("GET", API + r"/activities/9876543210", status=401)
+    transport.on("POST", r"oauth/token", status=400, body=DEAD_REFRESH_TOKEN)
     out = adapter.parse_inbound(
         None, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
     ).output
@@ -495,3 +503,209 @@ def test_an_event_for_an_athlete_nobody_linked_announces_nothing(adapter, org):
 
 
 _ = timedelta
+
+
+# --- hardening of the confirmation: what a forged event must not be able to do, and what a real one must still do
+
+
+def _synced(adapter, transport, org, **fields):
+    ids = make_link(org, "strava", **fields)
+    transport.on("GET", API + r"/athlete/activities", "strava/activities.json")
+    adapter.sync(org.ctx("strava", ids["person"], ids["link"]), {"account_link_id": ids["link"]})
+    assert len(records(ids["link"])) == 2
+    return ids
+
+
+def _deauthorised(adapter):
+    return adapter.parse_inbound(
+        None, request(fixture("strava/event_athlete_deauthorized.json"), query={"provider": "strava"})
+    )
+
+
+def _deleted(adapter):
+    return adapter.parse_inbound(
+        None, request(fixture("strava/event_activity_delete.json"), query={"provider": "strava"})
+    )
+
+
+def _stored(link_id) -> dict:
+    from eos_wearables.infrastructure import crypto
+    from eos_wearables.infrastructure.config import Config
+
+    return json.loads(crypto.unseal(Config.load(), link_row(link_id).tokens_encrypted))
+
+
+@pytest.mark.parametrize(
+    "status,body",
+    [
+        (400, OUR_CLIENT_SECRET),
+        (401, OUR_CLIENT_SECRET),
+        (403, {}),
+        (404, {}),
+        (400, {}),
+        (401, None),
+        (400, {"errors": [{"field": "refresh_token", "code": "expired"}]}),
+    ],
+)
+def test_a_token_refusal_that_is_not_about_the_athletes_token_is_not_a_deauthorisation(
+    adapter, transport, org, status, body
+):
+    """A wrong client secret, a wrong URL or an unreadable answer is not the athlete withdrawing the app: a forged event
+    must not turn it into the deletion of their data. It is retried, not believed."""
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/athlete$", status=401)
+    transport.on("POST", r"oauth/token", status=status, body=body)
+    out = _deauthorised(adapter)
+    assert out.output is None and out.error["retryable"] is True
+    assert link_row(ids["link"]).status == "active" and len(records(ids["link"])) == 2
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503])
+def test_strava_failing_or_throttling_confirms_nothing_and_is_retried(adapter, transport, org, status):
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/athlete$", status=status)
+    out = _deauthorised(adapter)
+    assert out.error["retryable"] is True
+    transport.routes.clear()
+    transport.on("GET", API + r"/athlete$", status=401)
+    transport.on("POST", r"oauth/token", status=status)
+    assert _deauthorised(adapter).error["retryable"] is True
+    assert link_row(ids["link"]).status == "active" and len(records(ids["link"])) == 2
+
+
+def test_a_real_deauthorisation_revokes_the_link_deletes_the_data_and_keeps_no_token(adapter, transport, org):
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/athlete$", status=401)
+    transport.on("POST", r"oauth/token", status=401, body=DEAD_REFRESH_TOKEN)  # Strava answers 400 or 401 for it
+    out = _deauthorised(adapter).output["notifications"]
+    assert [n["kind"] for n in out] == ["link_revoked_by_provider"]
+    row = link_row(ids["link"])
+    assert row.status == "revoked" and records(ids["link"]) == []
+    assert row.tokens_encrypted is None
+
+
+def test_a_link_revoked_by_the_hub_keeps_no_token_either(adapter, transport, org):
+    ids = _synced(adapter, transport, org)
+    assert link_row(ids["link"]).tokens_encrypted
+    adapter.revoke_by_link_id(org.id, ids["link"])
+    assert link_row(ids["link"]).tokens_encrypted is None
+
+
+def test_a_real_delete_with_an_expired_token_is_confirmed_after_a_refresh(adapter, transport, org):
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/activities/9876543210", (401, None, {}, None), (404, None, {}, None))
+    transport.on("POST", r"oauth/token", "strava/token_refresh.json")
+    assert _deleted(adapter).output == {"notifications": []}
+    assert [r.provider_record_id for r in records(ids["link"])] == ["9876543211"]
+    assert _stored(ids["link"]) == {"access_token": "strava-access-2", "refresh_token": "strava-refresh-2"}
+    assert transport.sent("GET", "activities/9876543210")[-1].headers["authorization"] == "Bearer strava-access-2"
+
+
+def test_tokens_made_by_a_refresh_are_kept_even_when_the_check_then_fails(adapter, transport, org):
+    """Strava may retire the old refresh token when it issues a new one: the new pair is stored before anything else
+    can go wrong, or the athlete's link would be lost to a 5xx."""
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/activities/9876543210", (401, None, {}, None), (500, None, {}, None))
+    transport.on("POST", r"oauth/token", "strava/token_refresh.json")
+    out = _deleted(adapter)
+    assert out.error["retryable"] is True and len(records(ids["link"])) == 2
+    assert _stored(ids["link"])["refresh_token"] == "strava-refresh-2"
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_a_delete_check_that_strava_cannot_answer_is_retried_and_deletes_nothing(adapter, transport, org, status):
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/activities/9876543210", status=status)
+    assert _deleted(adapter).error["retryable"] is True
+    assert len(records(ids["link"])) == 2
+
+
+@pytest.mark.parametrize("bad", ["../athlete", "1/../../oauth/x", "12 34", "1e5", "-1", "9" * 21, "", "٣٤٥"])
+def test_ids_that_are_not_integers_never_reach_a_url(adapter, transport, org, bad):
+    _synced(adapter, transport, org)
+    delete = event("strava/event_activity_delete.json", object_id=bad)
+    assert verdict(adapter, delete)["verdict"] == "reject"
+    assert verdict(adapter, event("strava/event_activity_delete.json", owner_id=bad))["verdict"] == "reject"
+    before = len(transport.requests)
+    out = adapter.parse_inbound(
+        None, request(delete, query={"provider": "strava"})
+    ).output  # even if verify were skipped
+    assert out == {"notifications": []} and len(transport.requests) == before
+
+
+def test_a_no_from_strava_holds_the_next_confirmation_for_that_athlete_back(adapter, transport, org, clock):
+    """Forged events cost Strava calls: after a 'no', the same athlete is asked again only after the cooldown, and the
+    event is retried then, not dropped."""
+    _synced(adapter, transport, org)
+    transport.on("GET", API + r"/athlete$", status=200, body={"id": 12345678})
+    assert _deauthorised(adapter).output == {"notifications": []}
+    for _ in range(5):
+        held = _deauthorised(adapter)
+        assert held.error["code"] == "throttled" and 1 <= held.error["retry_after_s"] <= 30
+    assert len(transport.sent("GET", API + r"/athlete$")) == 1
+    clock.advance(seconds=31)
+    assert _deauthorised(adapter).output == {"notifications": []}
+    assert len(transport.sent("GET", API + r"/athlete$")) == 2
+
+
+def test_a_real_deauthorisation_right_after_a_forged_one_is_retried_not_lost(adapter, transport, org, clock):
+    ids = _synced(adapter, transport, org)
+    transport.on("GET", API + r"/athlete$", (200, '{"id": 12345678}', {}, None), (401, None, {}, None))
+    transport.on("POST", r"oauth/token", status=400, body=DEAD_REFRESH_TOKEN)
+    assert _deauthorised(adapter).output == {"notifications": []}  # forged: still authorised
+    assert _deauthorised(adapter).error["code"] == "throttled"  # the real one, held back, not believed and not dropped
+    clock.advance(seconds=31)
+    assert [n["kind"] for n in _deauthorised(adapter).output["notifications"]] == ["link_revoked_by_provider"]
+    assert link_row(ids["link"]).status == "revoked"
+
+
+def test_a_hub_refresh_that_is_refused_is_retried_once_with_the_tokens_kept_here(adapter, transport, org):
+    """A confirmation refreshes the token and keeps the new pair here; Strava may retire the old one, which is what the hub
+    still holds. The hub's next refresh is refused, and the kept copy is the one that works."""
+    ids = make_link(org, "strava", tokens={"access_token": "kept-a", "refresh_token": "kept-r"})
+    transport.on("POST", r"oauth/token", (400, "{}", {}, None), (200, fixture("strava/token_refresh.json"), {}, None))
+    out = adapter.refresh_authorisation(org.ctx("strava", ids["person"], ids["link"]))
+    assert out.error is None and out.output["secrets"]["refresh_token"] == "strava-refresh-2"
+    sent = [form_of(r)["refresh_token"] for r in transport.sent("POST", "oauth/token")]
+    assert sent == ["strava-refresh-1", "kept-r"]
+    assert link_row(ids["link"]).status == "active"
+
+
+def test_a_hub_refresh_refused_with_nothing_newer_kept_still_expires_the_link(adapter, transport, org):
+    ids = make_link(org, "strava")  # kept copy is the hub's own token: nothing newer to try
+    transport.on("POST", r"oauth/token", status=400, body={})
+    assert (
+        adapter.refresh_authorisation(org.ctx("strava", ids["person"], ids["link"])).error["code"] == "consent_required"
+    )
+    assert len(transport.sent("POST", "oauth/token")) == 1 and link_row(ids["link"]).status == "expired"
+
+
+def test_a_missing_data_key_stops_a_link_before_the_one_time_code_is_spent(adapter, transport, org, monkeypatch):
+    monkeypatch.delenv("WEARABLES_DATA_KEY")
+    ids = make_link(org, "strava", tokens={})
+    e = adapter.complete_authorisation(
+        org.ctx("strava", ids["person"], ids["link"], secrets={}),
+        {"code": "c", "code_verifier": "V" * 43, "redirect_uri": "https://hub.example/cb"},
+    ).error
+    assert e["code"] == "not_configured" and transport.requests == []
+    refreshed = adapter.refresh_authorisation(org.ctx("strava", ids["person"], ids["link"])).error
+    assert refreshed["code"] == "not_configured" and transport.requests == []
+
+
+def test_the_data_key_can_be_rotated_without_losing_stored_tokens():
+    from cryptography.fernet import Fernet
+    from eos_wearables.domain.errors import AdapterError
+    from eos_wearables.infrastructure import crypto
+
+    old, new = Fernet.generate_key().decode(), Fernet.generate_key().decode()
+
+    def cfg(keys: str):
+        return type("C", (), {"data_key": keys, "mode": "sandbox"})()
+
+    sealed = crypto.seal(cfg(old), "tokens")
+    assert crypto.unseal(cfg(f"{new},{old}"), sealed) == "tokens"  # the new key first, the old still reads
+    assert crypto.unseal(cfg(new), crypto.seal(cfg(f"{new},{old}"), "x")) == "x"  # and the first key is what seals
+    with pytest.raises(AdapterError):
+        crypto.unseal(cfg(new), sealed)  # once the old key is dropped, what it sealed is unreadable
+    with pytest.raises(AdapterError):
+        crypto.require_key(cfg(""))

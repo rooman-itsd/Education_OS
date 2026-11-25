@@ -6,7 +6,7 @@ Google Health API) and Strava: an athlete links their own account, the adapter r
 workouts as the provider makes them available, normalises them to one shape and fixed units, and lets the sports modules read
 them for that athlete. It also backs the coach dashboard's `wearables.alerts` widget.
 
-**Status:** built against the draft contracts (0.3.0). Runs in **mock** mode by default; sandbox and live need each provider's
+**Status:** built against the draft contracts (0.3.0). Runs in **sandbox** mode by default (mock is refused unless `EOS_DEV_MODE=true`); sandbox and live need each provider's
 approval (see "What is mocked until approval"). See [docs/prd.md](docs/prd.md). Heart rate, sleep and body composition are
 **health data**: read the "Personal data" section of the PRD before changing anything here.
 
@@ -50,14 +50,36 @@ Strava's API agreement allows its data to be shown only to the athlete it belong
 connection's `strava_shared_display_approved` is set after Strava approves wider display in writing and the athlete consented
 (it is checked again at every read, so withdrawing it hides the data at once). The alerts show Strava links only as "linked":
 no recency, no sync time. Strava sends **no signature**: an event is accepted only for our `subscription_id` and an athlete with
-an active link, and nothing in the body is trusted, the data is fetched afterwards with the athlete's own token.
+an active link, with numeric ids, and nothing in the body is trusted, the data is fetched afterwards with the athlete's own token.
+A deauthorisation or a delete removes data only after Strava confirms it with the athlete's stored tokens: a refresh token
+Strava names as invalid, or a 404 for the activity. Any other answer (our client secret refused, a 5xx, a rate limit, no stored
+tokens) deletes nothing and is retried when it may pass. Links made before tokens were stored cannot be confirmed until
+their next refresh stores them.
 
 ## Garmin
 
-Business Starter is push only; Enterprise pulls and can backfill (connection setting `garmin_tier`). Garmin documents its
-notification signing inside the program, so until Rooman is approved a push is trusted only as far as its user id matching an
-active link, and a forged push for a known athlete id could write records for them. Do not point a production Garmin
-endpoint at this adapter before the program's signing is added to `GarminProvider.verify_inbound`.
+Business Starter is push only; Enterprise pulls and can backfill (connection setting `garmin_tier`). A push is accepted only
+when it carries an HMAC-SHA256 of its raw body, as hex, in `garmin-webhook-signature` (or `x-garmin-signature`) made with
+`WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY` (at least 16 characters); without the key every push is refused. **Garmin documents
+its own signing only inside the program, so this header and scheme are not confirmed to be Garmin's.** Until the program
+confirms them, something in front of the adapter must sign what Garmin sends, or no push will be accepted (it fails closed).
+The signature has no timestamp, so a captured signed push can be replayed within the hub's de-duplication window.
+
+## Before enabling Strava or Garmin in production
+
+Three things below rest on assumptions nobody has checked against the real provider. Each fails safe (it refuses or
+retries, it never deletes on a guess), so a wrong guess shows up as events that are not accepted, not as lost or forged
+data. Check them in sandbox first:
+
+| Assumption | How to check | If it is wrong |
+|---|---|---|
+| **Strava names a withdrawn athlete's refresh token as invalid** (`errors[].field == "refresh_token"`, `code == "invalid"`). The shape comes from the existing test fixture and Strava developer-forum reports, not from a live deauthorisation. | Link a test athlete, then remove the app in their Strava settings. Strava sends the `authorized: false` event; the log should say the link was revoked, not `unconfirmed deauthorisation ignored`. | A real deauthorisation is retried, then dropped, and the athlete's data stays. Adjust `StravaProvider._refresh_token_is_dead`. |
+| **Garmin signs pushes the way `GarminProvider.verify_inbound` expects** (HMAC-SHA256 of the raw body, hex, in `garmin-webhook-signature` or `x-garmin-signature`). Garmin documents its signing only inside the program. | Ask Garmin (or read the program's notification documentation) for the real header and algorithm, then send a real push to a sandbox endpoint. | Every push is refused (fails closed). Until the scheme is confirmed, something in front of the adapter must sign what Garmin sends. |
+| **Garmin pushes have no timestamp** that could bound a replay. | Same documentation. | A captured signed push can be replayed within the hub's de-duplication window; a replayed deregistration would revoke a re-linked athlete's link and delete their data. |
+
+Also: a Strava confirmation can refresh the athlete's token. Strava's rule for the old refresh token (kept valid or
+retired) is unknown; the adapter keeps the new pair at once and retries a refused hub refresh with it, which is safe
+either way.
 
 ## Fitbit (Google Health API)
 
@@ -67,8 +89,8 @@ base URL and scopes have no default and are required, the resource paths and res
 
 ## Configuration
 
-Every key is in [config/env.example](config/env.example), prefixed `WEARABLES_`. `MODE` is `mock` (default), `sandbox` or
-`live`; the hub's per-call `ctx.mode` wins. **Live refuses to start** (`get_adapter()` raises `not_configured`) without the
+Every key is in [config/env.example](config/env.example), prefixed `WEARABLES_`. `MODE` is `sandbox` (default), `live` or
+`mock` (dev mode only); the hub's per-call `ctx.mode` wins. **Live refuses to start** (`get_adapter()` raises `not_configured`) without the
 developer app credentials of every provider in `PROVIDERS` (default all four). A connection's settings (in the hub):
 `data_types`, `share_with_coaches`, `strava_shared_display_approved`, `garmin_tier`.
 

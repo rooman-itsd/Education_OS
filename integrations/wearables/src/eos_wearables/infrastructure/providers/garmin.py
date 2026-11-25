@@ -2,8 +2,11 @@
 
 Garmin **pushes** summaries (Business Starter: push only, no history) or pings us to pull (Business Enterprise: pull and a
 month or more of history); the tier is the connection setting `garmin_tier`. Pushed entries are matched to an active link
-by Garmin's user id. docs/prd.md says what is not verified: Garmin documents notification signing inside the program, so
-until the program approves Rooman a push is trusted only as far as that match goes (README, "Garmin")."""
+by Garmin's user id. A push is accepted only with a valid HMAC-SHA256 of its body (hex, in `garmin-webhook-signature` or
+`x-garmin-signature`) under WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY, and without that key every push is refused. docs/prd.md
+says what is not verified: Garmin documents its own signing inside the program, so that header and scheme are this
+adapter's contract with whatever signs in front of it, not yet Garmin's (README, "Garmin"). The signature has no timestamp,
+so a captured signed push can be replayed; the hub's per-body de-duplication is the only guard."""
 
 from __future__ import annotations
 

@@ -28,6 +28,12 @@ def token_call(
         raise AdapterError(
             "auth_failed", "the provider refused the code or the refresh token", provider_code=provider_code(r)
         )
+    return token_answer(r, now, default_ttl=default_ttl)
+
+
+def token_answer(r, now: datetime, *, default_ttl: int = 3600) -> dict:
+    """Read a successful token answer. Split from token_call so a caller that must tell *why* a token call was
+    refused (Strava's deauthorisation check) can send the request itself and still parse the answer the same way."""
     body = json_body(r)
     access = body.get("access_token")
     if not isinstance(access, str) or not access:

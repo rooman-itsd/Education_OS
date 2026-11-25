@@ -268,3 +268,14 @@ def test_completing_the_link_asks_for_history_only_on_enterprise_and_never_fails
         and link_row(link).provider_subject == GARMIN_USER
         and transport.sent("GET", "backfill/")
     )
+
+
+def test_a_short_garmin_signature_key_is_refused_at_load(monkeypatch):
+    """A shared secret anyone could guess signs nothing: a key under 16 characters is a configuration error."""
+    from eos_wearables.domain.errors import AdapterError
+    from eos_wearables.infrastructure.config import Config
+
+    monkeypatch.setenv("WEARABLES_GARMIN_WEBHOOK_SIGNATURE_KEY", "short-key")
+    with pytest.raises(AdapterError) as e:
+        Config.load()
+    assert e.value.code == "not_configured" and "short-key" not in str(e.value)

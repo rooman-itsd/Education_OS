@@ -204,6 +204,7 @@ class WearablesAdapter:
     def _complete(self, c: Context, input: dict):
         a = _auth_input(input, ("code", "code_verifier", "redirect_uri"))
         provider, cfg = self._provider(c)
+        crypto.require_key(cfg)  # before the one-time code is spent: a missing key must not lose the athlete's tokens
         out = provider.complete_authorisation(c, a["code"], a["code_verifier"], a["redirect_uri"])
         link = c.account_link or {}
         link_id, person_id = str(link.get("id") or ""), str(link.get("person_id") or "")
@@ -245,27 +246,51 @@ class WearablesAdapter:
     def refresh_authorisation(self, ctx: Any, input: dict | None = None) -> Result:
         def run(c: Context):
             provider, cfg = self._provider(c)
+            link_id = str(c.account_link["id"]) if c.account_link and c.account_link.get("id") else ""
+            if link_id:
+                crypto.require_key(cfg)  # before the provider rotates the refresh token
             try:
-                out = provider.refresh_authorisation(c)
-                if out.get("secrets") and c.account_link and c.account_link.get("id"):
+                try:
+                    out = provider.refresh_authorisation(c)
+                except AdapterError as first:
+                    out = self._refresh_with_kept_tokens(c, provider, cfg, link_id, first)
+                if out.get("secrets") and link_id:
                     with self._db(c.organisation_id) as db:
                         row = db.scalar(
-                            scoped(
-                                db,
-                                select(LinkState).where(LinkState.account_link_id == str(c.account_link["id"])),
-                                LinkState,
-                            )
+                            scoped(db, select(LinkState).where(LinkState.account_link_id == link_id), LinkState)
                         )
                         if row is not None:
                             row.tokens_encrypted = crypto.seal(cfg, json.dumps(out["secrets"]))
                             db.commit()
                 return out
             except AdapterError as e:
-                if e.code == "consent_required" and c.account_link and c.account_link.get("id"):
-                    self._set_status(c, str(c.account_link["id"]), "expired", e.code)  # the link can no longer fetch
+                if e.code == "consent_required" and link_id:
+                    self._set_status(c, link_id, "expired", e.code)  # the link can no longer fetch
                 raise
 
         return self._run(ctx, run)
+
+    def _refresh_with_kept_tokens(
+        self, c: Context, provider: Provider, cfg: Config, link_id: str, refused: AdapterError
+    ) -> dict:
+        """The hub's refresh token was refused. Our own copy may be newer: a confirmation of an unsigned provider event
+        refreshes the token and keeps the result here, and the provider can retire the old token when it does. Try the
+        kept copy once; if there is none, or it is the same token, the refusal stands."""
+        if refused.code != "consent_required" or not link_id:
+            raise refused
+        with self._db(c.organisation_id) as db:
+            row = db.scalar(scoped(db, select(LinkState).where(LinkState.account_link_id == link_id), LinkState))
+            sealed = row.tokens_encrypted if row is not None else None
+        try:
+            kept = json.loads(crypto.unseal(cfg, sealed) or "{}") if sealed else {}
+        except Exception:
+            kept = {}
+        if not kept.get("refresh_token") or kept["refresh_token"] == c.secrets.get("refresh_token"):
+            raise refused
+        try:
+            return provider.refresh_authorisation(replace(c, secrets=kept))
+        except AdapterError:
+            raise refused from None
 
     def revoke_authorisation(self, ctx: Any, input: dict | None = None) -> Result:
         return self._run(ctx, lambda c: {"revoked": self._provider(c)[0].revoke_authorisation(c)})
@@ -373,6 +398,7 @@ class WearablesAdapter:
         if row.status != "revoked":
             row.status, row.status_since = "revoked", self.clock()
         row.last_data_at = row.last_synced_at = None
+        row.tokens_encrypted = None  # a revoked link keeps no credential: nothing is left to confirm or to leak
         self._audit(db, c, row.organisation_id, action, "link", row.account_link_id)
         db.commit()
         return deleted
@@ -796,10 +822,12 @@ class WearablesAdapter:
                 try:
                     unsealed = crypto.unseal(cfg, row.tokens_encrypted)
                     stored_tokens = json.loads(unsealed) if unsealed else {}
-                except Exception:
+                except Exception as e:
+                    log.warning("wearables: stored tokens are unreadable (%s)", type(e).__name__)
                     stored_tokens = {}
+            link = {"id": row.account_link_id, "person_id": row.person_id, "provider_subject": row.provider_subject}
             link_ctx = (
-                replace(c, secrets=stored_tokens)
+                replace(c, secrets=stored_tokens, account_link=link)
                 if c
                 else Context(
                     organisation_id=org,
@@ -807,19 +835,20 @@ class WearablesAdapter:
                     provider=provider.id,
                     mode=cfg.mode,
                     secrets=stored_tokens,
-                    account_link={
-                        "id": row.account_link_id,
-                        "person_id": row.person_id,
-                        "provider_subject": row.provider_subject,
-                    },
+                    account_link=link,
                 )
             )
+
+            def keep(tokens: dict) -> None:
+                """New tokens from a confirmation's refresh, stored at once: the provider may have retired the old."""
+                stored_tokens.update(tokens)
+                row.tokens_encrypted = crypto.seal(cfg, json.dumps(stored_tokens))
+                db.commit()
+
+            if ev.kind in ("revoked", "deleted") and not stored_tokens:
+                log.warning("wearables: no usable stored tokens for this link: the %s event is not confirmed", ev.kind)
             if ev.kind == "revoked":
-                deauthorized, new_tokens = provider.is_deauthorized(link_ctx)
-                if not deauthorized:
-                    if new_tokens:
-                        row.tokens_encrypted = crypto.seal(cfg, json.dumps(new_tokens))
-                        db.commit()
+                if not provider.is_deauthorized(link_ctx, keep):
                     log.warning("wearables: unconfirmed deauthorisation ignored")
                     return []
                 self._revoke_row(db, c, row, "link.revoked_by_provider")
@@ -829,17 +858,18 @@ class WearablesAdapter:
                 self._audit(db, c, org, "link.narrowed", "link", link_id)
                 db.commit()
             elif ev.kind == "deleted":
-                confirmed_ids = [rid for rid in ev.record_ids if provider.is_activity_deleted(link_ctx, rid)]
+                confirmed_ids = [rid for rid in ev.record_ids if provider.is_activity_deleted(link_ctx, rid, keep)]
                 if not confirmed_ids:
                     return []
-                db.execute(
+                res = db.execute(
                     delete(Record).where(
                         Record.account_link_id == link_id,
                         Record.organisation_id == org,
                         Record.provider_record_id.in_([i[:200] for i in confirmed_ids]),
                     )
                 )
-                self._audit(db, c, org, "records.deleted", "link", link_id)
+                if res.rowcount:
+                    self._audit(db, c, org, "records.deleted", "link", link_id)
                 db.commit()
         return []
 

@@ -5,6 +5,12 @@ subscription_id is ours and its owner_id is an athlete with an active link; noth
 says "something changed": the activity is fetched afterwards with the athlete's own token); and a deauthorisation arrives as
 an athlete update with `authorized: false`. Strava data is shown only to its athlete (display_to_others_allowed is false).
 
+Deleting is destructive, so a deauthorisation or a delete is confirmed with Strava, with the athlete's stored tokens, before
+anything is removed. Only Strava's own answer counts: a refresh token it names as invalid means the athlete withdrew the app,
+a 404 for the activity means it is gone. Anything else (our own client credentials refused, a 5xx, a rate limit, no stored
+tokens) confirms nothing: an answer we cannot read is retried, never taken as a yes. A refusal that blames our client secret
+is not the athlete's doing and must never delete their data.
+
 Rate limits are per app (200 per 15 minutes, 2,000 per day; non-upload reads 100 and 1,000): the gate below stops calling
 when a response says the window is used up, and answers throttled until it resets (:00, :15, :30, :45, and midnight UTC)."""
 
@@ -18,7 +24,7 @@ from urllib.parse import urlencode
 
 from ...domain.context import Context
 from ...domain.errors import AdapterError
-from ..http import map_status
+from ..http import map_status, provider_code
 from . import base
 from .base import (
     InboundEvent,
@@ -33,12 +39,23 @@ from .base import (
     reject,
     text,
 )
-from .oauth import token_call
+from .oauth import token_answer, token_call
 
 SCOPE = "activity:read_all"
 KJ_TO_KCAL = 0.239006
 CHALLENGE = re.compile(r"^[A-Za-z0-9._~\-]{1,256}$")
 _BLOCKED: dict[str, datetime] = {}  # until when Strava's window is used up (memory only; a restart just asks once more)
+CONFIRM_COOLDOWN_S = 30
+_UNCONFIRMED: dict[tuple[str, str], datetime] = {}  # (kind, athlete) -> when a confirmation last said "no"; memory only
+_ID = re.compile(r"^[0-9]{1,20}$")
+
+
+def numeric_id(value: object) -> str | None:
+    """A Strava id (athlete, activity) is a plain integer. Anything else never reaches a URL."""
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        return None
+    v = str(value)
+    return v if _ID.match(v) else None
 
 
 def next_window(now: datetime) -> datetime:
@@ -206,47 +223,130 @@ class StravaProvider(Provider):
             raise map_status(r)
         return r.status_code < 400
 
-    def is_deauthorized(self, ctx: Context | None) -> tuple[bool, dict | None]:
-        if ctx is None:
-            return False, None
-        token = ctx.secrets.get("access_token")
-        refresh = ctx.secrets.get("refresh_token")
-        if not token and not refresh:
-            return False, None
-        if token:
-            r = self.http.send(
-                "GET",
-                f"{self.cfg.strava_api_base_url}/athlete",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if r.status_code < 400:
-                return False, None
-            if r.status_code != 401:
-                return False, None
-        if refresh:
-            try:
-                out = self._tokens({"grant_type": "refresh_token", "refresh_token": refresh})
-                return False, out.get("secrets")
-            except AdapterError as e:
-                if e.provider_code in ("400", "401") or e.code in ("consent_required", "auth_failed"):
-                    return True, None
-                return False, None
-        return False, None
+    # --- confirmation of unsigned events (see the module docstring)
+    def _athlete_key(self, ctx: Context) -> str:
+        link = ctx.account_link or {}
+        return str(link.get("provider_subject") or ctx.connection_id or "")
 
-    def is_activity_deleted(self, ctx: Context | None, activity_id: str) -> bool:
+    def _hold_back(self, kind: str, ctx: Context) -> None:
+        """A forged event costs Strava calls and, with a refresh, a token rotation. After a confirmation said "no" for
+        this athlete, further ones wait: the event is retried later rather than asked again at once."""
+        until = _UNCONFIRMED.get((kind, self._athlete_key(ctx)))
+        now = self.clock()
+        if until and until > now:
+            raise AdapterError(
+                "throttled",
+                "a confirmation for this athlete was just made",
+                provider_code="strava_confirmation",
+                retry_after_s=max(1, int((until - now).total_seconds())),
+            )
+
+    def _not_confirmed(self, kind: str, ctx: Context) -> bool:
+        now = self.clock()
+        if len(_UNCONFIRMED) > 10_000:
+            for k in [k for k, v in _UNCONFIRMED.items() if v <= now]:
+                del _UNCONFIRMED[k]
+        _UNCONFIRMED[(kind, self._athlete_key(ctx))] = now + timedelta(seconds=CONFIRM_COOLDOWN_S)
+        return False
+
+    @staticmethod
+    def _refresh_token_is_dead(r) -> bool:
+        """Strava names the field it refused. `refresh_token` / `invalid` is the athlete's token; `client_secret` or
+        anything else is about us (or unreadable) and says nothing about the athlete."""
+        if r.status_code not in (400, 401):
+            return False
+        try:
+            body = r.json()
+        except ValueError:
+            return False
+        errors = body.get("errors") if isinstance(body, dict) else None
+        return isinstance(errors, list) and any(
+            isinstance(e, dict) and e.get("field") == "refresh_token" and e.get("code") == "invalid" for e in errors
+        )
+
+    def _refresh_for_confirmation(self, refresh: str, on_tokens: Callable[[dict], None] | None) -> dict | None:
+        """New tokens, or None when Strava says the refresh token is dead. Anything it does not say clearly raises."""
+        if not self.cfg.strava_client_id or not self.cfg.strava_client_secret:
+            raise AdapterError("not_configured", "Strava client credentials are not set")
+        self._gate()
+        r = self.http.send(
+            "POST",
+            self.cfg.strava_token_url,
+            data={
+                "client_id": self.cfg.strava_client_id,
+                "client_secret": self.cfg.strava_client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh,
+            },
+        )
+        self._note_usage(r)
+        if r.status_code == 429 or r.status_code >= 500:
+            raise map_status(r)
+        if self._refresh_token_is_dead(r):
+            return None
+        if r.status_code >= 400:
+            raise AdapterError(
+                "provider_error",
+                "Strava's refusal does not say the athlete withdrew the app: nothing is deleted",
+                provider_code=provider_code(r),
+            )
+        secrets = {"refresh_token": refresh, **token_answer(r, self.clock(), default_ttl=21600)["secrets"]}
+        if on_tokens:
+            on_tokens(secrets)  # stored before anything else can fail: Strava may have retired the old refresh token
+        return secrets
+
+    def is_deauthorized(self, ctx: Context | None, on_tokens: Callable[[dict], None] | None = None) -> bool:
         if ctx is None:
             return False
-        token = ctx.secrets.get("access_token")
-        if not token:
+        token, refresh = ctx.secrets.get("access_token"), ctx.secrets.get("refresh_token")
+        if not token and not refresh:
+            return False  # nothing to ask Strava with: unconfirmed
+        self._hold_back("deauthorisation", ctx)
+        if token:
+            self._gate()
+            r = self.http.send(
+                "GET", f"{self.cfg.strava_api_base_url}/athlete", headers={"Authorization": f"Bearer {token}"}
+            )
+            self._note_usage(r)
+            if r.status_code == 429 or r.status_code >= 500:
+                raise map_status(r)
+            if r.status_code != 401:
+                return self._not_confirmed("deauthorisation", ctx)  # still authorised, or a refusal that is not one
+        if not refresh:
+            return self._not_confirmed("deauthorisation", ctx)  # an expired token looks like a withdrawn one: no
+        if self._refresh_for_confirmation(refresh, on_tokens) is None:
+            return True
+        return self._not_confirmed("deauthorisation", ctx)
+
+    def is_activity_deleted(
+        self, ctx: Context | None, activity_id: str, on_tokens: Callable[[dict], None] | None = None
+    ) -> bool:
+        oid = numeric_id(activity_id)
+        if ctx is None or oid is None:
             return False
-        r = self.http.send(
-            "GET",
-            f"{self.cfg.strava_api_base_url}/activities/{activity_id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
+        token, refresh = ctx.secrets.get("access_token"), ctx.secrets.get("refresh_token")
+        if not token and not refresh:
+            return False
+        self._hold_back("deletion", ctx)
+        r = self._get_activity(token, oid) if token else None
+        if r is None or r.status_code == 401:
+            fresh = self._refresh_for_confirmation(refresh, on_tokens) if refresh else None
+            if fresh is None:
+                return self._not_confirmed("deletion", ctx)  # cannot ask; a withdrawn athlete's own event follows
+            r = self._get_activity(fresh["access_token"], oid)
         if r.status_code == 404:
             return True
-        return False
+        if r.status_code == 429 or r.status_code >= 500:
+            raise map_status(r)
+        return self._not_confirmed("deletion", ctx)
+
+    def _get_activity(self, token: str, oid: str):
+        self._gate()
+        r = self.http.send(
+            "GET", f"{self.cfg.strava_api_base_url}/activities/{oid}", headers={"Authorization": f"Bearer {token}"}
+        )
+        self._note_usage(r)
+        return r
 
     # --- data
     def pull(self, ctx: Context, data_type: str, start: date, end: date) -> list[Normal]:
@@ -307,19 +407,15 @@ class StravaProvider(Provider):
         # No signature exists, so identity is established by what only Strava and our own records can tell:
         if str(body.get("subscription_id")) != sub_id or body.get("object_type") not in ("activity", "athlete"):
             return reject()
-        owner = body.get("owner_id")
-        if (
-            isinstance(owner, bool)
-            or not isinstance(owner, (int, str))
-            or not str(owner).isdigit()
-            or len(str(owner)) > 20
-        ):
-            return reject()
-        link = link_of(str(owner))
+        owner = numeric_id(body.get("owner_id"))
+        object_id = numeric_id(body.get("object_id"))
+        if owner is None or object_id is None:
+            return reject()  # both end up in a URL or a lookup: only integers pass
+        link = link_of(owner)
         if link is None:
             return reject()
-        key = f"strava:{sub_id}:{body.get('object_type')}:{text(body.get('object_id'), 40)}:{text(body.get('aspect_type'), 10)}:{text(body.get('event_time'), 20)}"
-        return accept(key, {"connection_id": link["connection_id"], "account_link_subject": str(owner)})
+        key = f"strava:{sub_id}:{body.get('object_type')}:{object_id}:{text(body.get('aspect_type'), 10)}:{text(body.get('event_time'), 20)}"
+        return accept(key, {"connection_id": link["connection_id"], "account_link_subject": owner})
 
     def parse_inbound(self, req: InboundRequest) -> list[InboundEvent]:
         body = json_any(req.raw_body)
@@ -331,7 +427,7 @@ class StravaProvider(Provider):
             if aspect == "update" and str(updates.get("authorized")).lower() == "false":
                 return [InboundEvent("revoked", subject)]
             return []
-        oid = text(body.get("object_id"), 40)
+        oid = numeric_id(body.get("object_id"))
         if not oid:
             return []
         if aspect == "delete":
