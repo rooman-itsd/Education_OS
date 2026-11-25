@@ -9,11 +9,23 @@ from eos_external_university_portals.application.formats import edc, elmo
 from eup_support import FIXED_NOW, FIXTURES, export, outbox, partner, put, transcript
 
 
-def _import(adapter, org, docs, fmt, content: bytes, key: str = "in-1", settings: dict | None = None):
+def _import(
+    adapter,
+    org,
+    docs,
+    fmt,
+    content: bytes,
+    key: str = "in-1",
+    settings: dict | None = None,
+):
     provider = {"csv": "file", "pdf": "file", "elmo_xml": "elmo", "edc_jsonld": "edc"}[fmt]
     doc = put(docs, org.id, content)
     return adapter.import_records(
-        org.ctx(provider, "mock", settings), exchange_key=key, partner_id="uni-oslo", format=fmt, document_id=doc
+        org.ctx(provider, "mock", settings),
+        exchange_key=key,
+        partner_id="uni-oslo",
+        format=fmt,
+        document_id=doc,
     )
 
 
@@ -57,7 +69,13 @@ def test_the_exchange_is_recorded_without_the_transcript(adapter, docs, org):
 
 
 def test_the_official_elmo_example_imports_with_what_it_cannot_map(adapter, docs, org):
-    r = _import(adapter, org, docs, "elmo_xml", (FIXTURES / "elmo-schemas" / "example.xml").read_bytes())
+    r = _import(
+        adapter,
+        org,
+        docs,
+        "elmo_xml",
+        (FIXTURES / "elmo-schemas" / "example.xml").read_bytes(),
+    )
     assert r.ok, r.error
     out = r.output
     assert (
@@ -75,7 +93,13 @@ def test_the_official_elmo_example_imports_with_what_it_cannot_map(adapter, docs
 
 
 def test_the_commissions_edc_sample_is_read_and_its_unmappable_claim_listed(adapter, docs, org):
-    r = _import(adapter, org, docs, "edc_jsonld", (FIXTURES / "edc" / "Sample-CertOfPart-unsigned.jsonld").read_bytes())
+    r = _import(
+        adapter,
+        org,
+        docs,
+        "edc_jsonld",
+        (FIXTURES / "edc" / "Sample-CertOfPart-unsigned.jsonld").read_bytes(),
+    )
     assert r.ok, r.error
     assert r.output["transcript"]["learner"]["family_name"] and r.output["transcript"]["entries"] == []
     assert r.output["unmapped"] == [
@@ -117,13 +141,26 @@ def test_a_tampered_credit_value_is_read_as_written_and_flagged_when_signed(adap
 def test_elmo_lines_that_cannot_be_mapped_are_listed_by_position_and_reason(adapter, docs, org):
     xml = _exported(adapter, docs, org, "elmo_xml").decode()
     xml = xml.replace("<status>passed</status>", "<status>withdrawn</status>", 1)
-    xml = re.sub(r"<credit>\s*<scheme>indian_credit</scheme>\s*<value>3.5</value>\s*</credit>", "", xml)
+    xml = re.sub(
+        r"<credit>\s*<scheme>indian_credit</scheme>\s*<value>3.5</value>\s*</credit>",
+        "",
+        xml,
+    )
     r = _import(adapter, org, docs, "elmo_xml", xml.encode())
     assert r.output["unmapped"] == [
-        {"position": "report/learningOpportunitySpecification[1]/hasPart[1]", "reason": "unknown_status"},
-        {"position": "report/learningOpportunitySpecification[1]/hasPart[2]", "reason": "no_credit_value"},
+        {
+            "position": "report/learningOpportunitySpecification[1]/hasPart[1]",
+            "reason": "unknown_status",
+        },
+        {
+            "position": "report/learningOpportunitySpecification[1]/hasPart[2]",
+            "reason": "no_credit_value",
+        },
     ]
-    assert [e["course_code"] for e in r.output["transcript"]["entries"]] == ["PH103", "CS201"]
+    assert [e["course_code"] for e in r.output["transcript"]["entries"]] == [
+        "PH103",
+        "CS201",
+    ]
 
 
 def test_csv_rows_that_cannot_be_mapped_are_listed(adapter, docs, org):
@@ -150,9 +187,21 @@ def test_csv_rows_that_cannot_be_mapped_are_listed(adapter, docs, org):
 
 
 def test_the_partners_csv_mapping_is_applied_on_the_way_in(adapter, docs, org):
-    mapping = {"course_code": "Module", "title": "Name", "credits": "ECTS", "status": "Result"}
+    mapping = {
+        "course_code": "Module",
+        "title": "Name",
+        "credits": "ECTS",
+        "status": "Result",
+    }
     csv_text = "Module,Name,ECTS,Result\nM1,Maths,5,passed\n"
-    r = _import(adapter, org, docs, "csv", csv_text.encode(), settings=partner(csv_mapping=mapping))
+    r = _import(
+        adapter,
+        org,
+        docs,
+        "csv",
+        csv_text.encode(),
+        settings=partner(csv_mapping=mapping),
+    )
     assert r.output["transcript"]["entries"][0]["title"] == "Maths"
     missing = _import(adapter, org, docs, "csv", csv_text.encode(), key="in-2")
     assert missing.error.code == "invalid_request"  # without the mapping the columns are not there
@@ -182,11 +231,21 @@ HOSTILE = [
     ("elmo_xml", b'<elmo xmlns="https://github.com/emrex-eu/elmo-schemas/tree/v2"/>'),
     ("elmo_xml", b"<a>" * 5000),
     ("elmo_xml", "﻿<elmo/>".encode()),
+    ("elmo_xml", BILLION_LAUGHS.decode("ascii").encode("utf-16")),
+    (
+        "elmo_xml",
+        b'<?xml version="1.0" encoding="utf-16"?><elmo xmlns="https://github.com/emrex-eu/elmo-schemas/tree/v2"/>'.decode(
+            "ascii"
+        ).encode("utf-16"),
+    ),
     ("edc_jsonld", b""),
     ("edc_jsonld", b"[]"),
     ("edc_jsonld", b'{"type": "Other"}'),
     ("edc_jsonld", b'{"type": "VerifiableCredential"}'),
-    ("edc_jsonld", b'{"type": "VerifiableCredential", "credentialSubject": {"hasClaim": NaN}}'),
+    (
+        "edc_jsonld",
+        b'{"type": "VerifiableCredential", "credentialSubject": {"hasClaim": NaN}}',
+    ),
     (
         "edc_jsonld",
         b'{"type": "VerifiableCredential", "credentialSubject": {"hasClaim": [{"title": "x", "specifiedBy": {"creditPoint": [{"point": Infinity}]}}]}}',
@@ -212,7 +271,14 @@ def test_a_rejected_file_is_recorded_and_a_corrected_one_replaces_it(adapter, do
     bad = _import(adapter, org, docs, "csv", b"nothing useful", key="retry-1")
     assert bad.error.code == "invalid_request"
     assert len(outbox(org.id, "external-university-portals.exchange.rejected")) == 1
-    good = _import(adapter, org, docs, "csv", b"course_code,title,credits,status\nC,T,1,passed\n", key="retry-1")
+    good = _import(
+        adapter,
+        org,
+        docs,
+        "csv",
+        b"course_code,title,credits,status\nC,T,1,passed\n",
+        key="retry-1",
+    )
     assert good.ok
 
 
@@ -221,6 +287,29 @@ def test_an_entity_expanding_file_never_reaches_the_parser():
         elmo.read(BILLION_LAUGHS)
     with pytest.raises(edc.EdcError):
         edc.read(b'{"a": NaN}')
+
+
+def test_utf16_entity_expansion_and_non_utf8_are_refused():
+    utf16_payload = (
+        (
+            b'<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol"><!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;">]>'
+            b'<elmo xmlns="https://github.com/emrex-eu/elmo-schemas/tree/v2"><learner><givenNames>&lol2;</givenNames></learner><report/></elmo>'
+        )
+        .decode("ascii")
+        .encode("utf-16")
+    )
+    with pytest.raises(elmo.ElmoError, match="DOCTYPE|UTF-8"):
+        elmo.read(utf16_payload)
+
+    utf16_plain = (
+        (
+            b'<?xml version="1.0"?><elmo xmlns="https://github.com/emrex-eu/elmo-schemas/tree/v2"><learner/><report/></elmo>'
+        )
+        .decode("ascii")
+        .encode("utf-16")
+    )
+    with pytest.raises(elmo.ElmoError, match="UTF-8"):
+        elmo.read(utf16_plain)
 
 
 def test_a_hostile_credit_value_is_never_mapped():
@@ -234,7 +323,10 @@ def test_a_hostile_credit_value_is_never_mapped():
         },
     }
     tr, unmapped, _ = edc.read(json.dumps(doc).encode())
-    assert tr["entries"] == [] and [u["reason"] for u in unmapped] == ["bad_credit_value", "bad_credit_value"]
+    assert tr["entries"] == [] and [u["reason"] for u in unmapped] == [
+        "bad_credit_value",
+        "bad_credit_value",
+    ]
 
 
 def test_deeply_nested_elmo_parts_are_bounded(adapter, docs, org):
@@ -250,7 +342,13 @@ def test_deeply_nested_elmo_parts_are_bounded(adapter, docs, org):
 
 def test_the_import_size_limit(adapter, docs, org, monkeypatch):
     monkeypatch.setenv("EXTERNAL_UNIVERSITY_PORTALS_MAX_IMPORT_BYTES", "2048")
-    r = _import(adapter, org, docs, "csv", b"course_code,title,credits,status\n" + b"C,T,1,passed\n" * 400)
+    r = _import(
+        adapter,
+        org,
+        docs,
+        "csv",
+        b"course_code,title,credits,status\n" + b"C,T,1,passed\n" * 400,
+    )
     assert r.error.code == "invalid_request" and "limit" in r.error.detail
 
 
