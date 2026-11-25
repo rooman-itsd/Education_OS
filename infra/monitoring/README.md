@@ -51,12 +51,70 @@ bash infra/monitoring/install.sh
 ```
 
 Re-run `install.sh` after `eos-monitor.sh` changes (the copy in `/usr/local/bin` is not auto-updated); the
-settings in `/etc/eos/monitor.env` are kept. To set the webhook or a label:
+settings in `/etc/eos/monitor.env` are kept. Automated container deployments (`tools/scripts/deploy-api-lxc.sh`)
+install and enable `eos-monitor.timer` automatically in step 5c.
+
+To set the webhook or a label:
 
 ```
 nano /etc/eos/monitor.env          # EOS_MONITOR_WEBHOOK_URL="...", EOS_MONITOR_LABEL=staging
 systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
 ```
+
+## Configuring Telegram alerts
+
+The on-call group receives alerts through a Telegram bot (Bot API `sendMessage`). The token and the chat id are
+secrets: they live in the password manager and in `/etc/eos/monitor.env` (mode 600), never in git or chat.
+
+1. **Create the bot:** in Telegram, message `@BotFather`, send `/newbot`, name it (e.g. `EOS Alerts`) and keep
+   the token it returns.
+2. **Create the group:** a group (e.g. `EOS On-call`) with the on-call people, and add the bot. A group needs no
+   admin rights for the bot to post; a channel does.
+3. **Find the chat id:** in the group send `/start@<bot username>` (with privacy mode on, the default, a bot does
+   not see ordinary messages), then open `https://api.telegram.org/bot<token>/getUpdates` and read
+   `"chat":{"id":-100…}`, minus sign included.
+4. **Configure `/etc/eos/monitor.env`**, keeping the double quotes, and label the host it runs on (`staging` on
+   the staging container, `production` only on the production one):
+   ```bash
+   EOS_MONITOR_WEBHOOK_URL="https://api.telegram.org/bot<token>/sendMessage?chat_id=<chat_id>"
+   EOS_MONITOR_LABEL=staging
+   ```
+5. **Test it:** a message must reach the group (`200`), then the monitor must run without a `config` problem:
+   ```bash
+   ( . /etc/eos/monitor.env; curl -s -o /dev/null -w "%{http_code}\n" -H 'Content-Type: application/json' \
+     -d '{"text":"EOS: alert test"}' "$EOS_MONITOR_WEBHOOK_URL" )
+   systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
+   ```
+
+## Sentry error tracking
+
+`eos-monitor` watches the host; the API's unhandled errors go to Sentry (backend only in v1.0, sentry.io free
+plan), started by `init_sentry` in `apps/backend/src/eos_backend/observability.py` when a DSN is set.
+
+In `/opt/education-os/infra/docker/.env.api` (the DSN is a secret: password manager and this file only), with the
+environment naming the host (`staging` on the staging container, `production` only on the production one; unset
+means `staging`):
+
+```bash
+EOS_SENTRY_DSN=https://<public-key>@o<org-id>.ingest.sentry.io/<project-id>
+EOS_ENVIRONMENT=staging
+```
+
+Then, from `/opt/education-os`, restart the API and send a test event; it must appear under Issues in the Sentry
+project, tagged with that environment:
+
+```bash
+C="docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api"
+$C up -d api relay scheduler
+$C exec -T api python -c "from eos_backend.observability import init_sentry; import sentry_sdk
+print('sentry on:', init_sentry()); sentry_sdk.capture_message('EOS: Sentry test'); sentry_sdk.flush(10)"
+```
+
+Nothing personal is sent (DPDP): no request body, cookies, query string, local variables or user, and of the
+headers only user agent, content type, content length and accept; email addresses in messages and breadcrumbs become `[email]`. Each event is
+tagged with `request_id` and `organisation_id`, so `$C logs api | grep <request_id>` finds its log lines.
+
+What to do when an alert or a Sentry issue arrives is in [the on-call runbook](../runbooks/on-call.md).
 
 ## Day to day
 
