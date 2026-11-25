@@ -118,6 +118,18 @@ def on_status_changed(db: Session, event) -> None:
 
 
 def _send_to_admins(db: Session, event, template: str, extra: dict) -> None:
+    _send_to_users(db, event, admins(db, event.organisation_id), template, extra, "active admin")
+
+
+def _send_to_users(
+    db: Session,
+    event,
+    recipients: list,
+    template: str,
+    extra: dict,
+    role_label: str,
+) -> None:
+    """Resolve organisation name, build per-recipient client tokens, and dispatch via send_message."""
     organisation_name = hooks.name(db, event.organisation_id)
     if not organisation_name:
         # Unwired host (tenancy's entry point missing from this process), or an organisation that no longer
@@ -125,9 +137,8 @@ def _send_to_admins(db: Session, event, template: str, extra: dict) -> None:
         # sees it. Returning marked the event done and lost the email; sending would read "The trial for  has
         # ended".
         raise LookupError(f"no organisation name for {event.organisation_id}: {template} not sent")
-    recipients = admins(db, event.organisation_id)
     if not recipients:
-        log.warning("organisation %s has no active admin: %s not sent", event.organisation_id, template)
+        log.warning("organisation %s has no %s: %s not sent", event.organisation_id, role_label, template)
         return
     payload = event.payload or {}
     variables = {"organisation_name": organisation_name, **extra}
@@ -142,6 +153,31 @@ def _send_to_admins(db: Session, event, template: str, extra: dict) -> None:
             variables=variables,
             client_token=token,
         )
+
+
+def approvers(db: Session, payload: dict) -> list:
+    """Active delegated user if delegated_to is set, else active users holding approver_role."""
+    delegated_to = payload.get("delegated_to")
+    if delegated_to:
+        return [u for u in list_users(db) if u.id == str(delegated_to) and u.status == "active"]
+    role = payload.get("approver_role")
+    if not role:
+        return []
+    return [u for u in list_users(db) if role in (u.roles or []) and u.status == "active"]
+
+
+def on_step_overdue(db: Session, event) -> None:
+    if not event.organisation_id:
+        return
+    payload = event.payload or {}
+    recipients = approvers(db, payload)
+    variables = {
+        "chain_code": str(payload.get("chain_code") or ""),
+        "step_name": str(payload.get("step_name") or ""),
+        "entity_type": str(payload.get("entity_type") or ""),
+        "deadline": str(payload.get("deadline") or "")[:10] or "now",
+    }
+    _send_to_users(db, event, recipients, "workflow.step.overdue", variables, "active approver")
 
 
 def on_job_due(db: Session, event) -> None:
@@ -173,5 +209,6 @@ def on_job_due(db: Session, event) -> None:
 CONSUMERS = {
     **dict.fromkeys(EVENTS, on_event),
     **dict.fromkeys(STATUS_EVENTS, on_status_changed),
+    "workflow.step.overdue": on_step_overdue,
     "scheduler.job.due": on_job_due,
 }

@@ -255,6 +255,21 @@ DEFAULTS: dict[str, DefaultTemplate] = {
             },
             in_app_allowed=True,
         ),
+        _t(
+            "workflow.step.overdue",
+            "operational",
+            ["email", "in_app"],
+            ["organisation_name", "chain_code", "step_name", "entity_type", "deadline"],
+            {
+                ("email", "en"): (
+                    "Overdue approval step: ${step_name} (${chain_code})",
+                    "Approval step ${step_name} in workflow ${chain_code} (${entity_type}) passed its deadline "
+                    "(${deadline}) at ${organisation_name}. Please review and take action." + _FOOTER,
+                ),
+                ("in_app", "en"): (None, "Approval step ${step_name} (${chain_code}) is overdue since ${deadline}."),
+            },
+            in_app_allowed=True,
+        ),
     )
 }
 

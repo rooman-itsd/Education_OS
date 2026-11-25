@@ -412,3 +412,66 @@ def test_a_failed_sweep_is_reported_to_the_run_not_raised(monkeypatch):
     run_job(e)  # does not raise: the next tick runs the sweep again
     (report,) = finished_reports(e.payload["run_id"])
     assert report == {"run_id": e.payload["run_id"], "outcome": "failed", "detail": "RuntimeError"}
+
+
+def deliver_overdue(e) -> None:
+    with organisation_scope(e.organisation_id), SessionLocal() as session:
+        consumers.CONSUMERS[e.name](session, e)
+        session.commit()
+
+
+def test_overdue_workflow_step_mails_role_approvers_once():
+    o = Org.create(SessionLocal())
+    dept = o.user(SessionLocal(), ["department-admin"], "dept")
+    e = event(
+        "workflow.step.overdue",
+        o.id,
+        {
+            "request_id": str(uuid.uuid4()),
+            "chain_id": str(uuid.uuid4()),
+            "chain_code": "leave-approval",
+            "entity_type": "leave",
+            "entity_id": "lv-1",
+            "step_order": 1,
+            "step_name": "Department Head",
+            "approver_role": "department-admin",
+            "delegated_to": None,
+            "deadline": "2026-11-24T10:00:00+00:00",
+            "overdue_seconds": 3600,
+        },
+    )
+    deliver_overdue(e)
+    deliver_overdue(e)
+    (message,) = messages_of(o.id)
+    assert message.template_key == "workflow.step.overdue"
+    assert message.recipient_id == dept.id
+    dept_mails = [m for m in transport_module.sent if m.get("to") == dept.email]
+    assert len(dept_mails) == 1
+    assert "Department Head" in dept_mails[0]["subject"]
+    assert "leave-approval" in dept_mails[0]["body"] and NAME in dept_mails[0]["body"]
+
+
+def test_overdue_workflow_step_with_delegated_to_mails_only_the_delegate():
+    o = Org.create(SessionLocal())
+    dept = o.user(SessionLocal(), ["department-admin"], "dept")
+    delegate = o.user(SessionLocal(), ["faculty"], "delegate")
+    e = event(
+        "workflow.step.overdue",
+        o.id,
+        {
+            "request_id": str(uuid.uuid4()),
+            "chain_id": str(uuid.uuid4()),
+            "chain_code": "leave-approval",
+            "entity_type": "leave",
+            "entity_id": "lv-2",
+            "step_order": 1,
+            "step_name": "Department Head",
+            "approver_role": "department-admin",
+            "delegated_to": delegate.id,
+            "deadline": "2026-11-24T10:00:00+00:00",
+            "overdue_seconds": 7200,
+        },
+    )
+    deliver_overdue(e)
+    sent_to = {m.get("to") for m in transport_module.sent}
+    assert delegate.email in sent_to and dept.email not in sent_to

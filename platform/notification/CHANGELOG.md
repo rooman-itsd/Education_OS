@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Consumes `workflow.step.overdue`: notifies active users holding `approver_role`, or only the active `delegated_to` user when delegated, using the new `workflow.step.overdue` template (idempotent per event and recipient).
 - Notification history is now purged (DPDP gap D14, part of #148). `NOTIFICATION_HISTORY_RETENTION_DAYS` (default 90)
   was documented but read by nothing, so message addresses, subjects and in_app bodies were kept forever. New platform
   job `notification.prune-history` (`45 2 * * *`, entry point `eos.scheduler_jobs`, handled by the existing
