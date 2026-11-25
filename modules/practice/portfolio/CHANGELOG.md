@@ -2,6 +2,10 @@
 
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
+## [Unreleased]
+### Added
+- Frontend tests (vitest) for `portfolio.my-portfolio` and `portfolio.reviews-pending`: export contract, request URLs, rows and status badges, empty states, and 401/403/503/500 error handling with retry.
+
 ## [0.1.0] - 2026-10-31
 ### Added
 - Contracts: OpenAPI 3.1 specification, Outbox events (`portfolio.item.submitted`, `reviewed`, `withdrawn`), and permission catalog.
