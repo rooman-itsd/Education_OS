@@ -6,6 +6,11 @@ All notable changes to this module. Follows Keep a Changelog, semver per module.
 Contract 0.2.0 (additive): versions, `include_superseded`, 409 on a replayed intent after confirm.
 
 ### Security
+- Hardened upload constraints, pending upload cleanup, deletion privacy, and permissions (security review, November 2026, N11):
+  - `/upload-intent` and `/{id}/versions` now issue signed POST policy credentials (`method: "POST"`, `upload_fields`) binding `key`, `Content-Type`, and `content-length-range` into MinIO's signature rather than an unconstrained presigned PUT URL.
+  - Added hourly `documents.sweep-pending-uploads` scheduler job (`scheduler.job.due` consumer, `DOCUMENTS_PENDING_UPLOAD_TTL_SECONDS`, default 3600s) to remove abandoned `pending_upload` objects from storage and mark rows deleted.
+  - `delete_document` and the pending-upload sweep now blank `filename`, `title`, and `tags` (and publish an empty `filename` on `documents.document.deleted`) so `?status=deleted` retains no sensitive document names.
+  - Removed `documents:document:read-any` from `department-admin` in `contracts/permissions.yaml` so org-wide document reading stays restricted to `org-admin`.
 - Delete stored files on organisation purge: subscribe to `tenancy.organisation.purged`, remove all objects under
   the organisation's prefix in object storage, and publish `documents.organisation.purged` (security review,
   November 2026, N9, #676). The purge removes every version and delete marker of those objects, so a versioned bucket

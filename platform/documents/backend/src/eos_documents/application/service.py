@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from eos_core import events
-from eos_core.db import new_id, utcnow
+from eos_core.db import SessionLocal, new_id, utcnow
+from eos_core.tenant import organisation_scope, platform_scope
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -145,9 +146,9 @@ def _upload_key(organisation_id: str, document_id: str) -> str:
     return f"{organisation_id}/uploads/{document_id}/{new_id()}"
 
 
-def upload_url_for(doc: Document, store: StoragePort | None = None) -> tuple[str, int]:
-    """A presigned PUT for a document still waiting for its file. Once confirmed there is nothing to upload: a
-    replayed intent answers 409 rather than hand out a URL (it used to point at the confirmed file's own key)."""
+def upload_post_for(doc: Document, store: StoragePort | None = None) -> tuple[str, dict[str, str], int]:
+    """A signed presigned POST policy for a pending upload binding key, Content-Type, and size range.
+    Once confirmed there is nothing to upload: a replayed intent answers 409 rather than handing out credentials."""
     if doc.status != STATUS_PENDING_UPLOAD:
         raise DocumentError(
             f"Document is already {doc.status}; upload a new version instead (POST /{doc.id}/versions)", status=409
@@ -155,7 +156,20 @@ def upload_url_for(doc: Document, store: StoragePort | None = None) -> tuple[str
     cfg = load_settings()
     store = store or get_storage(cfg)
     key = doc.upload_path or doc.storage_path  # rows from before upload_path uploaded to storage_path
-    return store.generate_upload_url(doc.bucket, key, doc.mime_type, cfg.url_expires_seconds), cfg.url_expires_seconds
+    max_len = (
+        min(doc.size_bytes, cfg.max_file_size_bytes)
+        if doc.size_bytes and doc.size_bytes > 0
+        else cfg.max_file_size_bytes
+    )
+    min_len = max_len if (doc.size_bytes and doc.size_bytes > 0) else 1
+    url, fields = store.generate_upload_post(doc.bucket, key, doc.mime_type, min_len, max_len, cfg.url_expires_seconds)
+    return url, fields, cfg.url_expires_seconds
+
+
+def upload_url_for(doc: Document, store: StoragePort | None = None) -> tuple[str, int]:
+    """Presigned upload URL helper preserving the 2-tuple signature for callers that need only URL and expiry."""
+    url, _fields, exp = upload_post_for(doc, store)
+    return url, exp
 
 
 def confirm_upload(
@@ -425,6 +439,14 @@ def list_documents(
     return items, total
 
 
+def _blank_deleted_metadata(doc: Document, when: datetime) -> None:
+    doc.status = STATUS_DELETED
+    doc.filename = ""
+    doc.title = ""
+    doc.tags = []
+    doc.updated_at = when
+
+
 def delete_document(
     db: Session,
     organisation_id: str,
@@ -432,7 +454,7 @@ def delete_document(
     document_id: str,
     storage: StoragePort | None = None,
 ) -> bool:
-    """Soft delete document record and delete object from storage."""
+    """Soft delete document record, scrub filename/title metadata, and delete object from storage."""
     store = storage or get_storage()
     doc = get_document(db, organisation_id, document_id)
     if not doc:
@@ -442,7 +464,7 @@ def delete_document(
 
     # Remove the binary first. If storage refuses, nothing is marked deleted and nothing is published: the caller
     # can retry, and no row claims an erasure that did not happen. A pending upload's staged object goes too, so its
-    # presigned PUT cannot leave a file behind a deleted document.
+    # presigned upload cannot leave a file behind a deleted document.
     keys = [k for k in (doc.storage_path, doc.upload_path) if k]
     try:
         for key in keys:
@@ -451,8 +473,7 @@ def delete_document(
         logger.warning("Failed to delete object from storage %s: %s", doc.storage_path, exc)
         raise DocumentError("Storage is unavailable; the document was not deleted", status=503) from exc
 
-    doc.status = STATUS_DELETED
-    doc.updated_at = utcnow()
+    _blank_deleted_metadata(doc, utcnow())
     # The version before this one was superseded by it. Hand it on to whatever superseded this one: None when this
     # was the latest (so the previous version is current again and can be followed), or the newer version when this
     # was in the middle (so v1 -> v2 -> v3 becomes v1 -> v3, never two live heads).
@@ -461,19 +482,68 @@ def delete_document(
     ).scalars():
         earlier.superseded_by = doc.superseded_by
 
-    # Publish outbox event
+    # Publish outbox event without keeping sensitive filename after deletion
     events.publish(
         db,
         "documents.document.deleted",
         organisation_id,
         {
             "document_id": doc.id,
-            "filename": doc.filename,
+            "filename": "",
             "deleted_by": actor_id,
         },
         actor=actor_id,
     )
     return True
+
+
+def sweep_pending_uploads(
+    max_age_seconds: int | None = None,
+    storage: StoragePort | None = None,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Delete expired pending_upload staged objects across organisations and mark their rows deleted."""
+    cfg = load_settings()
+    store = storage or get_storage(cfg)
+    ttl = max_age_seconds if max_age_seconds is not None else cfg.pending_upload_ttl_seconds
+    current = now or utcnow()
+    cutoff = current - timedelta(seconds=ttl)
+
+    with platform_scope(), SessionLocal() as db:
+        org_ids = list(
+            db.execute(
+                select(Document.organisation_id)
+                .where(Document.status == STATUS_PENDING_UPLOAD, Document.created_at < cutoff)
+                .distinct()
+            ).scalars()
+        )
+
+    swept = 0
+    errors = 0
+    for org_id in org_ids:
+        with organisation_scope(org_id), SessionLocal() as db:
+            stale_docs = list(
+                db.execute(
+                    select(Document).where(
+                        Document.organisation_id == org_id,
+                        Document.status == STATUS_PENDING_UPLOAD,
+                        Document.created_at < cutoff,
+                    )
+                ).scalars()
+            )
+            for doc in stale_docs:
+                keys = [k for k in (doc.upload_path, doc.storage_path) if k]
+                try:
+                    for key in keys:
+                        store.delete_object(doc.bucket, key)
+                except Exception as exc:
+                    errors += 1
+                    logger.warning("Failed to sweep stale upload %s/%s: %s", doc.organisation_id, doc.id, exc)
+                    continue
+                _blank_deleted_metadata(doc, current)
+                swept += 1
+            db.commit()
+    return {"swept": swept, "errors": errors}
 
 
 def direct_upload(

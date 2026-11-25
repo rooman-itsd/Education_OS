@@ -10,3 +10,13 @@ events:
     description: A document was deleted from storage and metadata catalog.
   - name: documents.organisation.purged
     description: Stored document files of an organisation were deleted from object storage on organisation purge.
+  - name: documents.job.finished
+    description: The outcome of a documents.sweep-pending-uploads run, for platform/scheduler, which closes the run.
+    payload:
+      run_id: uuid
+      outcome: string
+      detail: string
+
+consumes:
+  - tenancy.organisation.purged
+  - scheduler.job.due

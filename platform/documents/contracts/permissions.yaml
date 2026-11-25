@@ -23,10 +23,9 @@ roles:
       - documents:document:delete
 
   - name: department-admin
-    description: "Department Admin: upload and view departmental documents."
+    description: "Department Admin: upload and view own documents."
     grants:
       - documents:document:read
-      - documents:document:read-any
       - documents:document:write
 
   - name: faculty

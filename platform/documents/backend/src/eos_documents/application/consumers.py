@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from ..infrastructure.config import load_settings
 from ..infrastructure.storage import get_storage
+from . import service
+from .jobs import SWEEP_PENDING
 
 log = logging.getLogger("eos.documents")
 
@@ -45,6 +47,29 @@ def on_purged(db: Session, event) -> None:
     )
 
 
+def on_job_due(db: Session, event) -> None:
+    """scheduler.job.due for documents.sweep-pending-uploads: sweep stale unconfirmed uploads."""
+    payload = event.payload or {}
+    if payload.get("job") != SWEEP_PENDING:
+        return
+    cfg = load_settings()
+    storage = get_storage(cfg)
+    try:
+        counts = service.sweep_pending_uploads(storage=storage)
+        outcome = "failed" if counts["errors"] else "succeeded"
+        detail = ", ".join(f"{k} {v}" for k, v in counts.items())
+    except Exception as exc:  # noqa: BLE001
+        log.exception("%s failed", SWEEP_PENDING)
+        outcome, detail = "failed", type(exc).__name__
+    events.publish(
+        db,
+        "documents.job.finished",
+        event.organisation_id,
+        {"run_id": payload.get("run_id"), "outcome": outcome, "detail": detail},
+    )
+
+
 CONSUMERS = {
     "tenancy.organisation.purged": on_purged,
+    "scheduler.job.due": on_job_due,
 }

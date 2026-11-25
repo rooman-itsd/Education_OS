@@ -5,10 +5,11 @@ from __future__ import annotations
 import io
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
 from minio import Minio
+from minio.datatypes import PostPolicy
 
 from .config import DocumentsSettings, load_settings
 
@@ -26,6 +27,18 @@ class StoragePort(Protocol):
 
     def generate_upload_url(self, bucket: str, key: str, mime_type: str, expires_seconds: int = 900) -> str:
         """Generate a presigned PUT URL for client-side direct upload."""
+        ...
+
+    def generate_upload_post(
+        self,
+        bucket: str,
+        key: str,
+        mime_type: str,
+        min_size_bytes: int,
+        max_size_bytes: int,
+        expires_seconds: int = 900,
+    ) -> tuple[str, dict[str, str]]:
+        """Generate a signed POST policy target (url, form fields) binding key, Content-Type, and size range."""
         ...
 
     def generate_download_url(self, bucket: str, key: str, filename: str, expires_seconds: int = 900) -> str:
@@ -71,7 +84,10 @@ class MinioStorage:
             access_key=settings.minio_access_key,
             secret_key=settings.minio_secret_key,
             secure=settings.minio_secure,
+            region=settings.minio_region,
         )
+        self._endpoint = settings.minio_endpoint
+        self._secure = settings.minio_secure
         self.default_bucket = settings.minio_bucket
         self._ensure_bucket(self.default_bucket)
 
@@ -90,6 +106,25 @@ class MinioStorage:
             key,
             expires=timedelta(seconds=expires_seconds),
         )
+
+    def generate_upload_post(
+        self,
+        bucket: str,
+        key: str,
+        mime_type: str,
+        min_size_bytes: int,
+        max_size_bytes: int,
+        expires_seconds: int = 900,
+    ) -> tuple[str, dict[str, str]]:
+        policy = PostPolicy(bucket, datetime.now(UTC) + timedelta(seconds=expires_seconds))
+        policy.add_equals_condition("key", key)
+        policy.add_equals_condition("Content-Type", mime_type)
+        policy.add_content_length_range_condition(min_size_bytes, max_size_bytes)
+        fields = self.client.presigned_post_policy(policy)
+        fields["key"] = key
+        fields["Content-Type"] = mime_type
+        scheme = "https" if self._secure else "http"
+        return f"{scheme}://{self._endpoint}/{bucket}", fields
 
     def generate_download_url(self, bucket: str, key: str, filename: str, expires_seconds: int = 900) -> str:
         safe_filename = filename.replace('"', '\\"')
@@ -164,6 +199,27 @@ class MemoryStorage:
 
     def generate_upload_url(self, bucket: str, key: str, mime_type: str, expires_seconds: int = 900) -> str:
         return f"https://storage.local.test/{bucket}/{key}?upload=1&expires={expires_seconds}"
+
+    def generate_upload_post(
+        self,
+        bucket: str,
+        key: str,
+        mime_type: str,
+        min_size_bytes: int,
+        max_size_bytes: int,
+        expires_seconds: int = 900,
+    ) -> tuple[str, dict[str, str]]:
+        url = (
+            f"https://storage.local.test/{bucket}/{key}?upload=1"
+            f"&mime_type={mime_type}&max_bytes={max_size_bytes}&expires={expires_seconds}"
+        )
+        fields = {
+            "key": key,
+            "Content-Type": mime_type,
+            "min_size_bytes": str(min_size_bytes),
+            "max_size_bytes": str(max_size_bytes),
+        }
+        return url, fields
 
     def generate_download_url(self, bucket: str, key: str, filename: str, expires_seconds: int = 900) -> str:
         return f"https://storage.local.test/{bucket}/{key}?download=1&filename={filename}&expires={expires_seconds}"

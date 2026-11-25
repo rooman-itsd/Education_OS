@@ -23,6 +23,7 @@ exposes:
 # Events this module subscribes to (by name, from other modules' events.yaml).
 consumes_events:
   - tenancy.organisation.purged
+  - scheduler.job.due
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
