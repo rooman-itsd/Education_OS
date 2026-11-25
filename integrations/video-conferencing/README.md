@@ -5,7 +5,7 @@ Zoom, Microsoft Teams, Webex and self-hosted Jitsi adapter for online classes, i
 create, change and cancel a meeting, give each participant the right join link, and report started, ended, attendance
 and recordings, the same way whichever provider an institution uses.
 
-**Status:** built against the draft contracts (0.3.0). Runs in **mock** mode by default; sandbox and live need each
+**Status:** built against the draft contracts (0.3.0). Runs in **sandbox** mode by default (**mock** only with `EOS_DEV_MODE=true`); sandbox and live need each
 provider's approval (see "What is mocked until approval"). See [docs/prd.md](docs/prd.md).
 
 ## Layout
@@ -50,14 +50,28 @@ are used for that call only; they are never logged, stored or returned. Inbound 
 has no "ended" event: list meetings whose report should now exist) and `renew_subscriptions` (Graph subscriptions last under
 3 days).
 
+## Callbacks and outbound URLs
+
+- **Zoom's `endpoint.url_validation`** is answered for a `plainToken` of base64url characters only, signed or not (Zoom
+  documents no signature on it). Its answer, HMAC(secret, `plainToken`), must never be usable as the signature of an event
+  (HMAC(secret, `v0:<ts>:<body>`)), which is why a token with a `:` is refused. Every other Zoom event needs a valid
+  `x-zm-signature` within the timestamp tolerance.
+- **Jitsi `base_url`** is the only address the adapter calls that an institution chooses. It must be `https` and resolve
+  only to globally routable addresses (no loopback, private, link-local, shared `100.64.0.0/10`, reserved or multicast
+  address, no IPv6 form carrying one). The healthcheck resolves it once and connects to that address, with the name kept
+  for `Host` and TLS, and does not follow redirects. A Jitsi server on a private network is not reachable unless the operator lists its
+  network in `VIDEO_CONFERENCING_JITSI_ALLOWED_NETWORKS` (an organisation's connection settings cannot); loopback,
+  link-local, multicast and the cloud metadata addresses (`169.254.169.254`, `100.100.100.200`, `168.63.129.16`,
+  `fd00:ec2::254`) stay refused whatever is listed. In dev mode only, names ending in `.example` or `.test` are accepted without a lookup, for the tests.
+
 ## Configuration
 
 Every key is in [config/env.example](config/env.example), prefixed `VIDEO_CONFERENCING_`. The ones that decide behaviour:
 
 | Key | Meaning |
 |---|---|
-| `MODE` | `mock` (default), `sandbox` or `live`. The hub's per-call `ctx.mode` wins. Live refuses to start (`get_adapter()` raises `not_configured`) without the data key, the public URL and the platform apps of every provider in `PROVIDERS` |
-| `DATA_KEY` | Fernet key protecting stored join links and passcodes; required outside mock |
+| `MODE` | `sandbox` (default), `live`, or `mock` (refused unless `EOS_DEV_MODE=true`). The hub's per-call `ctx.mode` wins. Live refuses to start (`get_adapter()` raises `not_configured`) without the data key, the public URL and the platform apps of every provider in `PROVIDERS` |
+| `DATA_KEY` | Fernet key protecting stored join links and passcodes; required outside dev-mode mock |
 | `ZOOM_*`, `TEAMS_*`, `WEBEX_*` | Rooman's platform apps (one per provider and deployment) |
 | `ZOOM_CREATE_LIMIT_PER_HOST_PER_DAY` | Zoom's 100 create/update calls per host per day; the adapter holds the 101st (`throttled`, `retry_after_s` to 00:00 UTC) or moves to the connection's host pool |
 | `WEBHOOK_TOLERANCE_S`, `ATTENDANCE_DELAY_MIN`, `JITSI_TOKEN_TTL_S` | as the PRD describes |

@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -43,6 +44,8 @@ from .base import (
 # Zoom's own machine codes (https://developers.zoom.us/docs/api/meetings/ error tables).
 USER_NOT_FOUND = {"1001", "1120"}
 MEETING_NOT_FOUND = {"3001"}
+# A url_validation challenge token: base64url characters only. It can never hold the ":" of a signed "v0:<ts>:<body>".
+CHALLENGE_TOKEN = re.compile(r"[A-Za-z0-9_-]{1,256}")
 KIND = {"MP4": "video", "M4A": "audio", "TRANSCRIPT": "transcript", "CC": "transcript", "CHAT": "chat"}
 _TOKENS: dict[tuple[str, str], tuple[str, float]] = {}  # (account, client id) -> (access token, expiry); memory only
 
@@ -367,9 +370,20 @@ class ZoomProvider(Provider):
         body = json_object(req.raw_body)
         if not secret or body is None or req.method.upper() != "POST":
             return reject()
-        # Every request is verified first, the url_validation handshake included (Zoom signs it like any event). The
-        # handshake answers HMAC(secret, plainToken), the same function as the signature HMAC(secret, "v0:<ts>:<body>"),
-        # so answering it unsigned would sign any event a stranger wrote (security review, November 2026, N13).
+        if body.get("event") == "endpoint.url_validation":
+            # Zoom's documentation does not say whether this challenge carries x-zm-signature (its own sample answers it
+            # unsigned), so the answer must be safe unsigned. It answers HMAC(secret, plainToken), the same function as an
+            # event's signature HMAC(secret, "v0:<ts>:<body>"): an attacker-chosen "v0:<ts>:<forged event>" would have
+            # the adapter sign that event for them (security review, November 2026, N13). Every signed message contains
+            # a ":", and a challenge token (Zoom's are 22 base64url characters) never does, so only tokens made of
+            # base64url characters are answered and no answer can ever be an event signature.
+            payload = body.get("payload")
+            plain = payload.get("plainToken") if isinstance(payload, dict) else None
+            if not isinstance(plain, str) or CHALLENGE_TOKEN.fullmatch(plain) is None:
+                return reject(400)
+            enc = hmac.new(secret.encode(), plain.encode(), hashlib.sha256).hexdigest()
+            return handshake(json.dumps({"plainToken": plain, "encryptedToken": enc}), "application/json")
+        # Every other event is verified first, signature and timestamp, before anything in it is read.
         ts = req.header("x-zm-request-timestamp")
         sig = req.header("x-zm-signature")
         if not ts.isdigit() or len(ts) > 12 or not sig.startswith("v0="):
@@ -379,12 +393,6 @@ class ZoomProvider(Provider):
         want = "v0=" + hmac.new(secret.encode(), b"v0:" + ts.encode() + b":" + req.raw_body, hashlib.sha256).hexdigest()
         if not hex_equal(want, sig):
             return reject()
-        if body.get("event") == "endpoint.url_validation":
-            plain = (body.get("payload") or {}).get("plainToken")
-            if not isinstance(plain, str) or not 1 <= len(plain) <= 256:
-                return reject(400)
-            enc = hmac.new(secret.encode(), plain.encode(), hashlib.sha256).hexdigest()
-            return handshake(json.dumps({"plainToken": plain, "encryptedToken": enc}), "application/json")
         payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
         obj = payload.get("object") if isinstance(payload.get("object"), dict) else {}
         # An app-level URL serves every institution that authorised Rooman's app: the account names the tenant, and
