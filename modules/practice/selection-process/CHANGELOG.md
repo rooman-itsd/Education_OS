@@ -2,6 +2,10 @@
 
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
+## [Unreleased]
+### Added
+- Frontend tests (vitest) for the four widgets: export contract, request URLs per open process, rows and status badges, empty states, skipped unreadable processes, and 401/403/502/503 error handling with retry.
+
 ## [0.1.0] - 2026-10-31
 ### Added
 - Complete generic selection-process domain, database schema, and Alembic initial migration `selection_process_0001`.
