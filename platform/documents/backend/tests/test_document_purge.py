@@ -104,12 +104,13 @@ def test_minio_storage_delete_prefix_raises_on_errors():
             self.code = code
 
     class FakeMinioClient:
-        def list_objects(self, bucket: str, prefix: str = "", recursive: bool = False):
+        def list_objects(self, bucket: str, prefix: str = "", recursive: bool = False, include_version: bool = False):
             from dataclasses import dataclass
 
             @dataclass
             class Item:
                 object_name: str
+                version_id: str | None = None
 
             return [Item("org-1/file1.pdf"), Item("org-1/file2.pdf")]
 
@@ -153,3 +154,51 @@ def test_on_purged_fails_and_does_not_publish_event_on_storage_error(db, monkeyp
         db.execute(select(OutboxEvent).where(OutboxEvent.name == "documents.organisation.purged")).scalars().all()
     )
     assert len(evs) == 0
+
+
+def test_minio_storage_delete_prefix_removes_every_version_and_delete_marker():
+    """On a versioned bucket a plain delete leaves the earlier versions readable: the purge must name each version and
+    each delete marker, the 'null' version of an object made before versioning was switched on included."""
+    from dataclasses import dataclass
+
+    from eos_documents.infrastructure.storage import MinioStorage
+
+    @dataclass
+    class Item:
+        object_name: str
+        version_id: str | None
+        is_delete_marker: bool = False
+
+    listed = [
+        Item("org-1/a.pdf", "v2"),
+        Item("org-1/a.pdf", "v1"),
+        Item("org-1/a.pdf", "mk1", is_delete_marker=True),
+        Item("org-1/old.pdf", "null"),
+        Item("org-1/plain.pdf", None),
+    ]
+
+    class FakeMinioClient:
+        def __init__(self):
+            self.list_kwargs = None
+            self.removed = None
+
+        def list_objects(self, bucket, prefix="", recursive=False, include_version=False):
+            self.list_kwargs = {"bucket": bucket, "prefix": prefix, "recursive": recursive, "version": include_version}
+            return listed if include_version else [i for i in listed if i.version_id in (None, "v2")]
+
+        def remove_objects(self, bucket, objects):
+            self.removed = sorted((o.name, o.version_id) for o in objects)
+            return []
+
+    storage = MinioStorage.__new__(MinioStorage)
+    storage.client = FakeMinioClient()
+
+    assert storage.delete_prefix("bucket", "org-1/") == 5
+    assert storage.client.list_kwargs == {"bucket": "bucket", "prefix": "org-1/", "recursive": True, "version": True}
+    assert storage.client.removed == [
+        ("org-1/a.pdf", "mk1"),
+        ("org-1/a.pdf", "v1"),
+        ("org-1/a.pdf", "v2"),
+        ("org-1/old.pdf", "null"),
+        ("org-1/plain.pdf", None),
+    ]
