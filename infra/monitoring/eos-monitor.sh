@@ -2,9 +2,13 @@
 # Checks the API host every minute (eos-monitor.timer) and alerts when something breaks and when it recovers.
 # Settings in /etc/eos/monitor.env (see eos-monitor.env.example); every one has a default.
 #
-# Checks: the API answers /api/v1/health; the compose services run; the last database backup is recent; the
-# API's 5xx answers and slow requests over the last few minutes, counted from its JSON `request` log lines
-# (apps/backend observability.py); the disk is not nearly full.
+# Checks: the API auto-deploy did not fail or hang; the API answers /api/v1/health; the compose services run; the
+# last database backup is recent; the API's 5xx answers and slow requests over the last few minutes, counted from
+# its JSON `request` log lines (apps/backend observability.py); the disk is not nearly full.
+#
+# While an auto-deploy runs (its mark, infra/autodeploy), the checks a deploy upsets (health, containers, errors,
+# slow) are logged, not alerted: the API restarts, and Docker answers slowly during the build. Up to
+# EOS_MONITOR_DEPLOY_MAX_MIN; a deploy running longer is an alert of its own.
 #
 # An alert is sent when a check starts failing, again every EOS_MONITOR_REMIND_MIN while it keeps failing,
 # and once when it recovers; never every minute. Alerts always go to the journal (journalctl -t eos-monitor),
@@ -27,6 +31,11 @@ REMIND_MIN="${EOS_MONITOR_REMIND_MIN:-60}"
 HEALTH_URL="${EOS_MONITOR_HEALTH_URL:-http://127.0.0.1:8000/api/v1/health}"
 HEALTH_RETRY_S="${EOS_MONITOR_HEALTH_RETRY_S:-10}"
 SERVICES="${EOS_MONITOR_SERVICES:-db api relay scheduler}"
+CONTAINERS_RETRY_S="${EOS_MONITOR_CONTAINERS_RETRY_S:-10}"
+DEPLOY_MARK="${EOS_MONITOR_DEPLOY_MARK:-/run/eos/api-deploying}"
+DEPLOY_MAX_MIN="${EOS_MONITOR_DEPLOY_MAX_MIN:-30}"
+DEPLOY_FAILED="${EOS_MONITOR_DEPLOY_FAILED:-/var/lib/eos/api-autodeploy.failed}"
+DEPLOY_UNIT="${EOS_MONITOR_DEPLOY_UNIT:-eos-api-autodeploy.service}"
 BACKUP_MARK="${EOS_MONITOR_BACKUP_MARK:-/var/backups/eos/last-success}"
 BACKUP_MAX_AGE_H="${EOS_MONITOR_BACKUP_MAX_AGE_H:-26}"
 WINDOW="${EOS_MONITOR_WINDOW:-5m}"
@@ -44,8 +53,8 @@ log() {
 }
 # Settings used in arithmetic must be whole numbers: a typo falls back to the default, with a line in the journal,
 # instead of a shell error that would stop every check after it.
-for setting in REMIND_MIN:60 HEALTH_RETRY_S:10 BACKUP_MAX_AGE_H:26 MAX_5XX:5 SLOW_MS:2000 MAX_SLOW:10 \
-  DISK_MAX_PCT:85 DOCKER_TIMEOUT_S:20; do
+for setting in REMIND_MIN:60 HEALTH_RETRY_S:10 CONTAINERS_RETRY_S:10 DEPLOY_MAX_MIN:30 BACKUP_MAX_AGE_H:26 \
+  MAX_5XX:5 SLOW_MS:2000 MAX_SLOW:10 DISK_MAX_PCT:85 DOCKER_TIMEOUT_S:20; do
   name="${setting%%:*}"
   case "${!name}" in
     '' | *[!0-9]*)
@@ -82,11 +91,18 @@ alert() {
 
 # One check's result: "" when it passes, else what is wrong. Remembers when it last alerted (a file per
 # check in STATE_DIR), so an alert goes out on a change and as a reminder, not every minute. The state changes
-# only once the alert was delivered.
+# only once the alert was delivered. A third argument `hold`: while a deploy runs, a failure is logged only.
 failing=0
+held=0
+deploying=0
 report() {
-  local name="$1" problem="$2" mark="$STATE_DIR/$1" now last
+  local name="$1" problem="$2" hold="${3:-}" mark="$STATE_DIR/$1" now last
   now="$(date +%s)"
+  if [ -n "$problem" ] && [ -n "$hold" ] && [ "$deploying" = 1 ]; then
+    held=$((held + 1))
+    log "failing $name during the deploy: $problem (not alerted while the deploy runs)"
+    return
+  fi
   if [ -n "$problem" ]; then
     failing=$((failing + 1))
     if [ ! -f "$mark" ]; then
@@ -117,6 +133,29 @@ if [ -z "$WEBHOOK" ] && [ -f "$CONFIG" ] &&
 fi
 report config "$problem"
 
+# The API auto-deploy. Its mark says one is running (it decides `deploying` for the checks below); a mark older than
+# DEPLOY_MAX_MIN is a deploy that hangs. Its failed file is a deploy it rolled back, kept until a newer commit
+# deploys; a failed run of its unit is a migration that failed (retried every two minutes, the API left alone).
+problem=""
+if [ -f "$DEPLOY_MARK" ]; then
+  since="$(stat -c %Y "$DEPLOY_MARK" 2>/dev/null)"
+  if [ -n "$since" ]; then
+    age_min=$((($(date +%s) - since) / 60))
+    if [ "$age_min" -lt "$DEPLOY_MAX_MIN" ]; then
+      deploying=1
+      log "a deploy is running (${age_min} min): health, containers, errors and slow are logged, not alerted"
+    else
+      problem="a deploy started ${age_min} min ago has not finished: journalctl -u $DEPLOY_UNIT"
+    fi
+  fi
+fi
+if [ -z "$problem" ] && [ -f "$DEPLOY_FAILED" ]; then
+  problem="the auto-deploy rolled back from $(oneline "$(head -c 40 "$DEPLOY_FAILED")"): journalctl -t eos-api-autodeploy"
+elif [ -z "$problem" ] && command -v systemctl >/dev/null && systemctl is-failed --quiet "$DEPLOY_UNIT" 2>/dev/null; then
+  problem="the last auto-deploy run failed: journalctl -t eos-api-autodeploy"
+fi
+report deploy "$problem"
+
 # The API answers. Asked twice before failing: an auto-deploy restarts it for a few seconds.
 health() {
   local body
@@ -125,22 +164,27 @@ health() {
 }
 problem="$(health)"
 [ -z "$problem" ] || { sleep "$HEALTH_RETRY_S"; problem="$(health)"; }
-report health "$problem"
+report health "$problem" hold
 
-# Every service runs (a stopped relay means no event is acted on, a stopped scheduler no job runs).
-problem=""
-running="$(compose ps --status running --services 2>&1)"
-rc=$?
-if [ "$rc" = 0 ]; then
-  missing=""
-  for s in $SERVICES; do printf '%s\n' "$running" | grep -qx "$s" || missing="$missing $s"; done
-  [ -z "$missing" ] || problem="not running:$missing"
-elif [ "$rc" = 124 ]; then
-  problem="docker did not answer within ${DOCKER_TIMEOUT_S}s"
-else
-  problem="docker compose ps failed: $(oneline "${running:0:120}")"
-fi
-report containers "$problem"
+# Every service runs (a stopped relay means no event is acted on, a stopped scheduler no job runs). A service missing
+# from the list is asked about once more: a busy Docker daemon has answered with a running container left out
+# (staging, 23 and 24 Nov: `db` "not running" while it had run since 9 Oct). Not after a timeout, already 20 s spent.
+containers() {
+  local running rc missing="" s
+  running="$(compose ps --status running --services 2>&1)"
+  rc=$?
+  if [ "$rc" = 0 ]; then
+    for s in $SERVICES; do printf '%s\n' "$running" | grep -qx "$s" || missing="$missing $s"; done
+    [ -z "$missing" ] || echo "not running:$missing"
+  elif [ "$rc" = 124 ]; then
+    echo "docker did not answer within ${DOCKER_TIMEOUT_S}s"
+  else
+    echo "docker compose ps failed: $(oneline "${running:0:120}")"
+  fi
+}
+problem="$(containers)"
+case "$problem" in "not running:"*) sleep "$CONTAINERS_RETRY_S"; problem="$(containers)" ;; esac
+report containers "$problem" hold
 
 # The nightly backup succeeded recently (eos-db-backup writes the mark only on success).
 problem=""
@@ -171,8 +215,8 @@ if logs="$(compose logs --no-log-prefix --since "$WINDOW" api 2>/dev/null)"; the
 else
   errors_problem="the api logs could not be read"
 fi
-report errors "$errors_problem"
-report slow "$slow_problem"
+report errors "$errors_problem" hold
+report slow "$slow_problem" hold
 
 # The disk the databases and backups live on.
 problem=""
@@ -182,5 +226,9 @@ report disk "$problem"
 
 if [ "$failing" -gt 0 ]; then
   exit 1
+fi
+if [ "$held" -gt 0 ]; then
+  log "ok apart from $held check(s) held while the deploy runs"
+  exit 0
 fi
 log "ok"

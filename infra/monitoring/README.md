@@ -11,8 +11,9 @@ alerts when something breaks and when it recovers. The API's own logs and Sentry
 | Check | Fails when (defaults; all in `/etc/eos/monitor.env`) |
 |---|---|
 | `config` | `EOS_MONITOR_WEBHOOK_URL` is in the settings file but did not load (an unquoted URL with `&`) |
+| `deploy` | the API auto-deploy rolled back (`/var/lib/eos/api-autodeploy.failed`), its last run failed (a migration), or a deploy has run for 30 minutes |
 | `health` | `http://127.0.0.1:8000/api/v1/health` does not answer `ok` within 5 s, twice 10 s apart |
-| `containers` | one of the compose services `db api relay scheduler` is not running, or Docker does not answer in 20 s |
+| `containers` | one of the compose services `db api relay scheduler` is not running (asked twice, 10 s apart), or Docker does not answer in 20 s |
 | `backup` | `/var/backups/eos/last-success` (written by `eos-db-backup` on success) is missing or 26 h old |
 | `errors` | more than 5 API answers with status 5xx in the last 5 minutes, or the API's logs cannot be read |
 | `slow` | more than 10 API requests slower than 2000 ms in the last 5 minutes |
@@ -20,6 +21,14 @@ alerts when something breaks and when it recovers. The API's own logs and Sentry
 
 `errors` and `slow` count the API's JSON `request` lines (`EOS_LOG_FORMAT=json`, the default; #379); before
 those are deployed, or with the console format, they always pass.
+
+**During an auto-deploy** (`/run/eos/api-deploying` exists, written by `../autodeploy/eos-api-autodeploy.sh` for
+the whole deploy, build included), `health`, `containers`, `errors` and `slow` are logged as `failing <check>
+during the deploy`, not alerted: the API restarts for about a minute, and Docker answers slowly while the image
+builds. `config`, `deploy`, `backup` and `disk` alert as always. After 30 minutes (`EOS_MONITOR_DEPLOY_MAX_MIN`)
+nothing is held any more and `deploy` fails. Before 25 Nov every merge sent four alerts per host (FAILING and
+RECOVERED, `health` and `containers`); a single `not running: db` on staging, with `db` up since October, came
+from one incomplete answer of a busy Docker daemon, which is why `containers` asks twice.
 
 **What it cannot see.** `/api/v1/health` is static: it answers `ok` while the API process runs, without asking
 the database (the `containers` and `errors` checks cover that). And this runs **on** the API host, so when the

@@ -30,6 +30,12 @@ COMPOSE="docker compose -f $APP/infra/docker/docker-compose.api.yml --env-file $
 exec 9>"${EOS_AUTODEPLOY_LOCK:-/run/lock/eos-api-autodeploy.lock}"
 flock -n 9 || exit 0
 
+# Exists while a deploy runs, build included. eos-monitor (infra/monitoring) reads it and holds the alerts a deploy
+# causes: the API restarting, Docker slow during the build. We hold the lock, so a mark already here is from a run
+# that was killed, and goes.
+DEPLOY_MARK="${EOS_AUTODEPLOY_MARK:-/run/eos/api-deploying}"
+rm -f "$DEPLOY_MARK"
+
 cd "$APP"
 if [ "$REF" = latest-tag ]; then
   git fetch -q --force --prune --prune-tags --tags origin
@@ -59,6 +65,9 @@ fi
 if [ "$(cat "$FAILED_FILE" 2>/dev/null || true)" = "$want" ] && [ "${FORCE:-}" != "1" ]; then
   exit 0  # rolled back from this commit already (logged then); wait for a new one, or FORCE=1
 fi
+mkdir -p "$(dirname "$DEPLOY_MARK")"
+: >"$DEPLOY_MARK"
+trap 'rm -f "$DEPLOY_MARK"' EXIT
 
 # The running API's image, kept under its own tag: the rebuild below takes over the name, and the prune at the end
 # would delete the old image once nothing names it. Empty on a host whose API is not running yet.
@@ -86,7 +95,13 @@ if ! $COMPOSE run --rm -T migrate; then
   logger -t eos-api-autodeploy "migrations failed at $want; API not restarted, staying on $have"
   exit 1
 fi
-$COMPOSE up -d --quiet-pull
+# Every service except migrate, without waiting on it (--no-deps): the schema is already up to date. A plain `up -d`
+# ran the migrate service a second time while api, relay and scheduler waited for it, stopped: 1.5 to 3.5 minutes of
+# outage on every merge on the staging and production hosts (25 Nov). Now only the restart itself is lost.
+services="$($COMPOSE config --services 2>/dev/null | grep -vx migrate || true)"
+[ -n "$services" ] || services="db api relay scheduler"
+# shellcheck disable=SC2086 # one service name per word
+$COMPOSE up -d --quiet-pull --no-deps $services
 
 healthy() {
   local cid
