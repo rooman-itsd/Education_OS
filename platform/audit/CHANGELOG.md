@@ -3,6 +3,7 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Records `workflow.step.overdue` in `AUDITED` (declared in `contracts/events.yaml` and `module.yaml`), matching `platform/workflow`'s expectation that SLA escalations are recorded in the audit trail.
 - Impersonated actions name the super admin (security review N3, #672). The consumer records the envelope's
   `impersonated_by` as `context.impersonated_by`, as `POST /records` already did from the token: until now a record
   written from an event under impersonation named only the impersonated user.

@@ -82,6 +82,7 @@ consumes:
   - workflow.request.approved
   - workflow.request.rejected
   - workflow.request.delegated
+  - workflow.step.overdue
   - documents.document.uploaded
   - documents.document.deleted
   - reporting.report.executed

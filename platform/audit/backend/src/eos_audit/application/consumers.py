@@ -73,6 +73,7 @@ AUDITED: tuple[str, ...] = (
     "workflow.request.approved",
     "workflow.request.rejected",
     "workflow.request.delegated",
+    "workflow.step.overdue",
     # documents
     "documents.document.uploaded",
     "documents.document.deleted",
