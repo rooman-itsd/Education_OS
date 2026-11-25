@@ -63,74 +63,58 @@ systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
 
 ## Configuring Telegram alerts
 
-Telegram channels and groups receive alerts via the standard Bot API (`sendMessage`):
+The on-call group receives alerts through a Telegram bot (Bot API `sendMessage`). The token and the chat id are
+secrets: they live in the password manager and in `/etc/eos/monitor.env` (mode 600), never in git or chat.
 
-1. **Create the bot:** Message `@BotFather` on Telegram, send `/newbot`, name it (e.g. `Education OS Alerts`),
-   and copy the HTTP API bot token (`<token>`, e.g. `123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ`).
-2. **Create the alerts channel or group:** Create a channel or group (e.g. `EOS Alerts`) for the on-call team,
-   and add the bot as an administrator with permission to post messages.
-3. **Find the chat ID:**
-   - Send a message to the channel or group.
-   - Run: `curl -s https://api.telegram.org/bot<token>/getUpdates`
-   - Look for `"chat":{"id": -100xxxxxxxxxx}`. Channel and supergroup IDs start with `-100`.
-4. **Configure `/etc/eos/monitor.env`:**
+1. **Create the bot:** in Telegram, message `@BotFather`, send `/newbot`, name it (e.g. `EOS Alerts`) and keep
+   the token it returns.
+2. **Create the group:** a group (e.g. `EOS On-call`) with the on-call people, and add the bot. A group needs no
+   admin rights for the bot to post; a channel does.
+3. **Find the chat id:** in the group send `/start@<bot username>` (with privacy mode on, the default, a bot does
+   not see ordinary messages), then open `https://api.telegram.org/bot<token>/getUpdates` and read
+   `"chat":{"id":-100…}`, minus sign included.
+4. **Configure `/etc/eos/monitor.env`**, keeping the double quotes, and label the host it runs on (`staging` on
+   the staging container, `production` only on the production one):
    ```bash
    EOS_MONITOR_WEBHOOK_URL="https://api.telegram.org/bot<token>/sendMessage?chat_id=<chat_id>"
-   EOS_MONITOR_LABEL=production
+   EOS_MONITOR_LABEL=staging
    ```
-   *Important:* Always enclose the URL in double quotes `""`. Because Telegram URLs contain query parameters
-   (`?chat_id=`), shell parsing without quotes cuts the line at `&` or misinterprets symbols, causing the
-   `config` check to fail.
-5. **Test the alert:**
+5. **Test it:** a message must reach the group (`200`), then the monitor must run without a `config` problem:
    ```bash
-   systemctl start eos-monitor.service
-   journalctl -t eos-monitor -n 20 --no-pager
+   ( . /etc/eos/monitor.env; curl -s -o /dev/null -w "%{http_code}\n" -H 'Content-Type: application/json' \
+     -d '{"text":"EOS: alert test"}' "$EOS_MONITOR_WEBHOOK_URL" )
+   systemctl start eos-monitor.service; journalctl -t eos-monitor -n 20 --no-pager
    ```
 
 ## Sentry error tracking
 
-While `eos-monitor` checks host health, containers, backups, and aggregated error rates, application-level Python
-exceptions are tracked by Sentry.
+`eos-monitor` watches the host; the API's unhandled errors go to Sentry (backend only in v1.0, sentry.io free
+plan), started by `init_sentry` in `apps/backend/src/eos_backend/observability.py` when a DSN is set.
 
-### Setup
-
-In `/opt/education-os/infra/docker/.env.api`:
-
-```bash
-# Sentry DSN (from your Sentry project settings). Empty: Sentry disabled.
-EOS_SENTRY_DSN="https://<public-key>@o<org-id>.ingest.sentry.io/<project-id>"
-# Environment tag: staging or production (defaults to staging if unset)
-EOS_ENVIRONMENT=production
-```
-
-After updating `.env.api`, restart the API service:
+In `/opt/education-os/infra/docker/.env.api` (the DSN is a secret: password manager and this file only), with the
+environment naming the host (`staging` on the staging container, `production` only on the production one; unset
+means `staging`):
 
 ```bash
-docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api up -d api
+EOS_SENTRY_DSN=https://<public-key>@o<org-id>.ingest.sentry.io/<project-id>
+EOS_ENVIRONMENT=staging
 ```
 
-### Privacy and DPDP compliance
+Then, from `/opt/education-os`, restart the API and send a test event; it must appear under Issues in the Sentry
+project, tagged with that environment:
 
-Sentry integration in `apps/backend/src/eos_backend/observability.py` is configured with strict DPDP (Digital Personal
-Data Protection) data scrubbing:
-- **Stripped:** Request bodies, query parameters, authorization headers, cookies, local variables, and user IPs.
-- **Redacted:** Email addresses in log messages and breadcrumbs are masked to `[email]`.
-- **Tagged:** Every event carries `request_id` (matching `X-Request-ID` and journal logs) and `organisation_id`
-  so errors can be correlated across systems without exposing student or user personal data.
+```bash
+C="docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api"
+$C up -d api relay scheduler
+$C exec -T api python -c "from eos_backend.observability import init_sentry; import sentry_sdk
+print('sentry on:', init_sentry()); sentry_sdk.capture_message('EOS: Sentry test'); sentry_sdk.flush(10)"
+```
 
-## On-call and incident response
+Nothing personal is sent (DPDP): no request body, cookies, query string, local variables or user, and of the
+headers only user agent, content type, content length and accept; email addresses in messages and breadcrumbs become `[email]`. Each event is
+tagged with `request_id` and `organisation_id`, so `$C logs api | grep <request_id>` finds its log lines.
 
-Per launch checklist v1.0 item 28:
-- Alerts fire immediately to the Telegram alerts channel on any check failure.
-- When an alert arrives, the on-call engineer checks:
-  ```bash
-  journalctl -t eos-monitor -g ALERT -n 20 --no-pager
-  ls /var/lib/eos-monitor       # lists currently failing checks
-  ```
-- If Sentry alerts on unhandled exceptions, correlate using the `request_id` tag with server logs:
-  ```bash
-  docker compose -f infra/docker/docker-compose.api.yml --env-file infra/docker/.env.api logs --tail 100 api | grep "<request_id>"
-  ```
+What to do when an alert or a Sentry issue arrives is in [the on-call runbook](../runbooks/on-call.md).
 
 ## Day to day
 
