@@ -296,18 +296,6 @@ def _receive(db, config, info, connection_key, channel, method, query, headers, 
     v = verify.output if verify.ok else {}
     verdict = v.get("verdict")
     if verdict == "handshake":
-        db.add(
-            InboundReceipt(
-                organisation_id=c.organisation_id if c else None,
-                adapter=adapter,
-                connection_id=c.id if c else None,
-                channel=channel,
-                verdict="handshake",
-                received_at=clock(),
-                processed_at=clock(),
-            )
-        )
-        db.commit()
         return _handshake(v.get("handshake_response"))
     if verdict != "accept":
         return _reject(
