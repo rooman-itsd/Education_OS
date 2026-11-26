@@ -49,7 +49,7 @@ describe("HistogramPanel accessibility", () => {
   it("offers every value in a data table with a caption, column headers and row headers", () => {
     render(<HistogramPanel title="Applications" data={DATA} xKey="year" series={SERIES} />);
     const table = screen.getByRole("table", { name: "Data of Applications" });
-    expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["year", "Applied", "Admitted"]);
+    expect(within(table).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Year", "Applied", "Admitted"]);
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(1 + DATA.length);
     expect(within(rows[2]!).getByRole("rowheader").textContent).toBe("2024");

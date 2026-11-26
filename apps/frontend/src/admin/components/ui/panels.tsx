@@ -59,7 +59,7 @@ export const ChartDataTable: React.FC<{ caption: string; data: Row[]; xKey: stri
     <caption>{caption}</caption>
     <thead>
       <tr>
-        <th scope="col">{xKey}</th>
+        <th scope="col">{xKey.charAt(0).toUpperCase() + xKey.slice(1)}</th>
         {series.map((s) => (
           <th key={s.key} scope="col">
             {s.name}
@@ -151,7 +151,7 @@ export const HistogramPanel: React.FC<{
           ))}
         </div>
       )}
-      <div className="px-5 pt-3 pb-4 flex-1">
+      <div className="relative px-5 pt-3 pb-4 flex-1">
         <div
           className="w-full"
           style={{ height }}
