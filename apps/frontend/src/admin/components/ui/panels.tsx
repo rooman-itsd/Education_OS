@@ -32,6 +32,54 @@ const TOOLTIP_STYLE = {
   labelStyle: { color: '#12233F', fontWeight: 600 }
 };
 
+/** Hidden from sight, read by screen readers. Inline because admin.css is generated from the class names it finds and carries no sr-only rule. */
+const VISUALLY_HIDDEN: React.CSSProperties = { position: 'absolute', width: 1, height: 1, margin: -1, padding: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 };
+
+/**
+ * What a chart says in words, for a screen reader: per series the highest and the lowest value with the label they
+ * fall on, and the latest value. The chart is drawn as SVG and has no text of its own; the data table beside it
+ * (ChartDataTable) has every value.
+ */
+export function chartSummary(title: string, data: Row[], xKey: string, series: Series[]): string {
+  if (data.length === 0) return `${title}: no data.`;
+  const fmt = (v: number) => v.toLocaleString('en-IN');
+  const parts = series.map((s) => {
+    const points = data.map((r) => ({ at: String(r[xKey] ?? ''), v: Number(r[s.key]) || 0 }));
+    const high = points.reduce((a, b) => (b.v > a.v ? b : a));
+    const low = points.reduce((a, b) => (b.v < a.v ? b : a));
+    const last = points[points.length - 1]!;
+    return `${s.name}: highest ${fmt(high.v)} at ${high.at}, lowest ${fmt(low.v)} at ${low.at}, latest ${fmt(last.v)} at ${last.at}.`;
+  });
+  return `${title}, ${data.length} ${data.length === 1 ? 'point' : 'points'}. ${parts.join(' ')}`;
+}
+
+/** The chart's data as a table for assistive technology: one row per x value, one column per series. */
+export const ChartDataTable: React.FC<{ caption: string; data: Row[]; xKey: string; series: Series[] }> = ({ caption, data, xKey, series }) => (
+  <table style={VISUALLY_HIDDEN}>
+    <caption>{caption}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{xKey}</th>
+        {series.map((s) => (
+          <th key={s.key} scope="col">
+            {s.name}
+          </th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {data.map((r, i) => (
+        <tr key={i}>
+          <th scope="row">{String(r[xKey] ?? '')}</th>
+          {series.map((s) => (
+            <td key={s.key}>{(Number(r[s.key]) || 0).toLocaleString('en-IN')}</td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
+
 /** A small text link for panel headers, e.g. "View admissions →". */
 export const PanelLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
   <button onClick={onClick} className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:opacity-80 pt-0.5 whitespace-nowrap">
@@ -104,7 +152,12 @@ export const HistogramPanel: React.FC<{
         </div>
       )}
       <div className="px-5 pt-3 pb-4 flex-1">
-        <div className="w-full" style={{ height }} role="img" aria-label={`${view === 'bars' ? 'Bar chart' : 'Trend'}: ${title}`}>
+        <div
+          className="w-full"
+          style={{ height }}
+          role="img"
+          aria-label={`${view === 'bars' ? 'Bar chart' : 'Trend'}: ${chartSummary(title, data, xKey, series)}`}
+        >
           <ResponsiveContainer width="100%" height="100%">
             {view === 'bars' ? (
               <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="28%" barGap={4}>
@@ -143,6 +196,7 @@ export const HistogramPanel: React.FC<{
             )}
           </ResponsiveContainer>
         </div>
+        <ChartDataTable caption={`Data of ${title}`} data={data} xKey={xKey} series={series} />
       </div>
       {footer}
     </section>
