@@ -33,9 +33,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_ex_0001_to_ex_0005_with_one_head():
+def test_the_chain_is_ex_0001_to_ex_0006_with_one_head():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["ex_0005"]
+    assert script.get_heads() == ["ex_0006"]
+    assert script.get_revision("ex_0006").down_revision == "ex_0005"
     assert script.get_revision("ex_0005").down_revision == "ex_0004"
     assert script.get_revision("ex_0004").down_revision == "ex_0003"
     assert script.get_revision("ex_0003").down_revision == "ex_0002"
@@ -224,6 +225,7 @@ def test_the_migration_creates_every_model_table_and_no_other():
         ("*_0001_initial.py", "ex_0001", "TABLES"),
         ("*_0004_offering_ref_consumers.py", "ex_0004", "NEW_TABLES"),
         ("*_0005_candidate_table.py", "ex_0005", "TABLE"),
+        ("*_0006_mark_entry.py", "ex_0006", "TABLE"),
     ):
         path = next((DB_DIR / "migrations" / "versions").glob(pattern))
         spec = util.spec_from_file_location(name, path)
@@ -235,7 +237,7 @@ def test_the_migration_creates_every_model_table_and_no_other():
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 13
+    assert len(TABLES) == 14
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name
@@ -247,9 +249,9 @@ def test_no_table_for_a_decision_that_is_not_taken():
     they are a later slice. The candidate table is schema only and is the one table that carries `student_id` (the
     canonical `person_id`)."""
     names = {t.name for t in TABLES}
-    for blocked in ("hall_ticket", "mark_entry", "result", "registration_ref"):
+    for blocked in ("hall_ticket", "result", "registration_ref"):
         assert f"{PREFIX}{blocked}" not in names
-    assert f"{PREFIX}candidate" in names
+    assert f"{PREFIX}candidate" in names and f"{PREFIX}mark_entry" in names
     for table in TABLES:
         if table.name != f"{PREFIX}candidate":
             assert "student_id" not in table.columns, table.name
@@ -339,8 +341,12 @@ def test_ex_0003_downgrade_removes_only_its_two_indexes():
     command.downgrade(cfg, "ex_0002")
     with engine.connect() as conn:
         after = {i["name"] for i in inspect(conn).get_indexes(f"{PREFIX}exam_duty")}
-        # the tables of ex_0004 and ex_0005 go with them
-        other_tables = {t.name for t in TABLES} - {f"{PREFIX}processed_event", f"{PREFIX}candidate"}
+        # the tables of ex_0004, ex_0005 and ex_0006 go with them
+        other_tables = {t.name for t in TABLES} - {
+            f"{PREFIX}processed_event",
+            f"{PREFIX}candidate",
+            f"{PREFIX}mark_entry",
+        }
         assert other_tables <= set(inspect(conn).get_table_names())
     assert before - after == DUTY_INDEXES and after <= before  # nothing else went, nothing came
 
@@ -470,7 +476,7 @@ def test_ex_0005_creates_only_the_candidate_table_with_the_approved_columns():
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
         assert CANDIDATE not in names
-        assert {t.name for t in TABLES} - {CANDIDATE} <= names  # nothing else went
+        assert {t.name for t in TABLES} - {CANDIDATE, f"{PREFIX}mark_entry"} <= names  # nothing else went
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert CANDIDATE in inspect(conn).get_table_names()
@@ -532,3 +538,66 @@ def test_postgres_ex_0005_sql_creates_the_candidate_table_with_rls_and_drops_onl
     assert f"ALTER TABLE {CANDIDATE} FORCE ROW LEVEL SECURITY;" in created
     assert f"CREATE POLICY tenant_isolation ON {CANDIDATE}" in created and created.count("CREATE POLICY") == 1
     assert [n for n in re.findall(r"DROP TABLE (\w+)", dropped) if "alembic" not in n] == [CANDIDATE]
+
+
+# ------------------------------------------------------------------------------------------------ ex_0006: mark entry
+
+MARK_ENTRY = f"{PREFIX}mark_entry"
+MARK_COLUMNS = {  # name: (type name, length, precision/scale, nullable)
+    "id": ("VARCHAR", 36, None, False),
+    "organisation_id": ("VARCHAR", 36, None, True),  # the module's tenant convention (TenantMixin)
+    "created_at": ("DATETIME", None, None, False),
+    "candidate_id": ("VARCHAR", 36, None, False),
+    "marks_obtained": ("NUMERIC", None, (8, 2), True),
+    "absent": ("BOOLEAN", None, None, False),
+    "entered_by": ("VARCHAR", 36, None, False),
+    "entered_at": ("DATETIME", None, None, False),
+    "moderation_delta": ("NUMERIC", None, (8, 2), True),
+    "moderation_reason": ("VARCHAR", 500, None, True),
+    "moderated_by": ("VARCHAR", 36, None, True),
+    "status": ("VARCHAR", 20, None, False),
+}
+
+
+def test_ex_0006_creates_only_the_mark_entry_table_with_the_prd_columns():
+    cfg, engine = _upgraded()
+    with engine.connect() as conn:
+        columns = _columns(conn, MARK_ENTRY)
+        assert set(columns) == set(MARK_COLUMNS)
+        for name, (type_name, length, scale, nullable) in MARK_COLUMNS.items():
+            column = columns[name]
+            assert type(column["type"]).__name__.upper() == type_name, name
+            assert getattr(column["type"], "length", None) == length, name
+            if scale:
+                assert (column["type"].precision, column["type"].scale) == scale, name
+            assert column["nullable"] is nullable, name
+            assert column["default"] is None, name  # no database default on any column
+        inspector = inspect(conn)
+        assert inspector.get_pk_constraint(MARK_ENTRY)["constrained_columns"] == ["id"]
+        uniques = {u["name"]: u["column_names"] for u in inspector.get_unique_constraints(MARK_ENTRY)}
+        assert uniques == {"uq_examinations_mark_entry_candidate": ["candidate_id"]}
+        foreign_keys = {
+            fk["constrained_columns"][0]: (fk["referred_table"], fk["referred_columns"])
+            for fk in inspector.get_foreign_keys(MARK_ENTRY)
+        }
+        assert foreign_keys == {"candidate_id": (f"{PREFIX}candidate", ["id"])}  # inside the module
+        assert {i["name"]: i["column_names"] for i in inspector.get_indexes(MARK_ENTRY)} == {
+            f"ix_{MARK_ENTRY}_organisation_id": ["organisation_id"]
+        }
+    command.downgrade(cfg, "ex_0005")
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+        assert MARK_ENTRY not in names and f"{PREFIX}candidate" in names  # only its own table went
+        assert {t.name for t in TABLES} - {MARK_ENTRY} <= names
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert MARK_ENTRY in inspect(conn).get_table_names()
+
+
+def test_the_mark_entry_model_has_the_columns_and_no_defaults_of_the_migration():
+    table = next(t for t in TABLES if t.name == MARK_ENTRY)
+    assert set(table.columns.keys()) == set(MARK_COLUMNS)
+    for column in table.columns:
+        assert column.server_default is None, column.name
+        if column.name not in {"id", "created_at", "absent"}:
+            assert column.default is None, column.name

@@ -72,6 +72,7 @@ CONFLICTS = {
     "duty_on_paper": ("duty_exists", "another request assigned this duty; try again"),
     "paper_in_session": ("paper_already_scheduled", "another request scheduled a paper of this session; try again"),
     "paper_component": ("paper_exists", "another request created a paper for a component; try again"),
+    "mark_entry": ("marks_conflict", "another request entered marks for this candidate; try again"),
 }
 
 

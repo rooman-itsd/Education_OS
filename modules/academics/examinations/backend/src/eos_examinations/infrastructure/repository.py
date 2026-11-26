@@ -77,6 +77,9 @@ CONSTRAINTS = {
             ("organisation_id", "staff_id", "duty_type", "exam_paper_id"),
         ),
     },
+    "mark_entry": {
+        "uq_examinations_mark_entry_candidate": ("examinations_mark_entry", ("candidate_id",)),
+    },
     "audit_token": {
         "uq_examinations_audit_client_token": ("examinations_audit_entry", ("organisation_id", "client_token")),
     },
