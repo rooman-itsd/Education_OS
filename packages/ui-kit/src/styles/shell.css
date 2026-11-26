@@ -464,6 +464,8 @@
 }
 .eos-topbar__menu {
   display: inline-flex;
+  /* The topbar is a flex row: without this the 36px button shrinks to 21px at 320px, below the 24px minimum target (WCAG 2.5.8). */
+  flex: none;
 }
 @media (min-width: 1024px) {
   .eos-topbar__menu {
@@ -481,6 +483,10 @@
 }
 .eos-breadcrumb a {
   color: inherit;
+  /* A 24px-high target (WCAG 2.5.8); the link was 18px high. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 .eos-breadcrumb a:hover {
   color: var(--accent);
