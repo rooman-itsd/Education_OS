@@ -84,3 +84,15 @@ def test_a_faculty_id_from_another_organisation_is_not_named(client):
     names = [i["faculty_name"] for i in r.json()["items"]]
     assert "Other Tenant Person" not in names
     assert names == ["Unknown user"]
+
+
+def test_the_host_wires_lookups_without_dependency_overrides():
+    """FastAPI rebuilds every dependency of every request, in every module, as soon as app.dependency_overrides is
+    not empty (FastAPI 0.142, solve_dependencies): about 9 % of the API's CPU on 20 Nov (tests/performance). The
+    host gives modules their lookups through app.state instead, so production wiring leaves the dict empty."""
+    from eos_backend import directories
+    from eos_backend.main import create_app
+
+    app = create_app()
+    assert app.dependency_overrides == {}
+    assert app.state.faculty_directory is directories.faculty_directory

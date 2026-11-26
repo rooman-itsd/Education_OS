@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `faculty_directory` (the faculty-load report's names) reads the host's lookup from `app.state.faculty_directory`
+  instead of being replaced through `app.dependency_overrides`, which made FastAPI rebuild every dependency of every
+  request in the whole API (about 9 % of its CPU on 20 Nov, tests/performance/README.md). The default still refuses
+  (503 `faculty_directory_unavailable`) when no host lookup is set; tests may still override the dependency.
 - `POST /offerings/republish` (contract 0.3.0, permission `academic-management:offering:write`): the backfill for
   consumers that started after offerings were created (issue #325). Announces every offering of the caller's
   organisation again (`offering.created` with the course as it is now, and `offering.status-changed` with

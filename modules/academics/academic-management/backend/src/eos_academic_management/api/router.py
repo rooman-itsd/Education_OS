@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from eos_core.db import get_db
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ..application import access as k
@@ -35,10 +35,18 @@ def _run(fn, *args, **kwargs):
         raise HTTPException(e.status, e.body()) from e
 
 
-def faculty_directory() -> Callable[[str], str]:
-    """Display names of faculty members (platform/identity users). No identity lookup is available to modules yet
-    (packages/sdk is empty and identity exposes no user lookup), so the default refuses when a name is needed
-    instead of showing ids as names. The host overrides this dependency once the lookup exists."""
+def faculty_directory(request: Request, db: Session = Depends(get_db)) -> Callable[[str], str]:
+    """Display names of faculty members (platform/identity users). This module cannot ask identity (it imports only
+    itself and packages/), so the host provides the lookup as `app.state.faculty_directory`: a function of the
+    request's session that returns name(faculty_id) (apps/backend/src/eos_backend/directories.py). Without it the
+    default refuses when a name is needed instead of showing ids as names.
+
+    Read from app.state rather than wired through `app.dependency_overrides`: FastAPI rebuilds every dependency of
+    every request, in every module, as soon as that dict is not empty (about 9 % of the API's CPU on 20 Nov,
+    tests/performance/README.md). Tests may still override this dependency."""
+    lookup = getattr(request.app.state, "faculty_directory", None)
+    if lookup is not None:
+        return lookup(db)
 
     def unavailable(faculty_id: str) -> str:
         raise AcademicManagementError(
