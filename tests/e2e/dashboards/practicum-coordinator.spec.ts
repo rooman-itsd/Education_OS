@@ -11,11 +11,12 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - for every widget of the layout whose module is in apps/frontend/config/modules.enabled.yaml and
  *   exports the widget: the panel renders by its registered title and shows its empty state, or says its data is not
  *   available while the backend is missing;
- * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
- *   (field-training #339, placement-career #337). Entries whose module is built already carry that widget's texts, so the journey starts checking them
- *   the day the module is enabled;
- * - no data journeys yet: every widget that holds data waits for its module (field-training, projects), and the
- *   shared ones need a term or a framework first. The data journeys are added with the modules.
+ * - a widget that is not on the dashboard is skipped, naming the module and the sprint batch that builds it. All
+ *   three modules of the layout (field-training #339, skill-progress #329 and placement-career #337) are
+ *   enabled in apps/frontend/config/modules.enabled.yaml, so every entry below is checked; the skip only applies if a
+ *   module is taken out of the list or stops exporting a widget;
+ * - no data journeys yet: only the empty states are asserted. The widgets that hold data need records from several
+ *   modules (placements, assessments, openings) and, for the shared ones, a term or a framework first.
  *
  * The super admin moves the organisation to Standard first, so every module of the profile is entitled (campus-life and
  * facilities are not in the Trial plan, platform/billing/config/plans.yaml).
@@ -55,8 +56,9 @@ const WIDGETS: LayoutWidget[] = [
     forbidden: "You do not have access to this.",
   },
   {
-    // Texts of OpeningsSummary.tsx (campus-life/placement-career, on main; the module is not enabled yet). The staff
-    // view of openings (#424 splits it from the learner widget placement-career.openings).
+    // Texts of OpeningsSummary.tsx (campus-life/placement-career, enabled in the backend and on the dashboard since
+    // #542). The staff view of openings: #424 split it from the learner widget placement-career.openings, which is
+    // not on this layout.
     id: "placement-career.openings-summary",
     module: "campus-life/placement-career",
     batch: "#337",
