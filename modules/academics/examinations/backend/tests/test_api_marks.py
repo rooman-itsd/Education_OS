@@ -326,6 +326,24 @@ def test_entering_needs_marks_entry_and_the_right_scope(client, org, other_org, 
         assert err(enter(client, headers, paper["id"], entry), 409, "paper_not_in_marks_entry")
 
 
+def test_a_lost_race_for_the_same_candidates_first_entry_is_a_409_not_a_500(client, org, h, paper, monkeypatch):
+    """Two first-time entries for one candidate both read no row and both insert: the second hits the unique key
+    (`uq_examinations_mark_entry_candidate`). That is the contract's retryable 409, and the first row stays untouched."""
+    from eos_examinations.application import marks as mks
+
+    headers = evaluator(client, org, h, paper)
+    first = paper["eligible"][0]
+    created = row_of(ok(enter(client, headers, paper["id"], {"candidate_id": first, "marks_obtained": 70})), first)
+    monkeypatch.setattr(mks, "_entries_of", lambda db, candidate_ids: {})  # the stale read of the losing request
+    response = enter(client, headers, paper["id"], {"candidate_id": first, "marks_obtained": 55})
+    assert err(response, 409, "marks_conflict")
+    monkeypatch.undo()
+    kept = row_of(marks(client, headers, paper["id"]), first)
+    assert kept == created and kept["marks_obtained"] == 70.0  # nothing of the losing request stayed
+    with session_for(org.id) as db:
+        assert db.query(MarkEntryRow).filter_by(candidate_id=first).count() == 1
+
+
 def test_entering_is_audited_and_publishes_no_event(client, org, h, paper):
     headers = evaluator(client, org, h, paper)
     before = len(all_outbox(org.id))
