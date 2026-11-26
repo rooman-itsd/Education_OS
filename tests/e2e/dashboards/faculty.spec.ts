@@ -137,7 +137,7 @@ test.describe("faculty widgets", () => {
     test.skip(SHIPPED.length < 2, "fewer than two of the faculty layout's widgets are shipped");
     await signIn(page, user);
     const dashboard = page.getByRole("region", { name: `${TITLE} dashboard` });
-    await expect(dashboard.getByRole("heading", { name: SHIPPED[0].title!, exact: true })).toBeVisible();
+    await expect(dashboard.getByRole("heading", { name: SHIPPED[0]!.title!, exact: true })).toBeVisible();
     const headings = (await dashboard.locator(".eos-widget h2, .eos-widget h3").allTextContents()).map((t) => t.trim());
     const seen = SHIPPED.map((w) => headings.indexOf(w.title!));
     expect(seen.every((i) => i >= 0), `headings found: ${headings.join(" | ")}`).toBeTruthy();
