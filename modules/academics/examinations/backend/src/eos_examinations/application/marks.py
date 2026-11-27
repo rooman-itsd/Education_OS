@@ -41,13 +41,23 @@ from .access import (
     Actor,
     require,
 )
-from .errors import ExaminationsError, forbidden
+from .errors import ExaminationsError, forbidden, not_found
 
 ELIGIBLE = "eligible"  # contract EligibilityStatus
 EVALUATION, MODERATION_DUTY = "evaluation", "moderation"  # contract DutyType
 
 
 # ---------------------------------------------------------------- scope and lookups
+
+
+def _locked_paper(db: Session, exam_paper_id: str) -> ExamPaperRow:
+    """The paper, locked for the rest of the transaction. Entering, submitting, moderating and locking all read the paper's
+    status and its candidates' marks and then write; without the lock a submit that races an entry reads the marks before
+    the entry commits, and a paper moves on with a candidate unmarked."""
+    row = repo.get_locked(db, ExamPaperRow, exam_paper_id)
+    if row is None:
+        raise not_found("exam_paper_not_found", "exam paper not found")
+    return row
 
 
 def _holds_duty(db: Session, actor: Actor, exam_paper_id: str, duty_types: tuple[str, ...]) -> bool:
@@ -180,7 +190,7 @@ def list_marks(db: Session, actor: Actor, exam_paper_id: str) -> dict:
 def enter_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) -> dict:
     """FR-10: creates or overwrites marks of eligible candidates of a paper in `marks_entry`, all or none. Candidates of
     another paper or not eligible are refused (422), as are marks out of range (422)."""
-    row = sch._paper_or_404(db, exam_paper_id)
+    row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=MARKS_ENTER_ALL, narrow=MARKS_ENTER_ASSIGNED, duty_types=(EVALUATION,))
     data = base._object(body, "body", ("entries",))
     sch._require_fields(data, ("entries",))
@@ -235,7 +245,7 @@ def enter_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) -> 
 @base.transactional
 def submit_marks(db: Session, actor: Actor, exam_paper_id: str) -> dict:
     """FR-11: moves a paper in `marks_entry` to `moderation` once every eligible candidate has marks or is absent."""
-    row = sch._paper_or_404(db, exam_paper_id)
+    row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=MARKS_ENTER_ALL, narrow=MARKS_ENTER_ASSIGNED, duty_types=(EVALUATION,))
     _require_status(row, pap.MARKS_ENTRY)
     candidates = _eligible(db, exam_paper_id)
@@ -259,7 +269,7 @@ def submit_marks(db: Session, actor: Actor, exam_paper_id: str) -> dict:
 def moderate_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) -> dict:
     """FR-11: adjusts the marks of a paper in `moderation`, uniformly or per candidate, with a reason. The original marks
     are kept, the moderated ones stay within 0 and `max_marks` (422), and all of it is applied or none."""
-    row = sch._paper_or_404(db, exam_paper_id)
+    row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=None, narrow=MARKS_MODERATE_ASSIGNED, duty_types=(MODERATION_DUTY,))
     data = base._object(body, "body", ("reason", "uniform_delta", "adjustments"))
     sch._require_fields(data, ("reason",))
@@ -318,7 +328,7 @@ def moderate_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) 
 def lock_marks(db: Session, actor: Actor, exam_paper_id: str) -> dict:
     """FR-12: locks the marks of a paper in `moderation`, once every eligible candidate has marks or is absent. Locked
     marks change only through result revision."""
-    row = sch._paper_or_404(db, exam_paper_id)
+    row = _locked_paper(db, exam_paper_id)
     require(actor, MARKS_LOCK)
     _require_status(row, pap.MODERATION)
     candidates = _eligible(db, exam_paper_id)
