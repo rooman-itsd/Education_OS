@@ -3,6 +3,12 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- The roster read model is now fed: `application/consumers.py` registers `roster.handle_event` for
+  enrolment-registration's `course-registration.confirmed`, `course-registration.withdrawn` and
+  `section-allocation.changed` events (entry point `eos.event_consumers`, `module.yaml` `consumes_events`). Until now
+  nothing delivered them, so `GET /offerings/{id}/roster` and the enrolled counts of `GET /me/offerings` stayed empty
+  outside the tests. The handler and its rules (once per envelope id, a withdrawal is never undone by a late
+  confirmation) are unchanged.
 - `faculty_directory` (the faculty-load report's names) reads the host's lookup from `app.state.faculty_directory`
   instead of being replaced through `app.dependency_overrides`, which made FastAPI rebuild every dependency of every
   request in the whole API (about 9 % of its CPU on 20 Nov, tests/performance/README.md). The default still refuses
