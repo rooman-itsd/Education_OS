@@ -82,7 +82,7 @@ export const ChartDataTable: React.FC<{ caption: string; data: Row[]; xKey: stri
 
 /** A small text link for panel headers, e.g. "View admissions →". */
 export const PanelLink: React.FC<{ onClick: () => void; children: React.ReactNode }> = ({ onClick, children }) => (
-  <button onClick={onClick} className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:opacity-80 pt-0.5 whitespace-nowrap">
+  <button onClick={onClick} className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] hover:opacity-80 pt-0.5 whitespace-nowrap" style={{ minHeight: 24 }}>
     {children}
     <ArrowRight className="w-3.5 h-3.5" />
   </button>

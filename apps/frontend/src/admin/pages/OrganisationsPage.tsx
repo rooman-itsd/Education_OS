@@ -140,7 +140,7 @@ export const OrganisationsPage: React.FC = () => {
             Every organisation on the platform. Suspending one blocks its sign-ins and its module requests at once and
             keeps all its data; every change is recorded with its reason. Registrations are approved on the Dashboard.
             {preview && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569]">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full eos-hero-chip">
                 <ShieldCheck className="w-3 h-3" />
                 Sample data
               </span>
