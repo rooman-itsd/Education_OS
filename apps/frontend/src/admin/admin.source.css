@@ -383,8 +383,8 @@ a:focus-visible {
 .eos-login-primary:hover { background-color: #bf2c3b; }
 .eos-login-field::placeholder { color: #475569; opacity: 1; }
 .eos-login-link { display: inline-flex; align-items: center; min-height: 24px; } /* a 24px-high target (WCAG 2.5.8) */
-/* The sidebar is dark: a white ring reads there (indigo is 1.4:1 on it). */
-aside button:focus-visible, aside a:focus-visible { outline-color: #fff; }
+/* The dark part of the sidebar (.eos-on-dark): a white ring reads there (indigo is 1.4:1 on it). Scoped to it, not to every <aside>: other asides are light, and the logo card stays light. */
+.eos-on-dark button:focus-visible, .eos-on-dark a:focus-visible { outline-color: #fff; }
 /* Slate-500 text is 4.3 to 4.5:1 at 10 to 12px; a slightly darker #5a6a7e is 5.0:1 on the page ground (the ui-kit's --eos-muted). */
 .text-\[\#64748B\] { color: #5a6a7e; }
 /* The "Sample data" chip sits in a page hero whose text is forced white (.eos-hero-sub *): it was white on #f1f5f9 (1.1:1). */

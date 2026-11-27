@@ -143,8 +143,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleMobileMenu }) => {
               <React.Fragment key={idx}>
                 {idx > 0 && <span className="text-[#64748B]">/</span>}
                 {crumb.to && idx < breadcrumbs.length - 1 ? (
-                  <Link to={crumb.to} className="hover:text-[#7E22CE] transition-colors truncate" style={{ display: 'inline-flex', alignItems: 'center', minHeight: 24, minWidth: 24 }}>
-                    {crumb.label}
+                  <Link to={crumb.to} className="hover:text-[#7E22CE] transition-colors" style={{ display: 'inline-flex', alignItems: 'center', minHeight: 24, minWidth: 24, maxWidth: '100%' }}>
+                    <span className="truncate">{crumb.label}</span>
                   </Link>
                 ) : (
                   <span className="font-semibold text-[#12233F] truncate">{crumb.label}</span>

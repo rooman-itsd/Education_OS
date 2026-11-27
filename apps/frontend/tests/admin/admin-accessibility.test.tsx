@@ -53,9 +53,10 @@ describe("admin console stylesheets", () => {
       }
     });
 
-    it(`${file}: the primary sign-in button uses the strong coral and the sidebar a white ring`, () => {
+    it(`${file}: the primary sign-in button uses the strong coral and only the dark part of the sidebar a white ring`, () => {
       expect(css).toMatch(/\.eos-login-primary\s*\{\s*background-color:\s*#d23443/);
-      expect(css).toMatch(/aside button:focus-visible, aside a:focus-visible\s*\{\s*outline-color:\s*#fff/);
+      expect(css).toMatch(/\.eos-on-dark button:focus-visible, \.eos-on-dark a:focus-visible\s*\{\s*outline-color:\s*#fff/);
+      expect(css).not.toMatch(/aside button:focus-visible/); // not every <aside>: Modules and Role Dashboards have light ones
     });
   }
 });
