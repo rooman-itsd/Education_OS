@@ -20,13 +20,13 @@ exposes:
   events: contracts/events.yaml
   permissions: contracts/permissions.yaml
 
-# Events this module subscribes to (by name, from other modules' events.yaml).
-# Agreed with enrolment-registration on issue #100 and handled by application/roster.py; listed here once
-# enrolment-registration publishes them in its events.yaml (docs/prd.md section 13):
-#   enrolment-registration.course-registration.confirmed
-#   enrolment-registration.course-registration.withdrawn
-#   enrolment-registration.section-allocation.changed
-consumes_events: []
+# Events this module subscribes to (by name, from other modules' events.yaml). Agreed with enrolment-registration
+# on issue #100, published in its events.yaml, handled by application/roster.py through
+# application/consumers.py (docs/prd.md section 13).
+consumes_events:
+  - enrolment-registration.course-registration.confirmed
+  - enrolment-registration.course-registration.withdrawn
+  - enrolment-registration.section-allocation.changed
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example

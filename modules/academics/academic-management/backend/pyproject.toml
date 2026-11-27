@@ -17,6 +17,10 @@ test = ["pytest>=8", "pyyaml"]
 [project.entry-points."eos.search_documents"]
 academic-management = "eos_academic_management.search:PROVIDER"
 
+# The roster read model is fed by enrolment-registration's course-registration events (event-bus README).
+[project.entry-points."eos.event_consumers"]
+academic-management = "eos_academic_management.application.consumers:CONSUMERS"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
