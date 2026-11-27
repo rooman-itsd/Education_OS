@@ -10,11 +10,11 @@ interns to assess and competitions in preparation.
 | Today's classes | Your classes today | Not built yet |
 | Attendance to mark | The registers you still have to fill in | Not built yet |
 | Assignments to grade | Submissions and quiz attempts waiting for your grade | "Nothing waiting to be graded" |
-| Exam duties | Exams you invigilate or mark | Not built yet |
+| My exam duties | Exams you invigilate or mark | "No upcoming exam duties." |
 | Course roster | The courses you teach this term and who is in them | "No courses this term" |
 | To review | Work submitted by the teams you guide: milestones and final submissions waiting for your review | "Nothing waiting for your review" |
 | To Judge | Candidates waiting for your score or decision in a moot court selection | "No candidates awaiting review" |
-| Trainees to assess | Students on a legal internship or clinic you supervise, so you can record how they are doing | Not built yet |
+| Trainees to assess | Students on a legal internship or clinic you supervise, so you can record how they are doing | "Nothing to assess right now" |
 | In preparation | Competitions and debates being got ready, with what is still outstanding | "Nothing in preparation" |
 
 ## If a panel says its data is not available

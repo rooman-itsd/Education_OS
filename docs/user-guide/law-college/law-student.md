@@ -17,9 +17,9 @@ your legal internship or clinic, case research and job openings.
 | Library loans | Books you have borrowed, with due dates and overdue ones marked | "No books on loan" |
 | Upcoming Selection Events | Moot court selections you are due to attend | "No upcoming selection rounds" |
 | Upcoming productions | The next competitions and debates | "Nothing coming up" |
-| My legal internship or clinic | Your legal internship or clinic | Not built yet |
+| My placement | Your legal internship or clinic, whether current, upcoming or applied for | "No placement yet" |
 | My projects | Your case research projects, with progress and the next milestone | A prompt that you have no case research projects yet |
-| Hours logged | The hours you have logged in your legal internship or clinic | Not built yet |
+| Hours logged | The hours you have logged in your legal internship or clinic | "No hours to show yet" |
 | Job openings | Job openings you can apply to, those closing soonest first | "No openings right now" |
 
 ## If a panel says its data is not available
@@ -41,7 +41,7 @@ Upcoming productions lists the next ones with their dates.
 
 ### Follow your legal internship or clinic
 
-My legal internship or clinic shows where your legal internship or clinic stands. Log your hours there as you go.
+My placement shows where your legal internship or clinic stands. Log your hours there as you go.
 
 ### Follow your case research projects
 

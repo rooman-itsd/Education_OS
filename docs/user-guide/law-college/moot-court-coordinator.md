@@ -10,7 +10,7 @@ competitions, and open internship places.
 | Open Calls | Moot court selections that are open for applications | "No open calls right now" |
 | Production calendar | Competitions and debates scheduled over the coming weeks | "Nothing scheduled" |
 | Upcoming productions | The next competitions and debates | "Nothing coming up" |
-| Open legal internships and clinics | Legal internships and clinics that still have places | Not built yet |
+| Open placements | Legal internships and clinics that still have places | "No open placements with seats" |
 
 ## If a panel says its data is not available
 
