@@ -146,32 +146,33 @@ export const LoginPage: React.FC = () => {
 
             <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
-                <label className="block text-xs font-semibold text-[#12233F] mb-1.5">Institutional Email</label>
+                <label htmlFor="admin-login-email" className="block text-xs font-semibold text-[#12233F] mb-1.5">Institutional Email</label>
                 <div className="relative rounded-lg shadow-2xs">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#475569]">
                     <User className="h-4 w-4" />
                   </div>
                   <input
+                    id="admin-login-email"
                     type="email"
                     required
                     value={universityId}
                     onChange={(e) => setUniversityId(e.target.value)}
                     placeholder="e.g. name@your-institution.edu"
-                    className="block w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[#E2E8F0] text-[#12233F] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#9333EA] focus:border-transparent bg-[#F6F8FB]"
+                    className="block w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[#E2E8F0] text-[#12233F] eos-login-field focus:outline-none focus:ring-2 focus:ring-[#9333EA] focus:border-transparent bg-[#F6F8FB]"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-[#12233F]">Password</label>
+                  <label htmlFor="admin-login-password" className="block text-xs font-semibold text-[#12233F]">Password</label>
                   <a
                     href="#forgot"
                     onClick={(e) => {
                       e.preventDefault();
                       alert('Password reset is not available yet. Ask your organisation admin.');
                     }}
-                    className="text-xs font-medium text-[#7E22CE] hover:underline"
+                    className="text-xs font-medium text-[#7E22CE] eos-login-link hover:underline rounded focus:outline-none focus:ring-2 focus:ring-[#7E22CE]"
                   >
                     Forgot Password?
                   </a>
@@ -181,12 +182,13 @@ export const LoginPage: React.FC = () => {
                     <Lock className="h-4 w-4" />
                   </div>
                   <input
+                    id="admin-login-password"
                     type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="block w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[#E2E8F0] text-[#12233F] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#9333EA] focus:border-transparent bg-[#F6F8FB]"
+                    className="block w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-[#E2E8F0] text-[#12233F] eos-login-field focus:outline-none focus:ring-2 focus:ring-[#9333EA] focus:border-transparent bg-[#F6F8FB]"
                   />
                 </div>
               </div>
@@ -201,7 +203,7 @@ export const LoginPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-semibold text-white bg-[#F65B66] hover:bg-[#E9505C] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7E22CE] transition-all shadow-md active:scale-[0.99] disabled:opacity-70"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-semibold text-white eos-login-primary focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7E22CE] transition-all shadow-md active:scale-[0.99] disabled:opacity-70"
                 >
                   {loading ? (
                     <span className="inline-flex items-center gap-2">
@@ -228,7 +230,7 @@ export const LoginPage: React.FC = () => {
                     setUniversityId('admin@example.org');
                     setPassword('demo');
                   }}
-                  className="w-full px-2 py-1.5 text-[11px] font-medium rounded-md bg-[#7E22CE26] text-[#7E22CE] hover:bg-[#7E22CE40] transition-colors text-center border border-[#9333EA]/20"
+                  className="w-full px-2 py-1.5 text-[11px] font-medium rounded-md bg-[#7E22CE26] text-[#7E22CE] hover:bg-[#7E22CE40] transition-colors text-center border border-[#9333EA]/20 focus:outline-none focus:ring-2 focus:ring-[#7E22CE]"
                 >
                   Preview as organisation admin (sample data)
                 </button>
@@ -243,7 +245,7 @@ export const LoginPage: React.FC = () => {
 
           <div className="mt-6 text-center text-xs text-[#475569] space-y-1 lg:hidden">
             <p>Education OS</p>
-            <p className="text-[11px] text-[#64748B]">Multi-tenant platform for higher-education institutions</p>
+            <p className="text-[11px] text-[#475569]">Multi-tenant platform for higher-education institutions</p>
           </div>
         </div>
       </main>

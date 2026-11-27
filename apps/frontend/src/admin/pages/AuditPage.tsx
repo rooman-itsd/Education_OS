@@ -127,7 +127,7 @@ export const AuditPage: React.FC = () => {
             Every recorded state change, newest first. Audit records are append-only: nothing here can be edited or
             deleted. {scopeNote}
             {preview && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#F1F5F9] text-[#475569]">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full eos-hero-chip">
                 <ShieldCheck className="w-3 h-3" />
                 Sample data
               </span>
