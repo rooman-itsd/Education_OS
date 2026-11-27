@@ -48,7 +48,7 @@ describe("admin console stylesheets", () => {
       const rule = css.slice(start, css.indexOf("}", start));
       expect(rule).toMatch(/outline:\s*2px solid/);
       for (const [, name, fallback] of rule.matchAll(/var\((--[\w-]+)(,[^)]*)?\)/g)) {
-        const defined = new RegExp(`${name}\s*:`).test(css);
+        const defined = new RegExp(`${name}\\s*:`).test(css);
         expect(defined || Boolean(fallback), `${name} is used by the focus ring and is neither defined nor given a fallback`).toBe(true);
       }
     });
