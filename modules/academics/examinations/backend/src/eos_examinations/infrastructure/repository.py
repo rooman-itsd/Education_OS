@@ -33,6 +33,17 @@ def get(db: Session, model, row_id: str):
     return db.scalars(q(db, model).where(model.id == row_id)).first()
 
 
+def locked_query(db: Session, model, row_id: str) -> Select:
+    """The query behind `get_locked`: one row of the caller's organisation, `FOR UPDATE` (PostgreSQL; SQLite has no row locks)."""
+    return q(db, model).where(model.id == row_id).with_for_update()
+
+
+def get_locked(db: Session, model, row_id: str):
+    """Like `get`, but the row stays locked until the transaction ends, so two requests that change what hangs off one
+    row (the marks of a paper) take turns instead of both acting on what they read before the other committed."""
+    return db.scalars(locked_query(db, model, row_id)).first()
+
+
 def ref_row(db: Session, model, column, value: str, organisation_id: str):
     """The read-model row with this key in this organisation, or None. The organisation is named as well as scoped, so
     a handler never reads a row of another organisation even if the session scope were wrong."""

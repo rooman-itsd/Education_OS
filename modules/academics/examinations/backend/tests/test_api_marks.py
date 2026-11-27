@@ -569,6 +569,46 @@ def test_locking_needs_the_lock_key_a_paper_in_moderation_and_complete_marks(cli
     assert err(client.post(f"{URL}/{paper['id']}/lock", headers=h), 409, "paper_not_in_moderation")
 
 
+def test_every_marks_change_takes_the_paper_row_lock(client, org, h, paper, monkeypatch):
+    """Entering, submitting, moderating and locking read the paper's status and its candidates' marks and then write, so each
+    takes the paper row's lock first: a submit that races an entry waits for it instead of reading the marks before it commits."""
+    from eos_examinations.infrastructure import repository as repo
+
+    taken: list[str] = []
+    original = repo.get_locked
+
+    def recording(db, model, row_id):
+        taken.append(row_id)
+        return original(db, model, row_id)
+
+    monkeypatch.setattr(repo, "get_locked", recording)
+    headers = evaluator(client, org, h, paper)
+    moderator = evaluator(client, org, h, paper, "moderation")
+    complete(client, headers, paper)
+    assert taken == [paper["id"]]
+    ok(client.post(f"{URL}/{paper['id']}/marks/submit", headers=auth(headers)))
+    ok(moderate(client, moderator, paper["id"], reason="r", uniform_delta=1))
+    ok(client.post(f"{URL}/{paper['id']}/lock", headers=h))
+    assert taken == [paper["id"]] * 4
+    marks(client, h, paper["id"])  # reading does not lock
+    assert len(taken) == 4
+
+
+def test_the_lock_is_a_select_for_update_on_postgresql_and_still_answers_404_and_scopes_by_organisation(
+    client, org, other_org, h, paper
+):
+    from eos_examinations.infrastructure import repository as repo
+    from sqlalchemy.dialects import postgresql
+
+    with session_for(org.id) as db:
+        statement = str(repo.locked_query(db, ExamPaperRow, paper["id"]).compile(dialect=postgresql.dialect()))
+        assert "FOR UPDATE" in statement and "organisation_id" in statement
+        assert repo.get_locked(db, ExamPaperRow, paper["id"]) is not None
+        assert repo.get_locked(db, ExamPaperRow, uid()) is None
+    with session_for(other_org.id) as db:
+        assert repo.get_locked(db, ExamPaperRow, paper["id"]) is None  # another organisation's paper is not found
+
+
 def test_the_marks_of_one_organisation_are_invisible_to_another(client, org, other_org, h, paper):
     headers = evaluator(client, org, h, paper)
     entry = {"candidate_id": paper["eligible"][0], "marks_obtained": 10}
