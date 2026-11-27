@@ -3,6 +3,10 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Live check on 27 Nov 2026: on https://educationos.futureacad.ae the API answers `/api/v1/health` with JSON on
+  Postgres (dev mode off), and `GET /api/v1/iqac-accreditation/stats/action-items` answers `401` with JSON when called
+  without a token, so the module is mounted and guarded. Not checked: what the Governance dashboard shows for a
+  signed-in `governance` user (no login for the live site).
 - Enabled in `apps/backend/config/modules.enabled.yaml` (mounted at `/api/v1/iqac-accreditation`) and
   `apps/frontend/config/modules.enabled.yaml` (`iqac-accreditation.action-items` on the Governance dashboard).
 - Module scaffolded.
