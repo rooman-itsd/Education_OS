@@ -20,6 +20,24 @@ const database = join(mkdtempSync(join(tmpdir(), "eos-e2e-")), "e2e.db").replace
 // database.
 const deployed = process.env.E2E_BASE_URL?.replace(/\/$/, "");
 
+const apiEnv = {
+  ...process.env,
+  EOS_DATABASE_URL: `sqlite:///${database}`,
+  EOS_DEV_MODE: "true", // returns the verification token, so no mailbox is needed
+  EOS_SUPER_ADMIN_EMAIL: SUPER_ADMIN.email,
+  EOS_SUPER_ADMIN_PASSWORD: SUPER_ADMIN.password,
+  TENANCY_AUTO_APPROVE: "false", // the journey includes the super admin's approval
+  BILLING_PAYMENT_ADAPTER: "none",
+  EOS_CORS_ORIGINS: `http://localhost:${WEB_PORT}`,
+  EOS_RATE_LIMIT_ENABLED: "false", // every spec signs in from 127.0.0.1; the sign-in bucket would refuse them
+} as Record<string, string>;
+
+// The event-bus relay is its own process in production (`python -m eos_event_bus`), and it is what delivers one module's
+// events to the modules that consume them. warmup.ts starts it next to the API, on the same database and with the same
+// environment, from what is handed over here (this file is loaded in the runner and in every worker; only the runner
+// uses it).
+if (!deployed) process.env.E2E_RELAY = JSON.stringify({ python, cwd: repoRoot, env: apiEnv });
+
 const localStack = [
   {
     name: "api",
@@ -28,17 +46,7 @@ const localStack = [
     url: `http://127.0.0.1:${API_PORT}/api/v1/health`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: {
-      ...process.env,
-      EOS_DATABASE_URL: `sqlite:///${database}`,
-      EOS_DEV_MODE: "true", // returns the verification token, so no mailbox is needed
-      EOS_SUPER_ADMIN_EMAIL: SUPER_ADMIN.email,
-      EOS_SUPER_ADMIN_PASSWORD: SUPER_ADMIN.password,
-      TENANCY_AUTO_APPROVE: "false", // the journey includes the super admin's approval
-      BILLING_PAYMENT_ADAPTER: "none",
-      EOS_CORS_ORIGINS: `http://localhost:${WEB_PORT}`,
-      EOS_RATE_LIMIT_ENABLED: "false", // every spec signs in from 127.0.0.1; the sign-in bucket would refuse them
-    } as Record<string, string>,
+    env: apiEnv,
   },
   {
     name: "web",

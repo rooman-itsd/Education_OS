@@ -137,9 +137,12 @@ export async function organisationAdmin(request: APIRequestContext, { academyTyp
   };
 }
 
-/** Add a user with `role` to the admin's organisation and return them signed in. */
-export async function addUser(request: APIRequestContext, admin: OrganisationAdmin, role: string): Promise<DashboardUser> {
-  const user = { name: `E2E ${role}`, email: `${role}@${admin.organisation.slug}.example.com`, password: "Passw0rd!e2e" };
+/**
+ * Add a user with `role` to the admin's organisation and return them signed in. A second user with the same role needs
+ * its own `label` (it names the mailbox: `<label>@<slug>.example.com`), which defaults to the role.
+ */
+export async function addUser(request: APIRequestContext, admin: OrganisationAdmin, role: string, label = role): Promise<DashboardUser> {
+  const user = { name: `E2E ${label}`, email: `${label}@${admin.organisation.slug}.example.com`, password: "Passw0rd!e2e" };
   const created = await ok<{ id: string }>(
     await request.post("/api/v1/identity/users", { headers: { Authorization: `Bearer ${admin.token}` }, data: { ...user, roles: [role] } }),
   );

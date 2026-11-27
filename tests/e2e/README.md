@@ -2,7 +2,10 @@
 
 Full user journeys through `apps/frontend` in a real browser (Playwright). Each run starts its own API
 (`apps/backend`, on port 8100) and web dev server (port 5180) with a fresh SQLite database, so it never
-touches a dev server you have running, and stops them afterwards.
+touches a dev server you have running, and stops them afterwards. `warmup.ts` also starts the event-bus relay
+(`python -m eos_event_bus`, as production runs it) on the same database: without it nothing delivers events between
+modules, so a journey whose data depends on one (an instructor reaching the LMS, a registration reaching a roster)
+retries its step until the event arrives, as `dashboards/faculty-data.ts` does.
 
 | Journey | Spec |
 |---|---|
