@@ -103,6 +103,30 @@ def test_a_redelivered_event_records_nothing_twice():
     assert (rec.entity_type, rec.entity_id, rec.actor) == ("request", "req-1", "u-1")
 
 
+def test_workflow_step_overdue_is_audited():
+    org = str(uuid.uuid4())
+    e = event(
+        "workflow.step.overdue",
+        org,
+        {
+            "request_id": "req-overdue-1",
+            "chain_code": "leave-approval",
+            "step_order": 1,
+            "step_name": "Department Head",
+            "approver_role": "department-admin",
+            "overdue_seconds": 3600,
+        },
+    )
+    deliver(e)
+    (rec,) = records(org)
+    assert (rec.module, rec.action, rec.entity_type, rec.entity_id) == (
+        "workflow",
+        "step.overdue",
+        "step",
+        "req-overdue-1",
+    )
+
+
 def test_a_super_admin_action_is_also_recorded_at_platform_level():
     org = str(uuid.uuid4())
     e = event(
