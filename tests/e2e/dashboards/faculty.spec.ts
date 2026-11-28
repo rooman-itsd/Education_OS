@@ -277,4 +277,40 @@ test.describe("with teaching data", () => {
     expect([row!.offerings_count, row!.contact_hours, row!.over_load]).toEqual([1, 4, false]);
     expect(report.items.some((i) => i.faculty_id === data.other.id)).toBe(false); // teaches nothing: no load
   });
+
+  // Last: it changes what the queue holds, and the tests above read the two waiting submissions.
+  test("grading a submission takes it off the queue, and the queue empties once both are graded", async ({ page, request }) => {
+    const grade = (who: { token: string }, student: { id: string }, points: number) =>
+      request.put("/api/v1/lms/grades", {
+        headers: { Authorization: `Bearer ${who.token}` },
+        data: { item_type: "assignment", item_id: data.assignment.id, entries: [{ student_id: student.id, points, feedback: "Well argued." }] },
+      });
+    const [first, second] = data.students as [DashboardUser, DashboardUser];
+
+    // Only the instructor of the course grades it: another faculty member is outside its scope, a student is refused.
+    const outside = await grade(data.other, first, 8);
+    expect([outside.status(), ((await outside.json()) as { detail: { code: string } }).detail.code]).toEqual([403, "not_in_scope"]);
+    expect((await grade(first, first, 10)).status()).toBe(403);
+    // A grade above the assignment's maximum (10) is refused and leaves the queue as it was.
+    expect((await grade(user, first, 11)).status()).toBe(422);
+    const before = await get<{ items: { waiting_count: number }[] }>(request, user, "/api/v1/lms/me/grading-queue");
+    expect(before.items[0]!.waiting_count).toBe(2);
+
+    // The instructor grades one student: one submission is left, in the API and on the dashboard.
+    const saved = await grade(user, first, 8);
+    expect(saved.status(), await saved.text()).toBe(200);
+    const queue = await get<{ total: number; items: { title: string; waiting_count: number }[] }>(request, user, "/api/v1/lms/me/grading-queue");
+    expect(queue.items.map((i) => [i.title, i.waiting_count])).toEqual([[ASSIGNMENT, 1]]);
+    await signIn(page, user);
+    const panel = widget(page, "Assignments to grade");
+    await expect(panel.getByRole("list", { name: "Work to grade" }).getByText("1 submission", { exact: true })).toBeVisible();
+    await expect(panel.getByText("2 submissions", { exact: true })).toHaveCount(0);
+
+    // Grading the second one empties the queue: the widget says so, with no stale row.
+    expect((await grade(user, second, 6)).status()).toBe(200);
+    expect(await get(request, user, "/api/v1/lms/me/grading-queue")).toEqual({ items: [], total: 0 });
+    await page.reload();
+    await expect(widget(page, "Assignments to grade").getByText("Nothing waiting to be graded", { exact: true })).toBeVisible();
+    await expect(page.getByText(ASSIGNMENT)).toHaveCount(0);
+  });
 });
