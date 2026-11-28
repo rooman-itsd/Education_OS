@@ -36,6 +36,7 @@ consumes_events:
   - billing.trial.expired
   - billing.subscription.upgraded
   - billing.trial.expiring
+  - workflow.step.overdue
   - scheduler.job.due
 
 # Config this module needs. Document every key in config/env.example.

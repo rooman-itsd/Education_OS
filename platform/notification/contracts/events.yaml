@@ -89,4 +89,5 @@ consumes:
   - billing.trial.expiring              # 7, 3 and 1 days before the trial ends
   - billing.trial.expired               # trial ended, how to upgrade
   - billing.subscription.upgraded       # plan changed, what is now available
+  - workflow.step.overdue               # approval step past its SLA deadline -> approver_role or delegated_to
   - scheduler.job.due                   # notification.recover-stuck (retry due and abandoned messages), notification.prune-history (retention)
