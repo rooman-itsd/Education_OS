@@ -69,6 +69,9 @@ IMPLEMENTED = {
     "cancelExamDuty": ("post", "/duties/{exam_duty_id}/cancel"),
     "listMyDuties": ("get", "/me/duties"),
     "openMarksEntry": ("post", "/papers/{exam_paper_id}/marks-entry"),
+    "listCandidates": ("get", "/candidates"),
+    "determineEligibility": ("post", "/exam-cycles/{exam_cycle_id}/eligibility-runs"),
+    "overrideCandidateEligibility": ("patch", "/candidates/{candidate_id}"),
     "getMyExamSchedule": ("get", "/me/exam-schedule"),
     "listMarks": ("get", "/papers/{exam_paper_id}/marks"),
     "enterMarks": ("put", "/papers/{exam_paper_id}/marks"),
@@ -88,7 +91,10 @@ PAPER_READ_OPERATIONS = {
     "listExamPapers",
     "getExamPaper",
     "getMyExamSchedule",
-}  # declare a 403 (D6; the schedule is the caller own)
+    "listCandidates",
+    "determineEligibility",
+    "overrideCandidateEligibility",
+}  # declare a 403 (D6; the schedule is the caller own; the candidates are the controller's)
 DUTY_READ_ALL = "examinations:duty:read-all"
 # The wider key an operation also accepts (the contract's descriptions name it): the route's keys are x-permission plus it.
 WIDENING = {

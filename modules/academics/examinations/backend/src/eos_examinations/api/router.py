@@ -11,7 +11,7 @@ getGradingScheme, replaceGradingScheme, setDefaultGradingScheme, listAssessmentS
 getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExamCycles, createExamCycle, getExamCycle,
 updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
 getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
-cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties; and the marks
+cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties; and the candidate operations: listCandidates, determineEligibility and overrideCandidateEligibility; and the marks
 operations: openMarksEntry, listMarks, enterMarks, submitMarks, moderateMarks and lockMarks."""
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..application import access as k
+from ..application import candidates as cnd
 from ..application import duties as dty
 from ..application import marks as mks
 from ..application import my_schedule as mys
@@ -325,6 +326,54 @@ def list_my_duties(
     db: Session = Depends(get_db),
 ):
     return _run(dty.list_my_duties, db, a, include_past)
+
+
+@router.get("/candidates")
+def list_candidates(
+    exam_cycle_id: str | None = None,
+    exam_paper_id: str | None = None,
+    course_offering_id: str | None = None,
+    student_id: str | None = None,
+    eligibility_status: str | None = None,
+    reason_code: str | None = None,
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    a: Actor = Depends(require(k.CANDIDATE_READ_DEPARTMENT)),
+    db: Session = Depends(get_db),
+):
+    return _run(
+        cnd.list_candidates,
+        db,
+        a,
+        exam_cycle_id,
+        exam_paper_id,
+        course_offering_id,
+        student_id,
+        eligibility_status,
+        reason_code,
+        limit,
+        offset,
+    )
+
+
+@router.post("/exam-cycles/{exam_cycle_id}/eligibility-runs")
+def determine_eligibility(
+    exam_cycle_id: str,
+    body: dict | None = Body(default=None),
+    a: Actor = Depends(require(k.CANDIDATE_DETERMINE)),
+    db: Session = Depends(get_db),
+):
+    return _run(cnd.determine_eligibility, db, a, exam_cycle_id, body)
+
+
+@router.patch("/candidates/{candidate_id}")
+def override_candidate_eligibility(
+    candidate_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.CANDIDATE_OVERRIDE)),
+    db: Session = Depends(get_db),
+):
+    return _run(cnd.override_candidate_eligibility, db, a, candidate_id, body)
 
 
 @router.get("/me/exam-schedule")

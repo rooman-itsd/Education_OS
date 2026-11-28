@@ -3,6 +3,19 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Candidates and eligibility (issue #325, decisions D2 and D7): migration `ex_0007` adds `examinations_registration_ref`, kept by
+  new consumers of enrolment-registration's `course-registration.confirmed` and `.withdrawn` (idempotent on the envelope id; a
+  withdrawal is final, even when it arrives before the confirmation; a registration type other than regular, supplementary or
+  backlog is refused). `determineEligibility` (`POST /exam-cycles/{id}/eligibility-runs`) creates or refreshes one candidate per
+  registered student per paper, `listCandidates` (`GET /candidates`, organisation-wide key; `candidate:read-department` alone grants
+  nothing until the caller's department is known, Q13) and `overrideCandidateEligibility` (`PATCH /candidates/{id}`, a reason is
+  mandatory) complete the slice. Registration types: a regular registration makes candidates in cycles that are not supplementary;
+  supplementary and backlog registrations make them in supplementary cycles only (`domain/eligibility.py`; Praveen's Q1 is open). The
+  minimum attendance is the cycle's `min_attendance_percent`. Inputs with no source (student status, attendance, dues) leave the
+  candidate `pending` with `pending_inputs` naming them, so eligibility today comes from a controller's override until the sources are
+  connected. A run keeps overrides and candidates that have marks, publishes `candidate.eligibility-determined` only for students whose
+  candidacy changed, and an unchanged run writes nothing. Tests: `test_consumers_registration.py`, `test_domain_eligibility.py`,
+  `test_api_candidates.py`.
 - `getMyExamSchedule` and the Student widget `examinations.upcoming-assessments` (issue #325): `GET /me/exam-schedule`
   (`application/my_schedule.py`, key `examinations:session:read-own`) lists the scheduled, not yet ended sessions of the
   papers the caller is a candidate for, by start time, from `date_from` (default today). Exam sessions only (PRD Q6). A

@@ -106,7 +106,11 @@ def test_a_role_is_refused_exactly_when_it_holds_none_of_the_routes_keys(client,
     _, headers = org.user(role)
     response = _call(client, method, path, headers)
     allowed = bool(keys & permissions_for([role]))
-    if allowed:
+    if (method, path) == ("GET", "/candidates") and role == HEAD:
+        # `candidate:read-department` passes the route's key, and the use case then refuses it: the caller's department is
+        # not known yet (Q13), so the key alone grants nothing (test_api_candidates.py)
+        assert response.status_code == 403 and response.json()["detail"]["code"] == "forbidden"
+    elif allowed:
         assert response.status_code != 403, (role, method, path, response.text)
     else:
         assert response.status_code == 403, (role, method, path, response.status_code, response.text)

@@ -173,6 +173,17 @@ def seed(org: str) -> dict:
         credits=Decimal(4),
         department_id=new(),
     )
+    registration = m.RegistrationRef(
+        id=new(),
+        organisation_id=org,
+        registration_id=new(),
+        person_id=new(),
+        course_offering_id=offering,
+        academic_period_id=new(),
+        registration_type="regular",
+        status="confirmed",
+        confirmed_at=NOW,
+    )
     marker = m.ProcessedEvent(
         id=new(), organisation_id=org, event_id=new(), name="academic-management.offering.created"
     )
@@ -186,7 +197,7 @@ def seed(org: str) -> dict:
         summary="created",
         occurred_at=NOW,
     )
-    rows = [g, band, a, comp, c, p, s, link, d, cand, mark, ref, marker, audit]
+    rows = [g, band, a, comp, c, p, s, link, d, cand, mark, ref, registration, marker, audit]
     with _db(org) as db:
         for row in rows:  # parents first, committed one by one so a foreign key never points at nothing
             db.add(row)

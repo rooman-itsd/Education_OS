@@ -29,6 +29,8 @@ exposes:
 consumes_events:
   - academic-management.offering.created
   - academic-management.offering.status-changed
+  - enrolment-registration.course-registration.confirmed
+  - enrolment-registration.course-registration.withdrawn
 
 # Config this module needs. Document every key in config/env.example.
 config: config/env.example
