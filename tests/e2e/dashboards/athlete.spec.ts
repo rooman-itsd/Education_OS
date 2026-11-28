@@ -13,11 +13,11 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  *   state, or says its data is not available while the backend is missing (the athlete holds the student role's
  *   permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it;
- * - athlete-performance.performance-trend (self-contained within athlete-performance) runs for real once the module
- *   ships; sports-nutrition-health.nutrition-plan and tournament-events.upcoming stay `fixme`: both scope the
- *   athlete's own records by the athlete id they learn from the athlete-performance.athlete.registered event, and
- *   this suite's local stack (playwright.config.ts) never starts the event-bus relay that delivers it (confirmed by
- *   running this suite, not just assumed — see the comment above those two tests).
+ * - the sports data journeys need their module enabled; the coach and the athlete's athlete-performance registration
+ *   are created once, in the performance-trend journey, and reused by sports-nutrition-health.nutrition-plan and
+ *   tournament-events.upcoming, which scope the athlete's own records by the athlete id they learn from the
+ *   athlete-performance.athlete.registered event — delivered by the event-bus relay playwright.config.ts now starts
+ *   alongside the API and web server.
  *
  * The sports suite is the profile's one specialized suite, so the Trial plan already includes it; the inherited
  * fees-accounts and hostel widgets are not in Trial, so the super admin moves the organisation to Standard first.
@@ -180,12 +180,19 @@ test.describe("athlete widgets", () => {
 
 // Backend-dependent: these need their module's API to create the data through, so nothing here is faked. Each needs
 // its module in both modules.enabled.yaml files; written as the finance-staff data journeys are written.
+//
+// The coach and the athlete's athlete-performance registration are created once, in the first test (serial mode),
+// and reused by the other two: addUser's email is deterministic per (organisation, role), so a second "coach" in
+// the same organisation collides with the first (confirmed by running this suite).
+let coach: DashboardUser | undefined;
+let athlete: { id: string } | undefined;
+
 test.describe("with sports data", () => {
   test("athlete-performance.performance-trend shows the results a coach records for the athlete", async ({ page, request }) => {
     const w = byId("athlete-performance.performance-trend");
     test.skip(!shipped(w), waitingFor(w));
     test.skip(!ready(w.id), `the athlete-performance API answered ${status[w.id]} to the athlete role`);
-    const coach = await addUser(request, admin, "coach");
+    coach = await addUser(request, admin, "coach");
     const discipline = await created<{ id: string }>(request, admin, "/athlete-performance/disciplines", {
       name: "Athletics",
       category: "individual",
@@ -197,7 +204,7 @@ test.describe("with sports data", () => {
       direction: "lower_is_better",
       discipline_id: discipline.id,
     });
-    const athlete = await created<{ id: string }>(request, coach, "/athlete-performance/athletes", {
+    athlete = await created<{ id: string }>(request, coach, "/athlete-performance/athletes", {
       user_id: user.id,
       full_name: "E2E athlete",
       primary_discipline_id: discipline.id,
@@ -208,14 +215,14 @@ test.describe("with sports data", () => {
       athlete_id: athlete.id,
       metric_id: metric.id,
       value: 11.9,
-      recorded_at: `${dayFromNow(-2)}T09:00:00Z`,
+      recorded_at: `${dayFromNow(-2)}T00:00:00Z`,
       context: "trial",
     });
     await created(request, coach, "/athlete-performance/results", {
       athlete_id: athlete.id,
       metric_id: metric.id,
       value: 11.6,
-      recorded_at: `${dayFromNow(0)}T09:00:00Z`,
+      recorded_at: new Date().toISOString(),
       context: "trial",
     });
     await signIn(page, user);
@@ -226,36 +233,19 @@ test.describe("with sports data", () => {
     await expect(trend.getByText(/^Improved 0\.3 s since /)).toBeVisible();
   });
 
-  // Confirmed by actually running this suite (not just read from the comment below): sports-nutrition-health and
-  // tournament-events scope the athlete's own records by the athlete id they learn from the
-  // athlete-performance.athlete.registered event, and that event is never delivered here. The event-bus relay
-  // (platform/event-bus, `python -m eos_event_bus`) is a separate process — "without it no event is ever acted on"
-  // (infra/docker/docker-compose.api.yml) — and tests/e2e/playwright.config.ts's localStack starts only the API and
-  // the web dev server, no relay. The outbox row sits pending for the whole run, in this suite's CI job
-  // (.github/workflows/system.yml) exactly as locally, so these two cannot pass until the e2e stack also runs the
-  // relay (or the suite polls the event-bus admin API until the delivery is published). Left fixme, bodies ready to
-  // flip to `test` once that's wired; the registration repeats the pattern confirmed passing above (self-contained,
-  // not dependent on the other tests' execution order).
-  test.fixme("sports-nutrition-health.nutrition-plan shows the plan a nutritionist activates for the athlete", async ({ page, request }) => {
+  // sports-nutrition-health scopes the athlete's own records by the athlete id it learns from
+  // athlete-performance.athlete.registered, delivered by the event-bus relay (platform/event-bus) that
+  // playwright.config.ts now starts alongside the API and web server (confirmed by running this suite: without it
+  // the relay never delivers anything — "without it no event is ever acted on", infra/docker/docker-compose.api.yml
+  // — and this GET answers an empty list, the empty state stays up, and this test times out).
+  test("sports-nutrition-health.nutrition-plan shows the plan a nutritionist activates for the athlete", async ({ page, request }) => {
     const w = byId("sports-nutrition-health.nutrition-plan");
     test.skip(!shipped(w), waitingFor(w));
     test.skip(!ready(w.id), `the sports-nutrition-health API answered ${status[w.id]} to the athlete role`);
-    const coach = await addUser(request, admin, "coach");
-    const discipline = await created<{ id: string }>(request, admin, "/athlete-performance/disciplines", {
-      name: "Athletics",
-      category: "individual",
-      active: true,
-    });
-    const athlete = await created<{ id: string }>(request, coach, "/athlete-performance/athletes", {
-      user_id: user.id,
-      full_name: "E2E athlete",
-      primary_discipline_id: discipline.id,
-      coach_id: coach.id,
-      status: "active",
-    });
+    test.skip(!athlete, "athlete-performance.performance-trend did not register an athlete (its own widget is not shipped yet)");
     const nutritionist = await addUser(request, admin, "nutritionist");
     await created(request, nutritionist, "/sports-nutrition-health/nutrition-plans", {
-      athlete_id: athlete.id,
+      athlete_id: athlete!.id,
       title: "Pre-season build",
       goal: "performance",
       daily_calories: 3200,
@@ -275,23 +265,11 @@ test.describe("with sports data", () => {
     await expect(panel.getByText(/Protein 160 g/)).toBeVisible();
   });
 
-  test.fixme("tournament-events.upcoming lists a published tournament the athlete is entered in", async ({ page, request }) => {
+  test("tournament-events.upcoming lists a published tournament the athlete is entered in", async ({ page, request }) => {
     const w = byId("tournament-events.upcoming");
     test.skip(!shipped(w), waitingFor(w));
     test.skip(!ready(w.id), `the tournament-events API answered ${status[w.id]} to the athlete role`);
-    const coach = await addUser(request, admin, "coach");
-    const discipline = await created<{ id: string }>(request, admin, "/athlete-performance/disciplines", {
-      name: "Athletics",
-      category: "individual",
-      active: true,
-    });
-    const athlete = await created<{ id: string }>(request, coach, "/athlete-performance/athletes", {
-      user_id: user.id,
-      full_name: "E2E athlete",
-      primary_discipline_id: discipline.id,
-      coach_id: coach.id,
-      status: "active",
-    });
+    test.skip(!athlete, "athlete-performance.performance-trend did not register an athlete (its own widget is not shipped yet)");
     // org-admin does not itself hold tournament-events:tournament:write/:publish (confirmed: tournament-events'
     // permissions.yaml grants those only to tournament-events-admin, which org-admin.yaml's module_roles does not
     // list), so a dedicated tournament-events-admin user creates and publishes the tournament.
@@ -306,12 +284,15 @@ test.describe("with sports data", () => {
       venue: "Main stadium",
       hosting: "home",
     });
-    await created(request, coach, `/tournament-events/tournaments/${tournament.id}/entries`, {
+    // Publish before entering: a draft is visible only to tournament:write holders (tournament-events-admin), and
+    // publishing is what "opens entries" (contracts/openapi.yaml) — the coach (entry:write only) cannot see or
+    // enter a draft (confirmed: POST .../entries on a draft answers 404 "tournament not found in your organisation").
+    await created(request, tournamentAdmin, `/tournament-events/tournaments/${tournament.id}/publish`, {});
+    await created(request, coach!, `/tournament-events/tournaments/${tournament.id}/entries`, {
       category: "100 m men",
-      athlete_ids: [athlete.id],
+      athlete_ids: [athlete!.id],
       status: "confirmed",
     });
-    await created(request, tournamentAdmin, `/tournament-events/tournaments/${tournament.id}/publish`, {});
     await signIn(page, user);
     const panel = widget(page, "Upcoming tournaments");
     await expect(panel.getByText("No upcoming tournaments")).toHaveCount(0);
