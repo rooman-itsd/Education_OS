@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
-import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
+import { OPENING, REQUIRED_HOURS, SITE, seedPlacement } from "./field-training-data";
+import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
  * Teacher Trainee dashboard (layout platform/identity/config/dashboards/teacher-trainee.yaml, which extends
@@ -15,8 +16,9 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (field-training and projects #339, skill-progress #329, and the inherited timetable-attendance, examinations and lms ones, and transport and library until they are enabled). Entries whose module is built already carry that widget's texts, so the journey starts checking them
  *   the day the module is enabled;
- * - no data journeys yet: every widget that holds data waits for its module (field-training, projects), and the
- *   shared ones need a term or a framework first. The data journeys are added with the modules.
+ * - with data: my-placement, hours-logged and my-projects show the trainee's own placement, verified hours and project,
+ *   and a second trainee sees none of them; the inherited Student widgets need a term, courses and registrations first
+ *   (skill-progress and portfolio have no data journey yet).
  *
  * The super admin moves the organisation to Standard first, so every module of the profile is entitled (campus-life and
  * facilities are not in the Trial plan, platform/billing/config/plans.yaml).
@@ -148,6 +150,9 @@ const WIDGETS: LayoutWidget[] = [
 const SHIPPED = WIDGETS.filter(shipped);
 
 let user: DashboardUser;
+let otherTrainee: DashboardUser;
+let coordinator: DashboardUser;
+let mentor: DashboardUser;
 /** Per shipped widget id: what its GET answered the teacher trainee. */
 const status: Record<string, number> = {};
 
@@ -157,6 +162,9 @@ test.beforeAll(async ({ request }) => {
   const admin = await organisationAdmin(request, { academyType: "teacher-education-college" });
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "teacher-trainee");
+  otherTrainee = await addUser(request, admin, "teacher-trainee", "trainee-two");
+  coordinator = await addUser(request, admin, "practicum-coordinator");
+  mentor = await addUser(request, admin, "mentor-teacher");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -190,4 +198,66 @@ test.describe("teacher-trainee widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with field-training and projects data", () => {
+  const byId = (id: string) => WIDGETS.find((w) => w.id === id)!;
+  const skipUnlessReady = (test_: typeof test, ids: string[]) => {
+    for (const id of ids) {
+      test_.skip(!shipped(byId(id)), waitingFor(byId(id)));
+      test_.skip(status[id] !== 200, `the ${byId(id).module} API answered ${status[id]} to the teacher-trainee role`);
+    }
+  };
+
+  test("my-placement, hours-logged and my-projects show the trainee's own placement, verified hours and project", async ({ page, request }) => {
+    skipUnlessReady(test, ["field-training.my-placement", "field-training.hours-logged", "projects.my-projects"]);
+    // The practicum coordinator places the trainee at a school and starts the placement; the trainee logs today's
+    // hours and the mentor named on the opening verifies them. Only verified hours count. The trainee proposes a project.
+    await seedPlacement(request, { coordinator, supervisor: mentor, trainee: user }, { start: true, log: true, verify: true });
+    await created(request, user, "/projects/projects", {
+      title: "Classroom questioning study",
+      kind: "Research",
+      starts_on: dayFromNow(0),
+      ends_on: dayFromNow(90),
+    });
+    await signIn(page, user);
+
+    const placement = widget(page, "My placement");
+    await expect(placement.getByText("No placement yet")).toHaveCount(0);
+    const row = placement.getByRole("list", { name: "Your placements" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(row).toContainText(SITE);
+    await expect(row).toContainText(`4 of ${REQUIRED_HOURS} h verified`);
+    await expect(row).toContainText("Active");
+
+    const hours = widget(page, "Hours logged");
+    await expect(hours.getByText("No hours to show yet")).toHaveCount(0);
+    await expect(hours).toContainText(`4 of ${REQUIRED_HOURS} hours verified`);
+    await expect(hours.getByText("Awaiting verification: 0 h")).toBeVisible();
+
+    const projects = widget(page, "My projects");
+    await expect(projects.getByText("You are not on a project yet")).toHaveCount(0);
+    const project = projects.getByRole("list", { name: "My projects" }).getByRole("listitem").filter({ hasText: "Classroom questioning study" });
+    await expect(project).toContainText("Lead · No milestones yet");
+    await expect(project).toContainText("Proposed");
+  });
+
+  test("another trainee sees none of it", async ({ page, request }) => {
+    skipUnlessReady(test, ["field-training.my-placement", "field-training.hours-logged", "projects.my-projects"]);
+    await signIn(page, otherTrainee);
+    await expect(widget(page, "My placement").getByText("No placement yet", { exact: true })).toBeVisible();
+    await expect(widget(page, "Hours logged").getByText("No hours to show yet", { exact: true })).toBeVisible();
+    await expect(widget(page, "My projects").getByText("You are not on a project yet", { exact: true })).toBeVisible();
+    await expect(page.getByText(OPENING)).toHaveCount(0);
+    await expect(page.getByText("Classroom questioning study")).toHaveCount(0);
+    // The same through the API the widgets call: the first trainee's records, and nothing for the second.
+    const mine = async (who: DashboardUser, path: string) => {
+      const response = await request.get(`/api/v1${path}`, { headers: { Authorization: `Bearer ${who.token}` } });
+      expect(response.status(), path).toBe(200);
+      return (await response.json()) as unknown[]; // both answer a plain list
+    };
+    expect(await mine(user, "/field-training/me/placements")).toHaveLength(1);
+    expect(await mine(otherTrainee, "/field-training/me/placements")).toEqual([]);
+    expect(await mine(user, "/projects/me/projects")).toHaveLength(1);
+    expect(await mine(otherTrainee, "/projects/me/projects")).toEqual([]);
+  });
 });
