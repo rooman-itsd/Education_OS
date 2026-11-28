@@ -1142,7 +1142,7 @@ paths:
     get:
       tags: [widgets, sessions]
       summary: The caller's upcoming exam sessions (student)
-      description: Exams only (PRD Q6). Used by widget examinations.upcoming-assessments (Student dashboard).
+      description: "Exams only (PRD Q6). The scheduled sessions, not yet ended, of the papers the caller is a candidate for. Used by widget examinations.upcoming-assessments (Student dashboard)."
       operationId: getMyExamSchedule
       x-permission: examinations:session:read-own
       parameters:
@@ -1157,6 +1157,8 @@ paths:
                 required: [items]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/MyExamSessionItem" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /me/hall-tickets:
     get:

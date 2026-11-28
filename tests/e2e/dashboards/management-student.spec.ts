@@ -13,9 +13,8 @@ import { created, dayFromNow, expectBody, probe, shipped, signIn, standardPlan, 
  *   state, or says its data is not available while the backend is missing (the management student holds the
  *   student role's permissions through `extends`);
  * - widgets of modules not enabled yet are skipped, naming the module and the sprint batch that builds it
- *   (timetable-attendance and examinations' upcoming-assessments #325, lms #326, transport and library #338,
- *   productions #318, projects and field-training #339, placement-career and alumni #337). examinations is enabled
- *   but does not export examinations.upcoming-assessments yet, so that widget skips too;
+ *   (timetable-attendance #325, lms #326, transport and library #338, productions #318, projects and field-training
+ *   #339, placement-career and alumni #337);
  * - data journeys, each once its widget has shipped and its API answers the management-student role:
  *   an invoice finance staff raise to the student shows in fees-accounts.fee-dues; a notice a warden publishes to
  *   every hostel shows in hostel.notices; an opening the placement officer publishes shows in
@@ -38,7 +37,17 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Student layout (extends: student).
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
+  {
+    // Texts of UpcomingAssessments.tsx and errorMessage in examinations/frontend/src/widgets/useWidgetData.tsx.
+    id: "examinations.upcoming-assessments",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "Upcoming assessments",
+    probe: "/examinations/me/exam-schedule",
+    empty: "No upcoming exams.",
+    unavailable: "Examinations data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   // The management-student layout lists lms.course-materials again; the shell shows it once (resolveWidgetIds).
   {
     id: "lms.course-materials",

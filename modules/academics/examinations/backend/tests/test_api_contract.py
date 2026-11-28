@@ -69,6 +69,7 @@ IMPLEMENTED = {
     "cancelExamDuty": ("post", "/duties/{exam_duty_id}/cancel"),
     "listMyDuties": ("get", "/me/duties"),
     "openMarksEntry": ("post", "/papers/{exam_paper_id}/marks-entry"),
+    "getMyExamSchedule": ("get", "/me/exam-schedule"),
     "listMarks": ("get", "/papers/{exam_paper_id}/marks"),
     "enterMarks": ("put", "/papers/{exam_paper_id}/marks"),
     "submitMarks": ("post", "/papers/{exam_paper_id}/marks/submit"),
@@ -83,7 +84,11 @@ WIDENED = {  # the contract's descriptions: write-all widens write-department
 WRITE_ALL = "examinations:assessment-scheme:write-all"
 # the marks operations that declare a 403; lockMarks declares none, but is refused for a missing key like the others (a gap)
 MARKS_OPERATIONS = {"openMarksEntry", "listMarks", "enterMarks", "submitMarks", "moderateMarks"}
-PAPER_READ_OPERATIONS = {"listExamPapers", "getExamPaper"}  # scoped to the caller's duties (decision D6)
+PAPER_READ_OPERATIONS = {
+    "listExamPapers",
+    "getExamPaper",
+    "getMyExamSchedule",
+}  # declare a 403 (D6; the schedule is the caller own)
 DUTY_READ_ALL = "examinations:duty:read-all"
 # The wider key an operation also accepts (the contract's descriptions name it): the route's keys are x-permission plus it.
 WIDENING = {

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from ..application import access as k
 from ..application import duties as dty
 from ..application import marks as mks
+from ..application import my_schedule as mys
 from ..application import schedule as sch
 from ..application import service as svc
 from ..application.access import Actor
@@ -324,6 +325,15 @@ def list_my_duties(
     db: Session = Depends(get_db),
 ):
     return _run(dty.list_my_duties, db, a, include_past)
+
+
+@router.get("/me/exam-schedule")
+def get_my_exam_schedule(
+    date_from: str | None = None,
+    a: Actor = Depends(require(k.SESSION_READ_OWN)),
+    db: Session = Depends(get_db),
+):
+    return _run(mys.my_exam_schedule, db, a, date_from)
 
 
 # ---------------------------------------------------------------- marks
