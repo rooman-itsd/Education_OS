@@ -49,6 +49,19 @@ const localStack = [
     timeout: 60_000,
     env: { ...process.env, EOS_API_TARGET: `http://127.0.0.1:${API_PORT}` } as Record<string, string>,
   },
+  {
+    // The event-bus relay (platform/event-bus): without it no outbox event is ever delivered, so a journey that
+    // depends on one module's event reaching another (sports-nutrition-health and tournament-events scoping by the
+    // athlete id athlete-performance.athlete.registered carries, for example) never sees it arrive. No `url`: it
+    // serves no HTTP, so Playwright only starts it, it does not wait on it. Same database as "api"; a pass that runs
+    // before "api" has created the schema fails and is logged, the next pass (poll_interval_ms, default 1 s) retries
+    // (relay.py run_forever catches every exception), so starting it alongside "api" rather than after is safe.
+    name: "relay",
+    command: `"${python}" -m eos_event_bus`,
+    cwd: repoRoot,
+    reuseExistingServer: false,
+    env: { ...process.env, EOS_DATABASE_URL: `sqlite:///${database}` } as Record<string, string>,
+  },
 ];
 
 export default defineConfig({
