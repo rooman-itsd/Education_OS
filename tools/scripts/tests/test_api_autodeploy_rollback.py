@@ -31,10 +31,15 @@ DOCKER = """#!/usr/bin/env bash
 echo "docker $*" >> "$CALLS"
 case "$*" in
   *" ps -q api"*) [ -n "$FAKE_CID" ] && echo "$FAKE_CID" ;;
-  *" run --rm -T migrate"*) exit "${FAKE_MIGRATE_EXIT:-0}" ;;
+  *" run --rm -T migrate"*)
+    [ -f "$EOS_AUTODEPLOY_MARK" ] && echo "mark present during migrate" >> "$CALLS"
+    exit "${FAKE_MIGRATE_EXIT:-0}" ;;
+  *" config --services"*) printf 'db\\nmigrate\\napi\\nrelay\\nscheduler\\n' ;;
   "inspect -f {{.Config.Image}} "*) echo "eos-api:latest" ;;
   "inspect -f {{.Image}} "*) echo "sha256:old" ;;
-  "exec "*) [ "$FAKE_HEALTH" = ok ] ;;
+  "exec "*)
+    [ -f "$EOS_AUTODEPLOY_MARK" ] && echo "mark present during the health wait" >> "$CALLS"
+    [ "$FAKE_HEALTH" = ok ] ;;
 esac
 """
 
@@ -65,6 +70,7 @@ def _run(tmp_path: Path, **fake: str) -> tuple[int, list[str], Path]:
         "EOS_APP_DIR": str(app),
         "EOS_AUTODEPLOY_LOCK": str(tmp_path / "lock"),
         "EOS_AUTODEPLOY_FAILED_FILE": str(failed),
+        "EOS_AUTODEPLOY_MARK": str(tmp_path / "run" / "api-deploying"),
         "EOS_AUTODEPLOY_HEALTH_SECONDS": "0",
         "FAKE_HAVE": "aaa1111",
         "FAKE_WANT": "bbb2222",
@@ -120,5 +126,30 @@ def test_a_first_deploy_without_a_running_api_does_not_try_to_roll_back(tmp_path
 def test_a_failed_migration_still_leaves_the_running_api_alone(tmp_path):
     code, calls, _ = _run(tmp_path, FAKE_MIGRATE_EXIT="1")
     assert code == 1
-    assert not any(c.endswith(" up -d --quiet-pull") for c in calls)
+    assert not any(" up -d" in c for c in calls)
     assert any("migrations failed at bbb2222" in c for c in calls)
+    assert not (tmp_path / "run" / "api-deploying").exists()
+
+
+def test_the_restart_skips_migrate_so_the_api_is_not_stopped_while_it_runs_again(tmp_path):
+    """25 Nov: a plain `up -d` ran migrate a second time while api, relay and scheduler waited for it, stopped:
+    1.5 to 3.5 minutes of outage on every merge."""
+    code, calls, _ = _run(tmp_path)
+    assert code == 0, calls
+    ups = [c for c in calls if " up -d" in c]
+    assert len(ups) == 1 and ups[0].endswith(" up -d --quiet-pull --no-deps db api relay scheduler"), ups
+    assert calls.index(ups[0]) > max(i for i, c in enumerate(calls) if "run --rm -T migrate" in c)
+
+
+def test_the_deploy_mark_covers_the_deploy_and_is_gone_after_it(tmp_path):
+    mark = tmp_path / "run" / "api-deploying"
+    _, calls, _ = _run(tmp_path)
+    assert "mark present during migrate" in calls and "mark present during the health wait" in calls
+    assert not mark.exists()
+
+    _run(tmp_path, FAKE_HEALTH="down", FAKE_WANT="ccc3333")  # a rollback removes it too
+    assert not mark.exists()
+
+    mark.write_text("")  # left by a run that was killed
+    _, calls, _ = _run(tmp_path, FAKE_WANT="aaa1111")  # nothing new to deploy
+    assert not any(" build " in c for c in calls) and not mark.exists()

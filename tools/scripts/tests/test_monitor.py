@@ -27,7 +27,10 @@ FAKE_DOCKER = """#!/bin/sh
 [ -f "$FAKE_DIR/docker-hangs" ] && exec sleep 30
 [ -f "$FAKE_DIR/docker-error" ] && { printf 'error during connect:\\n\\tCannot connect to the Docker daemon\\r\\n\\033[31mis it running?\\033[0m\\n' >&2; exit 1; }
 case "$*" in
-  *"ps --status running --services"*) cat "$FAKE_DIR/running" ;;
+  *"ps --status running --services"*)
+    # running-once: one answer with a service left out, as a busy daemon gave on staging; then the full list.
+    if [ -f "$FAKE_DIR/running-once" ]; then cat "$FAKE_DIR/running-once"; rm "$FAKE_DIR/running-once"
+    else cat "$FAKE_DIR/running"; fi ;;
   *"logs --no-log-prefix --since"*) cat "$FAKE_DIR/logs" 2>/dev/null || true ;;
   *) echo "unexpected: docker $*" >&2; exit 2 ;;
 esac
@@ -45,6 +48,11 @@ case "$*" in
     printf '{"status":"ok","database":"postgres"}' ;;
 esac
 """
+# `systemctl is-failed` for the auto-deploy unit: failed while deploy-failed exists.
+FAKE_SYSTEMCTL = """#!/bin/sh
+[ "$1" = is-failed ] && [ -f "$FAKE_DIR/deploy-failed" ] && exit 0
+exit 1
+"""
 
 
 @pytest.fixture
@@ -52,7 +60,7 @@ def box(tmp_path):
     bin_dir, fake = tmp_path / "bin", tmp_path / "fake"
     bin_dir.mkdir()
     fake.mkdir()
-    for name, body in (("docker", FAKE_DOCKER), ("curl", FAKE_CURL)):
+    for name, body in (("docker", FAKE_DOCKER), ("curl", FAKE_CURL), ("systemctl", FAKE_SYSTEMCTL)):
         (bin_dir / name).write_text(body, newline="\n")
         (bin_dir / name).chmod(0o755)
     (fake / "running").write_text("db\napi\nrelay\nscheduler\n", newline="\n")
@@ -73,6 +81,9 @@ def _run(box, **env) -> subprocess.CompletedProcess:
         "EOS_MONITOR_DISK_MAX_PCT": "101",
         "EOS_MONITOR_LABEL": "staging",
         "EOS_MONITOR_HEALTH_RETRY_S": "0",
+        "EOS_MONITOR_CONTAINERS_RETRY_S": "0",
+        "EOS_MONITOR_DEPLOY_MARK": str(box["tmp"] / "api-deploying"),
+        "EOS_MONITOR_DEPLOY_FAILED": str(box["tmp"] / "api-autodeploy.failed"),
         "INVOCATION_ID": "test",  # as under systemd: log to stdout only, not to logger
         **env,
     }
@@ -265,6 +276,66 @@ def test_a_multi_line_docker_error_still_reaches_the_webhook_as_valid_json(box):
         assert json.loads(raw)["text"].startswith("[staging] ")
     assert any("FAILING containers:" in json.loads(raw)["text"] for raw in bodies)
     assert "retrying next run" not in r.stdout
+
+
+def test_a_service_left_out_of_one_answer_is_not_an_outage(box):
+    """Staging, 24 Nov: `db` reported not running while it had run without a break since 9 Oct."""
+    (box["fake"] / "running-once").write_text("api\nrelay\nscheduler\n", newline="\n")
+    r = _run(box)
+    assert r.returncode == 0 and _alerts(r) == [], r.stdout
+    assert not (box["fake"] / "running-once").exists()  # asked a second time
+
+
+def test_a_running_deploy_holds_the_alerts_it_causes_but_not_the_others(box):
+    (box["tmp"] / "api-deploying").write_text("")
+    (box["fake"] / "api-down").write_text("")
+    (box["fake"] / "running").write_text("db\n", newline="\n")
+    (box["fake"] / "docker-hangs").write_text("")  # the build starves Docker: no answer, logs unreadable
+    box["mark"].unlink()  # not a deploy's doing: still alerts
+    r = _run(box, EOS_MONITOR_DOCKER_TIMEOUT_S="1")
+    alerts = _alerts(r)
+    assert len(alerts) == 1 and "FAILING backup:" in alerts[0], alerts
+    for name in ("health", "containers", "errors"):
+        assert f"failing {name} during the deploy" in r.stdout
+        assert not (box["tmp"] / "state" / name).exists()
+
+    # The deploy ends with the API still down: now it alerts.
+    (box["tmp"] / "api-deploying").unlink()
+    (box["fake"] / "docker-hangs").unlink()
+    alerts = _alerts(_run(box))
+    assert any("FAILING health:" in a for a in alerts)
+    assert "ALERT: [staging] FAILING containers: not running: api relay scheduler" in alerts
+
+
+def test_a_deploy_that_runs_too_long_alerts_and_holds_nothing(box):
+    mark = box["tmp"] / "api-deploying"
+    mark.write_text("")
+    old = time.time() - 31 * 60
+    os.utime(mark, (old, old))
+    (box["fake"] / "api-down").write_text("")
+    alerts = _alerts(_run(box))
+    assert (
+        "ALERT: [staging] FAILING deploy: a deploy started 31 min ago has not finished: "
+        "journalctl -u eos-api-autodeploy.service" in alerts
+    )
+    assert any("FAILING health:" in a for a in alerts)
+
+
+def test_a_rolled_back_deploy_alerts_until_a_newer_commit_deploys(box):
+    failed = box["tmp"] / "api-autodeploy.failed"
+    failed.write_text("bbb2222\n")
+    assert _alerts(_run(box)) == [
+        "ALERT: [staging] FAILING deploy: the auto-deploy rolled back from bbb2222: journalctl -t eos-api-autodeploy"
+    ]
+    failed.unlink()  # the auto-deploy removes it once a newer commit is healthy
+    assert _alerts(_run(box)) == ["ALERT: [staging] RECOVERED deploy"]
+
+
+def test_a_failed_deploy_run_alerts(box):
+    (box["fake"] / "deploy-failed").write_text("")  # a migration failed: the unit's last run exited 1
+    assert _alerts(_run(box)) == [
+        "ALERT: [staging] FAILING deploy: the last auto-deploy run failed: journalctl -t eos-api-autodeploy"
+    ]
 
 
 def test_a_setting_that_is_not_a_number_falls_back_to_its_default(box):

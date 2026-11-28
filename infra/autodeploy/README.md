@@ -51,6 +51,12 @@ restarted onto it every two minutes: the next commit on what the host follows de
 failed commit is in `/var/lib/eos/api-autodeploy.failed`. Changing this script needs `install-api.sh` again on
 each API host: the installed copy is not auto-updated.
 
+The restart is `up -d --no-deps` on every service except `migrate`, which already ran: a plain `up -d` ran it a
+second time while `api`, `relay` and `scheduler` waited for it, stopped, for 1.5 to 3.5 minutes on every merge
+(25 Nov). The API is now down only while it restarts, about a minute. For the whole deploy, build included, the
+script keeps `/run/eos/api-deploying`, so `eos-monitor` (`../monitoring`) does not alert on that minute; a rolled-back
+or failed deploy does alert there (the `deploy` check).
+
 ## Environments
 
 | | Staging | Production |
