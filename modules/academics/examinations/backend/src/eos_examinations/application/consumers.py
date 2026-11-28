@@ -12,7 +12,15 @@ Not consumed, on purpose (docs/reviewer-decisions.md):
   therefore not applied to `offering_ref`.
 - `course.created` / `course.archived`: `offering.created` already carries the course's code, title, credits and
   department. No deletion event is defined for an offering.
-- `term.*`, `faculty-assignment.*`, `curriculum.published` and the enrolment events: later slices.
+- `term.*`, `faculty-assignment.*`, `curriculum.published` and `section-allocation.changed` (a section is not the
+  examinations' concern): not consumed.
+
+Implemented for registration (enrolment-registration's `course-registration.confirmed` and `.withdrawn`, kept as the local
+`registration_ref` read model, the source of who may become a candidate, FR-7):
+- `course-registration.confirmed` -> registration_ref (person, offering, period, `registration_type`). A type other than
+  regular, supplementary or backlog is refused, not guessed. A repeat (the republish backfill) keeps what is known.
+- `course-registration.withdrawn` -> registration_ref.status. A withdrawal is final: a confirmation that arrives after it
+  only supplies the fields the withdrawal did not carry.
 
 Delivery is at-least-once and unordered (platform/event-bus/contracts/events.yaml), so:
 - Idempotency is keyed on the envelope id, recorded per organisation in `processed_event` before the event is applied;
@@ -39,13 +47,16 @@ from sqlalchemy.orm import Session
 from ..domain.errors import DomainRuleError
 from ..domain.values import require_id, require_instant, require_number, require_text
 from ..infrastructure import repository as repo
-from ..infrastructure.models import OfferingRef, ProcessedEvent
+from ..infrastructure.models import OfferingRef, ProcessedEvent, RegistrationRef
 
 log = logging.getLogger("eos.examinations")
 
 SOURCE = "academic-management"
 OFFERING_CREATED = f"{SOURCE}.offering.created"
 OFFERING_STATUS_CHANGED = f"{SOURCE}.offering.status-changed"
+ENROLMENT = "enrolment-registration"
+REGISTRATION_CONFIRMED = f"{ENROLMENT}.course-registration.confirmed"
+REGISTRATION_WITHDRAWN = f"{ENROLMENT}.course-registration.withdrawn"
 
 SUPPORTED_VERSION = 1
 APPLIED, DUPLICATE, IGNORED, STALE = "applied", "duplicate", "ignored", "stale"
@@ -156,6 +167,70 @@ def _offering_status_changed(db: Session, org: str, p: dict, occurred_at: dateti
     return APPLIED
 
 
+REGISTRATION_TYPES = ("regular", "supplementary", "backlog")  # enrolment-registration's RegistrationType
+CONFIRMED, WITHDRAWN = "confirmed", "withdrawn"
+
+
+def _registration_row(db: Session, org: str, registration_id: str, p: dict, status: str) -> RegistrationRef:
+    row = repo.ref_row(db, RegistrationRef, RegistrationRef.registration_id, registration_id, org)
+    if row is None:
+        row = RegistrationRef(
+            organisation_id=org,
+            registration_id=registration_id,
+            person_id=_id(p, "person_id"),
+            course_offering_id=_id(p, "course_offering_id"),
+            status=status,
+        )
+        db.add(row)
+    return row
+
+
+def _moment(payload: dict, name: str) -> datetime:
+    """A date-time field of a payload (an ISO 8601 string on the wire), with a zone, in UTC."""
+    value = payload.get(name)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00")) if isinstance(value, str) else value
+    except ValueError:
+        raise ValueError(f"{name} must be a date and time") from None
+    return _field({name: parsed}, name, require_instant)
+
+
+def _registration_confirmed(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    # Every field is validated before the row is touched, so a malformed event writes nothing.
+    registration_id = _id(p, "registration_id")
+    person, offering, period = _id(p, "person_id"), _id(p, "course_offering_id"), _id(p, "academic_period_id")
+    kind = _text(p, "registration_type", 20)
+    if kind not in REGISTRATION_TYPES:
+        raise ValueError(f"registration_type must be one of {', '.join(REGISTRATION_TYPES)}")
+    confirmed_at = _moment(p, "confirmed_at")
+    row = _registration_row(db, org, registration_id, p, CONFIRMED)
+    if row.registration_type is not None:
+        return IGNORED  # a registration is confirmed once; a repeat (the republish backfill) keeps what is known
+    # A withdrawal that arrived first stays: the confirmation only supplies what the withdrawal did not carry.
+    row.person_id, row.course_offering_id = person, offering
+    row.academic_period_id, row.registration_type, row.confirmed_at = period, kind, confirmed_at
+    return APPLIED
+
+
+def _registration_withdrawn(db: Session, org: str, p: dict, occurred_at: datetime) -> str:
+    registration_id = _id(p, "registration_id")
+    _id(p, "person_id"), _id(p, "course_offering_id")
+    withdrawn_at = _moment(p, "withdrawn_at")
+    row = _registration_row(db, org, registration_id, p, WITHDRAWN)
+    if row.status == WITHDRAWN and row.withdrawn_at is not None:
+        return IGNORED
+    row.status, row.withdrawn_at = WITHDRAWN, withdrawn_at
+    return APPLIED
+
+
+def on_registration_confirmed(db: Session, event) -> str:
+    return _receive(db, event, _registration_confirmed)
+
+
+def on_registration_withdrawn(db: Session, event) -> str:
+    return _receive(db, event, _registration_withdrawn)
+
+
 def on_offering_created(db: Session, event) -> str:
     return _receive(db, event, _offering_created)
 
@@ -168,4 +243,6 @@ def on_offering_status_changed(db: Session, event) -> str:
 CONSUMERS = {
     OFFERING_CREATED: on_offering_created,
     OFFERING_STATUS_CHANGED: on_offering_status_changed,
+    REGISTRATION_CONFIRMED: on_registration_confirmed,
+    REGISTRATION_WITHDRAWN: on_registration_withdrawn,
 }

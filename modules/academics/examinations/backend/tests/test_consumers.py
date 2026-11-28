@@ -116,7 +116,12 @@ def markers(org_id: str) -> int:
 def test_the_consumers_are_exactly_the_events_of_the_manifest_and_the_entry_point():
     manifest = yaml.safe_load((MODULE / "module.yaml").read_text(encoding="utf-8"))
     assert set(CONSUMERS) == set(manifest["consumes_events"])
-    assert set(CONSUMERS) == {"academic-management.offering.created", "academic-management.offering.status-changed"}
+    assert set(CONSUMERS) == {
+        "academic-management.offering.created",
+        "academic-management.offering.status-changed",
+        "enrolment-registration.course-registration.confirmed",  # test_consumers_registration.py
+        "enrolment-registration.course-registration.withdrawn",
+    }
     project = tomllib.loads((MODULE / "backend" / "pyproject.toml").read_text(encoding="utf-8"))
     entry = project["project"]["entry-points"]["eos.event_consumers"]
     assert entry == {"examinations": "eos_examinations.application.consumers:CONSUMERS"}

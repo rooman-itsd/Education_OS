@@ -329,6 +329,32 @@ class OfferingRef(Base, TenantMixin, TimestampMixin):
     status_as_of: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class RegistrationRef(Base, TenantMixin, TimestampMixin):
+    """Read model of an enrolment-registration course registration (PRD section 9), the source of who may become a
+    candidate. Written by the `course-registration.confirmed` and `.withdrawn` consumers (application/consumers.py).
+
+    Events are delivered unordered, so a withdrawal can arrive before the confirmation: the row then exists with
+    `status = withdrawn` and no `academic_period_id` or `registration_type`, which the confirmation fills in without
+    undoing the withdrawal (a registration is withdrawn for good, as in academic-management's roster). A row is *known*
+    for a cycle only once `academic_period_id` and `registration_type` are set. `person_id` is the canonical student id."""
+
+    __tablename__ = f"{PREFIX}registration_ref"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "registration_id", name="uq_examinations_registration_ref"),
+        Index("ix_examinations_registration_ref_offering", "organisation_id", "course_offering_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    registration_id: Mapped[str] = mapped_column(String(36))
+    person_id: Mapped[str] = mapped_column(String(36))
+    course_offering_id: Mapped[str] = mapped_column(String(36))
+    academic_period_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    registration_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ProcessedEvent(Base, TenantMixin, TimestampMixin):
     """The envelope ids this module has already applied, per organisation: delivery is at-least-once, so a handler
     that finds its event id here does nothing (platform/event-bus/contracts/events.yaml, idempotency)."""
@@ -380,6 +406,7 @@ TABLES = [
         CandidateRow,
         MarkEntryRow,
         OfferingRef,
+        RegistrationRef,
         ProcessedEvent,
         AuditEntry,
     )
