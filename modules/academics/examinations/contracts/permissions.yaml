@@ -90,9 +90,9 @@ permissions:
   - key: examinations:result:compute
     description: Compute results from locked marks
   - key: examinations:result:approve-department
-    description: Approve computed results for course offerings of the caller's department
+    description: "First approval stage: approve computed results for course offerings of the caller's department (grants nothing alone until the caller's department is known, Q13)"
   - key: examinations:result:approve-all
-    description: Approve computed results for any course offering
+    description: Second approval stage (department-approved results, any course offering); also does the first stage until departments are known
   - key: examinations:result:publish
     description: Publish approved results
   - key: examinations:result:revise

@@ -3,6 +3,15 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Results workflow (issue #325, decisions D4 and D5): migration `ex_0008` adds `examinations_result` (one row per version; nothing is
+  deleted). `computeResults`, `approveResultsDepartment` (new, first stage), `approveResults` (now the second stage, key
+  `result:approve-all`), `publishResults`, `listResults`, `listMyResults` (`GET /me/results`) and `reviseResult`
+  (`application/results.py`, `domain/results.py`). `ResultStatus` gained `department_approved`. Computation needs the cycle in
+  evaluation and papers all locked; the percentage, pass and band rules, the offerings that are skipped and why, and the retries
+  that change nothing are listed in docs/reviewer-decisions.md section 17. `result:approve-department` and `result:read-department`
+  alone grant nothing until the caller's department is known (Q13). Publication sends one `result.published` per student with a
+  credit-weighted average and moves the cycle to `results_published`; a revision makes a new published version and sends
+  `result.revised`. Tests: `test_domain_results.py`, `test_api_results.py`, `test_migrations.py` (ex_0008).
 - Candidates and eligibility (issue #325, decisions D2 and D7): migration `ex_0007` adds `examinations_registration_ref`, kept by
   new consumers of enrolment-registration's `course-registration.confirmed` and `.withdrawn` (idempotent on the envelope id; a
   withdrawal is final, even when it arrives before the confirmation; a registration type other than regular, supplementary or
