@@ -561,6 +561,8 @@ paths:
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/Candidate" } }
                   total: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /exam-cycles/{exam_cycle_id}/eligibility-runs:
     parameters:
@@ -570,8 +572,11 @@ paths:
       summary: Determine eligibility for a cycle
       description: |
         Creates or refreshes candidates from registration and applies the eligibility inputs (FR-7).
-        Inputs whose source is not yet available leave candidates pending. Manual overrides are kept.
-        Publishes examinations.candidate.eligibility-determined per student.
+        Inputs whose source is not yet available leave candidates pending. Manual overrides are kept, and so are candidates
+        that already have marks. Registration types: a regular registration makes a candidate in a cycle that is not
+        supplementary; supplementary and backlog registrations make candidates in a supplementary cycle only. The minimum
+        attendance is the cycle's min_attendance_percent. Publishes examinations.candidate.eligibility-determined for each
+        student whose candidacy was created or changed.
       operationId: determineEligibility
       x-permission: examinations:candidate:determine
       requestBody:
@@ -590,6 +595,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EligibilityRunResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
@@ -599,7 +606,7 @@ paths:
     patch:
       tags: [candidates]
       summary: Override a candidate's eligibility
-      description: Reason is mandatory; recorded as a manual_override reason (FR-7).
+      description: "Reason is mandatory; recorded as a manual_override reason (FR-7). Only eligible or ineligible can be set; a candidate who has marks cannot be made ineligible (409 candidate_has_marks)."
       operationId: overrideCandidateEligibility
       x-permission: examinations:candidate:override
       requestBody:
@@ -619,6 +626,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Candidate" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 

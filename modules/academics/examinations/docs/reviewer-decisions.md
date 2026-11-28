@@ -133,7 +133,7 @@ Found while building the domain rules and tables. None is decided; each is isola
 | Whether a grading scheme or exam cycle `code` must be unique | No uniqueness rule: the contract declares no 409 for creating a cycle | Shivani |
 | What a cycle uses as grading scheme when the request names none and no default exists | `new_cycle` takes the scheme from the caller; the module does not choose one | Shivani |
 | The candidate table | **Implemented as a schema** (migration `ex_0005`, section 14): the table exists and nothing creates, reads or serves candidates | Shivani; Praveen reviews |
-| `registration_ref`, the registration event consumers and candidate creation | **No tables or code.** Pending Praveen's confirmation of the registration types and the candidate-creation rules (Q1), and the decision on recovering historical registration events | Praveen (Q1); Praveen or Faizan (recovery) |
+| `registration_ref`, the registration event consumers and candidate creation | **Built, on the owner's decisions D2 and D7 (issue #325), with Q1 still open:** the pairing of registration types and cycle types is this module's rule (section 16). The decision on recovering historical registration events is still open | Praveen (Q1); Praveen or Faizan (recovery) |
 | Eligibility determination and overrides | **No code.** Pending the status-to-eligibility mapping, the attendance threshold ownership and the missing-threshold rule; dues are deferred | Praveen; Akshata and Praveen; the dues provider is not identified |
 | Marks | **Implemented** (migration `ex_0006`, the five operations; the choices and gaps are in section 15) | Shivani; Praveen reviews |
 | Hall tickets and results | **No tables or code.** They depend on eligibility and, for results, on marks and the approval workflow | Shivani; Praveen; Faizan (approval payload) |
@@ -310,3 +310,21 @@ This record covers PR #183 (5 comments, 1 review, no inline comments), PRs #168,
 
 It does not claim to cover every team discussion. An item marked "open" means no record of an answer was
 found in the sources inspected, not that none was given.
+
+## 16. Candidates and eligibility (issue #325, decisions D2, D7 and D5)
+
+Built from the owner's decisions, not from a recorded answer of Praveen's Q1; the pairing below is this module's rule and is
+the first thing to correct if Q1 says otherwise (`domain/eligibility.py`, one function).
+
+| Rule | What the code does | Open with |
+|---|---|---|
+| Registration types (D2) | A `regular` registration makes a candidate in each paper of a cycle that is not `supplementary`; `supplementary` and `backlog` registrations make candidates in a `supplementary` cycle only. A registration type outside the three is refused by the consumer | Praveen (Q1) |
+| Withdrawn registration | Makes no candidate; an existing candidate becomes `ineligible` with `not_registered`, unless it was overridden or has marks | none |
+| Minimum attendance (D7) | The exam cycle's own `min_attendance_percent` (0 to 100, optional); at least that passes. No constant anywhere | none |
+| Student status | No source (Q2): always an unavailable input, so the candidate stays `pending`, with no reason, and `pending_inputs` names `student_status` | Praveen (Q2) |
+| Attendance | The cycle sets a minimum and no reading is fetched yet (timetable-attendance's `POST /reports/attendance-eligibility` is not called from here): unavailable, `pending` | Faizan (how a module calls another's API) |
+| Dues | With `check_dues` set and no call to fees-accounts `GET /dues` (its response shape is not confirmed by examinations): unavailable, `pending` | Gokula, Shivani |
+| Consequence | A run never produces `eligible` by itself today. Eligibility comes from a controller's `PATCH /candidates/{id}` override (a reason is mandatory, `manual_override` is recorded) until the sources are connected | the three rows above |
+| Overrides and marks | A run keeps overridden candidates and candidates that have marks; an override cannot make a candidate with marks ineligible (409 `candidate_has_marks`) | none |
+| Events | `candidate.eligibility-determined` once per student whose candidacy a run created or changed, naming the papers that changed; an override publishes one; an unchanged run publishes nothing | none |
+| `student_id` | The `person_id` of the registration event (the decision on #325); the schedule of a student (`/me/exam-schedule`) matches it against the caller's user id until a sign-in account maps to a person | Faizan |

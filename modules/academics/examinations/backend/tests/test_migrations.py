@@ -33,9 +33,10 @@ def _upgraded():
     return cfg, create_engine(url)
 
 
-def test_the_chain_is_ex_0001_to_ex_0006_with_one_head():
+def test_the_chain_is_ex_0001_to_ex_0007_with_one_head():
     script = ScriptDirectory.from_config(_config("sqlite://"))
-    assert script.get_heads() == ["ex_0006"]
+    assert script.get_heads() == ["ex_0007"]
+    assert script.get_revision("ex_0007").down_revision == "ex_0006"
     assert script.get_revision("ex_0006").down_revision == "ex_0005"
     assert script.get_revision("ex_0005").down_revision == "ex_0004"
     assert script.get_revision("ex_0004").down_revision == "ex_0003"
@@ -226,6 +227,7 @@ def test_the_migration_creates_every_model_table_and_no_other():
         ("*_0004_offering_ref_consumers.py", "ex_0004", "NEW_TABLES"),
         ("*_0005_candidate_table.py", "ex_0005", "TABLE"),
         ("*_0006_mark_entry.py", "ex_0006", "TABLE"),
+        ("*_0007_registration_ref.py", "ex_0007", "TABLE"),
     ):
         path = next((DB_DIR / "migrations" / "versions").glob(pattern))
         spec = util.spec_from_file_location(name, path)
@@ -237,7 +239,7 @@ def test_the_migration_creates_every_model_table_and_no_other():
 
 
 def test_every_model_table_is_prefixed_and_tenant_scoped():
-    assert len(TABLES) == 14
+    assert len(TABLES) == 15
     for table in TABLES:
         assert table.name.startswith(PREFIX), table.name
         assert "organisation_id" in table.columns, table.name
@@ -245,13 +247,13 @@ def test_every_model_table_is_prefixed_and_tenant_scoped():
 
 
 def test_no_table_for_a_decision_that_is_not_taken():
-    """Hall tickets, marks, results and the registration read model depend on eligibility, whose rules are unresolved;
-    they are a later slice. The candidate table is schema only and is the one table that carries `student_id` (the
-    canonical `person_id`)."""
+    """Hall tickets and results depend on eligibility and on decisions that are not taken; they are a later slice. The
+    candidate table is the one table that carries `student_id` (the canonical `person_id`), and the registration read
+    model carries the same id as `person_id`."""
     names = {t.name for t in TABLES}
-    for blocked in ("hall_ticket", "result", "registration_ref"):
+    for blocked in ("hall_ticket", "result"):
         assert f"{PREFIX}{blocked}" not in names
-    assert f"{PREFIX}candidate" in names and f"{PREFIX}mark_entry" in names
+    assert {f"{PREFIX}candidate", f"{PREFIX}mark_entry", f"{PREFIX}registration_ref"} <= names
     for table in TABLES:
         if table.name != f"{PREFIX}candidate":
             assert "student_id" not in table.columns, table.name
@@ -341,11 +343,12 @@ def test_ex_0003_downgrade_removes_only_its_two_indexes():
     command.downgrade(cfg, "ex_0002")
     with engine.connect() as conn:
         after = {i["name"] for i in inspect(conn).get_indexes(f"{PREFIX}exam_duty")}
-        # the tables of ex_0004, ex_0005 and ex_0006 go with them
+        # the tables of ex_0004, ex_0005, ex_0006 and ex_0007 go with them
         other_tables = {t.name for t in TABLES} - {
             f"{PREFIX}processed_event",
             f"{PREFIX}candidate",
             f"{PREFIX}mark_entry",
+            f"{PREFIX}registration_ref",
         }
         assert other_tables <= set(inspect(conn).get_table_names())
     assert before - after == DUTY_INDEXES and after <= before  # nothing else went, nothing came
@@ -476,7 +479,11 @@ def test_ex_0005_creates_only_the_candidate_table_with_the_approved_columns():
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
         assert CANDIDATE not in names
-        assert {t.name for t in TABLES} - {CANDIDATE, f"{PREFIX}mark_entry"} <= names  # nothing else went
+        assert {t.name for t in TABLES} - {
+            CANDIDATE,
+            f"{PREFIX}mark_entry",
+            f"{PREFIX}registration_ref",
+        } <= names  # nothing else went
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert CANDIDATE in inspect(conn).get_table_names()
@@ -588,7 +595,7 @@ def test_ex_0006_creates_only_the_mark_entry_table_with_the_prd_columns():
     with engine.connect() as conn:
         names = set(inspect(conn).get_table_names())
         assert MARK_ENTRY not in names and f"{PREFIX}candidate" in names  # only its own table went
-        assert {t.name for t in TABLES} - {MARK_ENTRY} <= names
+        assert {t.name for t in TABLES} - {MARK_ENTRY, f"{PREFIX}registration_ref"} <= names
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert MARK_ENTRY in inspect(conn).get_table_names()
@@ -601,3 +608,37 @@ def test_the_mark_entry_model_has_the_columns_and_no_defaults_of_the_migration()
         assert column.server_default is None, column.name
         if column.name not in {"id", "created_at", "absent"}:
             assert column.default is None, column.name
+
+
+# ------------------------------------------------------------------------------------------ ex_0007: registration ref
+REGISTRATION_REF = f"{PREFIX}registration_ref"
+
+
+def test_ex_0007_creates_only_the_registration_ref_table_and_downgrades_cleanly():
+    cfg, engine = _upgraded()
+    with engine.connect() as conn:
+        columns = _columns(conn, REGISTRATION_REF)
+        assert {n: c["nullable"] for n, c in columns.items()} == {
+            "id": False,
+            "organisation_id": True,  # the TenantMixin column; the unique key below names it
+            "created_at": False,
+            "registration_id": False,
+            "person_id": False,
+            "course_offering_id": False,
+            "academic_period_id": True,  # filled by the confirmation, which can arrive after a withdrawal
+            "registration_type": True,
+            "status": False,
+            "confirmed_at": True,
+            "withdrawn_at": True,
+        }
+        inspector = inspect(conn)
+        uniques = {u["name"]: u["column_names"] for u in inspector.get_unique_constraints(REGISTRATION_REF)}
+        assert uniques == {"uq_examinations_registration_ref": ["organisation_id", "registration_id"]}
+        assert not inspector.get_foreign_keys(REGISTRATION_REF)  # a read model of another module's rows: no foreign key
+    command.downgrade(cfg, "ex_0006")
+    with engine.connect() as conn:
+        names = set(inspect(conn).get_table_names())
+        assert REGISTRATION_REF not in names and {t.name for t in TABLES} - {REGISTRATION_REF} <= names
+    command.upgrade(cfg, "head")
+    with engine.connect() as conn:
+        assert REGISTRATION_REF in inspect(conn).get_table_names()

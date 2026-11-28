@@ -12,7 +12,7 @@ assessment schemes, exam cycles, exam papers, exam sessions, exam duties and mar
 results, the consumers other than the two offering ones, and the widgets `upcoming-assessments` and `results-summary`.
 `application/consumers.py` fills `offering_ref` from academic-management's `offering.created` and `offering.status-changed`, and papers serve `course_code`, `course_title` and `department_id` from it when it has them (omitted otherwise; an offering created before the consumers may have no row until a backfill, and later offering changes are not applied). Open
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
-The `examinations_candidate` table exists (migration `ex_0005`, schema only): nothing creates, reads or serves candidates yet.
+Candidates (`application/candidates.py`, `domain/eligibility.py`, tables `examinations_candidate` and `examinations_registration_ref`, migrations `ex_0005` and `ex_0007`): the registration consumers keep `registration_ref`, `determineEligibility` makes and refreshes candidates from it, `listCandidates` lists them and `overrideCandidateEligibility` is the controller's override. Student status, attendance and dues have no source yet, so a run leaves candidates `pending` (see the decisions file, section 16).
 Marks (`application/marks.py`, table `examinations_mark_entry`, migration `ex_0006`): `listMarks`, `enterMarks`, `submitMarks`,
 `moderateMarks` and `lockMarks` work on the eligible candidates of a paper. Until candidates are created a paper has none.
 `openMarksEntry` (`POST /papers/{id}/marks-entry`, key `paper:manage`) is the controller's explicit move of a scheduled paper into
