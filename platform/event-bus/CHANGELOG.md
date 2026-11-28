@@ -3,6 +3,9 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- `Event.of` gives a consumer `occurred_at` with a zone (UTC) when the database returned it without one. SQLite does
+  that to the timezone-aware column, and examinations and timetable-attendance refuse an `occurred_at` with no zone, so
+  under SQLite (the end-to-end stack) their consumers rejected every event. PostgreSQL is unchanged.
 - The envelope carries `impersonated_by` (security review N3, #672): the super admin who was really acting when
   `actor` is a user being impersonated. Chain 0004 adds the nullable column to `outbox_event`;
   `eos_core.events.publish()` fills it from the request (the API host sets it from the token's `imp` claim), so no

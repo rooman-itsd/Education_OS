@@ -8,7 +8,7 @@ own table."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 from eos_core.db import Base, TenantMixin, new_id, utcnow
@@ -40,13 +40,18 @@ class Event:
 
     @classmethod
     def of(cls, row: OutboxEvent) -> Event:
+        # The column is timezone-aware and holds UTC. SQLite hands it back without the zone, and the consumers that
+        # require one (examinations, timetable-attendance) would refuse every event under it; PostgreSQL keeps it.
+        occurred_at = row.occurred_at
+        if occurred_at is not None and occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=UTC)
         return cls(
             id=row.id,
             name=row.name,
             version=row.version or 1,
             organisation_id=row.organisation_id,
             actor=row.actor,
-            occurred_at=row.occurred_at,
+            occurred_at=occurred_at,
             payload=dict(row.payload or {}),
             impersonated_by=row.impersonated_by,
         )
