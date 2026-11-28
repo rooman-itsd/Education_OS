@@ -29,7 +29,17 @@ const WIDGETS: LayoutWidget[] = [
   // Inherited from the Student layout (extends: student).
   { id: "timetable-attendance.today", module: "academics/timetable-attendance", batch: "#325" },
   { id: "timetable-attendance.attendance-summary", module: "academics/timetable-attendance", batch: "#325" },
-  { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
+  {
+    // Texts of UpcomingAssessments.tsx and errorMessage in examinations/frontend/src/widgets/useWidgetData.tsx.
+    id: "examinations.upcoming-assessments",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "Upcoming assessments",
+    probe: "/examinations/me/exam-schedule",
+    empty: "No upcoming exams.",
+    unavailable: "Examinations data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     id: "lms.course-materials",
     module: "academics/lms",

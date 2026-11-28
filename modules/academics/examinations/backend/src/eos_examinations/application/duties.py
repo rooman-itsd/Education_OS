@@ -213,6 +213,22 @@ def _target_conflict(db: Session, staff_id: str, duty_type: str, session_id: str
         )
 
 
+def _separation_conflict(db: Session, staff_id: str, duty_type: str, paper_id: str | None) -> None:
+    """Decision D5: whoever evaluates a paper does not moderate it, whichever duty is assigned first."""
+    other = {ses.EVALUATION: ses.MODERATION, ses.MODERATION: ses.EVALUATION}.get(duty_type)
+    if other is None or paper_id is None:
+        return
+    existing = repo.live_duplicate_duty(db, staff_id, other, None, paper_id)
+    if existing is not None:
+        raise ExaminationsError(
+            409,
+            "duty_separation",
+            f"the staff member holds the {other} duty on this paper; one person does not evaluate and moderate the same paper",
+            exam_duty_id=existing.id,
+            conflicting_duty_type=other,
+        )
+
+
 @base.transactional
 def assign_exam_duty(db: Session, actor: Actor, body: object) -> dict:
     """FR-9. Order of refusals: the request itself (400), a session or paper that does not exist for the caller (422),
@@ -263,6 +279,7 @@ def assign_exam_duty(db: Session, actor: Actor, body: object) -> dict:
         session = sch._session_domain(session_row)
         base._domain(ses.ensure_open, session)  # only a scheduled session takes duties
     _target_conflict(db, staff_id, duty_type, session_id, paper_id)
+    _separation_conflict(db, staff_id, duty_type, paper_id)
     if session is not None:
         others = [sch._session_domain(s) for s in repo.assigned_invigilation_sessions(db, staff_id)]
         base._domain(ses.ensure_no_invigilation_clash, session, others)

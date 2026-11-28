@@ -325,10 +325,11 @@ def test_the_same_staff_type_and_target_twice_is_409_but_each_variation_is_allow
     ok(invigilation(client, h, uid(), session["id"]), 201)  # another staff member, same session
     ok(evaluation(client, h, staff, paper["id"]), 201)
     err(evaluation(client, h, staff, paper["id"]), 409, "duty_exists")
-    ok(evaluation(client, h, staff, paper["id"], "moderation"), 201)  # another type, same paper
-    err(evaluation(client, h, staff, paper["id"], "moderation"), 409, "duty_exists")
+    moderator = uid()  # not the evaluator: one person does not do both on a paper (test_api_duty_separation.py)
+    ok(evaluation(client, h, moderator, paper["id"], "moderation"), 201)  # another type, same paper
+    err(evaluation(client, h, moderator, paper["id"], "moderation"), 409, "duty_exists")
     ok(evaluation(client, h, uid(), paper["id"]), 201)  # another staff member, same paper
-    assert ok(client.get(f"{URL}?staff_id={staff}", headers=h))["total"] == 3
+    assert ok(client.get(f"{URL}?staff_id={staff}", headers=h))["total"] == 2  # the invigilation and the evaluation
 
 
 def test_a_cancelled_duty_can_be_assigned_again_and_a_completed_one_cannot(client, org, h, world):
@@ -589,7 +590,10 @@ def test_my_duties_default_to_upcoming_assigned_duties_only(client, org, h, worl
     d_cancelled_session = ok(invigilation(client, h, me, cancelled_session["id"]), 201)
     ok(client.post(f"{BASE}/sessions/{cancelled_session['id']}/cancel", json={"reason": "flood"}, headers=h))
     d_eval = ok(evaluation(client, h, me, paper["id"]), 201)  # no date
-    d_mod = ok(evaluation(client, h, me, paper["id"], "moderation"), 201)
+    moderated = make_papers(client, h, cycle["id"], uid(), ["END"])[
+        0
+    ]  # moderating another paper than the one evaluated
+    d_mod = ok(evaluation(client, h, me, moderated["id"], "moderation"), 201)
     d_cancelled = ok(invigilation(client, h, me, new_session(client, h, cycle["id"], 9, 11, day="30")["id"]), 201)
     ok(client.post(f"{URL}/{d_cancelled['id']}/cancel", json={"reason": "x"}, headers=h))
     ok(invigilation(client, h, uid(), session["id"]), 201)  # someone else's duty
@@ -767,7 +771,10 @@ def test_undated_duties_keep_the_order_they_were_assigned(client, org, h, world)
     cycle, session, paper = world
     me, mine = org.user(FACULTY)
     papers = make_papers(client, h, cycle["id"], uid(), ["INT", "END"])
-    made = [ok(evaluation(client, h, me, p["id"], kind), 201) for p in papers for kind in ("evaluation", "moderation")]
+    made = [
+        ok(evaluation(client, h, me, p["id"], kind), 201)
+        for p, kind in zip(papers, ("evaluation", "moderation"), strict=True)
+    ]
     for _ in range(3):
         assert [d["id"] for d in ok(client.get(ME, headers=mine))["items"]] == [d["id"] for d in made]
 

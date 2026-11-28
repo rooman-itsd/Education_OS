@@ -49,7 +49,17 @@ const WIDGETS: LayoutWidget[] = [
     emptyCode: "active_term_not_found",
     unavailable: "Timetable and attendance are not available yet.",
   },
-  { id: "examinations.upcoming-assessments", module: "academics/examinations", batch: "#325" },
+  {
+    // Texts of UpcomingAssessments.tsx and errorMessage in examinations/frontend/src/widgets/useWidgetData.tsx.
+    id: "examinations.upcoming-assessments",
+    module: "academics/examinations",
+    batch: "#325",
+    title: "Upcoming assessments",
+    probe: "/examinations/me/exam-schedule",
+    empty: "No upcoming exams.",
+    unavailable: "Examinations data is not available yet.",
+    forbidden: "You do not have access to this.",
+  },
   {
     id: "lms.course-materials",
     module: "academics/lms",

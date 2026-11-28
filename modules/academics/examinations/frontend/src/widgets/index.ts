@@ -3,6 +3,7 @@ import { ExamDuties } from "./ExamDuties";
 import { ExamSchedule } from "./ExamSchedule";
 import { HallTicketsIssued } from "./HallTicketsIssued";
 import { ResultsPending } from "./ResultsPending";
+import { UpcomingAssessments } from "./UpcomingAssessments";
 import "./widgets.css";
 
 /**
@@ -13,7 +14,8 @@ import "./widgets.css";
  * through this module's generated API client in ../api.
  *
  * Data, endpoint and permission per the PRD, section 7 (PR #183): the three Examination Staff widgets, and
- * examinations.exam-duties for the Faculty dashboard.
+ * examinations.exam-duties for the Faculty dashboard and examinations.upcoming-assessments for the Student one (exam sessions
+ * only, PRD Q6).
  */
 export const widgets: DashboardWidget[] = [
   {
@@ -47,5 +49,13 @@ export const widgets: DashboardWidget[] = [
     kind: "list",
     size: "2x1",
     component: ExamDuties,
+  },
+  {
+    id: "examinations.upcoming-assessments",
+    title: "Upcoming assessments",
+    permission: "examinations:session:read-own",
+    kind: "list",
+    size: "2x1",
+    component: UpcomingAssessments,
   },
 ];

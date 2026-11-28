@@ -54,9 +54,13 @@ def test_the_operations_need_their_keys(client, org, h, cycle):
     paper = make_papers(client, h, cycle["id"])[0]
     assert client.get(URL).status_code == 401
     assert client.post(URL, json={}).status_code == 401
-    for headers in (head, viewer, faculty):  # paper:read
+    for headers in (head, viewer):  # paper:read: every paper of the organisation
         assert client.get(URL, headers=headers).status_code == 200
         assert client.get(f"{URL}/{paper['id']}", headers=headers).status_code == 200
+    # paper:read-assigned only (faculty): the list answers, with the caller's own papers (none here), and a paper they hold
+    # no duty for is refused (decision D6, test_api_paper_scope.py)
+    assert client.get(URL, headers=faculty).json() == {"items": [], "total": 0}
+    assert client.get(f"{URL}/{paper['id']}", headers=faculty).status_code == 403
     assert client.get(URL, headers=student).status_code == 403
     assert client.get(f"{URL}/{paper['id']}", headers=student).status_code == 403
     for headers in (head, viewer, faculty, student):  # reading is not managing

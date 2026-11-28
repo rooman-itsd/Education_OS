@@ -68,6 +68,8 @@ IMPLEMENTED = {
     "assignExamDuty": ("post", "/duties"),
     "cancelExamDuty": ("post", "/duties/{exam_duty_id}/cancel"),
     "listMyDuties": ("get", "/me/duties"),
+    "openMarksEntry": ("post", "/papers/{exam_paper_id}/marks-entry"),
+    "getMyExamSchedule": ("get", "/me/exam-schedule"),
     "listMarks": ("get", "/papers/{exam_paper_id}/marks"),
     "enterMarks": ("put", "/papers/{exam_paper_id}/marks"),
     "submitMarks": ("post", "/papers/{exam_paper_id}/marks/submit"),
@@ -81,7 +83,12 @@ WIDENED = {  # the contract's descriptions: write-all widens write-department
 }
 WRITE_ALL = "examinations:assessment-scheme:write-all"
 # the marks operations that declare a 403; lockMarks declares none, but is refused for a missing key like the others (a gap)
-MARKS_OPERATIONS = {"listMarks", "enterMarks", "submitMarks", "moderateMarks"}
+MARKS_OPERATIONS = {"openMarksEntry", "listMarks", "enterMarks", "submitMarks", "moderateMarks"}
+PAPER_READ_OPERATIONS = {
+    "listExamPapers",
+    "getExamPaper",
+    "getMyExamSchedule",
+}  # declare a 403 (D6; the schedule is the caller own)
 DUTY_READ_ALL = "examinations:duty:read-all"
 # The wider key an operation also accepts (the contract's descriptions name it): the route's keys are x-permission plus it.
 WIDENING = {
@@ -324,7 +331,9 @@ def test_the_contract_gaps_this_batch_records():
     for operation_id in IMPLEMENTED:
         declared = set(operation(operation_id)["responses"])
         assert "401" not in declared, operation_id
-        assert ("403" in declared) == (operation_id in WIDENED | MARKS_OPERATIONS), operation_id  # marks declare theirs
+        assert ("403" in declared) == (operation_id in WIDENED | MARKS_OPERATIONS | PAPER_READ_OPERATIONS), (
+            operation_id
+        )  # marks declare theirs
     # papers and sessions: a bad filter on both listings, and a missing reason on cancelExamSession, answer 400 where
     # the contract declares none; an unknown cycle or paper on create and schedule is the declared 422.
     for operation_id in (

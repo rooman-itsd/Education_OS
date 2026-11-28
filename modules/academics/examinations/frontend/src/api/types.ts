@@ -91,6 +91,30 @@ export interface ExamDuty {
   venue_label?: string | null;
 }
 
+export type EligibilityStatus = "pending" | "eligible" | "ineligible";
+
+/** components.schemas.MyExamSessionItem. `course_code`, `course_title` and `component_code` are read-only and may be absent;
+ *  `hall_ticket_status` is null until hall tickets are issued. */
+export interface MyExamSessionItem {
+  exam_session_id: string;
+  exam_cycle_id: string;
+  starts_at: string;
+  ends_at: string;
+  venue_label?: string | null;
+  exam_paper_id: string;
+  course_offering_id: string;
+  course_code?: string;
+  course_title?: string;
+  component_code?: string;
+  eligibility_status: EligibilityStatus;
+  hall_ticket_status?: string | null;
+}
+
+/** GET /me/exam-schedule: the caller's upcoming exam sessions ordered by start time. */
+export interface MyExamSchedule {
+  items: MyExamSessionItem[];
+}
+
 /** GET /me/duties: the caller's duties ordered by time. */
 export interface MyDutyPage {
   items: ExamDuty[];
