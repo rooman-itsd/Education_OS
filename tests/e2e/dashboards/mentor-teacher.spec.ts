@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { addUser, organisationAdmin, type DashboardUser } from "./organisation";
+import { OPENING, SITE, seedPlacement } from "./field-training-data";
+import { MILESTONE, TRIAL, seedProject } from "./projects-data";
 import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, type LayoutWidget } from "./widgets";
 
 /**
@@ -15,8 +17,9 @@ import { expectBody, probe, shipped, signIn, standardPlan, waitingFor, widget, t
  * - widgets that are not on the dashboard yet are skipped, naming the module and the sprint batch that builds it
  *   (field-training and projects #339, and the inherited timetable-attendance, examinations and lms ones). Entries whose module is built already carry that widget's texts, so the journey starts checking them
  *   the day the module is enabled;
- * - no data journeys yet: every widget that holds data waits for its module (field-training, projects), and the
- *   shared ones need a term or a framework first. The data journeys are added with the modules.
+ * - with data: field-training.trainees-to-assess and projects.to-review show the trainee the practicum coordinator
+ *   places with the mentor teacher and the milestone the trainee submits to them, and none of it reaches another mentor
+ *   teacher; the inherited Faculty widgets need a term, courses and registrations (faculty.spec.ts seeds them).
  *
  * The super admin moves the organisation to Standard first, so every module of the profile is entitled (campus-life and
  * facilities are not in the Trial plan, platform/billing/config/plans.yaml).
@@ -129,6 +132,10 @@ const WIDGETS: LayoutWidget[] = [
 const SHIPPED = WIDGETS.filter(shipped);
 
 let user: DashboardUser;
+let otherMentor: DashboardUser;
+let coordinator: DashboardUser;
+let projectsLead: DashboardUser;
+let trainee: DashboardUser;
 /** Per shipped widget id: what its GET answered the mentor teacher. */
 const status: Record<string, number> = {};
 
@@ -138,6 +145,10 @@ test.beforeAll(async ({ request }) => {
   const admin = await organisationAdmin(request, { academyType: "teacher-education-college" });
   await standardPlan(request, admin.organisation.id);
   user = await addUser(request, admin, "mentor-teacher");
+  otherMentor = await addUser(request, admin, "mentor-teacher", "mentor-two");
+  coordinator = await addUser(request, admin, "practicum-coordinator");
+  projectsLead = await addUser(request, admin, "projects-coordinator");
+  trainee = await addUser(request, admin, "teacher-trainee");
   for (const w of SHIPPED) status[w.id] = await probe(request, user, w);
 });
 
@@ -171,4 +182,55 @@ test.describe("mentor-teacher widgets", () => {
       await expect(widget(page, w.id)).toHaveCount(0);
     });
   }
+});
+
+test.describe("with field-training and projects data", () => {
+  test("trainees-to-assess and to-review show the trainee placed with this mentor and the milestone they submit", async ({ page, request }) => {
+    for (const id of ["field-training.trainees-to-assess", "projects.to-review"]) {
+      const w = WIDGETS.find((x) => x.id === id)!;
+      test.skip(!shipped(w), waitingFor(w));
+      test.skip(status[id] !== 200, `the ${w.module} API answered ${status[id]} to the mentor-teacher role`);
+    }
+    // The practicum coordinator places the trainee at a school (site and opening name the mentor as supervisor), the
+    // trainee logs today's hours and the entry waits for the mentor. The projects coordinator creates the trainee's
+    // project with the mentor as guide; the guide adds a milestone and the trainee submits it.
+    await seedPlacement(request, { coordinator, supervisor: user, trainee }, { start: true, log: true });
+    await seedProject(request, { coordinator: projectsLead, guide: user, lead: trainee }, { milestone: true, submit: true });
+    await signIn(page, user);
+
+    const toAssess = widget(page, "Trainees to assess");
+    await expect(toAssess.getByText("Nothing to assess right now")).toHaveCount(0);
+    // No identity lookup gives the module the trainee's name yet, so the row is titled "Trainee".
+    const row = toAssess.getByRole("list", { name: "Trainees to assess" }).getByRole("listitem").filter({ hasText: OPENING });
+    await expect(row).toContainText(SITE);
+    await expect(row).toContainText("1 entry to verify");
+
+    const review = widget(page, "To review");
+    await expect(review.getByText("Nothing waiting for your review")).toHaveCount(0);
+    const item = review.getByRole("list", { name: "Work to review" }).getByRole("listitem").filter({ hasText: MILESTONE });
+    await expect(item).toContainText(`${TRIAL} · version 1`);
+  });
+
+  test("another mentor teacher sees none of it", async ({ page }) => {
+    for (const id of ["field-training.trainees-to-assess", "projects.to-review"]) {
+      const w = WIDGETS.find((x) => x.id === id)!;
+      test.skip(!shipped(w), waitingFor(w));
+    }
+    await signIn(page, otherMentor);
+    await expect(widget(page, "Trainees to assess").getByText("Nothing to assess right now", { exact: true })).toBeVisible();
+    await expect(widget(page, "To review").getByText("Nothing waiting for your review", { exact: true })).toBeVisible();
+    await expect(page.getByText(OPENING)).toHaveCount(0);
+    await expect(page.getByText(MILESTONE)).toHaveCount(0);
+  });
+
+  test("the trainee is refused what only a supervisor reads", async ({ request }) => {
+    // The mentor review queue and assessment list belong to supervisors: the trainee being assessed may not read them.
+    for (const [who, path] of [
+      [trainee, "/api/v1/projects/me/reviews?limit=1"],
+      [trainee, "/api/v1/field-training/me/trainees?limit=1"],
+    ] as const) {
+      const response = await request.get(path, { headers: { Authorization: `Bearer ${who.token}` } });
+      expect(response.status(), path).toBe(403);
+    }
+  });
 });
