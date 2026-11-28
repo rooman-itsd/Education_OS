@@ -15,5 +15,8 @@ dependencies = [
 [project.entry-points."eos.event_consumers"]
 documents = "eos_documents.application.consumers:CONSUMERS"
 
+[project.entry-points."eos.scheduler_jobs"]
+documents = "eos_documents.application.jobs:JOBS"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

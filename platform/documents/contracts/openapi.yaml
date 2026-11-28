@@ -256,9 +256,13 @@ components:
           $ref: "#/components/schemas/Document"
         upload_url:
           type: string
+        upload_fields:
+          type: object
+          additionalProperties:
+            type: string
         method:
           type: string
-          example: PUT
+          example: POST
         expires_in_seconds:
           type: integer
 

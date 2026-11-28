@@ -16,6 +16,8 @@ class DocumentsSettings:
     minio_bucket: str
     max_file_size_bytes: int
     url_expires_seconds: int
+    minio_region: str = "us-east-1"
+    pending_upload_ttl_seconds: int = 3600
 
 
 def load_settings() -> DocumentsSettings:
@@ -41,4 +43,6 @@ def load_settings() -> DocumentsSettings:
         minio_bucket=os.getenv("DOCUMENTS_MINIO_BUCKET", "eos-documents"),
         max_file_size_bytes=int(os.getenv("DOCUMENTS_MAX_FILE_SIZE_BYTES", "52428800")),  # 50MB
         url_expires_seconds=int(os.getenv("DOCUMENTS_URL_EXPIRES_SECONDS", "900")),  # 15m
+        minio_region=os.getenv("DOCUMENTS_MINIO_REGION", "us-east-1"),
+        pending_upload_ttl_seconds=max(60, int(os.getenv("DOCUMENTS_PENDING_UPLOAD_TTL_SECONDS", "3600"))),
     )

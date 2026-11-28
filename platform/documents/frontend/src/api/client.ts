@@ -67,6 +67,7 @@ export interface UploadIntentInput {
 export interface UploadIntentResponse {
   document: DocumentRecord;
   upload_url: string;
+  upload_fields?: Record<string, string>;
   method: string;
   expires_in_seconds: number;
 }

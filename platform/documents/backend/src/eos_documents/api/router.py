@@ -49,7 +49,7 @@ def request_upload_intent(
     if not p.organisation_id:
         raise HTTPException(400, detail={"code": "bad_request", "message": "organisation_id required"})
     try:
-        doc, created, url, exp = service.request_upload_intent(
+        doc, created, _url, _exp = service.request_upload_intent(
             db,
             p.organisation_id,
             actor_id=p.user_id,
@@ -62,11 +62,13 @@ def request_upload_intent(
             client_token=body.client_token,
             tags=body.tags,
         )
+        url, fields, exp = service.upload_post_for(doc)
         db.commit()
         resp_data = {
             "document": service.view_document(doc),
             "upload_url": url,
-            "method": "PUT",
+            "upload_fields": fields,
+            "method": "POST",
             "expires_in_seconds": exp,
         }
         return JSONResponse(resp_data, status_code=201 if created else 200)
@@ -78,14 +80,15 @@ def request_upload_intent(
         existing = service.find_by_token(db, p.organisation_id, body.client_token, uploaded_by=p.user_id)
         if existing:
             try:
-                url, exp = service.upload_url_for(existing)
+                url, fields, exp = service.upload_post_for(existing)
             except DocumentError as e:
                 raise _err(e) from e
             return JSONResponse(
                 {
                     "document": service.view_document(existing),
                     "upload_url": url,
-                    "method": "PUT",
+                    "upload_fields": fields,
+                    "method": "POST",
                     "expires_in_seconds": exp,
                 },
                 status_code=200,
@@ -120,7 +123,7 @@ def request_new_version(
     if not _visible(p, service.get_document(db, p.organisation_id, id)):
         raise HTTPException(404, detail={"code": "not_found", "message": "Document not found"})
     try:
-        doc, created, url, exp = service.request_new_version(
+        doc, created, _url, _exp = service.request_new_version(
             db,
             p.organisation_id,
             actor_id=p.user_id,
@@ -130,6 +133,7 @@ def request_new_version(
             size_bytes=body.size_bytes,
             client_token=body.client_token,
         )
+        url, fields, exp = service.upload_post_for(doc)
         db.commit()
     except DocumentError as e:
         db.rollback()
@@ -138,7 +142,13 @@ def request_new_version(
         db.rollback()
         raise HTTPException(409, detail={"code": "document_error", "message": "client_token already used"}) from e
     return JSONResponse(
-        {"document": service.view_document(doc), "upload_url": url, "method": "PUT", "expires_in_seconds": exp},
+        {
+            "document": service.view_document(doc),
+            "upload_url": url,
+            "upload_fields": fields,
+            "method": "POST",
+            "expires_in_seconds": exp,
+        },
         status_code=201 if created else 200,
     )
 
