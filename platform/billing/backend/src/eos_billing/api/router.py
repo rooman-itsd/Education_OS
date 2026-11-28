@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 from datetime import datetime
 
 from eos_core.db import get_db
+from eos_core.settings import settings
 from eos_identity.api.deps import Principal, require
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..application import service
+from ..application import config, service
 from ..application.reports import subscription_report
 from ..application.service import BillingError
 from ..domain.limits import PlanLimits
@@ -18,6 +24,14 @@ router = APIRouter(tags=["billing"])
 
 def _err(e: BillingError):
     return HTTPException(e.status, str(e))
+
+
+def _refusal(e: BillingError) -> JSONResponse:
+    """A refusal with its machine-readable code beside the message, for the errors that carry one."""
+    return JSONResponse({"detail": str(e), "code": e.code}, status_code=e.status)
+
+
+SIGNATURE_HEADER = "X-Payment-Signature"
 
 
 class Upgrade(BaseModel):
@@ -119,6 +133,8 @@ def upgrade(
             db, organisation_id=p.organisation_id, plan_id=body.plan, billing_cycle=body.billing_cycle
         )
     except BillingError as e:
+        if e.code:
+            return _refusal(e)  # 409 payment_not_configured: no adapter, a paid plan (security review N8)
         raise _err(e) from e
 
 
@@ -131,12 +147,42 @@ def cancel(p: Principal = Depends(require("billing:subscription:manage")), db: S
 
 
 @router.post("/webhooks/payment", status_code=204)
-def payment_webhook(body: dict, db: Session = Depends(get_db)):
-    """Payment adapter callback. The adapter verifies the signature before calling this."""
+async def payment_webhook(request: Request, db: Session = Depends(get_db)):
+    """The payment adapter's server-to-server notification (payment-sbiepay's PaymentNotification). Security
+    review N7: it takes no token, so it is trusted only when signed: HMAC-SHA256 of the raw body with
+    BILLING_PAYMENT_WEBHOOK_SECRET, hex, in X-Payment-Signature, compared in constant time. With no adapter
+    configured there is nothing to notify and the route answers 404; with no secret it refuses everything (503).
+    Only a succeeded payment for billing activates the pending upgrade, and only for the plan's amount."""
+    if settings.payment_adapter == "none":
+        raise HTTPException(404, "Not Found")
+    secret = config.payment_webhook_secret()
+    if not secret:
+        raise HTTPException(503, "BILLING_PAYMENT_WEBHOOK_SECRET is not set: payment notifications cannot be verified")
+    raw = await request.body()
+    expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, request.headers.get(SIGNATURE_HEADER, "")):
+        raise HTTPException(401, "invalid payment notification signature")
     try:
-        service.confirm_payment(db, reference=body.get("reference", ""))
+        body = json.loads(raw)
+    except ValueError as e:
+        raise HTTPException(400, "the notification is not JSON") from e
+    if not isinstance(body, dict):
+        raise HTTPException(400, "the notification is not a JSON object")
+    source = body.get("source_module")
+    if source not in (None, "billing") or body.get("status", "succeeded") != "succeeded":
+        return Response(status_code=204)  # another module's payment, or not a success: nothing to activate
+    reference = body.get("source_reference") if source == "billing" else body.get("reference")
+    try:
+        await run_in_threadpool(_confirm, db, str(reference or ""), body.get("amount"), body.get("organisation_id"))
     except BillingError as e:
+        if e.code:
+            return _refusal(e)
         raise _err(e) from e
+    return Response(status_code=204)
+
+
+def _confirm(db: Session, reference: str, amount, organisation_id) -> None:
+    service.confirm_payment(db, reference=reference, amount=amount, organisation_id=organisation_id)
 
 
 @router.get("/admin/reports/subscriptions")

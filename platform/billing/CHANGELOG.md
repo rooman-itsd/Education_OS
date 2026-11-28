@@ -3,6 +3,14 @@
 All notable changes to this module. Follows Keep a Changelog, semver per module.
 
 ## [Unreleased]
+- Security review N8 (#675): with no payment adapter, a paid plan is no longer self-service outside dev mode.
+  `POST /subscription/upgrade` answers `409 payment_not_configured` instead of activating it with a numbered "paid"
+  GST invoice for money never received; a super admin activates it once paid offline (`PUT
+  /admin/subscriptions/{id}`, no invoice). Free plans, and dev mode, are unchanged.
+- Security review N7 (#674): `POST /webhooks/payment` verifies the adapter's signature (HMAC-SHA256 of the raw
+  body with the new `BILLING_PAYMENT_WEBHOOK_SECRET`, in `X-Payment-Signature`, as payment-sbiepay signs), checks
+  the amount against the pending plan's total, acts only on a succeeded billing payment, answers a redelivery
+  with 204, refuses everything without a secret (503) and answers 404 with no adapter. Contract minor bump.
 - Plan limits (contract 0.4.0, additive): `plan_limits`, `user_limit` and `usage_vs_limits` in the application service,
   and `GET /usage` (permission `billing:subscription:read`) reporting usage against the plan's limits: users
   counted by identity (a declared dependency), students and storage `null` until a module counts them.
