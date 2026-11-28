@@ -14,8 +14,9 @@ results, the consumers other than the two offering ones, and the widgets `upcomi
 decisions: [docs/reviewer-decisions.md](docs/reviewer-decisions.md).
 The `examinations_candidate` table exists (migration `ex_0005`, schema only): nothing creates, reads or serves candidates yet.
 Marks (`application/marks.py`, table `examinations_mark_entry`, migration `ex_0006`): `listMarks`, `enterMarks`, `submitMarks`,
-`moderateMarks` and `lockMarks` work on the eligible candidates of a paper. Until candidates are created a paper has none, and no
-operation yet moves a paper into `marks_entry` (docs/reviewer-decisions.md, section 15).
+`moderateMarks` and `lockMarks` work on the eligible candidates of a paper. Until candidates are created a paper has none.
+`openMarksEntry` (`POST /papers/{id}/marks-entry`, key `paper:manage`) is the controller's explicit move of a scheduled paper into
+`marks_entry`; nothing moves it automatically (docs/reviewer-decisions.md, section 15).
 
 Exam scheduling, hall tickets, evaluation, results, transcripts.
 

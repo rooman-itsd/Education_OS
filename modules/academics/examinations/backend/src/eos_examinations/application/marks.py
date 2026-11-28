@@ -1,5 +1,5 @@
-"""Use cases for marks (docs/prd.md FR-10 to FR-12, contracts/openapi.yaml): listMarks, enterMarks, submitMarks,
-moderateMarks and lockMarks. They share the conventions of application/service.py (one transaction wrapper, one audit
+"""Use cases for marks (docs/prd.md FR-10 to FR-12, contracts/openapi.yaml): openMarksEntry, listMarks, enterMarks,
+submitMarks, moderateMarks and lockMarks. They share the conventions of application/service.py (one transaction wrapper, one audit
 writer, one clock): domain rules first, an audit entry per state change, one commit, everything rolled back on any
 failure. The contract declares no marks event, so none is published.
 
@@ -14,8 +14,8 @@ Decisions of the marks slice (docs/reviewer-decisions.md section 15):
   a caller without a scope is refused (403), not shown an empty list.
 - Pipeline. enterMarks needs the paper in `marks_entry`, submitMarks moves it to `moderation` and needs every eligible
   candidate to have marks or be absent, moderateMarks needs `moderation` and lockMarks needs `moderation` and
-  complete marks; each wrong status is a 409. A paper reaches `marks_entry` through nothing in this module yet: the PRD's
-  rule that a finished session moves its papers there is not built, and no operation of the contract does it.
+  complete marks; each wrong status is a 409. A paper reaches `marks_entry` through openMarksEntry, an explicit
+  controller operation (decision D3); the PRD's rule that a finished session moves its papers there is not built.
 - Moderation delta replaces any earlier one; locking sets every entry of the paper to `locked`."""
 
 from __future__ import annotations
@@ -80,6 +80,18 @@ def _authorise(
         return
     if not _holds_duty(db, actor, exam_paper_id, duty_types):
         raise forbidden(f"{narrow} covers only the papers you hold a {' or '.join(duty_types)} duty for")
+
+
+def _require_separation(db: Session, actor: Actor, exam_paper_id: str, *, acting_as: str, holds: str) -> None:
+    """Decision D5, as the marks see it: a person holding a live `holds` duty on the paper does not act as `acting_as` on it,
+    even with an organisation-wide key. Duty assignment refuses the pairing; this covers one that exists already."""
+    if _holds_duty(db, actor, exam_paper_id, (holds,)):
+        raise ExaminationsError(
+            409,
+            "duty_separation",
+            f"you hold the {holds} duty on this paper, so you cannot act as its {acting_as}",
+            conflicting_duty_type=holds,
+        )
 
 
 def _eligible(db: Session, exam_paper_id: str) -> list[CandidateRow]:
@@ -192,6 +204,7 @@ def enter_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) -> 
     another paper or not eligible are refused (422), as are marks out of range (422)."""
     row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=MARKS_ENTER_ALL, narrow=MARKS_ENTER_ASSIGNED, duty_types=(EVALUATION,))
+    _require_separation(db, actor, exam_paper_id, acting_as="evaluator", holds=MODERATION_DUTY)
     data = base._object(body, "body", ("entries",))
     sch._require_fields(data, ("entries",))
     entries = base._domain(mk.parse_entries, data["entries"], row.max_marks)
@@ -243,10 +256,45 @@ def enter_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) -> 
 
 
 @base.transactional
+def open_marks_entry(db: Session, actor: Actor, exam_paper_id: str) -> dict:
+    """Decision D3 (issue #325): a controller moves a scheduled paper into `marks_entry`. It is explicit: a session that has
+    ended moves nothing by itself. A paper already in `marks_entry` is returned as it is (a repeated request changes and
+    audits nothing); any other status is refused by the pipeline (a draft paper is not scheduled yet, a paper past entry
+    cannot go back), and so is a paper whose cycle has published its results. The route's `paper:manage` key is the
+    permission."""
+    row = _locked_paper(db, exam_paper_id)
+    if row.status == pap.MARKS_ENTRY:
+        return sch._paper_bodies(db, [row])[0]
+    cycle_row = repo.cycle(db, row.exam_cycle_id)
+    if cycle_row is not None and cycle_row.status in repo.PUBLISHED_CYCLE_STATUSES:
+        raise ExaminationsError(
+            409,
+            "cycle_results_published",
+            f"the cycle is {cycle_row.status}, so its papers no longer open for marks entry",
+            status=cycle_row.status,
+        )
+    moved = base._domain(pap.plan_status_change, sch._paper_domain(row), pap.MARKS_ENTRY)
+    before = {"status": row.status}
+    row.status = moved.status
+    base._audit(
+        db,
+        actor,
+        "exam_paper.marks_entry_opened",
+        "exam_paper",
+        row,
+        before=before,
+        after={"status": pap.MARKS_ENTRY},
+    )
+    db.commit()
+    return sch._paper_bodies(db, [row])[0]
+
+
+@base.transactional
 def submit_marks(db: Session, actor: Actor, exam_paper_id: str) -> dict:
     """FR-11: moves a paper in `marks_entry` to `moderation` once every eligible candidate has marks or is absent."""
     row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=MARKS_ENTER_ALL, narrow=MARKS_ENTER_ASSIGNED, duty_types=(EVALUATION,))
+    _require_separation(db, actor, exam_paper_id, acting_as="evaluator", holds=MODERATION_DUTY)
     _require_status(row, pap.MARKS_ENTRY)
     candidates = _eligible(db, exam_paper_id)
     _require_complete(candidates, _entries_of(db, [c.id for c in candidates]))
@@ -271,6 +319,7 @@ def moderate_marks(db: Session, actor: Actor, exam_paper_id: str, body: object) 
     are kept, the moderated ones stay within 0 and `max_marks` (422), and all of it is applied or none."""
     row = _locked_paper(db, exam_paper_id)
     _authorise(db, actor, exam_paper_id, wide=None, narrow=MARKS_MODERATE_ASSIGNED, duty_types=(MODERATION_DUTY,))
+    _require_separation(db, actor, exam_paper_id, acting_as="moderator", holds=EVALUATION)
     data = base._object(body, "body", ("reason", "uniform_delta", "adjustments"))
     sch._require_fields(data, ("reason",))
     moderation = base._domain(mk.parse_moderation, data)

@@ -22,6 +22,7 @@ ASSESSMENT_SCHEME_WRITE_ALL = f"{MODULE}:assessment-scheme:write-all"
 GRADING_SCHEME_READ = f"{MODULE}:grading-scheme:read"
 GRADING_SCHEME_MANAGE = f"{MODULE}:grading-scheme:manage"
 PAPER_READ = f"{MODULE}:paper:read"
+PAPER_READ_ASSIGNED = f"{MODULE}:paper:read-assigned"
 PAPER_MANAGE = f"{MODULE}:paper:manage"
 SESSION_READ = f"{MODULE}:session:read"
 SESSION_READ_OWN = f"{MODULE}:session:read-own"
@@ -67,6 +68,7 @@ PERMISSION_KEYS = (
     GRADING_SCHEME_READ,
     GRADING_SCHEME_MANAGE,
     PAPER_READ,
+    PAPER_READ_ASSIGNED,
     PAPER_MANAGE,
     SESSION_READ,
     SESSION_READ_OWN,

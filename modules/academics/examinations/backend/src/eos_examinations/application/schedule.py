@@ -45,8 +45,8 @@ from ..infrastructure.models import (
     iso,
 )
 from . import service as base
-from .access import Actor
-from .errors import ExaminationsError, invalid, not_found
+from .access import PAPER_READ, Actor
+from .errors import ExaminationsError, forbidden, invalid, not_found
 
 # ---------------------------------------------------------------- parsing
 
@@ -158,8 +158,32 @@ def _paper_domain(row: ExamPaperRow) -> pap.Paper:
     )
 
 
+def _assigned_paper_ids(db: Session, actor: Actor) -> set[str]:
+    """Decision D6: the papers the caller holds a live duty for. An evaluation or moderation duty names its paper; an
+    invigilation duty names a session, and the papers written in it are the caller's."""
+    duties = list(
+        db.scalars(
+            repo.q(db, ExamDutyRow).where(
+                ExamDutyRow.staff_id == actor.user_id, ExamDutyRow.status.in_(repo.LIVE_DUTY_STATUSES)
+            )
+        )
+    )
+    papers = {d.exam_paper_id for d in duties if d.exam_paper_id}
+    sessions = {d.exam_session_id for d in duties if d.exam_session_id}
+    if sessions:
+        papers |= set(
+            db.scalars(
+                repo.q(db, ExamSessionPaperRow)
+                .where(ExamSessionPaperRow.exam_session_id.in_(sessions))
+                .with_only_columns(ExamSessionPaperRow.exam_paper_id)
+            )
+        )
+    return papers
+
+
 def list_exam_papers(
     db: Session,
+    actor: Actor,
     exam_cycle_id: str | None,
     course_offering_id: str | None,
     department_id: str | None,
@@ -168,6 +192,10 @@ def list_exam_papers(
     offset: int,
 ) -> dict:
     query = repo.q(db, ExamPaperRow)
+    if not actor.can(
+        PAPER_READ
+    ):  # the organisation-wide key lists every paper; the assigned-only key, the caller's own
+        query = query.where(ExamPaperRow.id.in_(_assigned_paper_ids(db, actor) or {""}))
     if (cycle := base._optional_id(exam_cycle_id, "exam_cycle_id")) is not None:
         query = query.where(ExamPaperRow.exam_cycle_id == cycle)
     if (offering := base._optional_id(course_offering_id, "course_offering_id")) is not None:
@@ -185,8 +213,11 @@ def list_exam_papers(
     return {"items": _paper_bodies(db, rows), "total": total}
 
 
-def get_exam_paper(db: Session, exam_paper_id: str) -> dict:
-    return _paper_bodies(db, [_paper_or_404(db, exam_paper_id)])[0]
+def get_exam_paper(db: Session, actor: Actor, exam_paper_id: str) -> dict:
+    row = _paper_or_404(db, exam_paper_id)
+    if not actor.can(PAPER_READ) and row.id not in _assigned_paper_ids(db, actor):
+        raise forbidden("examinations:paper:read-assigned covers only the papers you hold an exam duty for")
+    return _paper_bodies(db, [row])[0]
 
 
 @base.transactional

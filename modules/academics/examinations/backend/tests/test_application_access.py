@@ -18,7 +18,7 @@ OPENAPI = yaml.safe_load(
 
 def test_the_keys_are_exactly_the_catalogues_keys():
     assert set(access.PERMISSION_KEYS) == {p["key"] for p in CATALOGUE["permissions"]}
-    assert len(access.PERMISSION_KEYS) == len(set(access.PERMISSION_KEYS)) == 43
+    assert len(access.PERMISSION_KEYS) == len(set(access.PERMISSION_KEYS)) == 44
 
 
 def test_every_key_is_module_resource_action_in_this_module():

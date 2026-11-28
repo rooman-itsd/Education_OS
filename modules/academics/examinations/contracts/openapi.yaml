@@ -338,8 +338,9 @@ paths:
     get:
       tags: [papers]
       summary: List exam papers
+      description: "Scope: examinations:paper:read-assigned lists the papers the caller holds an exam duty for (evaluation or moderation of the paper, or invigilation of a session it is written in); examinations:paper:read widens it to every paper of the organisation."
       operationId: listExamPapers
-      x-permission: examinations:paper:read
+      x-permission: examinations:paper:read-assigned
       parameters:
         - $ref: "#/components/parameters/ExamCycleQuery"
         - { name: course_offering_id, in: query, schema: { type: string, format: uuid } }
@@ -358,6 +359,7 @@ paths:
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/ExamPaper" } }
                   total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [papers]
       summary: Create exam papers for a course offering in a cycle
@@ -389,14 +391,16 @@ paths:
     get:
       tags: [papers]
       summary: Get an exam paper
+      description: "Scope: examinations:paper:read-assigned reads a paper the caller holds an exam duty for; examinations:paper:read widens it to every paper of the organisation."
       operationId: getExamPaper
-      x-permission: examinations:paper:read
+      x-permission: examinations:paper:read-assigned
       responses:
         "200":
           description: Exam paper
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ExamPaper" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [papers]
@@ -790,6 +794,25 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ----------------------------------------------------------------- marks
+  /papers/{exam_paper_id}/marks-entry:
+    parameters:
+      - $ref: "#/components/parameters/ExamPaperId"
+    post:
+      tags: [marks]
+      summary: Open a scheduled paper for marks entry
+      description: "An explicit controller decision: a paper whose session has ended does not move by itself. Moves a scheduled paper to marks_entry (FR-10). A paper already in marks_entry is returned unchanged and nothing is audited, so a repeated request is safe; a draft paper, or one past marks_entry, answers 409 invalid_status_transition, and a paper of a cycle whose results are published answers 409 cycle_results_published."
+      operationId: openMarksEntry
+      x-permission: examinations:paper:manage
+      responses:
+        "200":
+          description: Paper in marks_entry
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExamPaper" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /papers/{exam_paper_id}/marks:
     parameters:
       - $ref: "#/components/parameters/ExamPaperId"

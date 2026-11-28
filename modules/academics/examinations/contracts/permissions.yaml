@@ -28,7 +28,9 @@ permissions:
   - key: examinations:grading-scheme:manage
     description: Define grading schemes and set the organisation default
   - key: examinations:paper:read
-    description: View exam papers
+    description: View every exam paper of the organisation
+  - key: examinations:paper:read-assigned
+    description: View the exam papers the caller holds an exam duty for
   - key: examinations:paper:manage
     description: Create and edit exam papers
   - key: examinations:session:read
@@ -111,6 +113,7 @@ roles:
       - examinations:grading-scheme:read
       - examinations:grading-scheme:manage
       - examinations:paper:read
+      - examinations:paper:read-assigned
       - examinations:paper:manage
       - examinations:session:read
       - examinations:session:manage
@@ -147,6 +150,7 @@ roles:
       - examinations:assessment-scheme:write-department
       - examinations:grading-scheme:read
       - examinations:paper:read
+      - examinations:paper:read-assigned
       - examinations:session:read
       - examinations:candidate:read-department
       - examinations:duty:read-department
@@ -162,7 +166,7 @@ roles:
     grants:
       - examinations:exam-cycle:read
       - examinations:assessment-scheme:read
-      - examinations:paper:read
+      - examinations:paper:read-assigned
       - examinations:session:read
       - examinations:duty:read-own
       - examinations:marks:read-assigned
@@ -181,6 +185,7 @@ roles:
       - examinations:assessment-scheme:read
       - examinations:grading-scheme:read
       - examinations:paper:read
+      - examinations:paper:read-assigned
       - examinations:session:read
       - examinations:report:read-department
       - examinations:report:read-all

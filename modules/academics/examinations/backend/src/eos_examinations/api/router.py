@@ -12,7 +12,7 @@ getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExam
 updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
 getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
 cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties; and the marks
-operations: listMarks, enterMarks, submitMarks, moderateMarks and lockMarks."""
+operations: openMarksEntry, listMarks, enterMarks, submitMarks, moderateMarks and lockMarks."""
 
 from __future__ import annotations
 
@@ -189,10 +189,10 @@ def list_exam_papers(
     status: str | None = None,
     limit: int = LIMIT,
     offset: int = OFFSET,
-    _: Actor = Depends(require(k.PAPER_READ)),
+    a: Actor = Depends(require(k.PAPER_READ_ASSIGNED)),
     db: Session = Depends(get_db),
 ):
-    return _run(sch.list_exam_papers, db, exam_cycle_id, course_offering_id, department_id, status, limit, offset)
+    return _run(sch.list_exam_papers, db, a, exam_cycle_id, course_offering_id, department_id, status, limit, offset)
 
 
 @router.post("/papers", status_code=201)
@@ -203,8 +203,10 @@ def create_exam_papers(
 
 
 @router.get("/papers/{exam_paper_id}")
-def get_exam_paper(exam_paper_id: str, _: Actor = Depends(require(k.PAPER_READ)), db: Session = Depends(get_db)):
-    return _run(sch.get_exam_paper, db, exam_paper_id)
+def get_exam_paper(
+    exam_paper_id: str, a: Actor = Depends(require(k.PAPER_READ_ASSIGNED)), db: Session = Depends(get_db)
+):
+    return _run(sch.get_exam_paper, db, a, exam_paper_id)
 
 
 @router.patch("/papers/{exam_paper_id}")
@@ -344,6 +346,15 @@ def enter_marks(
     db: Session = Depends(get_db),
 ):
     return _run(mks.enter_marks, db, a, exam_paper_id, body)
+
+
+@router.post("/papers/{exam_paper_id}/marks-entry")
+def open_marks_entry(
+    exam_paper_id: str,
+    a: Actor = Depends(require(k.PAPER_MANAGE)),
+    db: Session = Depends(get_db),
+):
+    return _run(mks.open_marks_entry, db, a, exam_paper_id)
 
 
 @router.post("/papers/{exam_paper_id}/marks/submit")
