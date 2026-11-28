@@ -957,7 +957,7 @@ paths:
     post:
       tags: [results]
       summary: Compute results
-      description: For course offerings whose papers are all locked; replaces only computed results (FR-13).
+      description: "For course offerings whose papers are all locked, while the cycle is in evaluation; replaces only computed results (FR-13). An offering that cannot be computed (papers not locked, a scheme component without a paper, results already approved, no grading band for a percentage) is listed under skipped with its reason. A cycle that is not in evaluation answers 409 cycle_not_in_evaluation, or cycle_results_published once its results are published."
       operationId: computeResults
       x-permission: examinations:result:compute
       requestBody:
@@ -970,20 +970,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
-  /exam-cycles/{exam_cycle_id}/results/approve:
+  /exam-cycles/{exam_cycle_id}/results/approve-department:
     parameters:
       - $ref: "#/components/parameters/ExamCycleId"
     post:
       tags: [results]
-      summary: Approve computed results
-      description: "Department heads approve their department's course offerings; the controller any (FR-14). Scope: examinations:result:approve-department gives the caller's department; examinations:result:approve-all widens it to the organisation."
-      operationId: approveResults
+      summary: Approve computed results for the department
+      description: "First approval stage (FR-14, decision D4): computed results become department_approved, recording who and when. The caller's department is not known yet (Q13), so the stage needs examinations:result:approve-all; examinations:result:approve-department alone answers 403. Results already past the stage are listed under skipped, so a retry changes nothing; a named offering whose results are not computed answers 409 invalid_status_transition."
+      operationId: approveResultsDepartment
       x-permission: examinations:result:approve-department
       requestBody:
-        required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CourseOfferingSelection" }
@@ -993,6 +993,31 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /exam-cycles/{exam_cycle_id}/results/approve:
+    parameters:
+      - $ref: "#/components/parameters/ExamCycleId"
+    post:
+      tags: [results]
+      summary: Approve department-approved results for the organisation
+      description: "Second approval stage (FR-14, decision D4): department_approved results become approved, recording approver and time. Results already approved or published are listed under skipped, so a retry changes nothing; a named offering whose results are not department_approved answers 409 invalid_status_transition."
+      operationId: approveResults
+      x-permission: examinations:result:approve-all
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CourseOfferingSelection" }
+      responses:
+        "200":
+          description: Approval summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -1003,7 +1028,7 @@ paths:
     post:
       tags: [results]
       summary: Publish approved results
-      description: Publishes examinations.result.published per student (FR-15).
+      description: "Approved results become published (FR-15), with one examinations.result.published event per student listing what was published now. When every offering of the cycle has its papers locked and its results published, the cycle moves to results_published. Results already published are listed under skipped, so a retry publishes nothing twice; a named offering whose results are not approved answers 409 invalid_status_transition."
       operationId: publishResults
       x-permission: examinations:result:publish
       requestBody:
@@ -1016,6 +1041,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ResultActionSummary" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
@@ -1023,7 +1049,7 @@ paths:
     get:
       tags: [results]
       summary: List results
-      description: "Scope: examinations:result:read-department gives the caller's department; examinations:result:read-all widens it to the organisation."
+      description: "Scope: examinations:result:read-all reads the organisation. examinations:result:read-department alone answers 403 until the caller's department is known (Q13)."
       operationId: listResults
       x-permission: examinations:result:read-department
       parameters:
@@ -1045,6 +1071,8 @@ paths:
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/Result" } }
                   total: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /results/{result_id}/revise:
     parameters:
@@ -1052,7 +1080,7 @@ paths:
     post:
       tags: [results]
       summary: Revise a published result
-      description: Creates a new version, keeps the previous one, publishes examinations.result.revised (FR-17).
+      description: "Creates a new published version with the corrected final marks, keeps the previous one as superseded, and publishes examinations.result.revised (FR-17); grade and pass are recomputed. Only a published result is revised, otherwise 409 result_not_published. Allowed after the cycle's results are published and after it is closed."
       operationId: reviseResult
       x-permission: examinations:result:revise
       requestBody:
@@ -1191,7 +1219,7 @@ paths:
     get:
       tags: [results]
       summary: The caller's published results
-      description: Only published, current versions.
+      description: Only published, current versions of the caller's own results; the student is the caller's user id.
       operationId: listMyResults
       x-permission: examinations:result:read-own
       parameters:
@@ -1206,6 +1234,7 @@ paths:
                 required: [items]
                 properties:
                   items: { type: array, items: { $ref: "#/components/schemas/StudentCycleResult" } }
+        "400": { $ref: "#/components/responses/BadRequest" }
 
 components:
   parameters:
@@ -1342,7 +1371,7 @@ components:
       enum: [entered, moderated, locked]
     ResultStatus:
       type: string
-      enum: [computed, approved, published, superseded]
+      enum: [computed, department_approved, approved, published, superseded]
 
     # --- exam cycles
     ExamCycle:

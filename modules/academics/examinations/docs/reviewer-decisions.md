@@ -328,3 +328,27 @@ the first thing to correct if Q1 says otherwise (`domain/eligibility.py`, one fu
 | Overrides and marks | A run keeps overridden candidates and candidates that have marks; an override cannot make a candidate with marks ineligible (409 `candidate_has_marks`) | none |
 | Events | `candidate.eligibility-determined` once per student whose candidacy a run created or changed, naming the papers that changed; an override publishes one; an unchanged run publishes nothing | none |
 | `student_id` | The `person_id` of the registration event (the decision on #325); the schedule of a student (`/me/exam-schedule`) matches it against the caller's user id until a sign-in account maps to a person | Faizan |
+
+## 17. Results workflow (issue #325, decisions D4 and D5)
+
+The state machine is this module's own (Q10: no `platform/workflow`). The rules below are settled here because the PRD does
+not state them; each is one function in `domain/results.py` and the first thing to correct if its owner says otherwise.
+
+| Rule | What the code does | Open with |
+|---|---|---|
+| States (D4) | `computed`, then `department_approved` (key `result:approve-department`), then `approved` (key `result:approve-all`), then `published` (key `result:publish`); a revision makes a new `published` version and turns the previous one `superseded`. `ResultStatus` in the contract gained `department_approved`; `approveResults` is now the second stage and `approveResultsDepartment` the first | Praveen (is a two-stage approval what Q10 needs?) |
+| Department scope | The caller's department is unknown (Q13, D14), so `result:approve-department` and `result:read-department` alone grant nothing and answer 403. The organisation-wide keys do both stages, and the department stage is still recorded (who, when), so the second stage is a separate decision | Faizan (D14) |
+| Cycle status | Compute, both approvals and publish need the cycle in `evaluation` (409 `cycle_not_in_evaluation`); once published, 409 `cycle_results_published`. Publishing again after the cycle moved is not a conflict, it finds nothing left. Revision is allowed at any cycle status | none |
+| Weighted percentage | Sum of `weightage_percent * final_marks / max_marks` over the scheme's components, rounded to two places, half up. `final_marks` is the marks plus the moderation delta. An absent component adds nothing | Praveen |
+| Pass | The percentage reaches the scheme's `pass_percent`, every component with `pass_marks` reaches it (an absent one fails it), and the grading band is a pass band | Praveen |
+| Grade band | The band whose range holds the percentage; where ranges touch (0 to 40 and 40 to 50) the higher minimum wins. A percentage no band holds skips the offering (`no_grading_band`), it is never guessed | Praveen (grading-band coverage, section 3) |
+| Offerings that cannot be computed | Skipped with a reason, nothing written: `papers_not_locked`, `components_without_paper` (a component of the scheme with no paper in the cycle, so the percentage would not cover the whole scheme), `results_already_approved`, `no_grading_band`, `no_papers_in_cycle` | Praveen (are there components assessed outside the cycle?) |
+| Which students | Those with an `eligible` candidacy for every paper of the offering and a mark entry for each. Others get no result | none |
+| Recompute | Replaces `computed` results in place (the same row), and turns the computed result of a student who no longer qualifies `superseded`; nothing is deleted | none |
+| Retries | A result already past the stage is reported under `skipped` (`already_<state>`) and changes nothing, so no result is advanced, audited or published twice. A named offering whose results have not reached the stage is a 409 `invalid_status_transition` | none |
+| Publication | One `result.published` per student, listing the courses published now; `grade_point_average` is weighted by the offering's credits (the offering read model) over all the student's published results in the cycle, and null when a credit is unknown. When every offering with papers in the cycle has all its papers locked and its results published, the cycle moves to `results_published` (audited) | none |
+| Revision | A published result, a mandatory reason (500 characters), corrected `final_marks` for at least one component (the others keep their value, a corrected one is no longer absent); grade and pass are recomputed; the new version is `published`, keeps the approval and publication facts, and `result.revised` carries the previous and new values. Only `published` is revised (409 `result_not_published`) | none |
+| Student reads | `GET /me/results` returns published, current versions of the caller's own results, grouped by cycle; the student is the caller's user id (as `/me/exam-schedule`) | Faizan (account to person) |
+
+Not built here and not invented: `GET /reports/results-pending`, `GET /reports/results-summary` and their widgets, and the
+rule that a department head sees only their department.

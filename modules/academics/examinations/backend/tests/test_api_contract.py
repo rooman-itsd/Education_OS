@@ -78,6 +78,13 @@ IMPLEMENTED = {
     "submitMarks": ("post", "/papers/{exam_paper_id}/marks/submit"),
     "moderateMarks": ("post", "/papers/{exam_paper_id}/moderation"),
     "lockMarks": ("post", "/papers/{exam_paper_id}/lock"),
+    "computeResults": ("post", "/exam-cycles/{exam_cycle_id}/results/compute"),
+    "approveResultsDepartment": ("post", "/exam-cycles/{exam_cycle_id}/results/approve-department"),
+    "approveResults": ("post", "/exam-cycles/{exam_cycle_id}/results/approve"),
+    "publishResults": ("post", "/exam-cycles/{exam_cycle_id}/results/publish"),
+    "listResults": ("get", "/results"),
+    "listMyResults": ("get", "/me/results"),
+    "reviseResult": ("post", "/results/{result_id}/revise"),
 }
 WIDENED = {  # the contract's descriptions: write-all widens write-department
     "createAssessmentScheme",
@@ -94,6 +101,9 @@ PAPER_READ_OPERATIONS = {
     "listCandidates",
     "determineEligibility",
     "overrideCandidateEligibility",
+    "approveResultsDepartment",
+    "approveResults",
+    "listResults",
 }  # declare a 403 (D6; the schedule is the caller own; the candidates are the controller's)
 DUTY_READ_ALL = "examinations:duty:read-all"
 # The wider key an operation also accepts (the contract's descriptions name it): the route's keys are x-permission plus it.
@@ -102,6 +112,8 @@ WIDENING = {
     "replaceAssessmentScheme": WRITE_ALL,
     "activateAssessmentScheme": WRITE_ALL,
     "listExamDuties": DUTY_READ_ALL,
+    "approveResultsDepartment": "examinations:result:approve-all",
+    "listResults": "examinations:result:read-all",
 }
 
 

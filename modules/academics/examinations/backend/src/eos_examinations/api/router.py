@@ -12,7 +12,8 @@ getAssessmentScheme, replaceAssessmentScheme, activateAssessmentScheme, listExam
 updateExamCycle and changeExamCycleStatus; and the paper and session operations: listExamPapers, createExamPapers,
 getExamPaper, updateExamPaper, listExamSessions, scheduleExamSession, getExamSession, rescheduleExamSession and
 cancelExamSession; and the duty operations: listExamDuties, assignExamDuty, cancelExamDuty and listMyDuties; and the candidate operations: listCandidates, determineEligibility and overrideCandidateEligibility; and the marks
-operations: openMarksEntry, listMarks, enterMarks, submitMarks, moderateMarks and lockMarks."""
+operations: openMarksEntry, listMarks, enterMarks, submitMarks, moderateMarks and lockMarks; and the result operations: computeResults, approveResultsDepartment, approveResults,
+publishResults, listResults, listMyResults and reviseResult."""
 
 from __future__ import annotations
 
@@ -25,6 +26,7 @@ from ..application import candidates as cnd
 from ..application import duties as dty
 from ..application import marks as mks
 from ..application import my_schedule as mys
+from ..application import results as res
 from ..application import schedule as sch
 from ..application import service as svc
 from ..application.access import Actor
@@ -442,3 +444,91 @@ def lock_marks(
     db: Session = Depends(get_db),
 ):
     return _run(mks.lock_marks, db, a, exam_paper_id)
+
+
+# ---------------------------------------------------------------- results
+
+
+@router.post("/exam-cycles/{exam_cycle_id}/results/compute")
+def compute_results(
+    exam_cycle_id: str,
+    body: dict | None = Body(None),
+    a: Actor = Depends(require(k.RESULT_COMPUTE)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.compute_results, db, a, exam_cycle_id, body)
+
+
+@router.post("/exam-cycles/{exam_cycle_id}/results/approve-department")
+def approve_results_department(
+    exam_cycle_id: str,
+    body: dict | None = Body(None),
+    a: Actor = Depends(require(k.RESULT_APPROVE_DEPARTMENT, k.RESULT_APPROVE_ALL)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.approve_results_department, db, a, exam_cycle_id, body)
+
+
+@router.post("/exam-cycles/{exam_cycle_id}/results/approve")
+def approve_results(
+    exam_cycle_id: str,
+    body: dict | None = Body(None),
+    a: Actor = Depends(require(k.RESULT_APPROVE_ALL)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.approve_results, db, a, exam_cycle_id, body)
+
+
+@router.post("/exam-cycles/{exam_cycle_id}/results/publish")
+def publish_results(
+    exam_cycle_id: str,
+    body: dict | None = Body(None),
+    a: Actor = Depends(require(k.RESULT_PUBLISH)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.publish_results, db, a, exam_cycle_id, body)
+
+
+@router.get("/results")
+def list_results(
+    exam_cycle_id: str | None = None,
+    course_offering_id: str | None = None,
+    student_id: str | None = None,
+    status: str | None = None,
+    include_superseded: bool = False,
+    limit: int = LIMIT,
+    offset: int = OFFSET,
+    a: Actor = Depends(require(k.RESULT_READ_DEPARTMENT, k.RESULT_READ_ALL)),
+    db: Session = Depends(get_db),
+):
+    return _run(
+        res.list_results,
+        db,
+        a,
+        exam_cycle_id,
+        course_offering_id,
+        student_id,
+        status,
+        include_superseded,
+        limit,
+        offset,
+    )
+
+
+@router.get("/me/results")
+def list_my_results(
+    exam_cycle_id: str | None = None,
+    a: Actor = Depends(require(k.RESULT_READ_OWN)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.list_my_results, db, a, exam_cycle_id)
+
+
+@router.post("/results/{result_id}/revise")
+def revise_result(
+    result_id: str,
+    body: dict = Body(...),
+    a: Actor = Depends(require(k.RESULT_REVISE)),
+    db: Session = Depends(get_db),
+):
+    return _run(res.revise_result, db, a, result_id, body)

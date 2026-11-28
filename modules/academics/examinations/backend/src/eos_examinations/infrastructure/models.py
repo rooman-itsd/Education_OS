@@ -6,7 +6,7 @@ no foreign key leaves this module. academic_period_id, course_offering_id, cours
 This is the foundation: the configuration side of the PRD's data model (cycles, grading and assessment schemes, papers,
 sessions, duties, the offering read model and the audit entry), and the `candidate` table (schema only: nothing writes
 or reads it yet) and the `mark_entry` table. Not here, because they depend on decisions that are not taken
-(docs/reviewer-decisions.md): `hall_ticket`, `result` (they depend on eligibility) and `registration_ref`. `student_id` carries the
+(docs/reviewer-decisions.md): `hall_ticket`. `student_id` carries the
 canonical `person_id` (decided on issue #325)."""
 
 from __future__ import annotations
@@ -355,6 +355,48 @@ class RegistrationRef(Base, TenantMixin, TimestampMixin):
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ResultRow(Base, TenantMixin, TimestampMixin):
+    """One student's result in one course offering and exam cycle, one row per version (PRD FR-13 to FR-17). A revision adds
+    a row with the next `version` and turns the previous one `superseded`; no row is deleted. `components` holds the
+    contract's ComponentScore list as computed. `student_id` carries the canonical `person_id`. Status runs
+    computed, department_approved, approved, published (decision D4), or superseded."""
+
+    __tablename__ = f"{PREFIX}result"
+    __table_args__ = (
+        UniqueConstraint(
+            "organisation_id",
+            "exam_cycle_id",
+            "student_id",
+            "course_offering_id",
+            "version",
+            name="uq_examinations_result_version",
+        ),
+        Index("ix_examinations_result_cycle", "organisation_id", "exam_cycle_id", "status"),
+        Index("ix_examinations_result_student", "organisation_id", "student_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    exam_cycle_id: Mapped[str] = mapped_column(String(36), ForeignKey(f"{PREFIX}exam_cycle.id"))
+    student_id: Mapped[str] = mapped_column(String(36))
+    course_offering_id: Mapped[str] = mapped_column(String(36))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    components: Mapped[list] = mapped_column(JSON(none_as_null=True), nullable=False)
+    weighted_percent: Mapped[Decimal] = mapped_column(PERCENT)
+    grade: Mapped[str] = mapped_column(String(20))
+    grade_point: Mapped[Decimal] = mapped_column(POINTS)
+    passed: Mapped[bool] = mapped_column(Boolean)
+    status: Mapped[str] = mapped_column(String(20))
+    computed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    department_approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    department_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revision_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    revised_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
 class ProcessedEvent(Base, TenantMixin, TimestampMixin):
     """The envelope ids this module has already applied, per organisation: delivery is at-least-once, so a handler
     that finds its event id here does nothing (platform/event-bus/contracts/events.yaml, idempotency)."""
@@ -407,6 +449,7 @@ TABLES = [
         MarkEntryRow,
         OfferingRef,
         RegistrationRef,
+        ResultRow,
         ProcessedEvent,
         AuditEntry,
     )

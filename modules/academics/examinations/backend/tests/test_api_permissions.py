@@ -100,15 +100,22 @@ def test_no_token_is_401(client, method, path, keys):
     assert _call(client, method, path, None).status_code == 401
 
 
+DEPARTMENT_KEY_ALONE = {
+    ("GET", "/candidates"),
+    ("GET", "/results"),
+    ("POST", "/exam-cycles/{exam_cycle_id}/results/approve-department"),
+}
+
+
 @pytest.mark.parametrize(("method", "path", "keys"), ROUTES, ids=[f"{m} {p}" for m, p, _ in ROUTES])
 @pytest.mark.parametrize("role", [CONTROLLER, HEAD, FACULTY, VIEWER, STUDENT])
 def test_a_role_is_refused_exactly_when_it_holds_none_of_the_routes_keys(client, org, role, method, path, keys):
     _, headers = org.user(role)
     response = _call(client, method, path, headers)
     allowed = bool(keys & permissions_for([role]))
-    if (method, path) == ("GET", "/candidates") and role == HEAD:
-        # `candidate:read-department` passes the route's key, and the use case then refuses it: the caller's department is
-        # not known yet (Q13), so the key alone grants nothing (test_api_candidates.py)
+    if role == HEAD and (method, path) in DEPARTMENT_KEY_ALONE:
+        # the department key passes the route's key, and the use case then refuses it: the caller's department is
+        # not known yet (Q13), so the key alone grants nothing (test_api_candidates.py, test_api_results.py)
         assert response.status_code == 403 and response.json()["detail"]["code"] == "forbidden"
     elif allowed:
         assert response.status_code != 403, (role, method, path, response.text)
