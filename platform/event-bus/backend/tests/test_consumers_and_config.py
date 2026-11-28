@@ -65,3 +65,26 @@ def test_an_unusable_setting_is_refused(monkeypatch, key, value):
     monkeypatch.setenv(key, value)
     with pytest.raises(ValueError, match=key):
         EventBusConfig.from_env()
+
+
+def test_an_event_read_back_without_its_zone_reaches_consumers_as_utc():
+    """SQLite returns the timezone-aware `occurred_at` column naive; consumers that require a zone must still get one."""
+    from datetime import UTC, datetime
+
+    from eos_event_bus.domain.models import Event
+
+    def row(occurred_at):
+        return SimpleNamespace(
+            id="e1",
+            name="x.y.z",
+            version=1,
+            organisation_id="o1",
+            actor=None,
+            occurred_at=occurred_at,
+            payload={},
+            impersonated_by=None,
+        )
+
+    assert Event.of(row(datetime(2026, 11, 28, 9, 0))).occurred_at == datetime(2026, 11, 28, 9, 0, tzinfo=UTC)
+    aware = datetime(2026, 11, 28, 9, 0, tzinfo=UTC)
+    assert Event.of(row(aware)).occurred_at is aware
